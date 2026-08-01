@@ -2433,3 +2433,169 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
         animation: none;
     }
 }
+
+/* ─── Run phase stepper, horizontal (#454) ───
+   Reads left to right as a stepped progress bar: a marker per step, and a filling line between
+   markers showing how far through the step it leaves the run is. */
+.jim-phase-stepper-h .mud-stepper-nav {
+    padding: 0;
+    overflow-x: auto;
+}
+
+/* MudBlazor gives each step a 175px flex basis, which at seven steps leaves the connectors their
+   minimum width and the last step clipped. Sizing steps to their label instead gives the rail its
+   proportions back: short labels take less, and what is left over goes to the progress legs. */
+/* !important because MudBlazor's own rule wins on specificity, and its fixed basis is what
+   squeezes the connectors to nothing at seven steps. */
+.jim-phase-stepper-h .mud-stepper-nav .mud-step {
+    flex: 0 0 auto !important;
+    min-width: 0;
+    padding-inline: 0.25rem;
+}
+
+/* The stepper's own content area and action bar have nothing to show here: this is a report on a
+   run, not a wizard, so the rail is the whole component. */
+.jim-phase-stepper-h .mud-stepper-content {
+    display: none;
+}
+
+.jim-phase-h-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    border: 1px solid var(--mud-palette-lines-default);
+    background-color: var(--mud-palette-surface);
+    color: var(--mud-palette-text-disabled);
+}
+
+.jim-phase-h-label .mud-icon-root {
+    font-size: 1.125rem;
+}
+
+.jim-phase-h-label--completed {
+    border-color: var(--mud-palette-success);
+    background-color: var(--mud-palette-success);
+    color: var(--mud-palette-success-text);
+}
+
+.jim-phase-h-label--failed {
+    border-color: var(--mud-palette-error);
+    background-color: var(--mud-palette-error);
+    color: var(--mud-palette-error-text);
+}
+
+/* The running step: filled, and breathing, so the eye lands on it first. */
+.jim-phase-h-label--active {
+    border-color: var(--mud-palette-primary);
+    background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+    box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0.55);
+    animation: jim-phase-pulse 2.4s ease-out infinite;
+}
+
+@keyframes jim-phase-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0.5); }
+    70%  { box-shadow: 0 0 0 0.5rem rgba(var(--mud-palette-primary-rgb), 0); }
+    100% { box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0); }
+}
+
+.jim-phase-h-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    max-width: 6.5rem;
+    text-align: center;
+    line-height: 1.25;
+}
+
+.jim-phase-h-title--pending .jim-phase-step-name,
+.jim-phase-h-title--skipped .jim-phase-step-name {
+    color: var(--mud-palette-text-disabled);
+}
+
+.jim-phase-h-title--active .jim-phase-step-name {
+    font-weight: 500;
+}
+
+.jim-phase-h-title--failed .jim-phase-step-name,
+.jim-phase-h-title--failed .jim-phase-step-note {
+    color: var(--mud-palette-error);
+}
+
+/* The connector is the progress bar: one leg of the run, filled as that step does its work. */
+.jim-phase-h-connector {
+    flex: 1 1 2.5rem;
+    display: flex;
+    align-items: center;
+    min-width: 1.5rem;
+    /* Pulled under the step labels so each leg runs marker to marker: the labels sit below the
+       rail, so the overlap is space the bar can use rather than space it has to leave. */
+    margin-inline: -1.75rem;
+    padding: 0 0.5rem;
+    /* Aligned to the centre of the step markers (2.25rem circle, 0.25rem track), so the rail reads
+       as one line through them however many lines a step's label wraps to. */
+    align-self: flex-start;
+    /* 2.5rem lands the track on the centre of the step markers; measured against the rendered
+       page rather than derived, because the marker's offset depends on MudBlazor's own nav padding. */
+    margin-top: 2.5rem;
+}
+
+.jim-phase-h-connector-track {
+    width: 100%;
+    height: 0.25rem;
+    border-radius: 0.125rem;
+    background-color: var(--mud-palette-lines-default);
+    overflow: hidden;
+}
+
+.jim-phase-h-connector-fill {
+    height: 100%;
+    border-radius: 0.125rem;
+    background-color: var(--mud-palette-success);
+    transition: width 0.4s ease;
+}
+
+/* The leg in flight is the primary colour, and striped, so a slow step still looks like motion
+   even while its width holds steady. */
+.jim-phase-h-connector-fill--active {
+    background-color: var(--mud-palette-primary);
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.25) 25%, transparent 25%,
+        transparent 50%, rgba(255, 255, 255, 0.25) 50%,
+        rgba(255, 255, 255, 0.25) 75%, transparent 75%);
+    background-size: 0.75rem 0.75rem;
+    animation: jim-phase-stripes 1s linear infinite;
+}
+
+@keyframes jim-phase-stripes {
+    from { background-position: 0 0; }
+    to   { background-position: 0.75rem 0; }
+}
+
+/* What the running step is doing: the Connector's own steps, and the live message. */
+.jim-phase-h-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-phase-h-substeps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-phase-h-label--active,
+    .jim-phase-h-connector-fill--active {
+        animation: none;
+    }
+}

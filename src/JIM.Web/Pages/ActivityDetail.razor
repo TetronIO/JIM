@@ -205,7 +205,9 @@
     {
         <MudPaper Class="pa-4 mt-6" Outlined="true">
             <MudText Typo="Typo.h5" Class="mb-4">Steps</MudText>
-            <RunPhaseStepper Phases="_phases" Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)" />
+            <RunPhaseStepperHorizontal Phases="_phases"
+                                       Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)"
+                                       StepProgress="@StepProgressFraction" />
         </MudPaper>
     }
 
@@ -958,6 +960,15 @@
     /// stepper tracks the run live and still reads correctly on a page opened after it finished.
     /// </summary>
     private IReadOnlyList<ActivityPhase> _phases = [];
+
+    /// <summary>
+    /// How far through its own work the running step is, 0 to 1, or null when it counts nothing it
+    /// can report. Fills the stepper's connector so the rail reads as one progress bar across the
+    /// whole run.
+    /// </summary>
+    private double? StepProgressFraction => _activity is { Status: ActivityStatus.InProgress, ObjectsToProcess: > 0 }
+        ? Math.Clamp((double)_activity.ObjectsProcessed / _activity.ObjectsToProcess, 0d, 1d)
+        : null;
     private string _searchString = "";
     private bool _loading;
     private int _rowsPerPage = 10;
