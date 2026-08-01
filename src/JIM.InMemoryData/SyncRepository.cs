@@ -1336,13 +1336,13 @@ public class SyncRepository : ISyncRepository
         if (FailInitialPasswordStagingWith != null)
             throw FailInitialPasswordStagingWith;
 
-        foreach (var pending in pendingInitialPasswords)
+        // One outstanding record per account, matching the unique index in the real schema: two would mean two
+        // deliveries racing to set a password on the same object. The filter stays lazy on purpose, so that it
+        // is re-evaluated as the loop adds, and two records for the same account in one batch dedupe against
+        // each other exactly as ON CONFLICT does in the real one.
+        foreach (var pending in pendingInitialPasswords.Where(p =>
+                     !_pendingInitialPasswords.Values.Any(existing => existing.ConnectedSystemObjectId == p.ConnectedSystemObjectId)))
         {
-            // One outstanding record per account, matching the unique index in the real schema: two would mean
-            // two deliveries racing to set a password on the same object.
-            if (_pendingInitialPasswords.Values.Any(p => p.ConnectedSystemObjectId == pending.ConnectedSystemObjectId))
-                continue;
-
             if (pending.Id == Guid.Empty)
                 pending.Id = Guid.NewGuid();
 
