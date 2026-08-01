@@ -56,6 +56,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
     private readonly Dictionary<Guid, MetaverseObjectChange> _mvoChanges = new();
+    private readonly Dictionary<Guid, ActivityPhase> _activityPhases = new();
 
     // Secondary indexes
     private readonly Dictionary<int, HashSet<Guid>> _csosByConnectedSystem = new();
@@ -1469,6 +1470,20 @@ public class SyncRepository : ISyncRepository
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }
+
+    public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
+    {
+        foreach (var phase in phases)
+            _activityPhases[phase.Id] = phase;
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The Activity phases recorded so far, keyed by phase id, for tests asserting how a run
+    /// narrated its steps.
+    /// </summary>
+    public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {

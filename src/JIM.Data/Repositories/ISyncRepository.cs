@@ -580,6 +580,17 @@ public interface ISyncRepository
     Task UpdateActivityProgressOutOfBandAsync(Activity activity);
 
     /// <summary>
+    /// Records the given phases of a Run Profile execution (#454), inserting phases the Activity
+    /// has not seen before and updating the state of ones it has. Called with the phases declared
+    /// when the run starts, and thereafter with just the phases each transition changed.
+    /// </summary>
+    /// <remarks>
+    /// Narrating a run must never fail it: callers treat a failure here as cosmetic. Writes are
+    /// idempotent, so a retried call is harmless.
+    /// </remarks>
+    Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases);
+
+    /// <summary>
     /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
     /// Returns true if raw SQL was used (RPEIs are outside EF tracking),
     /// false if the EF fallback was used (RPEIs remain tracked).

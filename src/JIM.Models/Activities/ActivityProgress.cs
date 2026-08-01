@@ -60,4 +60,21 @@ public class ActivityProgress
     /// Total errored objects so far, summed across the error-type stat counters.
     /// </summary>
     public long TotalErrors { get; set; }
+
+    /// <summary>
+    /// The steps of the run in order (#454): what is done, what is running, and what is still to
+    /// come. Empty for Activities that are not Run Profile executions, and for runs that predate
+    /// phase recording.
+    /// </summary>
+    public List<ActivityPhase> Phases { get; set; } = [];
+
+    /// <summary>
+    /// The most specific step currently running (a Connector's step in preference to the JIM step
+    /// hosting it), or null when nothing is running.
+    /// </summary>
+    public ActivityPhase? CurrentPhase => Phases
+        .Where(p => p.Status == ActivityPhaseStatus.Active)
+        .OrderByDescending(p => p.ParentKey != null)
+        .ThenByDescending(p => p.Order)
+        .FirstOrDefault();
 }

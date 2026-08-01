@@ -1164,6 +1164,11 @@ public class ActivityRepository : IActivityRepository
         if (progress == null)
             return null;
 
+        // The run's steps (#454). A handful of rows per Activity, and the progress read is the one
+        // call the portal, the API and PowerShell all make while a run is executing, so the steps
+        // travel with the progress rather than needing a second round trip.
+        progress.Phases = await GetActivityPhasesAsync(activityId);
+
         // Operation breakdown from the stat counter rows (#1078): advisory incremental values
         // while the run is in flight, exact values once finalised. O(counter rows) either way.
         var counters = await Repository.Database.ActivityStatCounters
@@ -1186,6 +1191,15 @@ public class ActivityRepository : IActivityRepository
         }
 
         return progress;
+    }
+
+    public async Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId)
+    {
+        return await Repository.Database.ActivityPhases
+            .AsNoTracking()
+            .Where(p => p.ActivityId == activityId)
+            .OrderBy(p => p.Order)
+            .ToListAsync();
     }
 
     private static bool IsTerminalActivityStatus(ActivityStatus status) => status.IsTerminal();
