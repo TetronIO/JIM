@@ -139,6 +139,11 @@ public static class ConfigurationChangeClassifier
         ["unresolvedReferenceHandling"] = B,
         ["maxExportParallelism"] = C,
         ["settingValues"] = B,
+        // Every individual setting value, whatever the connector calls it. Connector settings are the connector's
+        // instructions: where it reads from, what it filters, how it writes. One key covers them all because the
+        // snapshot records them under one key (see ConfigurationSnapshotService.SettingValueNodeKey); a connector's
+        // own setting names are an open key space and could never be enumerated here.
+        ["settingValue"] = B,
 
         // Run Profiles.
         ["runProfiles"] = C,
@@ -161,10 +166,22 @@ public static class ConfigurationChangeClassifier
         ["isSecondaryExternalId"] = B,
         ["writability"] = B,
 
-        // Partitions and containers. Deselecting a partition removes the objects imported from it;
-        // `selected` above covers both, since both carry Class A.
+        // Simple Mode Object Matching Rules, which attach to a Connected System Object Type rather than to a
+        // Synchronisation Rule. Same keys, same classes as the Advanced Mode table above: they change which objects
+        // join to which.
         ["objectMatchingRules"] = B,
         ["objectMatchingRule"] = B,
+        ["order"] = B,
+        ["caseSensitive"] = B,
+        ["metaverseObjectTypeId"] = B,
+        ["targetMetaverseAttributeId"] = B,
+        ["sources"] = B,
+        ["source"] = B,
+        ["connectedSystemAttributeId"] = B,
+        ["expression"] = B,
+
+        // Partitions and containers. Deselecting a partition removes the objects imported from it;
+        // `selected` above covers both, since both carry Class A.
         ["partitions"] = B,
         ["partition"] = B,
         ["externalId"] = C,
@@ -183,6 +200,9 @@ public static class ConfigurationChangeClassifier
         ["deletionRule"] = A,
         ["deletionGracePeriod"] = A,
         ["deletionTriggerConnectedSystemIds"] = A,
+        // One Connected System within that list. Adding a trigger makes objects already disconnected from it eligible
+        // for deletion, so an individual entry carries the collection's class rather than a lesser one.
+        ["connectedSystemId"] = A,
         ["attributes"] = B,
         ["attribute"] = B,
         ["attributeId"] = B

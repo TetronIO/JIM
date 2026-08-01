@@ -66,6 +66,12 @@ public class ConfigurationSnapshotService
     /// <summary>The object-type discriminator stored on an Example Data Template snapshot.</summary>
     public const string ExampleDataTemplateObjectType = "ExampleDataTemplate";
 
+    /// <summary>
+    /// The node key every Connected System setting value is recorded under. Uniform by design; the setting's own name
+    /// is the node's label, and the setting id is its ItemId. See <see cref="BuildSettingValueNode"/>.
+    /// </summary>
+    public const string SettingValueNodeKey = "settingValue";
+
     private JimApplication Application { get; }
 
     private static readonly JsonSerializerOptions SerialiserOptions = new()
@@ -335,8 +341,14 @@ public class ConfigurationSnapshotService
     private ConfigurationSnapshotNode? BuildSettingValueNode(ConnectedSystemSettingValue settingValue, byte[] hashKey)
     {
         var label = settingValue.Setting?.Name ?? $"Setting {settingValue.Id}";
-        var nodeKey = !string.IsNullOrEmpty(settingValue.Setting?.Name) ? settingValue.Setting!.Name! : $"setting-{settingValue.Id}";
         var itemId = settingValue.Setting?.Id ?? settingValue.Id;
+
+        // The key is deliberately the same for every setting value, with the connector's setting name carried as the
+        // label. A node key is a *stable machine key*, and a connector author's display name is neither stable nor
+        // enumerable: keying by it put an open, third-party-controlled key space in front of
+        // ConfigurationChangeClassifier, which classifies by key and has no default class, so every Connected System
+        // settings change failed to classify and was recorded unclassified. Collection items are matched by ItemId,
+        // not by key, so this neither disturbs diffing nor invalidates snapshots already stored under the old keys.
 
         // Secret detection is robust: any populated encrypted value, or a setting declared as StringEncrypted, is
         // redacted. StringEncryptedValue is only ever populated for encrypted settings, so a secret is never leaked even
@@ -349,7 +361,7 @@ public class ConfigurationSnapshotService
             if (string.IsNullOrEmpty(settingValue.StringEncryptedValue))
                 return null;
 
-            var node = ConfigurationSnapshotNode.Secret(nodeKey, ComputeSecretHash(settingValue.StringEncryptedValue, hashKey), label);
+            var node = ConfigurationSnapshotNode.Secret(SettingValueNodeKey, ComputeSecretHash(settingValue.StringEncryptedValue, hashKey), label);
             node.ItemId = itemId;
             return node;
         }
@@ -364,7 +376,7 @@ public class ConfigurationSnapshotService
         if (string.IsNullOrEmpty(value))
             return null;
 
-        var scalar = ConfigurationSnapshotNode.Scalar(nodeKey, value, label);
+        var scalar = ConfigurationSnapshotNode.Scalar(SettingValueNodeKey, value, label);
         scalar.ItemId = itemId;
         return scalar;
     }

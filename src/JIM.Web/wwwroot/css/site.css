@@ -1262,11 +1262,6 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     box-shadow: none !important;
 }
 
-/* Centre-align alert icon and close button vertically */
-html[lang] .mud-alert-position {
-    align-items: center;
-}
-
 /* Schema refresh results alert - position close icon in top right */
 .jim-alert-schema-refresh {
     position: relative;

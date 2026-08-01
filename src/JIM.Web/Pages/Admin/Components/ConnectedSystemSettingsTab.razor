@@ -259,6 +259,17 @@
             return;
         }
 
+        // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
+        // are saving it. Connector settings are the connector's instructions (where it reads from, what it filters),
+        // so a change here is always sync-affecting; cancelling aborts the save.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+        {
+            _settingsBeingSaved = false;
+            return;
+        }
+
         // offer an optional reason for the configuration change history once validation has passed;
         // cancelling aborts the save
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);

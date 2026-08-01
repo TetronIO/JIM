@@ -4,6 +4,7 @@
 @using System.Text
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject IJSRuntime JSRuntime
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -467,6 +468,14 @@
     {
         // attribute the action to the user
         using var jim = JimFactory.Create();
+
+        // deselecting a partition takes everything imported from it out of scope, which obsoletes those objects and
+        // deprovisions whatever they are joined to. Until now that saved silently.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+            return;
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);

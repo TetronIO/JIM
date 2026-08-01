@@ -47,12 +47,21 @@
 
     private async Task HandleValidDetailsSubmitAsync()
     {
+        using var jim = JimFactory.Create();
+
+        // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
+        // are saving it. Every tab edits the one shared Connected System, so the preflight covers whatever they have
+        // touched, not just this tab's fields; a cosmetic edit shows nothing at all.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+            return;
+
         // offer an optional reason for the configuration change history; cancelling aborts the save
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
         if (cancelled)
             return;
 
-        using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
         Snackbar.Add("Your details changes have been saved.", Severity.Success);
