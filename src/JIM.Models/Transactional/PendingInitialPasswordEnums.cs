@@ -21,13 +21,18 @@ public enum PendingInitialPasswordStatus
     Pending = 0,
 
     /// <summary>
-    /// The target accepted the request and refused the password itself, because it does not satisfy the policy
-    /// in force for that account.
+    /// Nothing will change until a person changes the configuration, so JIM has stopped trying.
     /// <para>
-    /// Deliberately not retried. The same generator configuration produces another password the target will
-    /// refuse for the same reason, so retrying spends attempts to reach the same answer, and buries the one
-    /// thing that would fix it: an administrator changing the configuration. Saving a changed configuration on
-    /// the Synchronisation Rule releases everything parked against it.
+    /// The common case is a policy rejection: the target accepted the request and refused the password itself
+    /// for not satisfying the rules in force for that account. The same generator configuration produces
+    /// another password it refuses for the same reason, so retrying spends attempts reaching the same answer
+    /// and buries the one thing that would fix it. A generator configuration that cannot be satisfied at all,
+    /// and a target that cannot set a password on this kind of object, land here for the same reason.
+    /// </para>
+    /// <para>
+    /// This is the distinction from <see cref="Pending"/>, and it is the whole point of having two states:
+    /// pending means time or the environment may resolve it, parked means only an administrator can.
+    /// Saving a changed configuration on the Synchronisation Rule releases everything parked against it.
     /// </para>
     /// </summary>
     Parked = 1,
@@ -40,4 +45,31 @@ public enum PendingInitialPasswordStatus
     /// </para>
     /// </summary>
     Expired = 2
+}
+
+/// <summary>
+/// What came of trying to give a newly provisioned account its first password.
+/// </summary>
+public enum InitialPasswordDeliveryOutcome
+{
+    /// <summary>The password was set, and the account is no longer owed one.</summary>
+    Delivered = 0,
+
+    /// <summary>
+    /// It did not work, but time or a corrected environment may resolve it: the directory was unreachable, or
+    /// the account was not visible yet, which after a create is often nothing more than replication catching up.
+    /// </summary>
+    Retry = 1,
+
+    /// <summary>
+    /// It did not work and will not until somebody changes the configuration. See
+    /// <see cref="PendingInitialPasswordStatus.Parked"/>.
+    /// </summary>
+    Parked = 2,
+
+    /// <summary>
+    /// There was nothing to do: the Synchronisation Rule does not ask for an initial password, or the Connected
+    /// System cannot set one. Distinguished from a failure so that a run does not report work it never had.
+    /// </summary>
+    NotApplicable = 3
 }
