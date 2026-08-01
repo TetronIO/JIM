@@ -187,7 +187,9 @@
                 </MudItem>
             }
 
-            @if (!string.IsNullOrEmpty(_activity.Message))
+            @* While a run is in flight the message is live progress narration, and it belongs with
+               the step it describes rather than repeated in the summary. *@
+            @if (!string.IsNullOrEmpty(_activity.Message) && _activity.Status != ActivityStatus.InProgress)
             {
                 <MudItem xs="12">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Message:</MudText>
@@ -196,6 +198,15 @@
             }
         </MudGrid>
     </MudPaper>
+
+    @* The run's steps: what is done, what is running, and what is still to come (#454). Shown while
+       the run is in flight and afterwards, where the durations answer where the time went. *@
+    @if (_phases.Count > 0)
+    {
+        <MudPaper Class="pa-4 mt-6" Outlined="true">
+            <RunPhaseStepper Phases="_phases" Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)" />
+        </MudPaper>
+    }
 
     @if (_activity.Status == ActivityStatus.InProgress)
     {
@@ -206,7 +217,9 @@
 
         <MudPaper Class="pa-4 mt-6" Outlined="true">
             <MudStack Spacing="2">
-                @if (!string.IsNullOrEmpty(_activity.Message))
+                @* The message rides with the step it belongs to in the stepper above; repeating it
+                   here would print the same sentence twice on the page. *@
+                @if (_phases.Count == 0 && !string.IsNullOrEmpty(_activity.Message))
                 {
                     <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
                 }
@@ -938,6 +951,12 @@
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
+
+    /// <summary>
+    /// The steps of this Run Profile execution (#454), refreshed alongside the Activity so the
+    /// stepper tracks the run live and still reads correctly on a page opened after it finished.
+    /// </summary>
+    private IReadOnlyList<ActivityPhase> _phases = [];
     private string _searchString = "";
     private bool _loading;
     private int _rowsPerPage = 10;
@@ -1055,7 +1074,10 @@
             _parentActivity = await jim.Activities.GetActivityAsync(_activity.ParentActivityId.Value);
 
         if (ShowsExecutionItems)
+        {
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+            _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
+        }
 
         // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
         _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
@@ -1545,7 +1567,10 @@
             // Refresh child activities and stats alongside the activity itself
             _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([updated.Id])).GetValueOrDefault(updated.Id);
             if (ShowsExecutionItems)
+            {
                 _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(updated.Id);
+                _phases = await jim.Activities.GetActivityPhasesAsync(updated.Id);
+            }
 
             await InvokeAsync(StateHasChanged);
 

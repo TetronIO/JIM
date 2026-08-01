@@ -1,0 +1,115 @@
+@using JIM.Models.Activities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* ─── Run phase stepper (#454) ─── *@
+@* The journey through a Run Profile execution: what is done and how long it took, what is running
+   now, and what is still to come. The progress bar beneath shows detail for the step in progress;
+   this answers "where am I, and how much is left", which a bar that restarts per step cannot. *@
+
+@if (Phases.Count > 0)
+{
+    <div class="jim-phase-stepper">
+        @foreach (var phase in TopLevelPhases)
+        {
+            var children = ChildrenOf(phase.Key);
+            var isActive = phase.Status == ActivityPhaseStatus.Active;
+
+            <div class="jim-phase-step jim-phase-step--@StatusModifier(phase.Status)">
+                <div class="jim-phase-step-marker">
+                    <MudIcon Icon="@StatusIcon(phase.Status)" Size="Size.Small" />
+                </div>
+                <div class="jim-phase-step-body">
+                    <div class="jim-phase-step-heading">
+                        <MudText Typo="Typo.body1" Class="jim-phase-step-name">@phase.Name</MudText>
+                        @if (StatusNote(phase.Status) is { Length: > 0 } note)
+                        {
+                            <MudText Typo="Typo.body2" Class="jim-phase-step-note">@note</MudText>
+                        }
+                        @if (phase.Duration is { } duration)
+                        {
+                            <MudText Typo="Typo.body2" Class="jim-phase-step-duration">@duration.ToAbbreviatedString()</MudText>
+                        }
+                    </div>
+
+                    @* The active step carries the live detail: the Connector's own steps where it
+                       declared any, and the message describing what is happening right now. *@
+                    @if (isActive && children.Count > 0)
+                    {
+                        <div class="jim-phase-substeps">
+                            @foreach (var child in children)
+                            {
+                                <div class="jim-phase-substep jim-phase-substep--@StatusModifier(child.Status)">
+                                    <MudIcon Icon="@StatusIcon(child.Status)" Size="Size.Small" Class="jim-phase-substep-icon" />
+                                    <MudText Typo="Typo.body2">@child.Name</MudText>
+                                    @if (child.Duration is { } childDuration)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="jim-phase-step-duration">@childDuration.ToAbbreviatedString()</MudText>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (isActive && !string.IsNullOrWhiteSpace(Message))
+                    {
+                        <MudText Typo="Typo.body2" Class="jim-phase-step-message">@Message</MudText>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The run's steps, in run order. Renders nothing when empty, which covers Activities that are
+    /// not Run Profile executions and runs that predate phase recording.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
+
+    /// <summary>
+    /// The Activity's current message, shown under the step that is running so the narration and
+    /// the step it belongs to are read together rather than in two places.
+    /// </summary>
+    [Parameter]
+    public string? Message { get; set; }
+
+    private List<ActivityPhase> TopLevelPhases => Phases.Where(p => p.ParentKey == null).OrderBy(p => p.Order).ToList();
+
+    private List<ActivityPhase> ChildrenOf(string parentKey) =>
+        Phases.Where(p => p.ParentKey == parentKey).OrderBy(p => p.Order).ToList();
+
+    private static string StatusModifier(ActivityPhaseStatus status) => status switch
+    {
+        ActivityPhaseStatus.Active => "active",
+        ActivityPhaseStatus.Completed => "completed",
+        ActivityPhaseStatus.Skipped => "skipped",
+        ActivityPhaseStatus.Failed => "failed",
+        _ => "pending"
+    };
+
+    private static string StatusIcon(ActivityPhaseStatus status) => status switch
+    {
+        // The worker icon, animated by the stepper's CSS, is the same one the Operations Queue uses
+        // for work in flight, so "something is happening" reads the same way across the portal.
+        ActivityPhaseStatus.Active => Icons.Material.Filled.Memory,
+        ActivityPhaseStatus.Completed => Icons.Material.Filled.CheckCircle,
+        ActivityPhaseStatus.Skipped => Icons.Material.Filled.RemoveCircleOutline,
+        ActivityPhaseStatus.Failed => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.RadioButtonUnchecked
+    };
+
+    /// <summary>
+    /// Says what an unusual outcome means, so a step that never ran does not read as a problem and
+    /// a failed step does not need hunting for.
+    /// </summary>
+    private static string StatusNote(ActivityPhaseStatus status) => status switch
+    {
+        ActivityPhaseStatus.Skipped => "not needed",
+        ActivityPhaseStatus.Failed => "failed here",
+        _ => string.Empty
+    };
+}
