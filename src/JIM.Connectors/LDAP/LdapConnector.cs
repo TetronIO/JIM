@@ -26,11 +26,41 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private LdapConnectorExport? _currentExport;
 
     /// <summary>
-    /// The persisted connector state replayed by JIM at connection open (issue #230). Stored for a
-    /// later slice that will use it to pin the domain controller resolved on the first connection so
-    /// subsequent runs consistently hit the same DC. Not consumed by this connector yet.
+    /// The persisted connector state replayed by JIM at connection open (issue #230), including any
+    /// pinned domain controller. Read by <see cref="OpenImportConnection"/> to resolve the effective
+    /// server, and re-read by <see cref="CloseImportConnection"/>/<see cref="CloseExportConnection"/> as
+    /// the base to merge a pin update into, so any other persisted field (USN/changelog/accesslog
+    /// watermarks, invocationId) survives untouched.
     /// </summary>
     private string? _persistedConnectorData;
+
+    /// <summary>
+    /// Where the server used by the most recent <see cref="OpenImportConnection"/> call came from (issue
+    /// #230 Phase 2). Only a connection resolved via <see cref="LdapServerResolutionSource.Pinned"/> can
+    /// have its pin invalidated on failure; the other two sources are administrator-supplied or unpinned.
+    /// </summary>
+    private LdapServerResolutionSource? _lastResolutionSource;
+
+    /// <summary>
+    /// Set when a connection opened via a pinned domain controller fails after retries are exhausted.
+    /// Read (and cleared) by <see cref="CloseImportConnection"/>, which returns persisted connector data
+    /// with the pin removed so the next run re-discovers and re-pins via Host.
+    /// </summary>
+    private bool _pinInvalidatedByConnectionFailure;
+
+    /// <summary>
+    /// A newly discovered domain controller to pin, captured by <see cref="OpenExportConnection"/> when an
+    /// AD-family directory has no Preferred Domain Controller configured and no pin yet exists. Read (and
+    /// cleared) by <see cref="CloseExportConnection"/>. Import establishes/self-heals its own pin through
+    /// the ordinary import-result persistence channel, so this field is export-only.
+    /// </summary>
+    private string? _exportDiscoveredPinnedServer;
+
+    /// <summary>
+    /// The directory type detected alongside <see cref="_exportDiscoveredPinnedServer"/>, used as the
+    /// fallback directory type if no previous persisted connector data exists to merge the new pin into.
+    /// </summary>
+    private LdapDirectoryType? _exportDiscoveredDirectoryTypeForPin;
 
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
@@ -62,6 +92,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
+    private readonly string _settingPreferredDomainController = "Preferred Domain Controller";
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
@@ -96,6 +127,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+            new() { Name = _settingPreferredDomainController, Required = false, Description = "Applies to Active Directory and Samba AD. A specific domain controller FQDN to always connect to. When left blank, JIM automatically discovers and pins the domain controller it reaches via the Host value. For LDAPS, use a name present in the domain controller's certificate.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
@@ -255,11 +287,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorImportUsingCalls members
     public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
     {
-        // Stored for a later slice (issue #230); not consumed by this connector yet.
+        // Replayed by CloseImportConnection/CloseExportConnection as the base to merge a pin update into
+        // (issue #230), and consulted below to resolve the effective server for this connection.
         _persistedConnectorData = persistedConnectorData;
 
         logger.Verbose("OpenImportConnection() called");
         var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
+        var preferredDomainControllerSetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPreferredDomainController);
         var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
         var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
         var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
@@ -281,8 +315,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
+        // Resolve which server this connection actually opens against (issue #230 Phase 2): the Preferred
+        // Domain Controller setting when configured, else a domain controller pinned from a previous
+        // connection, else the configured Host. The result feeds the connection factory below, so every
+        // parallel connection this run creates resolves to the same server.
+        var (effectiveServer, resolutionSource) = LdapConnectorUtilities.ResolveEffectiveServer(
+            preferredDomainControllerSetting?.StringValue, persistedConnectorData, directoryServer.StringValue, logger);
+        _lastResolutionSource = resolutionSource;
+
         logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
-            LogSanitiser.Sanitise(directoryServer.StringValue), directoryServerPort.IntValue,
+            LogSanitiser.Sanitise(effectiveServer), directoryServerPort.IntValue,
             LogSanitiser.Sanitise(username.StringValue), LogSanitiser.Sanitise(authTypeSettingValue.StringValue), useSsl);
 
         // Supply the certificates from the JIM certificate store as additional trust anchors for LDAPS. The platform
@@ -291,7 +333,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (useSsl && _certificateProvider != null)
             PrepareTrustedCertificateDirectory(logger);
 
-        var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
+        var identifier = new LdapDirectoryIdentifier(effectiveServer, directoryServerPort.IntValue.Value);
 
         // Decrypt the password if credential protection is available
         // If not available or password is plain text, it will be returned as-is
@@ -332,11 +374,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             _trustDirectory?.Dispose();
             _trustDirectory = null;
+            InvalidatePinOnConnectionFailure(resolutionSource, effectiveServer, logger);
 
             // "The LDAP server is unavailable" is what a refused certificate looks like, so before reporting a
             // connectivity failure, go and look at what the server actually presented.
             if (useSsl)
-                ThrowIfCertificateWasRejected(directoryServer.StringValue, directoryServerPort.IntValue.Value,
+                ThrowIfCertificateWasRejected(effectiveServer, directoryServerPort.IntValue.Value,
                     connectionTimeout, logger, ex);
 
             throw;
@@ -345,8 +388,27 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             _trustDirectory?.Dispose();
             _trustDirectory = null;
+            InvalidatePinOnConnectionFailure(resolutionSource, effectiveServer, logger);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Records that the pin must be invalidated, when the connection just attempted (and about to fail
+    /// past retries) was resolved via a pinned domain controller (issue #230 Phase 2). The exception this
+    /// wraps is always rethrown unchanged by the caller: there is no mid-run failover, by design (the run
+    /// must fail), so this only leaves a note for <see cref="CloseImportConnection"/> to act on. The other
+    /// two resolution sources are administrator-supplied or unpinned, so their failures leave no pin state
+    /// to touch.
+    /// </summary>
+    private void InvalidatePinOnConnectionFailure(LdapServerResolutionSource resolutionSource, string effectiveServer, ILogger logger)
+    {
+        if (resolutionSource != LdapServerResolutionSource.Pinned)
+            return;
+
+        logger.Warning("OpenImportConnection: The connection to the pinned domain controller {Server} failed after exhausting retries. Invalidating the pin; the next run will re-discover and re-pin a domain controller via Host.",
+            LogSanitiser.Sanitise(effectiveServer));
+        _pinInvalidatedByConnectionFailure = true;
     }
 
     /// <summary>
@@ -483,7 +545,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .SingleOrDefault(s => s.Setting.Name == _settingImportConcurrency)?.IntValue
             ?? LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY;
 
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken, progressCallback);
+        // Needed so GetRootDseInformation can decide whether to (re-)pin the domain controller it just
+        // connected to, or clear a pin left over from a previous configuration (issue #230 Phase 2).
+        var preferredDomainController = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
+
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, preferredDomainController, logger, cancellationToken, progressCallback);
 
         switch (runProfile.RunType)
         {
@@ -510,9 +577,17 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _trustDirectory?.Dispose();
         _trustDirectory = null;
 
-        // No pinning logic yet (issue #230 slice 1 is plumbing-only); a later slice will return an
-        // updated pin here when the resolved domain controller needs to change.
-        return null;
+        // Pin invalidation (issue #230 Phase 2): a connection through a pinned domain controller failed
+        // past retries in OpenImportConnection. Return the replayed persisted data with the pin removed so
+        // the next run resolves via Host, re-discovers a domain controller, and re-pins. Import sessions
+        // that reached ImportAsync already carried any pin change through the import result's own
+        // PersistedConnectorData, so this only returns non-null for the invalidation case.
+        if (!_pinInvalidatedByConnectionFailure)
+            return null;
+
+        _pinInvalidatedByConnectionFailure = false;
+        return LdapConnectorUtilities.MergePinnedDirectoryServerIntoPersistedData(
+            _persistedConnectorData, null, LdapDirectoryType.Generic, Log.Logger);
     }
     #endregion
 
@@ -531,6 +606,27 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
             _directoryType = rootDse.DirectoryType;
+
+            // Pin creation (issue #230 Phase 2): export does not re-query rootDSE and re-pin on every run
+            // the way import self-heals via LdapConnectorImport.GetRootDseInformation; it only needs to
+            // establish a pin the first time an AD-family directory has none. _lastResolutionSource is
+            // Pinned only when a usable pin already existed, so this only fires when one genuinely does
+            // not: no Preferred Domain Controller configured, and either no persisted data, malformed
+            // persisted data, or persisted data whose pin is null (for example, a baseline recorded while
+            // a Preferred Domain Controller was configured, since cleared).
+            var preferredDomainController = settings
+                .FirstOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
+
+            if (rootDse.UseUsnDeltaImport &&
+                string.IsNullOrWhiteSpace(preferredDomainController) &&
+                _lastResolutionSource != LdapServerResolutionSource.Pinned &&
+                !string.IsNullOrEmpty(rootDse.DnsHostName))
+            {
+                Log.Logger.Information("OpenExportConnection: No pinned domain controller exists for this AD-family directory. Establishing one at {Server}.",
+                    LogSanitiser.Sanitise(rootDse.DnsHostName));
+                _exportDiscoveredPinnedServer = rootDse.DnsHostName;
+                _exportDiscoveredDirectoryTypeForPin = rootDse.DirectoryType;
+            }
         }
     }
 
@@ -568,7 +664,23 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     {
         _exportSettings = null;
         _currentExport = null;
-        return CloseImportConnection();
+
+        // Pin invalidation takes priority: if the connection never succeeded, OpenExportConnection never
+        // reached the pin-creation check below either, so the two cases cannot both apply.
+        var closeImportResult = CloseImportConnection();
+        if (closeImportResult != null)
+            return closeImportResult;
+
+        if (_exportDiscoveredPinnedServer == null)
+            return null;
+
+        var updated = LdapConnectorUtilities.MergePinnedDirectoryServerIntoPersistedData(
+            _persistedConnectorData, _exportDiscoveredPinnedServer,
+            _exportDiscoveredDirectoryTypeForPin ?? LdapDirectoryType.Generic, Log.Logger);
+
+        _exportDiscoveredPinnedServer = null;
+        _exportDiscoveredDirectoryTypeForPin = null;
+        return updated;
     }
     #endregion
 

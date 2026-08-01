@@ -27,6 +27,7 @@ internal class LdapConnectorImport
     private readonly int _importConcurrency;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
+    private readonly string? _preferredDomainController;
     private readonly TimeSpan _searchTimeout;
     private readonly string _placeholderMemberDn;
     private readonly Func<string, Task>? _progressCallback;
@@ -41,6 +42,7 @@ internal class LdapConnectorImport
         int importConcurrency,
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
+        string? preferredDomainController,
         ILogger logger,
         CancellationToken cancellationToken,
         Func<string, Task>? progressCallback = null)
@@ -52,6 +54,7 @@ internal class LdapConnectorImport
         _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
         _paginationTokens = paginationTokens;
         _persistedConnectorData = persistedConnectorData;
+        _preferredDomainController = preferredDomainController;
         _logger = logger;
         _cancellationToken = cancellationToken;
         _progressCallback = progressCallback;
@@ -843,8 +846,17 @@ internal class LdapConnectorImport
             }
         }
 
-        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}, InvocationId={InvocationId}",
-            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)", rootDse.InvocationId);
+        // Pin creation and self-healing (issue #230 Phase 2): the connection that answered this rootDSE
+        // query was itself opened via the resolved pin (or Host, on a first connection or after a pin was
+        // just invalidated), so setting the pin to the domain controller reached here both establishes the
+        // pin on first-ever connection and re-affirms/self-heals it on every later import. When a Preferred
+        // Domain Controller is configured, the setting owns selection, so any pin from a previous
+        // configuration is cleared rather than carried forward into the new baseline.
+        rootDse.PinnedDirectoryServer = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            rootDse.UseUsnDeltaImport, _preferredDomainController, rootDse.DnsHostName);
+
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}, InvocationId={InvocationId}, PinnedDirectoryServer={PinnedDirectoryServer}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)", rootDse.InvocationId, LogSanitiser.Sanitise(rootDse.PinnedDirectoryServer) ?? "(not set)");
         return rootDse;
     }
 

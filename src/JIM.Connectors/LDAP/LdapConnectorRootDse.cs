@@ -60,6 +60,19 @@ internal class LdapConnectorRootDse
     /// </summary>
     public string? VendorName { get; set; }
 
+    /// <summary>
+    /// The FQDN of the domain controller all connections for this Connected System are pinned to (issue
+    /// #230 Phase 2). Discovered from the directory's dnsHostName on first connection when no Preferred
+    /// Domain Controller setting is configured, so that every parallel connection in a run, and every
+    /// subsequent run, resolves to the same domain controller (replication consistency, and a stable
+    /// identity for the USN watermark). Null when pinning does not apply: non-AD-family directories
+    /// (OpenLDAP, Generic), or when a Preferred Domain Controller is explicitly configured, in which case
+    /// the setting owns domain controller selection and any previous pin must not survive. Old persisted
+    /// JSON predating this property deserialises this to null, which is the intended compatibility path
+    /// (equivalent to "no pin yet").
+    /// </summary>
+    public string? PinnedDirectoryServer { get; set; }
+
     // -----------------------------------------------------------------------
     // Computed properties — centralised directory-type-specific behaviour
     // -----------------------------------------------------------------------

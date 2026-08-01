@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
 internal static class LdapConnectorUtilities
@@ -452,7 +453,7 @@ internal static class LdapConnectorUtilities
     internal static LdapConnectorRootDse GetBasicRootDseInformation(LdapConnection connection, ILogger logger)
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass"]);
+        request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass", "DNSHostName"]);
 
         var response = (SearchResponse)connection.SendRequest(request);
 
@@ -467,13 +468,15 @@ internal static class LdapConnectorUtilities
         var capabilities = GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
         var structuralObjectClass = GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
+        var dnsHostName = GetEntryAttributeStringValue(rootDseEntry, "DNSHostName");
 
         var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
 
         var rootDse = new LdapConnectorRootDse
         {
             DirectoryType = directoryType,
-            VendorName = vendorName
+            VendorName = vendorName,
+            DnsHostName = dnsHostName
         };
 
         logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
@@ -663,5 +666,140 @@ internal static class LdapConnectorUtilities
 
         logger.Warning("VerifyDomainControllerIdentity: Could not verify domain controller identity between the previous watermark and the current " +
             "connection (no comparable invocationId or hostname pair was available). Proceeding without domain controller mismatch verification.");
+    }
+
+    /// <summary>
+    /// Resolves which server a connection should be opened against, and why (issue #230 Phase 2). This
+    /// is the single point where the domain controller/directory server for a connection is decided, so
+    /// that the connection factory (and therefore every parallel connection in a run) resolves to the
+    /// same server.
+    /// </summary>
+    /// <remarks>
+    /// Priority order:
+    /// <list type="number">
+    ///   <item>A non-blank Preferred Domain Controller setting always wins: the administrator has
+    ///   explicitly chosen, so no other source is even consulted.</item>
+    ///   <item>Otherwise, a domain controller pinned in <paramref name="persistedConnectorData"/> from a
+    ///   previous connection is used. Malformed persisted data (an old format, or corruption) is
+    ///   tolerated: the specific exception is caught, a warning logged, and resolution falls through to
+    ///   Host exactly as if no pin existed - a deserialisation failure must never itself fail a
+    ///   connection attempt.</item>
+    ///   <item>Otherwise, the configured Host setting is used, as it always was before pinning existed.</item>
+    /// </list>
+    /// </remarks>
+    /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
+    /// <param name="persistedConnectorData">The persisted connector data replayed for this connection, or null.</param>
+    /// <param name="host">The configured Host setting value; the final fallback.</param>
+    /// <param name="logger">Logger for the resolution decision; server strings are sanitised before logging.</param>
+    /// <returns>The server to connect to, and which source it came from.</returns>
+    internal static (string Server, LdapServerResolutionSource Source) ResolveEffectiveServer(
+        string? preferredDomainController,
+        string? persistedConnectorData,
+        string host,
+        ILogger logger)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredDomainController))
+        {
+            logger.Information("ResolveEffectiveServer: Connecting via the configured Preferred Domain Controller {Server}.",
+                LogSanitiser.Sanitise(preferredDomainController));
+            return (preferredDomainController, LdapServerResolutionSource.PreferredSetting);
+        }
+
+        if (!string.IsNullOrEmpty(persistedConnectorData))
+        {
+            LdapConnectorRootDse? previousRootDse = null;
+            try
+            {
+                previousRootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+            }
+            catch (JsonException ex)
+            {
+                logger.Warning(ex, "ResolveEffectiveServer: Failed to deserialise persisted connector data while looking for a pinned domain controller. Falling back to the configured Host.");
+            }
+
+            if (!string.IsNullOrEmpty(previousRootDse?.PinnedDirectoryServer))
+            {
+                logger.Information("ResolveEffectiveServer: Connecting via the pinned domain controller {Server}.",
+                    LogSanitiser.Sanitise(previousRootDse.PinnedDirectoryServer));
+                return (previousRootDse.PinnedDirectoryServer, LdapServerResolutionSource.Pinned);
+            }
+        }
+
+        logger.Information("ResolveEffectiveServer: Connecting via the configured Host {Server}.", LogSanitiser.Sanitise(host));
+        return (host, LdapServerResolutionSource.Host);
+    }
+
+    /// <summary>
+    /// Decides the <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/> value a full or delta import
+    /// should persist this run (issue #230 Phase 2). Pinning only ever applies to AD-family directories
+    /// (USN-based delta import); non-AD-family directories never pin.
+    /// </summary>
+    /// <remarks>
+    /// When no Preferred Domain Controller is configured, this returns <paramref name="dnsHostName"/> -
+    /// the domain controller the current connection actually reached, whether resolved via Host (first
+    /// connection, or a prior pin was just invalidated) or via an existing pin. Because the connection
+    /// was opened via whichever server was resolved, returning that same server here both creates the pin
+    /// on a first-ever connection and self-heals/re-affirms it on every subsequent run.
+    /// <para>
+    /// When a Preferred Domain Controller IS configured, this returns null: the setting owns domain
+    /// controller selection, so a pin recorded under a previous configuration (or before the setting was
+    /// introduced) must not survive into the new baseline.
+    /// </para>
+    /// </remarks>
+    /// <param name="useUsnDeltaImport">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>).</param>
+    /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
+    /// <param name="dnsHostName">The dnsHostName of the domain controller this connection reached.</param>
+    /// <returns>The value to persist as <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/>.</returns>
+    internal static string? ResolvePinnedDirectoryServerForImport(bool useUsnDeltaImport, string? preferredDomainController, string? dnsHostName)
+    {
+        if (!useUsnDeltaImport)
+            return null;
+
+        return string.IsNullOrWhiteSpace(preferredDomainController) ? dnsHostName : null;
+    }
+
+    /// <summary>
+    /// Updates only the <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/> field of persisted
+    /// connector data, leaving every other field (the USN/changelog/accesslog watermarks, invocationId,
+    /// directory type, vendor name) exactly as replayed (issue #230 Phase 2). Used by both the export-path
+    /// pin creation (<c>CloseExportConnection</c>) and the pin invalidation on a failed pinned connection
+    /// (<c>CloseImportConnection</c>/<c>CloseExportConnection</c>): the two callers differ only in whether
+    /// they pass a new pin or null.
+    /// </summary>
+    /// <remarks>
+    /// Preserving the watermark fields byte-for-byte in meaning is a correctness requirement: a regressed
+    /// watermark corrupts delta imports. Malformed or absent previous data is tolerated (the specific
+    /// deserialisation exception is caught and a warning logged) by starting from a minimal record that
+    /// carries only the pin and <paramref name="fallbackDirectoryType"/> - there is nothing else to
+    /// recover from data that could not be read.
+    /// </remarks>
+    /// <param name="persistedConnectorData">The persisted connector data to update, or null if none exists yet.</param>
+    /// <param name="newPinnedDirectoryServer">The new pin value; null clears the pin.</param>
+    /// <param name="fallbackDirectoryType">The directory type to record when no previous data can be recovered.</param>
+    /// <param name="logger">Logger for a deserialisation failure warning.</param>
+    /// <returns>The updated persisted connector data JSON.</returns>
+    internal static string MergePinnedDirectoryServerIntoPersistedData(
+        string? persistedConnectorData,
+        string? newPinnedDirectoryServer,
+        LdapDirectoryType fallbackDirectoryType,
+        ILogger logger)
+    {
+        LdapConnectorRootDse? rootDse = null;
+
+        if (!string.IsNullOrEmpty(persistedConnectorData))
+        {
+            try
+            {
+                rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+            }
+            catch (JsonException ex)
+            {
+                logger.Warning(ex, "MergePinnedDirectoryServerIntoPersistedData: Failed to deserialise persisted connector data. Replacing it with a minimal record carrying only the pin and directory type.");
+            }
+        }
+
+        rootDse ??= new LdapConnectorRootDse { DirectoryType = fallbackDirectoryType };
+        rootDse.PinnedDirectoryServer = newPinnedDirectoryServer;
+        return JsonSerializer.Serialize(rootDse);
     }
 }
