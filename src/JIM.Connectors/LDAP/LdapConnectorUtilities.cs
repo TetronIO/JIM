@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -592,5 +593,75 @@ internal static class LdapConnectorUtilities
     internal static string GenerateAccesslogFallbackTimestamp()
     {
         return DateTime.UtcNow.ToString("yyyyMMddHHmmss.ffffffZ");
+    }
+
+    /// <summary>
+    /// Guards a USN-based delta import against silently running against a different domain controller
+    /// than the one that produced the persisted watermark. AD/Samba AD USNs are scoped to the issuing
+    /// DC's invocationId, so a DNS round-robin Host resolving to a different DC (or a DC restored from
+    /// backup, which is issued a new invocationId) would otherwise make the persisted
+    /// <see cref="LdapConnectorRootDse.HighestCommittedUsn"/> meaningless: subsequent USN comparisons
+    /// against the new DC can silently skip changes or re-import stale ones.
+    /// </summary>
+    /// <remarks>
+    /// Comparison order:
+    /// <list type="number">
+    ///   <item>Both runs' <see cref="LdapConnectorRootDse.InvocationId"/> are present: compare directly.
+    ///   A mismatch is conclusive (different DC, or the same DC restored from backup) and throws.</item>
+    ///   <item>Either invocationId is missing (a baseline persisted before this guard was added, or the
+    ///   current run's invocationId query failed, for example due to permissions): fall back to a
+    ///   case-insensitive comparison of <see cref="LdapConnectorRootDse.DnsHostName"/>. A mismatch throws.
+    ///   This catches the detectable subset of mismatches even when the stronger signal is unavailable;
+    ///   it cannot detect a restore of the same DC.</item>
+    ///   <item>Neither comparison is possible: proceed without failing the import, logging a warning that
+    ///   identity could not be verified. Missing data must never itself fail a delta import.</item>
+    /// </list>
+    /// </remarks>
+    /// <param name="previousRootDse">The RootDSE info persisted by the run that produced the current watermark.</param>
+    /// <param name="currentRootDse">The RootDSE info just queried on the connection about to perform the delta import.</param>
+    /// <param name="logger">Logger for diagnostics; identifiers sourced from the directory are sanitised before logging.</param>
+    /// <exception cref="CannotPerformDeltaImportException">The domain controller identity has changed between the two runs.</exception>
+    internal static void VerifyDomainControllerIdentity(LdapConnectorRootDse previousRootDse, LdapConnectorRootDse currentRootDse, ILogger logger)
+    {
+        var previousInvocationId = previousRootDse.InvocationId;
+        var currentInvocationId = currentRootDse.InvocationId;
+
+        if (previousInvocationId.HasValue && currentInvocationId.HasValue)
+        {
+            if (previousInvocationId.Value == currentInvocationId.Value)
+                return;
+
+            logger.Warning("VerifyDomainControllerIdentity: Domain controller invocationId mismatch. Previous: {PreviousInvocationId}, Current: {CurrentInvocationId}.",
+                previousInvocationId.Value, currentInvocationId.Value);
+
+            throw new CannotPerformDeltaImportException(
+                $"Delta import aborted: the domain controller's invocationId has changed since the watermark was recorded " +
+                $"(previous: {previousInvocationId.Value}, current: {currentInvocationId.Value}). This can happen when a domain " +
+                "name configured as Host resolves to a different domain controller (DNS round-robin), or the domain controller " +
+                "was restored from backup. Run a Full Import to re-establish the delta baseline.");
+        }
+
+        // The invocationId pair is incomplete (a baseline persisted before this guard was added, or the
+        // current run's invocationId query failed); fall back to comparing the DC hostnames. Weaker (it
+        // cannot detect a restore of the same DC) but catches the detectable subset of mismatches.
+        var previousHostname = previousRootDse.DnsHostName;
+        var currentHostname = currentRootDse.DnsHostName;
+
+        if (!string.IsNullOrEmpty(previousHostname) && !string.IsNullOrEmpty(currentHostname))
+        {
+            if (string.Equals(previousHostname, currentHostname, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            logger.Warning("VerifyDomainControllerIdentity: Domain controller hostname mismatch (invocationId not available for comparison). Previous: {PreviousHostname}, Current: {CurrentHostname}.",
+                LogSanitiser.Sanitise(previousHostname), LogSanitiser.Sanitise(currentHostname));
+
+            throw new CannotPerformDeltaImportException(
+                $"Delta import aborted: the domain controller hostname has changed since the watermark was recorded " +
+                $"(previous: {previousHostname}, current: {currentHostname}). This can happen when a domain name configured " +
+                "as Host resolves to a different domain controller (DNS round-robin). Run a Full Import to re-establish the delta baseline.");
+        }
+
+        logger.Warning("VerifyDomainControllerIdentity: Could not verify domain controller identity between the previous watermark and the current " +
+            "connection (no comparable invocationId or hostname pair was available). Proceeding without domain controller mismatch verification.");
     }
 }

@@ -25,7 +25,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 - **Full Import**<br /> Reads all objects from selected partitions and object types.
 - **Delta Import**<br /> Imports only changes since the last import run.
-    - **Active Directory**<br /> Uses USN (Update Sequence Number) change tracking.
+    - **Active Directory**<br /> Uses USN (Update Sequence Number) change tracking. USNs are only meaningful when read back against the same domain controller that issued them, so JIM also records the domain controller's identity (its invocationId, falling back to its hostname where an invocationId is not available for comparison) and verifies it on every Delta Import before querying for changes. If the Connected System's Host setting is a domain name that DNS round-robins across multiple domain controllers, or the previous domain controller was restored from backup, the Delta Import fails fast with an error naming what changed rather than silently skipping or re-importing changes. See [Delta import fails with a domain controller mismatch error](#delta-import-fails-with-a-domain-controller-mismatch-error) below.
     - **OpenLDAP / 389 DS**<br /> Uses the changelog overlay (accesslog).
 - **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
@@ -220,6 +220,15 @@ If delta imports return no changes when changes are expected:
 - **Active Directory**: verify that the service account has read access to the `uSNChanged` attribute.
 - **OpenLDAP**: verify that the accesslog overlay is configured and the changelog database is accessible.
 - Run a full import to re-baseline, then test delta import again.
+
+### Delta import fails with a domain controller mismatch error
+
+Active Directory and Samba AD Delta Imports check that they are still talking to the same domain controller that produced the persisted USN watermark, and fail fast with an error naming the previous and current domain controller (or their invocationId) if not. This is expected, protective behaviour, not a bug: a USN watermark from one domain controller is meaningless against another, and continuing regardless risks silently skipping or re-importing changes.
+
+The most common cause is the Connected System's Host setting being a domain name that resolves to more than one domain controller (DNS round-robin), so successive Run Profile executions connect to a different domain controller each time. The other cause is the domain controller having been restored from backup, which is issued a new invocationId.
+
+- Point the Host setting at a single, specific domain controller rather than a domain name, if consistent DC affinity matters for your directory.
+- Run a Full Import to re-establish the delta baseline against whichever domain controller JIM connects to next; subsequent Delta Imports then succeed as long as that domain controller keeps answering.
 
 ### Export failures
 

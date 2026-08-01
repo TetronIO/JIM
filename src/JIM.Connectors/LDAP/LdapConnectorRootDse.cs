@@ -42,6 +42,19 @@ internal class LdapConnectorRootDse
     public LdapDirectoryType DirectoryType { get; set; } = LdapDirectoryType.Generic;
 
     /// <summary>
+    /// For Active Directory / Samba AD: the invocationId of the domain controller's NTDS Settings object.
+    /// AD USNs are scoped to the DC that issued them, so a persisted USN watermark is only meaningful when
+    /// read back against the same DC. The invocationId changes when a DC is restored from backup (a new
+    /// invocationId is generated to prevent USN reuse against stale replication state), so comparing it
+    /// between the run that produced the watermark and the current connection detects both a restore and a
+    /// connection to an entirely different DC (for example, via DNS round-robin against a domain name Host).
+    /// Null for non-AD-family directories, and for AD-family directories where the value could not be read
+    /// (for example, insufficient permissions on the NTDS Settings object); a null value means "identity
+    /// unknown", not "no mismatch".
+    /// </summary>
+    public Guid? InvocationId { get; set; }
+
+    /// <summary>
     /// The vendor name of the directory server (e.g., "Samba Team", "Microsoft", "OpenLDAP").
     /// Retained for logging and diagnostics.
     /// </summary>

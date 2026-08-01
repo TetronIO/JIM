@@ -236,6 +236,13 @@ internal class LdapConnectorImport
             await ReportProgressAsync("Querying root DSE...");
             _currentRootDse = GetRootDseInformation();
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
+
+            // Guard against a USN-based delta import silently connecting to a different domain
+            // controller than the one that produced the persisted watermark (see #230). This must
+            // run before any delta querying below, on the same connection that just answered the
+            // rootDSE query above.
+            if (_previousRootDse.UseUsnDeltaImport)
+                LdapConnectorUtilities.VerifyDomainControllerIdentity(_previousRootDse, _currentRootDse, _logger);
         }
 
         // Determine which delta strategy to use
@@ -758,7 +765,8 @@ internal class LdapConnectorImport
             "HighestCommittedUSN",
             "supportedCapabilities",
             "vendorName",
-            "structuralObjectClass"
+            "structuralObjectClass",
+            "dsServiceName"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -788,6 +796,25 @@ internal class LdapConnectorImport
             VendorName = vendorName
         };
 
+        // For AD-family directories, capture the DC's invocationId so a later delta import can detect
+        // it has connected to a different DC than the one that produced the persisted USN watermark
+        // (see VerifyDomainControllerIdentity in LdapConnectorUtilities). invocationId is not itself
+        // a rootDSE attribute: dsServiceName gives the DN of the DC's NTDS Settings object, which is
+        // queried separately below.
+        if (rootDse.UseUsnDeltaImport)
+        {
+            var dsServiceName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "dsServiceName");
+            if (string.IsNullOrEmpty(dsServiceName))
+            {
+                _logger.Warning("GetRootDseInformation: rootDSE did not return dsServiceName. " +
+                    "Domain controller identity cannot be verified for this import.");
+            }
+            else
+            {
+                rootDse.InvocationId = QueryInvocationId(dsServiceName);
+            }
+        }
+
         // For non-AD directories, capture the current delta watermark.
         // This must run during BOTH full and delta imports:
         // - Full import: establishes the baseline watermark for the first delta import
@@ -816,9 +843,64 @@ internal class LdapConnectorImport
             }
         }
 
-        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}",
-            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)");
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}, InvocationId={InvocationId}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)", rootDse.InvocationId);
         return rootDse;
+    }
+
+    /// <summary>
+    /// Queries the DC's NTDS Settings object (identified by the rootDSE's dsServiceName) for its
+    /// invocationId, a binary GUID attribute that is not itself exposed on the rootDSE. Used by
+    /// <see cref="LdapConnectorUtilities.VerifyDomainControllerIdentity"/> to detect a delta import
+    /// connecting to a different DC than the one that produced the persisted USN watermark.
+    /// Never throws: a missing attribute or an LDAP-level failure (permissions, a non-AD server that
+    /// still claims AD capabilities) is logged as a warning and returns null, since this is a
+    /// defence-in-depth guard, not itself required for the import to proceed.
+    /// </summary>
+    private Guid? QueryInvocationId(string dsServiceNameDn)
+    {
+        var request = new SearchRequest(dsServiceNameDn, "(objectClass=*)", SearchScope.Base, "invocationId");
+
+        try
+        {
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            if (response == null || response.Entries.Count == 0)
+            {
+                _logger.Warning("QueryInvocationId: No entries returned when querying the NTDS Settings object at {Dn}. " +
+                    "Domain controller identity cannot be verified for this import.", LogSanitiser.Sanitise(dsServiceNameDn));
+                return null;
+            }
+
+            var invocationId = LdapConnectorUtilities.GetEntryAttributeGuidValue(response.Entries[0], "invocationId");
+            if (invocationId == null)
+            {
+                _logger.Warning("QueryInvocationId: The NTDS Settings object at {Dn} did not return an invocationId value. " +
+                    "Domain controller identity cannot be verified for this import.", LogSanitiser.Sanitise(dsServiceNameDn));
+            }
+
+            return invocationId;
+        }
+        catch (DirectoryOperationException ex)
+        {
+            LogInvocationIdQueryFailure(dsServiceNameDn, ex);
+            return null;
+        }
+        catch (LdapException ex)
+        {
+            LogInvocationIdQueryFailure(dsServiceNameDn, ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Shared warning log for <see cref="QueryInvocationId"/>'s two identical-shaped catch clauses
+    /// (permissions, or a non-AD server that still claims AD capabilities).
+    /// </summary>
+    private void LogInvocationIdQueryFailure(string dsServiceNameDn, Exception ex)
+    {
+        _logger.Warning("QueryInvocationId: Failed to query the NTDS Settings object at {Dn}. " +
+            "Domain controller identity cannot be verified for this import. Error: {Message}",
+            LogSanitiser.Sanitise(dsServiceNameDn), LogSanitiser.Sanitise(ex.Message));
     }
 
     /// <summary>
