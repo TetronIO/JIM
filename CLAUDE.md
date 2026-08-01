@@ -63,7 +63,7 @@ If the answer is "no" or "this will not work", say so in the first sentence. The
 
 Structure every response as these three parts, in this order, and nothing else:
 
-1. **What you did:** one or two sentences, scaled to how much work it was. Never more.
+1. **What I did:** the work you (the agent) completed, headed exactly "What I did" so it reads in your voice. One or two sentences, scaled to how much work it was. Never more.
 2. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it.
 3. **Questions:** anything you need from me, as a numbered list at the very end under a clear heading. Omit the section entirely when you need nothing.
 
