@@ -1471,8 +1471,17 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// When set, <see cref="SaveActivityPhasesAsync"/> throws. Lets tests prove that a failure to
+    /// record a step (a database blip on a cosmetic write) does not fail the run itself.
+    /// </summary>
+    public bool FailActivityPhaseSaves { get; set; }
+
     public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
     {
+        if (FailActivityPhaseSaves)
+            throw new InvalidOperationException("Simulated failure recording Activity phases.");
+
         foreach (var phase in phases)
             _activityPhases[phase.Id] = phase;
 
