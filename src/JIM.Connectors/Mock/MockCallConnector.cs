@@ -43,6 +43,11 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     private Func<PendingExport, ConnectedSystemExportResult>? _exportResultFactory;
     private Func<PendingExport, ConnectedSystemImportObject>? _confirmingImportFactory;
 
+    // Issue #230 slice 1 plumbing: configurable Close return values, defaulting to null (the
+    // overwhelmingly common case), and the persisted connector data most recently passed to Open.
+    private string? _closeImportConnectionReturnValue;
+    private string? _closeExportConnectionReturnValue;
+
     #region Configuration Methods
 
     /// <summary>
@@ -131,6 +136,28 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     /// </summary>
     public Exception? ExportExceptionToThrow { get; set; }
 
+    /// <summary>
+    /// Configures the value <see cref="CloseImportConnection"/> returns. Defaults to null (the
+    /// normal case: leave persisted connector state unchanged). Set to a non-null value to simulate
+    /// a connector that needs JIM to persist updated state when the connection closes.
+    /// </summary>
+    public MockCallConnector WithCloseImportConnectionReturnValue(string? value)
+    {
+        _closeImportConnectionReturnValue = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the value <see cref="CloseExportConnection"/> returns. Defaults to null (the
+    /// normal case: leave persisted connector state unchanged). Set to a non-null value to simulate
+    /// a connector that needs JIM to persist updated state when the connection closes.
+    /// </summary>
+    public MockCallConnector WithCloseExportConnectionReturnValue(string? value)
+    {
+        _closeExportConnectionReturnValue = value;
+        return this;
+    }
+
     #endregion
 
     #region State Accessors
@@ -140,6 +167,16 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     /// Useful for verifying that the correct watermark is passed during paginated imports.
     /// </summary>
     public List<string?> ImportPersistedDataHistory { get; } = new();
+
+    /// <summary>
+    /// Gets the persisted connector data value passed to the most recent OpenImportConnection call.
+    /// </summary>
+    public string? LastOpenImportPersistedConnectorData { get; private set; }
+
+    /// <summary>
+    /// Gets the persisted connector data value passed to the most recent OpenExportConnection call.
+    /// </summary>
+    public string? LastOpenExportPersistedConnectorData { get; private set; }
 
     /// <summary>
     /// Gets all Pending Exports that were processed during Export calls.
@@ -166,6 +203,10 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         TestExceptionToThrow = null;
         ExportExceptionToThrow = null;
         ImportPersistedDataHistory.Clear();
+        LastOpenImportPersistedConnectorData = null;
+        LastOpenExportPersistedConnectorData = null;
+        _closeImportConnectionReturnValue = null;
+        _closeExportConnectionReturnValue = null;
     }
 
     /// <summary>
@@ -205,9 +246,9 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
 
     #region IConnectorImportUsingCalls Implementation
 
-    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
     {
-        // No-op for mock
+        LastOpenImportPersistedConnectorData = persistedConnectorData;
     }
 
     public Task<ConnectedSystemImportResult> ImportAsync(
@@ -238,18 +279,18 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         return Task.FromResult(result);
     }
 
-    public void CloseImportConnection()
+    public string? CloseImportConnection()
     {
-        // No-op for mock
+        return _closeImportConnectionReturnValue;
     }
 
     #endregion
 
     #region IConnectorExportUsingCalls Implementation
 
-    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings)
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
-        // No-op for mock
+        LastOpenExportPersistedConnectorData = persistedConnectorData;
     }
 
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
@@ -291,9 +332,9 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         return Task.FromResult(results);
     }
 
-    public void CloseExportConnection()
+    public string? CloseExportConnection()
     {
-        // No-op for mock
+        return _closeExportConnectionReturnValue;
     }
 
     #endregion

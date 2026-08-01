@@ -8,7 +8,13 @@ namespace JIM.Models.Interfaces;
 
 public interface IConnectorImportUsingCalls
 {
-    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger);
+    /// <summary>
+    /// Opens a connection to the Connected System, ready for import operations.
+    /// </summary>
+    /// <param name="settingValues">The Connected System's configured setting values (host, credentials, etc).</param>
+    /// <param name="persistedConnectorData">The previously persisted connector state, replayed so the connector can use it when establishing the connection (for example, a pinned directory server); null when nothing has been persisted yet.</param>
+    /// <param name="logger">Use this log to record information in the JIM logs, i.e. debug, info, warnings, errors, etc.</param>
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger);
 
     /// <summary>
     /// Used by JIM.Service to retrieve data from the Connected System. This will be called multiple times, depending on the user-configured page size, and whether there are more results to retrieve after a page of results.
@@ -23,5 +29,9 @@ public interface IConnectorImportUsingCalls
     /// <returns>A composite object that contains details of imported objects, and metadata about the import process.</returns>
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null);
 
-    public void CloseImportConnection();
+    /// <summary>
+    /// Closes the connection to the Connected System opened by <see cref="OpenImportConnection"/>.
+    /// </summary>
+    /// <returns>Return null to leave the persisted connector state unchanged (the normal case); return a value only when the connector needs JIM to persist updated state that no import result carried (for example, connection-open failed in a way that must invalidate persisted state). A non-null return is persisted by the worker AFTER any import-result persistence, so only return non-null when that override is intended.</returns>
+    public string? CloseImportConnection();
 }

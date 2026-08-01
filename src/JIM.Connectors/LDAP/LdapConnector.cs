@@ -25,6 +25,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private LdapTrustedCertificateDirectory? _trustDirectory;
     private LdapConnectorExport? _currentExport;
 
+    /// <summary>
+    /// The persisted connector state replayed by JIM at connection open (issue #230). Stored for a
+    /// later slice that will use it to pin the domain controller resolved on the first connection so
+    /// subsequent runs consistently hit the same DC. Not consumed by this connector yet.
+    /// </summary>
+    private string? _persistedConnectorData;
+
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
 
@@ -150,7 +157,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSchema members
     public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
-        OpenImportConnection(settingValues, logger);
+        // No persisted connector state applies to a schema-only connection.
+        OpenImportConnection(settingValues, null, logger);
 
         try
         {
@@ -221,7 +229,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorPartitions members
     public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
-        OpenImportConnection(settingValues, logger);
+        // No persisted connector state applies to a partition-discovery-only connection.
+        OpenImportConnection(settingValues, null, logger);
 
         try
         {
@@ -244,8 +253,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorImportUsingCalls members
-    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
     {
+        // Stored for a later slice (issue #230); not consumed by this connector yet.
+        _persistedConnectorData = persistedConnectorData;
+
         logger.Verbose("OpenImportConnection() called");
         var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
         var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
@@ -489,7 +501,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
     }
 
-    public void CloseImportConnection()
+    public string? CloseImportConnection()
     {
         _connection?.Dispose();
 
@@ -497,18 +509,22 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // as the connection is closed. A later Open call prepares a fresh one.
         _trustDirectory?.Dispose();
         _trustDirectory = null;
+
+        // No pinning logic yet (issue #230 slice 1 is plumbing-only); a later slice will return an
+        // updated pin here when the resolved domain controller needs to change.
+        return null;
     }
     #endregion
 
     #region IConnectorExportUsingCalls members
     private IList<ConnectedSystemSettingValue>? _exportSettings;
 
-    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings)
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
         _exportSettings = settings;
 
         // Reuse the same connection logic as import
-        OpenImportConnection(settings.ToList(), Log.Logger);
+        OpenImportConnection(settings.ToList(), persistedConnectorData, Log.Logger);
 
         // Detect directory type for export operations (external ID fetching, etc.)
         if (_connection != null)
@@ -548,11 +564,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 
-    public void CloseExportConnection()
+    public string? CloseExportConnection()
     {
         _exportSettings = null;
         _currentExport = null;
-        CloseImportConnection();
+        return CloseImportConnection();
     }
     #endregion
 
@@ -771,7 +787,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             try
             {
-                OpenImportConnection(settingValues, logger);
+                // This is a connectivity test only; no persisted connector state applies.
+                OpenImportConnection(settingValues, null, logger);
             }
             finally
             {

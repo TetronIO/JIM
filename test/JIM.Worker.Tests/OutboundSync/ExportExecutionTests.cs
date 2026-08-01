@@ -2232,7 +2232,7 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.OpenExportConnection(It.IsAny<IList<ConnectedSystemSettingValue>>()))
+        mockExportConnector.Setup(c => c.OpenExportConnection(It.IsAny<IList<ConnectedSystemSettingValue>>(), It.IsAny<string?>()))
             .Throws(new InvalidOperationException("Connection refused"));
 
         // Act & Assert - Exception must propagate so PerformExportAsync can fail the activity
