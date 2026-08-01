@@ -287,7 +287,7 @@ The following GitHub issues define additional deletion rule features. This secti
 | #116 | ExcludedFromLastConnectorCheck | Open | P3 - Low |
 | #117 | Soft Delete / Recycle Bin | Open | P2 - Medium |
 | #118 | Conditional MVO Deletion (Attribute-Based) | Open | P2 - Medium |
-| #119 | Authoritative Source Hierarchy | Open | P3 - Low |
+| #119 | Authoritative Source Trigger Modes (any / all / specific) | Open, planned | P3 - Low |
 | #126 | CSO Deletion Behaviour Options | Open | P2 - Medium |
 
 ---
@@ -410,26 +410,25 @@ MetaverseObjectType:
 
 ---
 
-### #119: Authoritative Source Hierarchy
+### #119: Authoritative Source Trigger Modes (any / all / specific)
 
-**Description**: Extend authoritative sources to support priority ordering and AND/OR logic (e.g., "delete only when ALL authoritative sources are gone" vs "delete when ANY is gone").
+**Description**: Extend `WhenAuthoritativeSourceDisconnected` with a configurable trigger mode: Any source disconnects (default, current behaviour), All sources disconnect, or Specific source(s) disconnect (a per-source "triggers deletion" designation). Also makes grace period cancellation mode-aware, so a rejoin only cancels a scheduled deletion when the mode's trigger condition no longer holds.
+
+**Redesigned 2026-08-01**: the original priority ordering / hierarchy concept was dropped; it collapses into the Specific mode designation. Full implementation plan: [`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](../AUTHORITATIVE_SOURCE_TRIGGER_MODES.md).
 
 **Use Cases**:
-- "Delete only when BOTH HR AND AD are disconnected" - redundant source validation
-- Multiple HR systems with different authority levels
-- Complex enterprise scenarios with regional HR systems
+- "Delete only when BOTH HR AND AD are disconnected" - redundant source validation (All mode)
+- "HR drives lifecycle; AD's state is irrelevant to deletion" (Specific mode)
+- Multiple HR systems (global plus regional) where no single system's outage should delete objects (All mode)
 
 **ILM Value Assessment**: ⭐⭐ **Niche**
 - Most deployments have a single authoritative source
-- Adds significant complexity to deletion logic
 - Edge case for very large enterprises
 - #115's "ANY in list triggers" covers most practical scenarios
 
-**Implementation Priority**: **P3 - Low (Post-MVP, if requested)**
+**Implementation Priority**: **P3 - Low (Post-MVP)**
 - #115 covers 90%+ of use cases
-- Complex to explain to admins
-- Can be added later if customers demonstrate need
-- Consider if #115 + conditional deletion (#118) covers these scenarios
+- Planned; see the implementation plan linked above
 
 ---
 
@@ -484,7 +483,7 @@ MetaverseObjectType:
 | Feature | Issue | Rationale |
 |---------|-------|-----------|
 | Excluded Systems | #116 | Niche use case |
-| Source Hierarchy | #119 | Complex enterprise only |
+| Source Trigger Modes | #119 | Complex enterprise only (planned: [`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](../AUTHORITATIVE_SOURCE_TRIGGER_MODES.md)) |
 
 ---
 
