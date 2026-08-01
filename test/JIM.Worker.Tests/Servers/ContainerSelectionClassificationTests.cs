@@ -71,15 +71,40 @@ public class ContainerSelectionClassificationTests
     #region What the administrator is asked before saving
 
     [Test]
-    public async Task EvaluateConnectedSystemAsync_DeselectingAContainer_AsksForAcknowledgementAsync()
+    public async Task EvaluateConnectedSystemAsync_DeselectingAContainer_StatesTheConsequenceAsync()
     {
         SetStoredBaseline(SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", true)));
         var proposed = SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", false));
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
-        Assert.That(result.RequiresAcknowledgement, Is.True,
-            "narrowing what a Connected System imports from changes what synchronisation sees, so it cannot save in silence");
+        var item = result.DestructiveItems.SingleOrDefault();
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsDestructive, Is.True,
+                "deselecting a container removes its objects from scope, exactly as deselecting a partition does");
+            Assert.That(item?.Label, Does.Contain("OU=Service Accounts"),
+                "the administrator needs to know which container they are removing from scope");
+            Assert.That(item?.Consequence, Is.Not.Null.And.Not.Empty,
+                "a destructive change with no stated consequence is a dialog nobody can weigh");
+        });
+    }
+
+    [Test]
+    public async Task EvaluateConnectedSystemAsync_DeselectingAContainer_ReportsItAsOneChangeAsync()
+    {
+        // The container's name, external id and hidden flag all disappear together. Listing them as three separate
+        // changes describes the mechanism rather than the act, and buries the one line that matters.
+        SetStoredBaseline(SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", true)));
+        var proposed = SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", false));
+
+        var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Items, Has.Count.EqualTo(1));
+            Assert.That(result.Items[0].ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Removed));
+        });
     }
 
     [Test]
@@ -94,6 +119,7 @@ public class ContainerSelectionClassificationTests
         {
             Assert.That(result.RequiresAcknowledgement, Is.True, "a wider import scope is a synchronisation-affecting change");
             Assert.That(result.IsDestructive, Is.False, "nothing leaves scope, so nothing existing is at risk");
+            Assert.That(result.Items.Single().ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Added));
         });
     }
 
@@ -108,6 +134,31 @@ public class ContainerSelectionClassificationTests
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
         Assert.That(result.IsDestructive, Is.False);
+    }
+
+    #endregion
+
+    #region What is recorded in the change history
+
+    [Test]
+    public void Classify_ContainerDeselected_IsDestructive()
+    {
+        var classification = Classify(
+            SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", true)),
+            SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", false)));
+
+        Assert.That(classification, Is.EqualTo(ConfigurationChangeClass.Destructive));
+    }
+
+    [Test]
+    public void Classify_ContainerRenamedInTheDirectory_IsNotDestructive()
+    {
+        // The distinction the removal classification turns on: a container that changed is not a container that left.
+        var classification = Classify(
+            SystemWithContainers(("OU=Users", true)),
+            SystemWithContainers(("OU=Colleagues", true)));
+
+        Assert.That(classification, Is.Not.EqualTo(ConfigurationChangeClass.Destructive));
     }
 
     #endregion

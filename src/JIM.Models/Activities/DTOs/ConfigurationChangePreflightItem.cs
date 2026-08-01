@@ -24,10 +24,16 @@ public class ConfigurationChangePreflightItem
     public required string Label { get; init; }
 
     /// <summary>
-    /// How consequential this individual property change is. The overall change takes the highest class among its
-    /// items; this is what lets the acknowledgement single out the dangerous property sitting beside harmless ones.
+    /// How consequential this individual property change is. This is what lets the acknowledgement single out the
+    /// dangerous property sitting beside harmless ones.
     /// </summary>
     public ConfigurationChangeClass Class { get; init; }
+
+    /// <summary>
+    /// Whether the property was modified, or a whole item added to or removed from a collection. Added and Removed
+    /// items carry no before-and-after values: what changed is the item's existence, not one of its properties.
+    /// </summary>
+    public ConfigurationDiffChangeType ChangeType { get; init; }
 
     /// <summary>
     /// The value before the change, rendered for display. Null when the property is being added, or when the value

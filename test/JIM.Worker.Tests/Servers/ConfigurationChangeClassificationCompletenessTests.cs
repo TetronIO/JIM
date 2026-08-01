@@ -113,9 +113,15 @@ public class ConfigurationChangeClassificationCompletenessTests
             _service.CreateSnapshot(BuildFullMetaverseAttribute(), HashKey)
         };
 
+        // Both change types, because a key can be destructive on removal alone (a container's selection is its
+        // presence in the snapshot, so deselecting one is a removal rather than a property edit). A key classified
+        // that way reaches the same dialog and owes the same explanation.
+        var changeTypes = new[] { ConfigurationDiffChangeType.Modified, ConfigurationDiffChangeType.Removed };
+
         var missing = snapshots
-            .SelectMany(s => CollectKeys(s.Root).Distinct().Select(key => (Snapshot: s, Key: key)))
-            .Where(x => ConfigurationChangeClassifier.ClassifyKey(x.Snapshot.ObjectType, x.Key, x.Snapshot.ObjectKey)
+            .SelectMany(s => CollectKeys(s.Root).Distinct()
+                .SelectMany(key => changeTypes.Select(changeType => (Snapshot: s, Key: key, ChangeType: changeType))))
+            .Where(x => ConfigurationChangeClassifier.ClassifyKey(x.Snapshot.ObjectType, x.Key, x.Snapshot.ObjectKey, x.ChangeType)
                         == ConfigurationChangeClass.Destructive)
             .Where(x => !ConfigurationChangeConsequences.HasCopyFor(x.Snapshot.ObjectType, x.Key))
             .Select(x => $"{x.Snapshot.ObjectType}.{x.Key}")
@@ -308,7 +314,9 @@ public class ConfigurationChangeClassificationCompletenessTests
         var partition = new ConnectedSystemPartition
         {
             Id = 30, Name = "DC=example", ExternalId = "abc", Selected = true,
-            Containers = [new ConnectedSystemContainer { Id = 40, Name = "OU=Users", ExternalId = "def", Hidden = false }]
+            // Selected matters: BuildContainers captures only selected containers, so an unselected one emits no
+            // keys at all and this guard silently covers nothing beneath the partition.
+            Containers = [new ConnectedSystemContainer { Id = 40, Name = "OU=Users", ExternalId = "def", Hidden = false, Selected = true }]
         };
 
         var system = new ConnectedSystem
