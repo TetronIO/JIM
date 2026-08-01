@@ -14,7 +14,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -95,7 +95,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = LdapConnectorConstants.DEFAULT_CONNECTION_TIMEOUT_SECONDS, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the directory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
@@ -268,10 +268,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         Func<LdapConnection> Factory,
         int MaxRetries,
         int RetryDelayMs,
-        string Host,
-        int Port,
-        TimeSpan Timeout,
-        bool UseSsl);
+        List<ConnectedSystemSettingValue> SettingValues);
 
     private ConnectionPlan BuildConnectionPlan(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
@@ -335,10 +332,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             () => CreateConnection(identifier, credential, authTypeEnumValue, connectionTimeout, useSsl, logger),
             maxRetries,
             retryDelayMs,
-            directoryServer.StringValue,
-            directoryServerPort.IntValue.Value,
-            connectionTimeout,
-            useSsl);
+            settingValues);
     }
 
     /// <summary>
@@ -364,9 +358,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             _trustDirectory = null;
 
             // "The LDAP server is unavailable" is what a refused certificate looks like, so before reporting a
-            // connectivity failure, go and look at what the server actually presented.
-            if (plan.UseSsl)
-                ThrowIfCertificateWasRejected(plan.Host, plan.Port, plan.Timeout, logger, ex);
+            // connectivity failure, go and look at what the server actually presented. No LDAPS check is needed
+            // here: ResolveSecureEndpoint returns nothing unless the system is configured for it.
+            if (ServerCertificateDiagnosis.Describe(this, plan.SettingValues, _certificateProvider, ex, logger) is { } rejection)
+                throw rejection;
 
             throw;
         }
@@ -378,40 +373,30 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
     }
 
+    #region IConnectorSecureEndpoint members
+
     /// <summary>
-    /// Examines the certificate the directory server presents and, when that is what refused the connection, replaces
-    /// the platform's opaque failure with one naming the certificate and what to do about it.
+    /// The directory server this system's settings connect to over LDAPS, so JIM can look at the certificate that
+    /// server presents without any caller naming a host of their own.
     /// </summary>
-    /// <remarks>
-    /// Only ever called after a connection has already failed. The examination cannot make a connection succeed, and
-    /// deliberately trusts nothing: it exists so an administrator is told "this certificate, this problem" instead of
-    /// "the server is unavailable".
-    /// </remarks>
-    private void ThrowIfCertificateWasRejected(string host, int port, TimeSpan timeout, ILogger logger, LdapException originalException)
+    public SecureEndpoint? ResolveSecureEndpoint(List<ConnectedSystemSettingValue> settingValues)
     {
-        var trustedCertificates = GetTrustedCertificates();
+        // Nothing encrypted is being attempted, so there is no certificate to look at.
+        if (settingValues.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection)?.CheckboxValue != true)
+            return null;
 
-        try
-        {
-            var diagnostic = ServerCertificateProbe.Probe(host, port, trustedCertificates, timeout, logger);
-            if (diagnostic == null || diagnostic.FailureReason == ServerCertificateFailureReason.None)
-                return;
+        var host = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer)?.StringValue;
+        var port = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort)?.IntValue;
+        if (string.IsNullOrWhiteSpace(host) || !port.HasValue)
+            return null;
 
-            logger.Error("LDAPS connection to {Host}:{Port} was refused because of the server's certificate. Reason: {Reason}. Subject: {Subject}, Issuer: {Issuer}, Thumbprint: {Thumbprint}, Valid to: {ValidTo}",
-                LogSanitiser.Sanitise(host), port, diagnostic.FailureReason, LogSanitiser.Sanitise(diagnostic.Subject),
-                LogSanitiser.Sanitise(diagnostic.Issuer), LogSanitiser.Sanitise(diagnostic.Thumbprint), diagnostic.ValidTo);
+        var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout)?.IntValue
+            ?? LdapConnectorConstants.DEFAULT_CONNECTION_TIMEOUT_SECONDS;
 
-            throw new ServerCertificateRejectedException(
-                $"The directory server's certificate was rejected: {diagnostic.Remediation}",
-                diagnostic,
-                originalException);
-        }
-        finally
-        {
-            foreach (var certificate in trustedCertificates)
-                certificate.Dispose();
-        }
+        return new SecureEndpoint(host, port.Value, TimeSpan.FromSeconds(timeoutSeconds), "directory server", "LDAPS");
     }
+
+    #endregion
 
     /// <summary>
     /// Creates a new bound LdapConnection with the specified parameters.
@@ -1036,7 +1021,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             return;
         }
 
-        var trustedCertificates = GetTrustedCertificates();
+        var trustedCertificates = ServerCertificateDiagnosis.LoadTrustedCertificates(_certificateProvider);
 
         try
         {
@@ -1060,24 +1045,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             foreach (var certificate in trustedCertificates)
                 certificate.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Reads the certificates an administrator has added to the JIM certificate store.
-    /// </summary>
-    /// <remarks>
-    /// The connector API is synchronous, so this has to block; what matters is which thread it blocks. It blocks on a
-    /// thread-pool thread, because the portal validates Connected System settings on Blazor's renderer
-    /// synchronisation context, which runs one callback at a time: awaiting the store on that context would post the
-    /// continuation behind the very call that is waiting for it, and neither would ever finish.
-    /// </remarks>
-    private List<X509Certificate2> GetTrustedCertificates()
-    {
-        if (_certificateProvider == null)
-            return [];
-
-        var provider = _certificateProvider;
-        return Task.Run(provider.GetTrustedCertificatesAsync).GetAwaiter().GetResult();
     }
 
     private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)

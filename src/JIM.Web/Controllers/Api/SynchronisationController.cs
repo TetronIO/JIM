@@ -11,6 +11,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
 using JIM.Models.Activities;
+using JIM.Models.Connectors;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
@@ -1285,6 +1286,135 @@ public class SynchronisationController(
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiErrorResponse.InternalError($"Clear operation failed: {ex.Message}"));
         }
+    }
+
+    /// <summary>
+    /// Read the certificate a Connected System's server presents
+    /// </summary>
+    /// <remarks>
+    /// Opens a TLS connection to the endpoint this Connected System is configured for, purely to look at the
+    /// certificate the server offers, and refuses it. Nothing is stored: trusting the certificate is a separate,
+    /// explicit call. The endpoint comes from the Connected System's own settings and can never be supplied by the
+    /// caller.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
+    /// <returns>The certificate the server presented and which check it fails.</returns>
+    /// <response code="200">The certificate the server is presenting.</response>
+    /// <response code="400">The Connected System is not configured to make an encrypted connection, so there is no certificate to look at.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">The server could not be reached, which is a connectivity problem rather than a certificate one.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/server-certificate", Name = "GetConnectedSystemServerCertificate")]
+    [ProducesResponseType(typeof(ServerCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetServerCertificateAsync(int connectedSystemId)
+    {
+        return await ReadServerCertificateAsync(connectedSystemId, draftSettingValues: null);
+    }
+
+    /// <summary>
+    /// Read the certificate a Connected System's server presents, using settings that have not been saved
+    /// </summary>
+    /// <remarks>
+    /// The same read as the GET, but taking connectivity settings the caller has entered and not yet saved. JIM
+    /// refuses to save settings that fail validation, and a certificate JIM does not trust is a validation failure,
+    /// so an administrator configuring a new Connected System has an address on screen and nothing in the database;
+    /// without this they could never reach the certificate that is blocking them. The endpoint is still derived by
+    /// the Connected System's own connector, so no address is ever named directly. Nothing is stored, and the draft
+    /// settings are never persisted.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
+    /// <param name="request">The unsaved setting values, keyed by Connector Definition Setting id.</param>
+    /// <returns>The certificate the server presented and which check it fails.</returns>
+    /// <response code="200">The certificate the server is presenting.</response>
+    /// <response code="400">The settings do not describe an encrypted connection, so there is no certificate to look at.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">The server could not be reached, which is a connectivity problem rather than a certificate one.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/server-certificate", Name = "ReadConnectedSystemServerCertificate")]
+    [ProducesResponseType(typeof(ServerCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> ReadServerCertificateAsync(int connectedSystemId, [FromBody] ReadServerCertificateRequest request)
+    {
+        return await ReadServerCertificateAsync(connectedSystemId, ServerCertificateDraftSettings.ToDrafts(request.SettingValues));
+    }
+
+    private async Task<IActionResult> ReadServerCertificateAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues)
+    {
+        _logger.LogDebug("Reading the server certificate for Connected System: {Id}", connectedSystemId);
+        var result = await _application.Certificates.ReadServerCertificateAsync(connectedSystemId, draftSettingValues);
+
+        switch (result.Outcome)
+        {
+            case ServerCertificateReadOutcome.Read:
+                return Ok(new ServerCertificateResponse
+                {
+                    Certificate = result.Diagnostic!,
+                    ReadAt = result.ReadAt ?? DateTime.UtcNow
+                });
+            case ServerCertificateReadOutcome.ConnectedSystemNotFound:
+                return NotFound(ApiErrorResponse.NotFound(result.Message ?? $"Connected System with ID {connectedSystemId} not found."));
+            case ServerCertificateReadOutcome.ServerUnreachable:
+                return StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadRequest(result.Message ?? "The server could not be reached."));
+            default:
+                return BadRequest(ApiErrorResponse.BadRequest(result.Message ?? "There is no server certificate to look at."));
+        }
+    }
+
+    /// <summary>
+    /// Trust the certificate a Connected System's server presents
+    /// </summary>
+    /// <remarks>
+    /// Reads the certificate from the server again, checks it against the thumbprint supplied, and adds it to the
+    /// JIM certificate store through the audited path. The thumbprint is required and a mismatch is refused: reading
+    /// again at the moment of the decision is what makes a certificate that changed since it was shown detectable
+    /// rather than waved through. Supplying the authority's thumbprint trusts the authority, which survives the
+    /// server's own certificate being renewed.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
+    /// <param name="request">The thumbprint being trusted, and optionally why.</param>
+    /// <returns>The outcome, including the certificate as it now sits in the store.</returns>
+    /// <response code="201">The certificate was added to the JIM certificate store.</response>
+    /// <response code="200">The certificate was already in the store, so there was nothing to do.</response>
+    /// <response code="400">No thumbprint was supplied, or the Connected System is not configured to make an encrypted connection.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="409">The server is presenting a different certificate from the one named, so nothing was trusted.</response>
+    /// <response code="502">The server could not be reached to read its certificate again, so nothing was trusted.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/server-certificate/trust", Name = "TrustConnectedSystemServerCertificate")]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> TrustServerCertificateAsync(int connectedSystemId, [FromBody] TrustServerCertificateRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Thumbprint))
+            return BadRequest(ApiErrorResponse.ValidationError("A thumbprint is required. JIM will not trust whatever a server happens to be presenting."));
+
+        _logger.LogInformation("Trusting the server certificate for Connected System: {Id}", connectedSystemId);
+        var drafts = ServerCertificateDraftSettings.ToDrafts(request.SettingValues);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.Certificates.TrustServerCertificateAsync(connectedSystemId, request.Thumbprint, apiKey, request.ChangeReason, drafts)
+            : await _application.Certificates.TrustServerCertificateAsync(connectedSystemId, request.Thumbprint, await GetCurrentUserAsync(), request.ChangeReason, drafts);
+
+        var response = TrustServerCertificateResponse.FromResult(result);
+
+        return result.Outcome switch
+        {
+            ServerCertificateTrustOutcome.Trusted => StatusCode(StatusCodes.Status201Created, response),
+            ServerCertificateTrustOutcome.AlreadyTrusted => Ok(response),
+            ServerCertificateTrustOutcome.ThumbprintMismatch => Conflict(response),
+            ServerCertificateTrustOutcome.ConnectedSystemNotFound => NotFound(ApiErrorResponse.NotFound(result.Message ?? $"Connected System with ID {connectedSystemId} not found.")),
+            ServerCertificateTrustOutcome.ServerUnreachable => StatusCode(StatusCodes.Status502BadGateway, response),
+            _ => BadRequest(response)
+        };
     }
 
     #endregion

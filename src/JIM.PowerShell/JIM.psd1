@@ -40,6 +40,8 @@
         'Remove-JIMConnectedSystem',
         'Import-JIMConnectedSystemSchema',
         'Import-JIMConnectedSystemHierarchy',
+        'Get-JIMConnectedSystemServerCertificate',
+        'Approve-JIMConnectedSystemServerCertificate',
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
         'Set-JIMConnectedSystemAttribute',
