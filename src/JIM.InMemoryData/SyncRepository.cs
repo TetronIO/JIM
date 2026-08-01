@@ -33,6 +33,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, ConnectedSystemObject> _csos = new();
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
+    private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
 
@@ -83,6 +84,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
+    public IReadOnlyDictionary<Guid, PendingInitialPassword> PendingInitialPasswords => _pendingInitialPasswords;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -1320,6 +1322,24 @@ public class SyncRepository : ISyncRepository
     {
         var count = _pendingExportsByCs.TryGetValue(connectedSystemId, out var ids) ? ids.Count : 0;
         return Task.FromResult(count);
+    }
+
+    public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
+    {
+        foreach (var pending in pendingInitialPasswords)
+        {
+            // One outstanding record per account, matching the unique index in the real schema: two would mean
+            // two deliveries racing to set a password on the same object.
+            if (_pendingInitialPasswords.Values.Any(p => p.ConnectedSystemObjectId == pending.ConnectedSystemObjectId))
+                continue;
+
+            if (pending.Id == Guid.Empty)
+                pending.Id = Guid.NewGuid();
+
+            _pendingInitialPasswords[pending.Id] = pending;
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)

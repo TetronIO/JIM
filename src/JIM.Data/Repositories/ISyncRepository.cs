@@ -480,6 +480,21 @@ public interface ISyncRepository
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Records that newly provisioned accounts are owed an initial password.
+    /// <para>
+    /// Staged rather than delivered inline, for the same reason a Pending Export is staged rather than written
+    /// during synchronisation: it keeps a network round trip to the target out of the loop that is persisting
+    /// the results of one that already succeeded. A password JIM could not set must never be able to delay, or
+    /// fail, the record of the account it was for.
+    /// </para>
+    /// <para>
+    /// Ignores accounts already carrying an outstanding record, so re-running an export cannot stage the same
+    /// work twice.
+    /// </para>
+    /// </summary>
+    Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>

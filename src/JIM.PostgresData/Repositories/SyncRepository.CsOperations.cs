@@ -704,6 +704,44 @@ public partial class SyncRepository
 
     #region Pending Export — Worker-Only Bulk Operations
 
+    public async Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
+    {
+        var staging = pendingInitialPasswords.ToList();
+        if (staging.Count == 0)
+            return;
+
+        foreach (var pending in staging.Where(p => p.Id == Guid.Empty))
+            pending.Id = Guid.NewGuid();
+
+        // ON CONFLICT DO NOTHING against the one-per-account unique index, rather than reading first and then
+        // inserting: re-running an export that already staged this work is an ordinary thing to do.
+        //
+        // Column list comes from the constant so it cannot drift from the model; the parameter order below MUST
+        // match PendingInitialPasswordBulkColumns.PendingInitialPasswords exactly.
+        var columns = BulkSqlHelpers.ToQuotedList(PendingInitialPasswordBulkColumns.PendingInitialPasswords);
+        var placeholders = string.Join(", ", Enumerable.Range(0, PendingInitialPasswordBulkColumns.PendingInitialPasswords.Length).Select(i => $"{{{i}}}"));
+        var sql = $"""
+            INSERT INTO "PendingInitialPasswords" ({columns}) VALUES ({placeholders})
+            ON CONFLICT ("ConnectedSystemObjectId") DO NOTHING
+            """;
+
+        foreach (var pending in staging)
+        {
+            await _context.Database.ExecuteSqlRawAsync(sql,
+                pending.Id,
+                pending.ConnectedSystemObjectId,
+                pending.ConnectedSystemId,
+                BulkSqlHelpers.NullableParam(pending.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+                (int)pending.Status,
+                BulkSqlHelpers.NullableParam((int?)pending.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
+                BulkSqlHelpers.NullableParam(pending.TargetMessage, NpgsqlTypes.NpgsqlDbType.Text),
+                pending.AttemptCount,
+                pending.CreatedAt,
+                BulkSqlHelpers.NullableParam(pending.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(pending.ExpiresAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+        }
+    }
+
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var pendingExportsList = pendingExports.ToList();
