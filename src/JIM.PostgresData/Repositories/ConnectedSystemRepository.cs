@@ -4690,11 +4690,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by creating a fresh context per handler), SaveChanges would silently persist nothing and report
         // success. Toggling Enabled on an existing rule was lost exactly this way. Synchronisation integrity
         // demands a fast, loud failure over silent data loss, so reject a detached entity outright.
-        if (Repository.Database.Entry(syncRule).State == EntityState.Detached)
-            throw new InvalidOperationException(
-                $"UpdateSyncRuleAsync requires a change-tracked SyncRule (Id {syncRule.Id}), but the supplied " +
-                "instance is detached from this DbContext, so no changes would be persisted. Load the rule via " +
-                "GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
+        Repository.Database.RequireTracked(syncRule, nameof(UpdateSyncRuleAsync),
+            "Load the rule via GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
 
         // Database.Update(syncRule) is deliberately NOT used: it traverses the full navigation graph and
         // re-attaches every reachable entity as Modified. The SyncRule graph reaches the same

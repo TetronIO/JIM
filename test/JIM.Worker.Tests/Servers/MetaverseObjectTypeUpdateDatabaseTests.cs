@@ -194,6 +194,37 @@ public class MetaverseObjectTypeUpdateDatabaseTests
             "the edit must win over the copy of the object type the initiator lookup happened to put in the tracker");
     }
 
+    [Test]
+    public async Task UpdateMetaverseObjectTypeAsync_ContextIsNoTracking_StillPersistsTheChangeAsync()
+    {
+        // Every context in this fixture is NoTracking, matching JIM.Web. Without an explicit AsTracking on the
+        // repository's read, this update writes nothing and reports success: the exact shape that shipped the defect,
+        // and the reason TrackedEntityGuard now asserts the contract rather than trusting it.
+        var (objectTypeId, initiatorId) = await SeedObjectTypeWithBoundAttributesAsync();
+
+        MetaverseObjectType detached;
+        await using (var loadContext = NewContext())
+        {
+            detached = await loadContext.MetaverseObjectTypes
+                .Include(t => t.Attributes)
+                .SingleAsync(t => t.Id == objectTypeId);
+        }
+
+        detached.DeletionGracePeriod = TimeSpan.FromHours(6);
+
+        await using (var saveContext = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(saveContext));
+            var initiator = await saveContext.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(detached, initiator);
+        }
+
+        await using var verify = NewContext();
+        var reloaded = await verify.MetaverseObjectTypes.SingleAsync(t => t.Id == objectTypeId);
+        Assert.That(reloaded.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromHours(6)),
+            "a NoTracking context must not turn the save into a silent no-op");
+    }
+
     private Task<(int ObjectTypeId, Guid InitiatorId)> SeedObjectTypeWithBoundAttributesAsync() =>
         SeedObjectTypeWithBoundAttributesAsync(initiatorIsOfTheSameType: false);
 

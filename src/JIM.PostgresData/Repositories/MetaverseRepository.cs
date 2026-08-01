@@ -139,6 +139,11 @@ public class MetaverseRepository : IMetaverseRepository
             .SingleOrDefaultAsync(t => t.Id == metaverseObjectType.Id)
             ?? throw new InvalidOperationException($"Metaverse Object Type {metaverseObjectType.Id} no longer exists.");
 
+        // Asserts the AsTracking above rather than trusting it: dropping it would make this method write nothing while
+        // reporting success, which is exactly how the defect above shipped in the first place.
+        Repository.Database.RequireTracked(tracked, nameof(UpdateMetaverseObjectTypeAsync),
+            "The read above must call AsTracking(); JIM.Web configures the DbContext NoTracking.");
+
         // A caller working on this same context gets its own tracked instance back, so this is a self-copy and the
         // edits it already made are what get saved.
         Repository.Database.Entry(tracked).CurrentValues.SetValues(metaverseObjectType);
@@ -1500,6 +1505,16 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    /// <summary>
+    /// Updates a Metaverse Object and the attribute values it owns.
+    /// </summary>
+    /// <remarks>
+    /// <c>Update</c> attaches explicitly, so unlike a load-mutate-save path this is unaffected by the context's query
+    /// tracking behaviour. It does traverse the graph, though, and a Metaverse Object reaches Roles through a
+    /// many-to-many skip navigation whose join rows EF cannot tell from new ones; passing a detached object with Roles
+    /// loaded would try to re-insert them and fail on the join table's primary key. No caller does: the sign-in path
+    /// loads the object tracked and without Roles. Keep it that way, or narrow this to the object's own columns.
+    /// </remarks>
     public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         Repository.Database.Update(metaverseObject);
