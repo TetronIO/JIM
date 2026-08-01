@@ -89,6 +89,43 @@ Describe 'Pagination safety (-All bounding) via Invoke-JIMPagedFetch' -ForEach @
         }
     }
 
+    It '<Cmdlet> -All -Force still stops at the API retrieval depth ceiling rather than erroring mid-fetch' {
+        # -Force overrides the client-side page cap, but it cannot override the server's depth ceiling: the
+        # API rejects an over-deep page with a 400. Without this guard, -Force on a result set larger than the
+        # ceiling terminated the fetch with an HTTP error part-way through, after emitting a partial result
+        # set; the documented promise that -Force "fetches everything" was unachievable.
+        InModuleScope JIM -Parameters @{ Cmdlet = $Cmdlet; BaseParams = $BaseParams } {
+            param($Cmdlet, $BaseParams)
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            $originalPages = $script:JIMMaxAllPages
+            $originalDepth = $script:JIMMaxRetrievalDepth
+            try {
+                # Page cap set well above the handful of pages the depth ceiling allows, so the depth ceiling
+                # is what stops the loop. -Force bypasses the page cap entirely, so the mock also stops
+                # claiming further pages after 30; without the depth guard the fetch runs to that limit
+                # (unbounded in reality, which is the defect) instead of stopping at the ceiling.
+                $script:JIMMaxAllPages = 50
+                $script:JIMMaxRetrievalDepth = 120
+                $script:depthPollCount = 0
+                Mock Invoke-JIMApi {
+                    $script:depthPollCount++
+                    [PSCustomObject]@{ items = @([PSCustomObject]@{ id = [guid]::NewGuid() }); hasNextPage = ($script:depthPollCount -lt 30); totalPages = 999999; totalCount = 100 }
+                }
+
+                & $Cmdlet @BaseParams -All -Force -WarningVariable w -WarningAction SilentlyContinue | Out-Null
+
+                ($w -join ' ') | Should -Match 'retrieval depth'
+                # Bounded well below the page cap, proving the depth ceiling terminated the loop rather than
+                # the page cap. The exact count varies with each cmdlet's default page size.
+                $script:depthPollCount | Should -BeLessThan 10
+            }
+            finally {
+                $script:JIMMaxAllPages = $originalPages
+                $script:JIMMaxRetrievalDepth = $originalDepth
+            }
+        }
+    }
+
     It '<Cmdlet> -All warns up front when the result set is large' {
         InModuleScope JIM -Parameters @{ Cmdlet = $Cmdlet; BaseParams = $BaseParams } {
             param($Cmdlet, $BaseParams)

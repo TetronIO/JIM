@@ -715,7 +715,8 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All
 ```
 
 ```powershell title="Get every object in a very large connector space, overriding the -All safety cap"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# API's maximum retrieval depth of 1,000,000 rows.
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All -Force
 ```
 
@@ -758,7 +759,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
 | `Id` | `guid` | Yes | | Connector space object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
@@ -809,7 +810,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 | `Search` | `string` | No | | Filter values by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of values per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all values, auto-paginating. Fetches at most 1000 pages (~50,000 values at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Returns all values, auto-paginating. Fetches at most 1000 pages (~50,000 values at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
@@ -962,7 +963,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 | `Search` | `string` | No | | Filter results by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all results, auto-paginating. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Returns all results, auto-paginating. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output

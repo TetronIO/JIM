@@ -736,7 +736,8 @@ Search-JIMMetaverseObject -PredefinedSearchUri "users" -All
 ```
 
 ```powershell title="Get all users, overriding the -All safety cap for a very large result set"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# API's maximum retrieval depth of 1,000,000 rows.
 Search-JIMMetaverseObject -PredefinedSearchUri "users" -All -Force
 ```
 
@@ -813,7 +814,8 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -All -Attributes @("Display Name"
 ```
 
 ```powershell title="Fetch a very large metaverse, overriding the -All safety cap"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# API's maximum retrieval depth of 1,000,000 rows.
 Get-JIMMetaverseObject -ObjectTypeName "Person" -All -Force
 ```
 
@@ -842,7 +844,7 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-Force] [-PageSize <int>]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
