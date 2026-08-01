@@ -20,6 +20,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
 | `<PrefilledFormValidator />` | Inside any `MudForm` prefilled with an existing entity, so validity-gated buttons enable on load | "Form action gating" below |
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |
+| `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
 
 ## Form action gating and input immediacy
 
@@ -30,9 +31,29 @@ Three interaction rules that have repeatedly regressed (multiple times each on a
   - **Prefilled edit forms MUST include `<PrefilledFormValidator />` inside the `MudForm`.** `MudForm.IsValid` starts `false` (its validity requires every `Required` control to have been *touched*, and its own first-render callback forces `IsValid` to `false` whenever a `Required` control exists), so a form prefilled with an existing, valid entity leaves its gated button disabled until the user pointlessly clicks in and out of a field. The shared component (`Shared/PrefilledFormValidator.razor`) receives the form via its cascading value and runs the initial validation at the right point in the form's own lifecycle, which also makes it work inside dialogs (dialog content renders through the dialog provider, so the opening component's `OnAfterRenderAsync` cannot see the form render). Do NOT hand-roll this with `@ref` + `OnAfterRenderAsync`; the parent's callback runs before `MudForm`'s and the result gets overwritten. Create forms start empty, so starting invalid is correct there; do not add this to them. See `ConnectedSystemDetailsTab.razor`, `ConnectedSystemRunProfilesTab.razor` (edit dialog).
 - **When a MudForm does not fit** (inline editors, or non-field state such as "at least one day selected"): gate on a small predicate (`CanSave()` / `DisableXButton()`) that mirrors *exactly* the blocking checks in the handler, so the button and the handler cannot drift. See `ScheduleEditorDialog.CanSaveStep()`, `SyncRuleDetailScopingCriteriaGroup.DisableAddCriteriaButton()`.
 
-**2. `Immediate="true"` on typed inputs that drive live UI.** `MudTextField` / `MudNumericField` commit their value on **blur** by default, so anything that reacts to the value (a gated button's `Disabled`, a live preview, inline `Required` validation) will not update until focus leaves the field. If the value drives live UI, set `Immediate="true"`. For search/filter-as-you-type, add `DebounceInterval="300"` so it does not fire every keystroke. `MudSelect`, `MudCheckBox`, `MudRadioGroup`, `MudDatePicker` and `MudSwitch` commit on click and never need this. When the input lives inside a wrapper component (e.g. `ConnectedSystemSettingField`), the wrapper's `Immediate` parameter must be passed at **every** call site; a missed call site silently reverts that instance to blur-commit.
+**2. `Immediate="true"` on typed inputs that drive live UI.** `MudTextField` / `MudNumericField` commit their value on **blur** by default, so anything that reacts to the value (a gated button's `Disabled`, a live preview, inline `Required` validation) will not update until focus leaves the field. If the value drives live UI, set `Immediate="true"`. `MudSelect`, `MudCheckBox`, `MudRadioGroup`, `MudDatePicker` and `MudSwitch` commit on click and never need this. When the input lives inside a wrapper component (e.g. `ConnectedSystemSettingField`), the wrapper's `Immediate` parameter must be passed at **every** call site; a missed call site silently reverts that instance to blur-commit. Search and filter boxes are the one case where this rule is enforced rather than remembered; see the section below.
 
 **3. A child value editor MUST notify its parent of edits.** A child component that mutates a by-reference model via `@bind` re-renders only itself; the parent's dependent UI (for example an Add button gated on that model) goes stale. Expose an `[Parameter] public EventCallback OnChanged`, raise it from each input via `@bind-Value:after`, and have the parent wire `OnChanged` to `StateHasChanged` (or its own handler). See `CriterionValueEditor.razor` and its hosts.
+
+## Search and filter boxes
+
+**A box that narrows a list as the user types is a `<SearchField />`.** Never hand-roll one from `MudTextField`: a bare `MudTextField` commits on blur, so the list sits unfiltered until focus leaves the box, and that has now regressed twice across the app while this was documented as prose alone (#864). The component bakes in `Immediate="true"`, a 300ms debounce, the magnifier adornment, the clear affordance and dense margin, so every search box behaves the same and no call site has to remember any of it.
+
+```razor
+@* Filters an in-memory list *@
+<SearchField @bind-Value="_searchString" Class="mt-0" />
+
+@* Handler reloads from the server or database: same component, longer debounce *@
+<SearchField Value="@_filterInitiatedBy" ValueChanged="OnInitiatedByFilterChanged" DebounceInterval="500" />
+```
+
+- `Immediate` is deliberately **not** a parameter, and unmatched attributes are deliberately **not** splatted through, so a call site cannot reinstate blur-commit (the failure mode rule 2 above warns about for wrapper components). If a call site legitimately needs another `MudTextField` setting, add an explicit parameter to `SearchField` rather than reopening the splat.
+- Raise `DebounceInterval` (to 500ms) where the change handler hits the server or database; leave it at the default where it filters an already-loaded list.
+- Pass `Margin="Margin.None"` when the box sits in a form grid beside normal-density inputs; the default suits a table toolbar.
+
+**Scope: this is about live filtering, not about the word "Search".** A field that is one criterion among several in a form the user submits with a button (Deleted Objects' query forms, the Logs filter behind **Refresh**) is not a search box; nothing filters as it is typed, so `Immediate` there changes nothing and `SearchField` would be the wrong component. Those are ordinary `MudTextField`s and carry a `@* search-convention: exempt - <why> *@` comment directly above, so the reason travels with the markup.
+
+`SearchFieldConventionTests` (in `test/JIM.Web.Components.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
 
 ## Row density (compact-row toggle)
 

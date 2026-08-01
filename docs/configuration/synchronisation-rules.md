@@ -315,7 +315,7 @@ Once a deployment has more than a handful of rules, the Synchronisation Rules li
 
 Each filter accepts several values, and the filters combine: picking two Connected Systems and the Outbound direction shows the outbound rules of either system. Leaving a filter empty means "all".
 
-The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. Clearing the search box returns the filtered list rather than the full one, so you can keep a filter in place while searching within it.
+The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. It filters as you type, so there is nothing to press. Clearing the search box returns the filtered list rather than the full one, so you can keep a filter in place while searching within it.
 
 The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
 

@@ -6,6 +6,9 @@
   arrive when a component is written or changed; the existing component set is not
   retrofitted wholesale.
 
+  Also home to convention sweeps over JIM.Web's Razor sources (SearchFieldConventionTests),
+  which catch a shared component being bypassed on a page a per-component test cannot see.
+
   This project uses Microsoft.NET.Sdk.Razor (not the plain SDK) because bUnit renders
   Razor components and requires the Razor SDK's compilation support.
 -->
