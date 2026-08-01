@@ -424,7 +424,10 @@ try
 
     // Add API controller support with JSON serialisation policy centralised in
     // ApiJsonConfiguration (see that class for the rationale and for unit tests).
-    builder.Services.AddControllers()
+    // The pagination depth filter (issue #487) applies the shared retrieval depth ceiling to every action,
+    // including the endpoints that bind page/pageSize as bare query parameters rather than a PaginationRequest.
+    // Registered globally so a new paginated endpoint is guarded by default rather than by the author remembering.
+    builder.Services.AddControllers(options => options.Filters.Add<PaginationDepthActionFilter>())
         .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 

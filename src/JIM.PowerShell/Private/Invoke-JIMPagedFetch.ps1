@@ -9,8 +9,9 @@ function Invoke-JIMPagedFetch {
     .DESCRIPTION
         Drives the page-by-page fetch for a paginated list endpoint, emitting each item to the
         pipeline. Applies JIM's pagination safety limits (see issue #487): it fetches at most
-        $script:JIMMaxAllPages pages before stopping with a warning, unless -Force is supplied, and
-        warns up front when the endpoint reports a total result set larger than
+        $script:JIMMaxAllPages pages before stopping with a warning, unless -Force is supplied; it always
+        stops at $script:JIMMaxRetrievalDepth rows deep (the server's own ceiling, which -Force cannot
+        override); and it warns up front when the endpoint reports a total result set larger than
         $script:JIMAllWarningThreshold.
 
         Centralising this here keeps every cmdlet's -All behaviour, wording and cap identical, so a
@@ -34,7 +35,8 @@ function Invoke-JIMPagedFetch {
         The page size in use, used only to estimate the item count in the cap warning.
 
     .PARAMETER Force
-        Override the page ceiling and fetch every page regardless of how large the result set is.
+        Override the client-side page ceiling and fetch every page regardless of how large the result set
+        is, up to the API's own retrieval depth ceiling, which cannot be overridden.
 
     .PARAMETER ItemNoun
         Plural noun for the items being fetched (e.g. "objects", "attribute values"), used in the
@@ -91,12 +93,23 @@ function Invoke-JIMPagedFetch {
 
         $hasMore = $response.hasNextPage -eq $true
 
-        # Enforce the -All page ceiling unless -Force is supplied, so a runaway fetch cannot hammer the
-        # API sequentially without bound (and cannot trip the API's own page-depth cap mid-loop). Stop
-        # clearly rather than truncating silently.
+        # Enforce the client-side -All page ceiling unless -Force is supplied, so a runaway fetch cannot
+        # hammer the API sequentially without bound. This one is a courtesy limit against a surprise
+        # long-running command; the server's own ceiling is enforced below and -Force cannot lift it.
+        # Stop clearly rather than truncating silently.
         if ($hasMore -and -not $Force -and $pagesFetched -ge $script:JIMMaxAllPages) {
             $hint = if ($NarrowHint) { ", or $NarrowHint" } else { '' }
-            Write-Warning "$CmdletName -All stopped after $script:JIMMaxAllPages pages (~$($script:JIMMaxAllPages * $PageSize) $ItemNoun); more results remain (total pages: $($response.totalPages)). Re-run with -Force to fetch everything$hint."
+            Write-Warning "$CmdletName -All stopped after $script:JIMMaxAllPages pages (~$($script:JIMMaxAllPages * $PageSize) $ItemNoun); more results remain (total pages: $($response.totalPages)). Re-run with -Force to continue past this limit$hint."
+            break
+        }
+
+        # Stop at the API's hard retrieval depth ceiling. Unlike the page cap above, -Force cannot override
+        # this: the server rejects an over-deep request with a 400, so continuing would abort the pipeline
+        # with an HTTP error after emitting a partial result set. Stopping here keeps the failure mode a
+        # clear warning instead. The next page would skip $currentPage x $PageSize rows (pages are 1-based).
+        if ($hasMore -and ($currentPage * $PageSize) -gt $script:JIMMaxRetrievalDepth) {
+            $hint = if ($NarrowHint) { "; $NarrowHint" } else { '' }
+            Write-Warning "$CmdletName -All stopped at the API's maximum retrieval depth ($($script:JIMMaxRetrievalDepth) $ItemNoun); the API rejects requests beyond this depth$hint."
             break
         }
 

@@ -38,6 +38,8 @@ public class ConnectorDeclarationSyncTests
         public bool SupportsParallelExport { get; init; }
         public bool SupportsPaging { get; init; }
         public bool SupportsFilePaths { get; init; }
+        public bool SupportsPasswordSet { get; init; }
+        public bool SupportsPasswordPolicyDiscovery { get; init; }
         public AttributeStandard SchemaStandard { get; init; }
     }
 
@@ -55,6 +57,8 @@ public class ConnectorDeclarationSyncTests
         SupportsParallelExport = true,
         SupportsPaging = true,
         SupportsFilePaths = true,
+        SupportsPasswordSet = true,
+        SupportsPasswordPolicyDiscovery = true,
         SchemaStandard = AttributeStandard.Ldap
     };
 
@@ -78,6 +82,8 @@ public class ConnectorDeclarationSyncTests
         Assert.That(definition.SupportsParallelExport, Is.True);
         Assert.That(definition.SupportsPaging, Is.True);
         Assert.That(definition.SupportsFilePaths, Is.True);
+        Assert.That(definition.SupportsPasswordSet, Is.True);
+        Assert.That(definition.SupportsPasswordPolicyDiscovery, Is.True);
         Assert.That(definition.SchemaStandard, Is.EqualTo(AttributeStandard.Ldap));
     }
 

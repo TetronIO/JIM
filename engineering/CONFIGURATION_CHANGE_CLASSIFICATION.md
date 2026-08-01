@@ -107,6 +107,30 @@ The remaining five types are classified per key.
 | `connectedSystemObjectTypeId` | B | Repoints the rule at a different Connected System Object Type. |
 | `metaverseObjectTypeId` | B | Repoints the rule at a different Metaverse Object Type. |
 
+### Initial Password (`initialPassword`)
+
+Whether JIM gives a newly provisioned account its first password, and what that password looks like. Class B throughout: these change what JIM writes to accounts it creates, and destroy nothing that already existed.
+
+| Key | Class | Reason |
+|---|---|---|
+| `initialPassword` | B | Governs whether the rule sets a password on the accounts it provisions at all. |
+| `source` | B | Switches between following the Connected System's discovered policy and the settings held here. |
+| `expiryBehaviour` | B | Changes whether the account holder must choose a new password at first sign-in, whether it ages, or whether it never expires. |
+| `enableAccount` | B | Governs whether the account is enabled as part of setting its password. |
+| `style` | B | Changes the shape of every generated password. |
+| `length` | B | Changes the length of every generated password. |
+| `minimumUppercase` | B | Changes the character categories a generated password is guaranteed to contain. |
+| `minimumLowercase` | B | As above. |
+| `minimumDigits` | B | As above. |
+| `minimumSymbols` | B | As above. |
+| `permittedSymbols` | B | Changes which symbols can appear in a generated password. |
+| `wordCount` | B | Changes the length and strength of a generated passphrase. |
+| `wordSeparator` | B | Changes what separates the words, and so which character categories the result contains. |
+| `wordCapitalisation` | B | As above. |
+| `appendedDigitCount` | B | Commonly the only thing giving a passphrase its digit category; changing it can make every password fail the target's complexity rule. |
+| `appendSymbol` | B | As above, for the symbol category. |
+| `excludeAmbiguousCharacters` | B | Changes the character pool, and so the entropy of every generated password. |
+
 ### Attribute Flow (`attributeFlowRules`, `sources`)
 
 | Key | Class | Reason |

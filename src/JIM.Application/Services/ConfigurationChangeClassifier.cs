@@ -65,6 +65,26 @@ public static class ConfigurationChangeClassifier
         ["connectedSystemObjectTypeId"] = B,
         ["metaverseObjectTypeId"] = B,
 
+        // Initial Password: changes whether JIM sets a password on the accounts this rule provisions, and what
+        // that password looks like. Sync-affecting rather than destructive: it alters what JIM writes to newly
+        // created accounts, and destroys nothing that existed before.
+        ["initialPassword"] = B,
+        ["expiryBehaviour"] = B,
+        ["enableAccount"] = B,
+        ["style"] = B,
+        ["length"] = B,
+        ["minimumUppercase"] = B,
+        ["minimumLowercase"] = B,
+        ["minimumDigits"] = B,
+        ["minimumSymbols"] = B,
+        ["permittedSymbols"] = B,
+        ["wordCount"] = B,
+        ["wordSeparator"] = B,
+        ["wordCapitalisation"] = B,
+        ["appendedDigitCount"] = B,
+        ["appendSymbol"] = B,
+        ["excludeAmbiguousCharacters"] = B,
+
         // Attribute Flow: changes what values flow.
         ["attributeFlowRules"] = B,
         ["attributeFlowRule"] = B,
