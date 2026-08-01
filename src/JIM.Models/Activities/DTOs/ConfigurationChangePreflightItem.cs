@@ -30,10 +30,18 @@ public class ConfigurationChangePreflightItem
     public ConfigurationChangeClass Class { get; init; }
 
     /// <summary>
-    /// Whether the property was modified, or a whole item added to or removed from a collection. Added and Removed
-    /// items carry no before-and-after values: what changed is the item's existence, not one of its properties.
+    /// How the property changed. Note that a scalar property can be Added or Removed in its own right (an entry
+    /// joining or leaving a list of identifiers); use <see cref="IsCollectionItem"/> to tell that apart from a whole
+    /// item joining or leaving a collection.
     /// </summary>
     public ConfigurationDiffChangeType ChangeType { get; init; }
+
+    /// <summary>
+    /// True when this is a whole item added to or removed from a collection (a container, a Run Profile, an Object
+    /// Type) rather than a property of one. Such an item carries no before-and-after values, because what changed is
+    /// its existence: <see cref="Label"/> names it and <see cref="ChangeType"/> says which way it went.
+    /// </summary>
+    public bool IsCollectionItem { get; init; }
 
     /// <summary>
     /// The value before the change, rendered for display. Null when the property is being added, or when the value

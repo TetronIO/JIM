@@ -11,7 +11,7 @@
 @* so the experience does not vary by page. It is replaced per surface by the preview-driven confirmation    *@
 @* as each adapter lands. See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2, FR17).       *@
 
-<ConsequenceConfirmationDialog Consequences="@BuildConsequences()"
+<ConsequenceConfirmationDialog Consequences="@ConfigurationChangePreflightConsequences.For(Preflight)"
                                AdditionalContent="@RenderChanges"
                                ConfirmButtonText="Save changes"
                                BusyText="Saving..."
@@ -40,30 +40,6 @@
     // turns the dialog into a wall nobody reads. The most consequential lead, and the tail is counted.
     private const int MaxListedChanges = 12;
 
-    private ConsequenceGroup? BuildConsequences()
-    {
-        var destructive = Preflight.DestructiveItems.Where(i => i.Consequence != null).ToList();
-        if (destructive.Count == 0)
-            return null;
-
-        // Deliberately neutral about direction. These properties are destructive because they *decide* whether
-        // objects are removed, and the same property is equally destructive turned off: switching a Deprovisioning
-        // Action back to Disconnect is still a Class A change, and a headline announcing data loss over a change that
-        // prevents it is the sort of lie that teaches administrators to click straight through. Which way this
-        // particular change goes is the item's own business, below.
-        return new ConsequenceGroup
-        {
-            Headline = destructive.Count == 1
-                ? "This property decides whether objects are removed"
-                : "These properties decide whether objects are removed",
-            // No per-item icon: the alert already carries one, and two side by side reads as a rendering fault.
-            Items = destructive.Select(item => new ConsequenceItem
-            {
-                Text = $"{item.Label}: {item.Consequence}"
-            }).ToList()
-        };
-    }
-
     private RenderFragment RenderChanges => @<div>
         <MudText Typo="Typo.subtitle2" Class="mb-1">
             @(Preflight.Items.Count == 1 ? "Change to" : "Changes to") @ObjectTypeLabel:
@@ -82,8 +58,7 @@
                             }
                         </td>
                         <td class="text-right">
-                            @if (item.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed
-                                 && item.OldDisplayValue == null && item.NewDisplayValue == null)
+                            @if (item.IsCollectionItem)
                             {
                                 @* A whole item joining or leaving a collection. There is no before-and-after pair to *@
                                 @* show: the label names it, and this says which way it went.                        *@

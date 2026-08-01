@@ -274,6 +274,7 @@ public class ConfigurationChangePreflightService
             Label = label,
             Class = ConfigurationChangeClassifier.ClassifyKey(objectType, node.Key, objectKey, node.ChangeType),
             ChangeType = node.ChangeType,
+            IsCollectionItem = true,
             // The consequence copy is direction-aware off the value pair, so the item's name stands in for the value
             // on whichever side it exists: present before and gone after is a removal, and the reverse an addition.
             Consequence = ConfigurationChangeConsequences.For(objectType, node.Key,
