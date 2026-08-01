@@ -581,7 +581,7 @@
                             @switch (_metaverseObjectType?.DeletionRule)
                             {
                                 case MetaverseObjectDeletionRule.Manual:
-                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong> — automatic deletion is disabled.</text>
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong>; automatic deletion is disabled.</text>
                                     break;
                                 case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
                                     <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other Connected Systems still have active connectors to this Metaverse Object.</text>
@@ -598,6 +598,7 @@
                                     <text>The deletion rule did not apply for this disconnection.</text>
                                     break;
                             }
+                            <text> This explanation reflects the current deletion rule configuration, which may have changed since this Activity ran.</text>
                         </MudText>
                     </MudStack>
                 </MudAlert>
@@ -632,7 +633,7 @@
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                     <MudStack Spacing="2">
                         <MudText Typo="Typo.body2">
-                            <strong>@_metaverseObjectType.Name</strong> objects are configured with the following deletion rule:
+                            <strong>@_metaverseObjectType.Name</strong> objects are currently configured with the following deletion rule:
                         </MudText>
 
                         @switch (_metaverseObjectType.DeletionRule)
@@ -718,6 +719,9 @@
                                             }
                                             break;
                                         }
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            Shown from the object type's current configuration, which may have changed since this Activity ran.
+                                        </MudText>
                                     </MudStack>
                                 </MudAlert>
                         }
