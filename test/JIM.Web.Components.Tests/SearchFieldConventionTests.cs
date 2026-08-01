@@ -42,7 +42,7 @@ public class SearchFieldConventionTests
     [Test]
     public void SearchBoxes_AcrossJimWeb_UseTheSharedSearchFieldComponent()
     {
-        var webRoot = Path.Combine(RepositoryRoot.Value, "src", "JIM.Web");
+        var webRoot = Path.Join(RepositoryRoot.Value, "src", "JIM.Web");
         Assert.That(Directory.Exists(webRoot), Is.True, $"Expected to find JIM.Web sources at '{webRoot}'.");
 
         var offenders = Directory
@@ -82,7 +82,7 @@ public class SearchFieldConventionTests
     [Test]
     public void SearchField_DoesNotLetCallSitesTurnOffImmediateCommit()
     {
-        var componentPath = Path.Combine(RepositoryRoot.Value, "src", "JIM.Web", "Shared", ComponentFileName);
+        var componentPath = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "Shared", ComponentFileName);
         Assert.That(File.Exists(componentPath), Is.True, $"Expected the shared component at '{componentPath}'.");
 
         var source = File.ReadAllText(componentPath);
@@ -200,7 +200,7 @@ public class SearchFieldConventionTests
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "JIM.sln")))
+        while (directory != null && !File.Exists(Path.Join(directory.FullName, "JIM.sln")))
             directory = directory.Parent;
 
         Assert.That(directory, Is.Not.Null, "Could not locate JIM.sln by walking up from the test output directory.");
