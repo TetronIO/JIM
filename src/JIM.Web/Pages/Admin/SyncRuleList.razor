@@ -81,9 +81,7 @@
                        Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">Create Synchronisation Rule
             </MudButton>
             <MudSpacer />
-            <MudTextField @bind-Value="SearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense"
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
-                          Immediate="true" DebounceInterval="300" Class="mt-0"></MudTextField>
+            <SearchField @bind-Value="SearchString" Class="mt-0" />
         </ToolBarContent>
         <HeaderContent>
             <MudTh>

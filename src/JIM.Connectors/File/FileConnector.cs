@@ -37,6 +37,10 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsPaging => false;
     public bool SupportsFilePaths => true;
 
+    public bool SupportsPasswordSet => false;
+
+    public bool SupportsPasswordPolicyDiscovery => false;
+
     // A delimited file's column names are whatever the file happens to carry, so no standard vocabulary is
     // claimed; the Attribute Flow editor falls back to matching names against every standard.
     public AttributeStandard SchemaStandard => AttributeStandard.NotSet;

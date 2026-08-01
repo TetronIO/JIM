@@ -119,13 +119,9 @@
                       Hover="true" Dense="true" Outlined="true" Elevation="0"
                       Loading="@_pendingExportLoading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
-                    <MudTextField T="string" Value="@_pendingExportSearchText"
-                                  ValueChanged="@OnPendingExportSearch"
-                                  Placeholder="Search Pending Exports..."
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  Immediate="true" DebounceInterval="300"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <SearchField Value="@_pendingExportSearchText"
+                                 ValueChanged="@OnPendingExportSearch"
+                                 Placeholder="Search Pending Exports..." />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>

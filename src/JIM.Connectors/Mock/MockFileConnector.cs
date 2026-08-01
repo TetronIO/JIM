@@ -29,6 +29,10 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsFilePaths => true;
     public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
 
+    public bool SupportsPasswordSet => false;
+
+    public bool SupportsPasswordPolicyDiscovery => false;
+
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         // if a test has configured an exception to be thrown, throw it to simulate connectivity errors

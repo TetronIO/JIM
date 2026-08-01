@@ -33,6 +33,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
@@ -75,6 +76,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
+    public virtual DbSet<SyncRuleInitialPassword> SyncRuleInitialPasswords { get; set; } = null!;
     public virtual DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
@@ -297,6 +299,15 @@ public class JimDbContext : DbContext
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
 
+        // A Connected System has at most one discovered password policy. Every other child of a Connected System
+        // is a collection, so this one-to-one has to be declared explicitly: EF cannot infer which end is the
+        // dependent. Cascade, because a discovered policy has no meaning without the system it was read from.
+        modelBuilder.Entity<ConnectedSystem>()
+            .HasOne(cs => cs.PasswordPolicy)
+            .WithOne(pp => pp.ConnectedSystem)
+            .HasForeignKey<ConnectedSystemPasswordPolicy>(pp => pp.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
             .WithMany(r => r.StaticMembers);
@@ -444,6 +455,38 @@ public class JimDbContext : DbContext
             .WithMany()
             .HasForeignKey(pe => pe.ConnectedSystemObjectId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // PendingExport: the Synchronisation Rule whose provisioning decision produced a Create.
+        // SetNull rather than Cascade: deleting a rule must not delete exports already staged for accounts it
+        // provisioned. Losing the link simply means the account does not get an initial password, which is the
+        // right outcome once the rule that asked for one is gone.
+        modelBuilder.Entity<PendingExport>()
+            .HasOne(pe => pe.ProvisioningSyncRule)
+            .WithMany()
+            .HasForeignKey(pe => pe.ProvisioningSyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Partial, because the column is set only on a provisioning Create and null on every update and delete,
+        // which at customer scale is the overwhelming majority of a table that is written in bulk on every
+        // export evaluation. The index exists to keep deleting a Synchronisation Rule from scanning the whole
+        // table to null the column out, and rows that are already null are not rows that delete has to visit.
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ProvisioningSyncRuleId)
+            .HasDatabaseName("IX_PendingExports_ProvisioningSyncRuleId")
+            .HasFilter("\"ProvisioningSyncRuleId\" IS NOT NULL");
+
+        // A Synchronisation Rule has at most one initial-password configuration. Cascade, because the
+        // configuration has no meaning without the rule that provisions with it. The generator settings live in
+        // the same table as owned columns: they have no identity of their own and are never queried apart from
+        // the configuration that holds them.
+        modelBuilder.Entity<SyncRule>()
+            .HasOne(sr => sr.InitialPassword)
+            .WithOne(ip => ip.SyncRule)
+            .HasForeignKey<SyncRuleInitialPassword>(ip => ip.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleInitialPassword>()
+            .OwnsOne(ip => ip.CustomPolicy);
 
         // DeferredReference: relationships for reference resolution
         modelBuilder.Entity<DeferredReference>()

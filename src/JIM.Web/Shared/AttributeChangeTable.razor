@@ -8,9 +8,7 @@
 
 <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 12px;">
     <div style="width: 250px;">
-        <MudTextField @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined"
-            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
-            DebounceInterval="300" Margin="Margin.Dense" />
+        <SearchField @bind-Value="_searchText" Label="Search" />
     </div>
     <div style="width: 180px;">
         <MudSelect T="string" @bind-Value="_filterAttribute" Label="Attribute" Variant="Variant.Outlined"
