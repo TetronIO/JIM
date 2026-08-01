@@ -332,6 +332,14 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObjectType>()
             .HasMany(mot => mot.Attributes);
 
+        // Authoritative source trigger mode (#119). The store-level default backfills existing rows with
+        // SpecificSourcesDisconnect (0), the behaviour they were configured with before trigger modes
+        // existed (#115), so the migration is behaviour-preserving with no backfill. New entities read the
+        // property initialiser instead and start at the safe default (AllSourcesDisconnect).
+        modelBuilder.Entity<MetaverseObjectType>()
+            .Property(mot => mot.DeletionTriggerMode)
+            .HasDefaultValue(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
+
         // advisory Standard Mapping metadata (#1104). Mappings are owned by their attribute (cascade delete),
         // and each (attribute, standard, counterpart name) combination exists at most once so the built-in
         // schema synchronisation pass converges rather than duplicates.

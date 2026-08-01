@@ -204,6 +204,7 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `builtIn` | C | System flag; not administrator-editable. |
 | `icon` | C | Portal display only. |
 | `deletionRule` | **A** | Governs when a Metaverse Object is deleted; changing it makes objects deletion-eligible immediately (#827 gap G5). |
+| `deletionTriggerMode` | **A** | Switching between all-sources and specific-sources semantics changes which disconnections trigger deletion (#119). |
 | `deletionGracePeriod` | **A** | Shortening the period brings forward deletions that were pending (#827 gap G5). |
 | `deletionTriggerConnectedSystemIds` | **A** | Changes which system disconnections trigger deletion (#827 gap G5). |
 | `attributes`, `attributeId` | B | Binding or unbinding an attribute changes what can flow to objects of this type. |

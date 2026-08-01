@@ -161,6 +161,7 @@ public static class ConfigurationChangeClassifier
         ["builtIn"] = C,
         ["icon"] = C,
         ["deletionRule"] = A,
+        ["deletionTriggerMode"] = A,
         ["deletionGracePeriod"] = A,
         ["deletionTriggerConnectedSystemIds"] = A,
         ["attributes"] = B,

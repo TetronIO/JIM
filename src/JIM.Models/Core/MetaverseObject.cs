@@ -56,6 +56,28 @@ public class MetaverseObject
     public string? DeletionInitiatedByName { get; set; }
 
     /// <summary>
+    /// The Connected System whose disconnection triggered the scheduled deletion (#119).
+    /// Set when a deletion is scheduled; cleared with the other deletion markers. Makes grace period
+    /// cancellation precise (only undoing the triggering disconnection cancels in Specific mode) and lets
+    /// the Pending Deletions page show what triggered each scheduled deletion.
+    /// </summary>
+    public int? DeletionTriggeredBySystemId { get; set; }
+
+    /// <summary>
+    /// The display name of the triggering Connected System at the time the deletion was scheduled.
+    /// The name snapshot survives deletion of the system itself (#119).
+    /// </summary>
+    public string? DeletionTriggeredBySystemName { get; set; }
+
+    /// <summary>
+    /// The decision-time deletion policy snapshot (a serialised <c>MvoDeletionPolicySnapshot</c>), captured
+    /// when the deletion is scheduled so housekeeping can carry it onto the final deletion record after the
+    /// grace period; the record then reflects the policy that scheduled the deletion, not the policy at
+    /// execution time (#119).
+    /// </summary>
+    public string? DeletionPolicySnapshotJson { get; set; }
+
+    /// <summary>
     /// How this MVO was created - determines deletion rule applicability.
     /// Projected MVOs are subject to automatic deletion rules.
     /// Internal MVOs (admin, service accounts) are protected from automatic deletion.
