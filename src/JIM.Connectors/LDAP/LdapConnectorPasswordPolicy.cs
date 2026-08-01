@@ -159,22 +159,22 @@ internal class LdapConnectorPasswordPolicy
             if (response.Entries.Count > 0)
                 return FineGrainedPolicySignal.Present;
 
-            _logger.Debug("LdapConnectorPasswordPolicy: No Fine-Grained Password Policies were returned from '{Container}'. This cannot be told apart from having no rights over it, so the result is undetermined.",
-                LogSanitiser.Sanitise(containerDn));
+            _logger.Debug("LdapConnectorPasswordPolicy: No Fine-Grained Password Policies were returned from the Password Settings Container in '{Domain}'. This cannot be told apart from having no rights over it, so the result is undetermined.",
+                LogSanitiser.Sanitise(domainRootDn));
             return FineGrainedPolicySignal.CouldNotDetermine;
         }
         catch (DirectoryOperationException ex)
         {
             // Including noSuchObject. An inaccessible object and an absent one are reported the same way, so this
             // is not evidence that the container does not exist.
-            _logger.Debug("LdapConnectorPasswordPolicy: Could not determine whether Fine-Grained Password Policies exist in '{Container}': {Message}",
-                LogSanitiser.Sanitise(containerDn), LogSanitiser.Sanitise(ex.Message));
+            _logger.Debug("LdapConnectorPasswordPolicy: Could not determine whether Fine-Grained Password Policies exist in the Password Settings Container in '{Domain}': {Message}",
+                LogSanitiser.Sanitise(domainRootDn), LogSanitiser.Sanitise(ex.Message));
             return FineGrainedPolicySignal.CouldNotDetermine;
         }
         catch (LdapException ex)
         {
-            _logger.Debug("LdapConnectorPasswordPolicy: Could not determine whether Fine-Grained Password Policies exist in '{Container}': {Message}",
-                LogSanitiser.Sanitise(containerDn), LogSanitiser.Sanitise(ex.Message));
+            _logger.Debug("LdapConnectorPasswordPolicy: Could not determine whether Fine-Grained Password Policies exist in the Password Settings Container in '{Domain}': {Message}",
+                LogSanitiser.Sanitise(domainRootDn), LogSanitiser.Sanitise(ex.Message));
             return FineGrainedPolicySignal.CouldNotDetermine;
         }
     }

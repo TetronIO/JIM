@@ -74,26 +74,25 @@ internal static class ControlAccessRightEvaluator
         // Step 3: walk in order. The first entry that matches decides the outcome, which is why entries must be
         // evaluated strictly in the order the directory holds them rather than denies-first: canonical ordering
         // already places denies ahead of grants, and a list that departs from it means what it says.
-        foreach (var ace in securityDescriptor.Aces)
-        {
-            // Step 3.1: an inherit-only entry governs children, not this object.
-            if (ace.IsInheritOnly)
-                continue;
+        // Steps 3.1 to 3.6: the first entry that applies to the caller and speaks to this right decides, and
+        // the walk stops there. FirstOrDefault preserves that: it evaluates in order and returns as soon as one
+        // matches, so the ordering the specification depends on is intact.
+        var decidingAce = securityDescriptor.Aces
+            .FirstOrDefault(ace => AppliesToTheCaller(ace, callerSids) && GrantsOrDeniesTheRight(ace, right));
 
-            // Step 3.2: entries naming a principal the caller is not fall away.
-            if (ace.Sid == null || !callerSids.Contains(ace.Sid.Value))
-                continue;
-
-            if (!GrantsOrDeniesTheRight(ace, right))
-                continue;
-
-            // Steps 3.3 to 3.6: matched, so this entry decides and the walk stops.
-            return ace.IsAllow ? AccessCheckOutcome.Granted : AccessCheckOutcome.Denied;
-        }
-
-        // Nothing matched, so the right was never granted.
-        return AccessCheckOutcome.Denied;
+        // No entry matched, so the right was never granted. An entry that matched decides by its own type.
+        return decidingAce is { IsAllow: true } ? AccessCheckOutcome.Granted : AccessCheckOutcome.Denied;
     }
+
+    /// <summary>
+    /// Whether an entry has anything to say about this caller.
+    /// <para>
+    /// Step 3.1: an inherit-only entry governs an object's children, not the object itself. Step 3.2: an entry
+    /// naming a principal the caller is not falls away.
+    /// </para>
+    /// </summary>
+    private static bool AppliesToTheCaller(AccessControlEntry ace, IReadOnlySet<string> callerSids) =>
+        !ace.IsInheritOnly && ace.Sid != null && callerSids.Contains(ace.Sid.Value);
 
     /// <summary>
     /// Whether an entry speaks to the right in question at all.

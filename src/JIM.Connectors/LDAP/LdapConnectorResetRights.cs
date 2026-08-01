@@ -143,13 +143,13 @@ internal class LdapConnectorResetRights
             return null;
         }
 
-        var sids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var value in attribute.GetValues(typeof(byte[])).OfType<byte[]>())
-        {
-            var sid = SecurityIdentifier.TryParse(value, 0);
-            if (sid != null)
-                sids.Add(sid.Value);
-        }
+        // Anything that will not parse is dropped rather than failing the read: one unreadable identifier among
+        // many is not a reason to abandon the caller's whole security context.
+        var sids = attribute.GetValues(typeof(byte[])).OfType<byte[]>()
+            .Select(value => SecurityIdentifier.TryParse(value, 0))
+            .Where(sid => sid != null)
+            .Select(sid => sid!.Value)
+            .ToHashSet(StringComparer.Ordinal);
 
         if (sids.Count == 0)
             return null;

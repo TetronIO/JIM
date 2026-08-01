@@ -745,7 +745,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
         var isConnectionEncrypted = useSecureConnection?.CheckboxValue == true;
 
-        LdapConnection? connection = null;
+        LdapConnection connection;
         try
         {
             connection = OpenConnection(BuildConnectionPlan(settings, logger), logger);
@@ -765,10 +765,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             return CouldNotConnect($"The directory refused JIM's connection: {ex.Message}");
         }
 
-        if (connection == null)
-            return CouldNotConnect("JIM could not open a connection to this Connected System.");
-
-        try
+        using (connection)
         {
             // A successful bind does not mean the directory will answer questions about itself. Reading the rootDSE
             // can still be refused or fail, and when it does, every remaining check depends on what it would have
@@ -809,10 +806,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 TargetDescription = DescribeDirectory(rootDse.DirectoryType),
                 Checks = checks
             };
-        }
-        finally
-        {
-            connection.Dispose();
         }
     }
 

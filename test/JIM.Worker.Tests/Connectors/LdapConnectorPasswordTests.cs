@@ -455,10 +455,37 @@ public class LdapConnectorPasswordTests
         var result = await CreateChannel(LdapDirectoryType.ActiveDirectory)
             .SetPasswordAsync(TestDn, TestPassword, new PasswordSetOptions(), CancellationToken.None);
 
-        // Even when the directory itself echoes the password back in its diagnostic, JIM must not carry it forward.
+        // Even when the directory itself echoes the password back in its diagnostic, JIM must not carry it
+        // forward. The whole message is withheld rather than having the password cut out of it: keeping the
+        // rest would depend on the echo matching exactly, and a directory that uppercased the password or
+        // quoted part of it would leave the credential in a message JIM hands to a caller and logs.
         Assert.That(result.ErrorMessage, Does.Not.Contain(TestPassword));
-        Assert.That(result.ErrorMessage, Does.Contain("[password redacted]"),
-            "The rest of the directory's diagnostic is still useful to an administrator, so redact the password rather than discarding the message.");
+        Assert.That(result.ErrorMessage, Does.Contain("withheld"),
+            "A message that echoed the password back must be withheld, not patched.");
+    }
+
+    /// <summary>
+    /// The sibling of the test above, and the reason withholding is safe: a directory's diagnostic that does not
+    /// contain the password reaches the administrator untouched. Without this, the withholding rule could quietly
+    /// swallow every useful message and nothing would notice.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_WhenTheDirectoryExplainsItself_KeepsTheExplanationAsync()
+    {
+        const string diagnostic = "0000052D: Constraint violation - check_password_restrictions: the password is too short";
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .Returns((DirectoryRequest request) =>
+            {
+                _sentRequests.Add(request);
+                return Task.FromResult<DirectoryResponse>(CreateResponse<ModifyResponse>(
+                    ResultCode.ConstraintViolation, diagnostic));
+            });
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory)
+            .SetPasswordAsync(TestDn, TestPassword, new PasswordSetOptions(), CancellationToken.None);
+
+        Assert.That(result.ErrorMessage, Does.Contain(diagnostic),
+            "A diagnostic that does not carry the password is what an administrator needs, and must survive intact.");
     }
 
     #endregion

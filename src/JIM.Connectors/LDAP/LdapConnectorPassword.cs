@@ -101,7 +101,14 @@ internal class LdapConnectorPassword
         if (string.IsNullOrEmpty(password))
             return message;
 
-        return message.Replace(password, "[password redacted]", StringComparison.Ordinal);
+        // Withheld whole rather than patched. Cutting the password out of the message and keeping the rest
+        // depends on the echo matching exactly: a directory that uppercased it, or quoted only part of it,
+        // would leave the credential in a message JIM then hands to a caller and writes to a log. Directories
+        // do not in practice echo a submitted password, so this costs nothing in the ordinary case and fails
+        // safe in the one that matters. The result code and JIM's own classification still say what happened.
+        return message.Contains(password, StringComparison.OrdinalIgnoreCase)
+            ? "[the directory's message is withheld because it contained the password]"
+            : message;
     }
 
     /// <summary>
