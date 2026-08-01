@@ -313,5 +313,15 @@ public interface ISyncServer
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null);
 
+    /// <summary>
+    /// Delivers the initial passwords outstanding on a Connected System (issue #1121). Runs after the export
+    /// phase, over everything outstanding rather than only what the run just staged, so an ordinary export run
+    /// is also the retry vehicle for an account whose password could not be set last time.
+    /// </summary>
+    Task<InitialPasswordRunResult> DeliverOutstandingInitialPasswordsAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        CancellationToken cancellationToken);
+
     #endregion
 }

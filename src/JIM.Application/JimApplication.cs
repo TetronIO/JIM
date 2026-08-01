@@ -67,6 +67,7 @@ public class JimApplication : IDisposable
     public DriftDetectionService DriftDetection { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
+    public InitialPasswordDeliveryServer InitialPasswords { get; }
     public ScopingEvaluationServer ScopingEvaluation { get; }
     public ScopeReconciliationServer ScopeReconciliation { get; }
     public FileSystemServer FileSystem { get; }
@@ -98,6 +99,7 @@ public class JimApplication : IDisposable
                                      // Bootstrap calls (SSO init, auth) don't use SyncRepo.
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
+        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, new PasswordGeneratorService());
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);

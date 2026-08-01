@@ -1352,6 +1352,60 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
+    {
+        var outstanding = _pendingInitialPasswords.Values
+            .Where(p => p.ConnectedSystemId == connectedSystemId && p.Status == PendingInitialPasswordStatus.Pending)
+            .OrderBy(p => p.CreatedAt)
+            .Take(maximum)
+            .ToList();
+
+        // The real query brings the account with it; the fake has to be asked to as well, or a delivery test
+        // would have nothing to set a password on.
+        foreach (var pending in outstanding.Where(p => p.ConnectedSystemObject == null! && _csos.ContainsKey(p.ConnectedSystemObjectId)))
+            pending.ConnectedSystemObject = _csos[pending.ConnectedSystemObjectId];
+
+        return Task.FromResult(outstanding);
+    }
+
+    public Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var configurations = _syncRules.Values
+            .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword != null)
+            .ToDictionary(r => r.Id, r => r.InitialPassword!);
+        return Task.FromResult(configurations);
+    }
+
+    public Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        var system = _connectedSystems.TryGetValue(connectedSystemId, out var connectedSystem) ? connectedSystem : null;
+        return Task.FromResult(system?.PasswordPolicy);
+    }
+
+    public Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
+    {
+        foreach (var attempt in attempts.Where(a => _pendingInitialPasswords.ContainsKey(a.Id)))
+        {
+            var stored = _pendingInitialPasswords[attempt.Id];
+            stored.Status = attempt.Status;
+            stored.FailureReason = attempt.FailureReason;
+            stored.TargetMessage = attempt.TargetMessage;
+            stored.AttemptCount = attempt.AttemptCount;
+            stored.LastAttemptedAt = attempt.LastAttemptedAt;
+            stored.ExpiresAt = attempt.ExpiresAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+            _pendingInitialPasswords.Remove(id);
+
+        return Task.CompletedTask;
+    }
+
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)

@@ -495,6 +495,54 @@ public interface ISyncRepository
     Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords);
 
     /// <summary>
+    /// Gets the accounts on a Connected System still waiting for an initial password JIM can act on, oldest
+    /// first, with the Connected System Object each one is owed to.
+    /// <para>
+    /// Parked and expired records are excluded: both mean a person has to do something, and re-attempting them
+    /// on every export would produce the same answer for ever while crowding out work that can succeed.
+    /// </para>
+    /// </summary>
+    /// <param name="maximum">
+    /// An upper bound on one pass, so that a target rejecting everything cannot turn an export run into an
+    /// unbounded sequence of failing password attempts. What is left over is attempted on the next run.
+    /// </param>
+    Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum);
+
+    /// <summary>
+    /// Gets the initial-password configuration of the given Synchronisation Rules, keyed by rule.
+    /// <para>
+    /// Read on its own rather than through a Synchronisation Rule, which materialises Attribute Flows, Object
+    /// Matching Rules and both object types; none of that has anything to say about a password.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// </summary>
+    Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Records the outcome of a delivery attempt against each record: its status, the target's reason, the
+    /// attempt count and when it was tried.
+    /// <para>
+    /// Only those columns are written. Which account the password is owed to, which Connected System it lives
+    /// in, which rule asked for it and when the work was staged are facts about how the record came to exist,
+    /// and an attempt does not change any of them.
+    /// </para>
+    /// </summary>
+    Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts);
+
+    /// <summary>
+    /// Deletes outstanding initial-password records by ID, which is what a delivered password looks like.
+    /// <para>
+    /// The table is a work list, not a history: keeping a row per account JIM has ever given a password to
+    /// would grow it without bound for no benefit, and the Activity already records that the delivery happened.
+    /// </para>
+    /// </summary>
+    Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
