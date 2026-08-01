@@ -111,9 +111,42 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Updates a Metaverse Object Type's own columns: its identity (name, plural name, icon), its deletion-rule
+    /// configuration and its audit fields. Attribute bindings are deliberately NOT written here; they are the business
+    /// of <see cref="AddAttributeObjectTypeBindingAsync"/> and <see cref="RemoveAttributeObjectTypeBindingAsync"/>,
+    /// and no caller of this method changes them.
+    /// </summary>
+    /// <remarks>
+    /// Written as load-then-SetValues rather than <c>DbSet.Update()</c> because callers routinely pass an object type
+    /// that was loaded on a *different* DbContext: the portal's detail page loads it (with its attributes) inside a
+    /// <c>using</c> block and saves minutes later on a fresh context. <c>Update()</c> traverses the whole graph, and
+    /// attribute bindings are a many-to-many skip navigation whose join rows are not entities the tracker can
+    /// recognise as already existing, so it inserted a join row per bound attribute and PostgreSQL rejected the batch
+    /// on the join table's primary key. Nothing saved, and the Deletion Rules panel was unusable on any object type
+    /// with attributes bound, which is every real one. <c>SetValues</c> copies scalar properties only and never looks
+    /// at navigations, and the entity it copies onto is loaded without its attributes, so there is no graph to
+    /// traverse. Guarded by <c>MetaverseObjectTypeUpdateDatabaseTests</c>; the in-memory provider enforces no unique
+    /// constraint on the join table, so only a real database reproduces the fault.
+    /// </remarks>
     public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
     {
-        Repository.Database.MetaverseObjectTypes.Update(metaverseObjectType);
+        // AsTracking is not optional: JIM.Web configures the context NoTracking, so without it this read returns a
+        // detached entity, SetValues writes to an entry SaveChanges never looks at, and the update silently does
+        // nothing while reporting success.
+        var tracked = await Repository.Database.MetaverseObjectTypes
+            .AsTracking()
+            .SingleOrDefaultAsync(t => t.Id == metaverseObjectType.Id)
+            ?? throw new InvalidOperationException($"Metaverse Object Type {metaverseObjectType.Id} no longer exists.");
+
+        // Asserts the AsTracking above rather than trusting it: dropping it would make this method write nothing while
+        // reporting success, which is exactly how the defect above shipped in the first place.
+        Repository.Database.RequireTracked(tracked, nameof(UpdateMetaverseObjectTypeAsync),
+            "The read above must call AsTracking(); JIM.Web configures the DbContext NoTracking.");
+
+        // A caller working on this same context gets its own tracked instance back, so this is a self-copy and the
+        // edits it already made are what get saved.
+        Repository.Database.Entry(tracked).CurrentValues.SetValues(metaverseObjectType);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -371,6 +404,20 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Updates a Metaverse Attribute and the Standard Mappings it owns.
+    /// </summary>
+    /// <remarks>
+    /// Do NOT convert this to the load-then-SetValues shape used by
+    /// <see cref="UpdateMetaverseObjectTypeAsync"/>. The two look alike but differ in what they own: an object type
+    /// owns no child rows through this path (its attribute bindings are written by
+    /// <see cref="AddAttributeObjectTypeBindingAsync"/> and <see cref="RemoveAttributeObjectTypeBindingAsync"/>),
+    /// whereas an attribute's Standard Mappings are its own child rows, reconciled in place by the caller and
+    /// persisted by this graph traversal. <c>SetValues</c> copies scalars only, so it would silently stop saving
+    /// mapping edits. The graph traversal is safe here because every caller loads the attribute tracked on the same
+    /// context it saves on; a caller that passed a detached attribute with its Object Types included would hit the
+    /// same join-table duplicate-key fault the object type path did.
+    /// </remarks>
     public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         Repository.Database.Update(attribute);
@@ -1458,6 +1505,16 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    /// <summary>
+    /// Updates a Metaverse Object and the attribute values it owns.
+    /// </summary>
+    /// <remarks>
+    /// <c>Update</c> attaches explicitly, so unlike a load-mutate-save path this is unaffected by the context's query
+    /// tracking behaviour. It does traverse the graph, though, and a Metaverse Object reaches Roles through a
+    /// many-to-many skip navigation whose join rows EF cannot tell from new ones; passing a detached object with Roles
+    /// loaded would try to re-insert them and fail on the join table's primary key. No caller does: the sign-in path
+    /// loads the object tracked and without Roles. Keep it that way, or narrow this to the object's own columns.
+    /// </remarks>
     public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         Repository.Database.Update(metaverseObject);

@@ -210,6 +210,13 @@ else if (_syncRule != null)
         // are we transitioning from new to existing?
         var isSyncRuleNew = _syncRule.Id == 0;
 
+        // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
+        // are saving it. A cosmetic edit (a rename, a description) shows nothing at all; cancelling aborts the save.
+        var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(_syncRule);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Synchronisation Rule", _syncRule.Name))
+            return;
+
         // offer an optional reason for the configuration change history; cancelling aborts the save
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, isSyncRuleNew ? "Create" : "Update");
         if (cancelled)

@@ -132,6 +132,10 @@ Read the same status from automation with `(Get-JIMConnectedSystem -Id <id>).Con
 `configurationDrift` object on the REST Connected System response. In both cases, check `IsDeterminable` before
 treating `HasPendingChanges` as `false`.
 
+## Confirming a configuration change
+
+Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the Connected System Objects imported through it become obsolete, and whatever they are joined to is deprovisioned on the next synchronisation. See [Configuration changes](configuration-changes.md).
+
 ## Common workflows
 
 **Setting up a new Connected System:**

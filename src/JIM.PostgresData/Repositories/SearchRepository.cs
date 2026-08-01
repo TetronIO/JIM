@@ -17,20 +17,10 @@ public class SearchRepository : ISearchRepository
         Repository = dataRepository;
     }
 
-    /// <summary>
-    /// Guards against silent data loss on a load-mutate-save path. The Blazor DbContext defaults to NoTracking
-    /// (see JIM.Web Program.cs), so an entity loaded without an explicit AsTracking() comes back detached and a
-    /// subsequent SaveChanges persists nothing while falsely reporting success. Every mutating method here loads
-    /// change-tracked; this asserts that contract and fails fast if a future change drops the AsTracking(), rather
-    /// than silently discarding the edit. Mirrors the guard in ConnectedSystemRepository.UpdateSyncRuleAsync.
-    /// </summary>
-    private void GuardTracked<T>(T entity, string operation) where T : class
-    {
-        if (Repository.Database.Entry(entity).State == EntityState.Detached)
-            throw new InvalidOperationException(
-                $"{operation} requires a change-tracked {typeof(T).Name}, but the supplied instance is detached " +
-                "from this DbContext, so no changes would be persisted. The query that loaded it must call AsTracking().");
-    }
+
+    // Every mutating method here loads change-tracked; see TrackedEntityGuard for why that is not optional.
+    private const string Remedy =
+        "The query that loaded it must call AsTracking(), on the same DbContext the change is saved on.";
 
     public async Task<IList<PredefinedSearchHeader>> GetPredefinedSearchHeadersAsync()
     {
@@ -139,7 +129,7 @@ public class SearchRepository : ISearchRepository
                 .Include(g => g.ChildGroups)
                 .SingleOrDefaultAsync(g => g.Id == parentId)
                 ?? throw new ArgumentException($"Parent criteria group with ID {parentId} not found.");
-            GuardTracked(parent, nameof(CreatePredefinedSearchCriteriaGroupAsync));
+            Repository.Database.RequireTracked(parent, nameof(CreatePredefinedSearchCriteriaGroupAsync), Remedy);
             parent.ChildGroups.Add(group);
         }
         else
@@ -149,7 +139,7 @@ public class SearchRepository : ISearchRepository
                 .Include(s => s.CriteriaGroups)
                 .SingleOrDefaultAsync(s => s.Id == predefinedSearchId)
                 ?? throw new ArgumentException($"Predefined search with ID {predefinedSearchId} not found.");
-            GuardTracked(search, nameof(CreatePredefinedSearchCriteriaGroupAsync));
+            Repository.Database.RequireTracked(search, nameof(CreatePredefinedSearchCriteriaGroupAsync), Remedy);
             search.CriteriaGroups.Add(group);
         }
 
@@ -163,7 +153,7 @@ public class SearchRepository : ISearchRepository
         if (group == null)
             return null;
 
-        GuardTracked(group, nameof(UpdatePredefinedSearchCriteriaGroupAsync));
+        Repository.Database.RequireTracked(group, nameof(UpdatePredefinedSearchCriteriaGroupAsync), Remedy);
         group.Type = type;
         group.Position = position;
         await Repository.Database.SaveChangesAsync();
@@ -196,7 +186,7 @@ public class SearchRepository : ISearchRepository
         if (group == null)
             return;
 
-        GuardTracked(group, nameof(DeletePredefinedSearchCriteriaGroupAsync));
+        Repository.Database.RequireTracked(group, nameof(DeletePredefinedSearchCriteriaGroupAsync), Remedy);
         foreach (var child in group.ChildGroups.ToList())
             await RemoveCriteriaGroupSubtreeAsync(child.Id);
 
@@ -224,7 +214,7 @@ public class SearchRepository : ISearchRepository
         if (group == null)
             return null;
 
-        GuardTracked(group, nameof(CreatePredefinedSearchCriterionAsync));
+        Repository.Database.RequireTracked(group, nameof(CreatePredefinedSearchCriterionAsync), Remedy);
         // Persist via the FK scalar only; the navigation is ignored so EF does not try to re-insert the attribute.
         criterion.MetaverseAttribute = null!;
         group.Criteria.Add(criterion);
@@ -238,7 +228,7 @@ public class SearchRepository : ISearchRepository
         if (existing == null)
             return null;
 
-        GuardTracked(existing, nameof(UpdatePredefinedSearchCriterionAsync));
+        Repository.Database.RequireTracked(existing, nameof(UpdatePredefinedSearchCriterionAsync), Remedy);
         existing.ComparisonType = criterion.ComparisonType;
         existing.MetaverseAttributeId = criterion.MetaverseAttributeId;
         existing.StringValue = criterion.StringValue;
@@ -263,7 +253,7 @@ public class SearchRepository : ISearchRepository
         if (criterion == null)
             return false;
 
-        GuardTracked(criterion, nameof(DeletePredefinedSearchCriterionAsync));
+        Repository.Database.RequireTracked(criterion, nameof(DeletePredefinedSearchCriterionAsync), Remedy);
         Repository.Database.PredefinedSearchCriteria.Remove(criterion);
         await Repository.Database.SaveChangesAsync();
         return true;
