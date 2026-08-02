@@ -230,7 +230,14 @@ public class SynchronisationControllerSetPasswordTests
         var result = await SetPasswordAsync();
 
         Assert.That(result, Is.TypeOf<ObjectResult>());
-        Assert.That(((ObjectResult)result).StatusCode, Is.EqualTo(StatusCodes.Status502BadGateway));
+        var objectResult = (ObjectResult)result;
+        Assert.Multiple(() =>
+        {
+            Assert.That(objectResult.StatusCode, Is.EqualTo(StatusCodes.Status502BadGateway));
+            // The body's code has to agree with the status, or a client branching on it is told the caller was
+            // at fault when the target was.
+            Assert.That(((ApiErrorResponse)objectResult.Value!).Code, Is.EqualTo(ApiErrorCodes.BadGateway));
+        });
     }
 
     /// <summary>
@@ -254,6 +261,20 @@ public class SynchronisationControllerSetPasswordTests
             new SetConnectedSystemObjectPasswordRequest { Password = Password });
 
         Assert.That(result, Is.TypeOf<NotFoundObjectResult>());
+    }
+
+
+    /// <summary>
+    /// The message is shown to an administrator and returned to automation, so it must read as a sentence about
+    /// their request rather than mentioning the name of a parameter on a JIM method they cannot see.
+    /// </summary>
+    [Test]
+    public async Task SetConnectedSystemObjectPasswordAsync_WhenTheObjectDoesNotExist_DoesNotLeakAParameterNameAsync()
+    {
+        var result = (NotFoundObjectResult)await _controller.SetConnectedSystemObjectPasswordAsync(ConnectedSystemId, Guid.NewGuid(),
+            new SetConnectedSystemObjectPasswordRequest { Password = Password });
+
+        Assert.That(((ApiErrorResponse)result.Value!).Message, Does.Not.Contain("Parameter"));
     }
 
     [Test]

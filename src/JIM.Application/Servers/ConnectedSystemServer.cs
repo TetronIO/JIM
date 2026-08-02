@@ -1930,13 +1930,14 @@ public class ConnectedSystemServer
         if (string.IsNullOrWhiteSpace(password))
             throw new ArgumentException("A password is required.", nameof(password));
 
+        // Deliberately without a parameter name: these messages are shown to an administrator and returned by the
+        // REST API, where "(Parameter 'connectedSystemObjectId')" is noise about JIM's own method signature.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId)
-            ?? throw new ArgumentException($"Connected System {connectedSystemId} does not exist.", nameof(connectedSystemId));
+            ?? throw new ArgumentException($"Connected System {connectedSystemId} does not exist.");
 
         var connectedSystemObject = await GetConnectedSystemObjectAsync(connectedSystemId, connectedSystemObjectId)
             ?? throw new ArgumentException(
-                $"Connected System Object {connectedSystemObjectId} does not exist in Connected System {connectedSystemId}.",
-                nameof(connectedSystemObjectId));
+                $"Connected System Object {connectedSystemObjectId} does not exist in Connected System {connectedSystemId}.");
 
         // Both resolved before the Activity is created, so a Connector that cannot do this never leaves an
         // in-flight Activity behind. Same reasoning as the hierarchy import above.

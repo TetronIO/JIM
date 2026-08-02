@@ -521,7 +521,7 @@ public class SynchronisationController(
             // replication: the caller's move is to wait and repeat the request, not to change the password.
             PasswordSetFailureReason.TargetObjectNotFound => NotFound(ApiErrorResponse.NotFound(reason)),
             // Nothing was established about the password itself, so this must not read as a rejection of it.
-            PasswordSetFailureReason.Transient => StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadRequest(reason)),
+            PasswordSetFailureReason.Transient => StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadGateway(reason)),
             _ => BadRequest(ApiErrorResponse.BadRequest(reason))
         };
     }
