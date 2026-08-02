@@ -14,7 +14,7 @@ If `$ARGUMENTS` is non-empty, treat it as the description of the discovered work
 
 ## 0. One-time setup
 
-The `gh stack` CLI is an extension (requires gh 2.90+):
+The `gh stack` CLI is an extension (requires gh 2.90+). The devcontainer installs it automatically (`.devcontainer/setup.sh`); if it is missing (e.g. the install was skipped because gh was not yet authenticated):
 
 ```
 gh extension list | grep -q gh-stack || gh extension install github/gh-stack
