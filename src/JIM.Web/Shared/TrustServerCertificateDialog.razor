@@ -1,0 +1,297 @@
+@using JIM.Models.Connectors
+@using JIM.Models.Staging
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Trusting the certificate a Connected System's server presents, in the two steps the decision actually has:
+    choosing what to trust (skipped where the server sent only its own certificate), then confirming it.
+
+    The certificate is read from the server again when the confirmation is given, not carried from the failure that
+    reported it. That is what makes the third state below possible: a server presenting something other than what
+    the administrator was shown stops the action instead of being waved through.
+*@
+
+<MudDialog>
+    @* The heading names the question actually being asked, which changes between choosing what to trust and
+       confirming it, so it is rendered by the dialog rather than fixed when it was opened. *@
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Title</MudText>
+    </TitleContent>
+    <DialogContent>
+        @switch (_step)
+        {
+            case Step.Choose:
+                <MudStack Spacing="4">
+                    <MudText Typo="Typo.body1">
+                        @Diagnostic.Host sent its own certificate and the authority that issued it. Trusting the
+                        authority covers this server and anything else it issues for.
+                    </MudText>
+                    <MudRadioGroup T="string" @bind-Value="_selectedThumbprint">
+                        <div class="jim-trust-option @(IsIssuerSelected ? "jim-trust-option-selected" : "")">
+                            <MudRadio T="string" Value="@IssuerThumbprint" Color="Color.Primary">
+                                <div class="jim-trust-option-title">
+                                    @CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer)
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">Recommended</MudChip>
+                                </div>
+                                <div class="jim-trust-option-note">
+                                    The authority that issued this certificate. Survives renewal, so this decision
+                                    holds when the server's own certificate is replaced.
+                                </div>
+                                <div class="jim-trust-option-thumbprint">@CertificateDisplay.FormatThumbprint(Diagnostic.IssuerThumbprint)</div>
+                            </MudRadio>
+                        </div>
+                        <div class="jim-trust-option @(IsIssuerSelected ? "" : "jim-trust-option-selected")">
+                            <MudRadio T="string" Value="@LeafThumbprint" Color="Color.Primary">
+                                <div class="jim-trust-option-title">@CertificateDisplay.FormatDistinguishedName(Diagnostic.Subject)</div>
+                                <div class="jim-trust-option-note">
+                                    This server's own certificate, and nothing else. You will need to trust the new
+                                    one when it is renewed@(Diagnostic.ValidTo.HasValue ? $" in {ValidToText}" : "").
+                                </div>
+                                <div class="jim-trust-option-thumbprint">@CertificateDisplay.FormatThumbprint(Diagnostic.Thumbprint)</div>
+                            </MudRadio>
+                        </div>
+                    </MudRadioGroup>
+                </MudStack>
+                break;
+
+            case Step.Confirm:
+                <MudStack Spacing="4">
+                    <MudText Typo="Typo.body1">
+                        JIM will trust @(IsIssuerSelected ? "every certificate this authority issues" : "this certificate"),
+                        until you remove it from <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>.
+                        Check the thumbprint against the one the server's administrator gives you before you continue.
+                    </MudText>
+
+                    <MudSimpleTable Dense="true" Elevation="0" Outlined="true">
+                        <tbody>
+                            <tr>
+                                <td class="mud-text-secondary">Trusting</td>
+                                <td>@SelectedName</td>
+                            </tr>
+                            <tr>
+                                <td class="mud-text-secondary">Presented by</td>
+                                <td>@Diagnostic.Host:@Diagnostic.Port</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+
+                    @* The thumbprint gets its own full-width block: it is the value being compared by eye, and it
+                       must not wrap for the comparison to be easy. *@
+                    <div class="jim-trust-compare">
+                        <div class="jim-trust-compare-label">Thumbprint to check</div>
+                        <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_selectedThumbprint)</div>
+                    </div>
+
+                    <MudTextField @bind-Value="_changeReason" Label="Change reason" Variant="Variant.Outlined"
+                                  Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
+                                  HelperText="Recorded on the Activity alongside your name." />
+                </MudStack>
+                break;
+
+            case Step.Refused:
+                <MudStack Spacing="4">
+                    <MudText Typo="Typo.body1">
+                        @Diagnostic.Host is presenting a different certificate from the one shown on this failure, so
+                        JIM has not trusted anything. This is expected if the certificate was renewed; investigate if
+                        it was not.
+                    </MudText>
+                    <div class="jim-trust-compare">
+                        <div class="jim-trust-compare-label">The one you confirmed</div>
+                        <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_expectedThumbprint)</div>
+                    </div>
+                    <div class="jim-trust-compare jim-trust-compare-now">
+                        <div class="jim-trust-compare-label">Presented now</div>
+                        <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_presentedThumbprint)</div>
+                    </div>
+                </MudStack>
+                break;
+
+            case Step.Failed:
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_failureMessage</MudAlert>
+                break;
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" DropShadow="false">@(_step is Step.Refused or Step.Failed ? "Close" : "Cancel")</MudButton>
+
+        @if (_step == Step.Choose)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="Continue">Continue</MudButton>
+        }
+        else if (_step == Step.Confirm)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" Disabled="_busy" OnClick="TrustAsync">
+                @if (_busy)
+                {
+                    <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                    <span class="ms-2">Trusting</span>
+                }
+                else
+                {
+                    <text>Trust certificate</text>
+                }
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The certificate the administrator was shown, which the thumbprint they confirm is taken from.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ServerCertificateDiagnostic Diagnostic { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System whose configured endpoint is read again. The endpoint itself is never passed from here:
+    /// it comes from that system's own settings.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// Names the Connected System in the change reason JIM prefills.
+    /// </summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// Connectivity settings entered but not yet saved, so the certificate trusted is the one presented by the
+    /// endpoint the administrator is configuring rather than the one last saved.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<ConnectedSystemSettingValueDraft>? DraftSettingValues { get; set; }
+
+    private enum Step { Choose, Confirm, Refused, Failed }
+
+    private Step _step;
+    private bool _busy;
+    private string? _selectedThumbprint;
+    private string? _changeReason;
+    private string? _expectedThumbprint;
+    private string? _presentedThumbprint;
+    private string? _failureMessage;
+
+    private string LeafThumbprint => Diagnostic.Thumbprint ?? string.Empty;
+
+    private string IssuerThumbprint => Diagnostic.IssuerThumbprint ?? string.Empty;
+
+    private bool IsIssuerSelected => Diagnostic.IsIssuerCertificateAvailable && _selectedThumbprint == IssuerThumbprint;
+
+    private string SelectedName => IsIssuerSelected
+        ? CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer)
+        : CertificateDisplay.FormatDistinguishedName(Diagnostic.Subject);
+
+    private string ValidToText => Diagnostic.ValidTo.HasValue ? Diagnostic.ValidTo.Value.ToString("MMMM yyyy") : string.Empty;
+
+    protected override void OnInitialized()
+    {
+        // Where the server sent the authority that issued its certificate, trusting the authority is the durable
+        // choice and is offered first. Where it did not, the server's own certificate is the only thing there is.
+        if (Diagnostic.IsIssuerCertificateAvailable)
+        {
+            _selectedThumbprint = IssuerThumbprint;
+            _step = Step.Choose;
+        }
+        else
+        {
+            _selectedThumbprint = LeafThumbprint;
+            _step = Step.Confirm;
+        }
+
+        _changeReason = string.IsNullOrEmpty(ConnectedSystemName)
+            ? $"Unblocking the connection to {Diagnostic.Host}."
+            : $"Unblocking the connection test for the {ConnectedSystemName} Connected System.";
+    }
+
+    private string Title => _step switch
+    {
+        Step.Choose => "Which certificate should JIM trust?",
+        Step.Refused => "The certificate has changed",
+        Step.Failed => "JIM could not trust this certificate",
+        _ => "Trust this certificate?"
+    };
+
+    private void Continue() => _step = Step.Confirm;
+
+    private async Task TrustAsync()
+    {
+        if (_busy || string.IsNullOrEmpty(_selectedThumbprint))
+            return;
+
+        _busy = true;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _selectedThumbprint, user, _changeReason, DraftSettingValues);
+
+            switch (result.Outcome)
+            {
+                case ServerCertificateTrustOutcome.Trusted:
+                case ServerCertificateTrustOutcome.AlreadyTrusted:
+                    MudDialog.Close(DialogResult.Ok(result.Outcome));
+                    return;
+
+                case ServerCertificateTrustOutcome.ThumbprintMismatch:
+                    _expectedThumbprint = result.ExpectedThumbprint;
+                    _presentedThumbprint = result.PresentedThumbprint;
+                    _step = Step.Refused;
+                    return;
+
+                default:
+                    _failureMessage = result.Message ?? "JIM could not trust this certificate.";
+                    _step = Step.Failed;
+                    return;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the dialog and returns what happened, or null when the administrator backed out.
+    /// </summary>
+    public static async Task<ServerCertificateTrustOutcome?> ShowAsync(
+        IDialogService dialogService,
+        ServerCertificateDiagnostic diagnostic,
+        int connectedSystemId,
+        string? connectedSystemName,
+        IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    {
+        var parameters = new DialogParameters<TrustServerCertificateDialog>
+        {
+            { x => x.Diagnostic, diagnostic },
+            { x => x.ConnectedSystemId, connectedSystemId },
+            { x => x.ConnectedSystemName, connectedSystemName },
+            { x => x.DraftSettingValues, draftSettingValues }
+        };
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        // The dialog renders its own heading, which changes between steps; this is the accessible fallback only.
+        var dialog = await dialogService.ShowAsync<TrustServerCertificateDialog>("Trust this certificate?", parameters, options);
+        var result = await dialog.Result;
+
+        return result is null or { Canceled: true } ? null : result.Data as ServerCertificateTrustOutcome?;
+    }
+}

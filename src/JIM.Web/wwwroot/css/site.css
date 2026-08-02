@@ -1262,6 +1262,11 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     box-shadow: none !important;
 }
 
+/* Centre-align alert icon and close button vertically */
+html[lang] .mud-alert-position {
+    align-items: center;
+}
+
 /* Schema refresh results alert - position close icon in top right */
 .jim-alert-schema-refresh {
     position: relative;
@@ -2211,6 +2216,86 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     color: var(--mud-palette-text-secondary);
     font-size: 0.875rem;
     text-align: left;
+}
+
+/* The action sits below its own rule, so the decision reads as something offered after the verdict rather than as
+   part of the certificate's own text. Left-aligned, because the note beside it is a sentence to read. */
+.jim-certificate-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    text-align: left;
+}
+
+.jim-certificate-action-note {
+    flex: 1 1 260px;
+    min-width: 240px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+/* ─── Trust a presented certificate (dialog) ─── */
+
+.jim-trust-option {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.jim-trust-option-selected {
+    border-color: var(--mud-palette-primary);
+}
+
+.jim-trust-option-title {
+    font-weight: 500;
+}
+
+.jim-trust-option-note {
+    margin-top: 2px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+/* The thumbprint is the value being compared by eye, so it is set in the monospace face and must not wrap. */
+.jim-trust-option-thumbprint,
+.jim-trust-compare-value {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.jim-trust-option-thumbprint {
+    margin-top: 6px;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-trust-compare {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    padding: 10px 12px;
+}
+
+.jim-trust-compare-now {
+    border-color: var(--mud-palette-warning);
+}
+
+.jim-trust-compare-label {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75rem;
+    margin-bottom: 4px;
+}
+
+.jim-trust-compare-now .jim-trust-compare-value {
+    color: var(--mud-palette-warning);
 }
 
 /* ─── Collapsible stack trace ─── */

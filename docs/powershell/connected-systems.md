@@ -343,6 +343,113 @@ Get-JIMConnectedSystem -Id 3 |
 
 ---
 
+## Get-JIMConnectedSystemServerCertificate
+
+Reads the certificate the Connected System's server is presenting, without storing anything.
+
+JIM connects to the endpoint the Connected System is configured for, purely to look at the certificate the server offers, and refuses the connection. The endpoint is always worked out by the Connected System's own connector from that system's settings; it is never named directly, so this cannot be used to make JIM connect to an address of your choosing.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> [-SettingValues <hashtable>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
+| `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
+
+### Output
+
+An object with a `certificate` property and a `readAt` timestamp. The certificate carries `host`, `port`, `subject`, `issuer`, `subjectAlternativeNames`, `validFrom`, `validTo`, `thumbprint`, `signatureAlgorithm`, `isSelfSigned`, `issuerThumbprint`, `isIssuerCertificateAvailable`, `failureReason` and `remediation`.
+
+`failureReason` is one of `None`, `UntrustedIssuer`, `NameMismatch`, `Expired`, `NotYetValid` or `NoCertificatePresented`. Only `UntrustedIssuer` is fixed by trusting the certificate.
+
+### Examples
+
+```powershell title="Read the certificate the configured server presents"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+```
+
+```powershell title="Show the identifying details and which check it fails"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 |
+    Select-Object -ExpandProperty certificate |
+    Select-Object host, subject, thumbprint, failureReason
+```
+
+```powershell title="Read an endpoint that has been entered but not saved"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' }
+```
+
+### Notes
+
+- **Why `-SettingValues` exists.** JIM does not save settings that fail validation, and a certificate JIM does not trust is a validation failure. A Connected System being configured for the first time therefore has the address you typed and nothing in the database, so without these JIM would look at the endpoint last saved, or report that the system is not configured for an encrypted connection. Setting identifiers come from `Get-JIMConnectorDefinition`. The values are never persisted, and values for encrypted settings are ignored.
+- Reading stores nothing. Trusting the certificate is a separate call to `Approve-JIMConnectedSystemServerCertificate`.
+
+---
+
+## Approve-JIMConnectedSystemServerCertificate
+
+Trusts the certificate the Connected System's server is presenting, adding it to the Trusted Certificates store.
+
+JIM reads the certificate from the server again, checks it against the thumbprint you supply, and adds it through the audited path, so the addition carries an Activity naming who trusted it and why.
+
+### Syntax
+
+```powershell
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> -Thumbprint <string>
+    [-ChangeReason <string>] [-SettingValues <hashtable>] [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
+| `Thumbprint` | `string` | Yes | | The thumbprint being trusted, as read from the server. Spaces and colons between the pairs are ignored. |
+| `ChangeReason` | `string` | No | | Reason recorded on the audit Activity. JIM records a sentence naming the Connected System when none is given. |
+| `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
+| `PassThru` | `switch` | No | `$false` | Returns the outcome, including the certificate as it now sits in the store. |
+
+### Output
+
+When `-PassThru` is specified, returns an object with `outcome` (`Trusted`, `AlreadyTrusted` or `ThumbprintMismatch`), `message`, `certificate`, `expectedThumbprint` and `presentedThumbprint`. Otherwise, no output.
+
+### Examples
+
+```powershell title="Trust the certificate you have checked"
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
+```
+
+```powershell title="Trust the authority that issued it, rather than the server's own certificate"
+$reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+$reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint $reading.certificate.issuerThumbprint `
+    -ChangeReason 'Unblocking the HR Cloud connection test.'
+```
+
+```powershell title="Trust an endpoint that has been entered but not saved"
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01' `
+    -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' } -PassThru
+```
+
+### Notes
+
+- **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
+- **Trust the issuer where there is one.** `issuerThumbprint` is populated when the server sent the authority that issued its certificate. Trusting the authority survives the server's certificate being renewed; trusting the server's own certificate has to be repeated at every renewal. A self-signed certificate has no separate authority, and `isIssuerCertificateAvailable` is then `$false`.
+- **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
+- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries.
+- Supports `ShouldProcess`.
+- Remove a certificate later with `Remove-JIMCertificate`.
+
+---
+
 ## Get-JIMConnectorDefinition
 
 Retrieves available connector definitions, including their settings and capabilities.

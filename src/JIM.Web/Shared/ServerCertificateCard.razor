@@ -1,4 +1,7 @@
 @using JIM.Models.Connectors
+@using JIM.Models.Staging
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -22,7 +25,7 @@
             <div class="jim-certificate-content">
                 <div class="jim-certificate-eyebrow">Certificate presented by @Diagnostic.Host:@Diagnostic.Port</div>
 
-                <div class="jim-certificate-subject">@FormatDistinguishedName(Diagnostic.Subject)</div>
+                <div class="jim-certificate-subject">@CertificateDisplay.FormatDistinguishedName(Diagnostic.Subject)</div>
 
                 <div class="jim-certificate-issuer">
                     @if (Diagnostic.IsSelfSigned)
@@ -31,7 +34,7 @@
                     }
                     else
                     {
-                        <span>Issued by @FormatDistinguishedName(Diagnostic.Issuer)</span>
+                        <span>Issued by @CertificateDisplay.FormatDistinguishedName(Diagnostic.Issuer)</span>
                     }
                 </div>
 
@@ -64,7 +67,7 @@
 
                     <div class="jim-certificate-field">
                         <span class="jim-certificate-label">Thumbprint</span>
-                        <span class="jim-certificate-value jim-certificate-thumbprint">@FormatThumbprint(Diagnostic.Thumbprint)</span>
+                        <span class="jim-certificate-value jim-certificate-thumbprint">@CertificateDisplay.FormatThumbprint(Diagnostic.Thumbprint)</span>
                     </div>
 
                     @if (!string.IsNullOrEmpty(Diagnostic.SignatureAlgorithm))
@@ -85,6 +88,38 @@
                 {
                     <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
                 }
+
+                @* The decision is offered where the problem is reported, so the administrator does not have to go and
+                   obtain the certificate by other means. Only for an untrusted issuer: for an expired certificate or
+                   a name mismatch, trusting cannot fix the failure, and a button that cannot work invites the click. *@
+                @if (ShowTrustAction)
+                {
+                    <div class="jim-certificate-actions">
+                        <span class="jim-certificate-action-note">
+                            @if (Diagnostic.IsSelfSigned)
+                            {
+                                <text>
+                                    Self-signed, so there is no separate authority to trust. Adds this certificate alone
+                                    to the <MudLink Href="/admin/certificates">Trusted Certificates</MudLink> store; it
+                                    will need trusting again when it is renewed.
+                                </text>
+                            }
+                            else
+                            {
+                                <text>
+                                    Adds it to the <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>
+                                    store, where you can remove it later. JIM reads it from the server again first, and
+                                    records who trusted it and why.
+                                </text>
+                            }
+                        </span>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                   StartIcon="@Icons.Material.Filled.VerifiedUser" Disabled="_trusting"
+                                   OnClick="TrustAsync" data-testid="jim-certificate-trust">
+                            Trust this certificate
+                        </MudButton>
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -102,6 +137,70 @@
     /// </summary>
     [Parameter]
     public bool Compact { get; set; }
+
+    /// <summary>
+    /// The Connected System this failure belongs to. Supplying it is what turns on the trust action, so the card
+    /// stays usable where there is nothing to act on (for example an Activity that names no Connected System).
+    /// </summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// Names the Connected System in the change reason JIM prefills.
+    /// </summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// Connectivity settings the administrator has entered but not yet saved. Supplied by a settings form, where the
+    /// address on screen is the one they are trying to reach and JIM has nothing saved for it: settings that fail
+    /// validation are never saved, and a certificate JIM does not trust is a validation failure.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<ConnectedSystemSettingValueDraft>? DraftSettingValues { get; set; }
+
+    /// <summary>
+    /// Raised once a certificate has been trusted, so the host can do the thing the administrator was trying to do
+    /// (re-run the connection test, reload the Activity) rather than leaving them to work out what happens next.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnTrusted { get; set; }
+
+    private bool _trusting;
+
+    /// <summary>
+    /// Offered only where trusting the certificate is what fixes the failure, and only where the caller supplied the
+    /// context needed to act on it.
+    /// </summary>
+    private bool ShowTrustAction =>
+        ConnectedSystemId.HasValue &&
+        Diagnostic?.FailureReason == ServerCertificateFailureReason.UntrustedIssuer &&
+        !string.IsNullOrEmpty(Diagnostic.Thumbprint);
+
+    private async Task TrustAsync()
+    {
+        if (_trusting || Diagnostic == null || !ConnectedSystemId.HasValue)
+            return;
+
+        _trusting = true;
+
+        try
+        {
+            var outcome = await TrustServerCertificateDialog.ShowAsync(DialogService, Diagnostic, ConnectedSystemId.Value, ConnectedSystemName, DraftSettingValues);
+            if (outcome == null)
+                return;
+
+            Snackbar.Add(outcome == ServerCertificateTrustOutcome.AlreadyTrusted
+                ? "That certificate was already in the Trusted Certificates store."
+                : "Certificate trusted.", Severity.Success);
+
+            await OnTrusted.InvokeAsync();
+        }
+        finally
+        {
+            _trusting = false;
+        }
+    }
 
     private string SealIcon => Diagnostic?.FailureReason switch
     {
@@ -136,35 +235,7 @@
         return string.Equals(name, Diagnostic.Host, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Distinguished names read as "CN=dc01.corp.local, O=Corp"; the common name alone is what an administrator
-    /// recognises, so lead with it and drop the rest.
-    /// </summary>
-    private static string FormatDistinguishedName(string? distinguishedName)
-    {
-        if (string.IsNullOrWhiteSpace(distinguishedName))
-            return "Unknown";
-
-        var commonName = distinguishedName
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault(part => part.StartsWith("CN=", StringComparison.OrdinalIgnoreCase));
-
-        return commonName != null ? commonName[3..] : distinguishedName;
-    }
 
     private static string FormatDate(DateTime? value) => value?.ToString("dd MMM yyyy") ?? "unknown";
 
-    /// <summary>
-    /// Grouped into pairs, the way certificate viewers present a thumbprint, so it can be compared by eye against
-    /// the one shown in Admin &gt; Certificates.
-    /// </summary>
-    private static string FormatThumbprint(string? thumbprint)
-    {
-        if (string.IsNullOrWhiteSpace(thumbprint))
-            return "unknown";
-
-        return string.Join(' ', Enumerable
-            .Range(0, thumbprint.Length / 2)
-            .Select(i => thumbprint.Substring(i * 2, 2)));
-    }
 }

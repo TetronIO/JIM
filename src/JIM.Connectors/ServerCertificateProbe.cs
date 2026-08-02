@@ -30,15 +30,40 @@ public static class ServerCertificateProbe
     /// <param name="trustedCertificates">Certificates from the JIM certificate store, treated as additional trust anchors when judging the issuer.</param>
     /// <param name="timeout">How long to wait for the connection and handshake.</param>
     /// <param name="logger">Logger for the calling operation.</param>
+    /// <param name="serverDescription">What to call the far end in the remediation text, for example "directory server" or "SCIM service provider".</param>
+    /// <param name="secureTransportName">The secure transport being attempted, for example "LDAPS" or "HTTPS", named in the remediation text.</param>
     /// <returns>What the server presented and why it fails, or null when the server could not be reached at all, which is a different problem.</returns>
     public static ServerCertificateDiagnostic? Probe(
         string host,
         int port,
         IReadOnlyCollection<X509Certificate2> trustedCertificates,
         TimeSpan timeout,
-        ILogger logger)
+        ILogger logger,
+        string serverDescription = "directory server",
+        string secureTransportName = "LDAPS")
+    {
+        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName)?.Diagnostic;
+    }
+
+    /// <summary>
+    /// Fetches the certificate a server presents, returning both the description an administrator is shown and the
+    /// certificates themselves, so that an administrator who decides to trust what they were just shown has exactly
+    /// that certificate added rather than a copy taken earlier.
+    /// </summary>
+    /// <inheritdoc cref="Probe" path="/param"/>
+    /// <returns>What the server presented, or null when it could not be reached at all, which is a different problem.</returns>
+    public static ServerCertificateReading? Read(
+        string host,
+        int port,
+        IReadOnlyCollection<X509Certificate2> trustedCertificates,
+        TimeSpan timeout,
+        ILogger logger,
+        string serverDescription = "directory server",
+        string secureTransportName = "LDAPS")
     {
         X509Certificate2? presented = null;
+        var presentedChain = new List<X509Certificate2>();
+        var readAt = DateTime.UtcNow;
 
         try
         {
@@ -49,10 +74,16 @@ public static class ServerCertificateProbe
                 return null;
             }
 
-            using var sslStream = new SslStream(client.GetStream(), false, (_, certificate, _, _) =>
+            using var sslStream = new SslStream(client.GetStream(), false, (_, certificate, chain, _) =>
             {
                 if (certificate != null)
                     presented = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
+
+                // The chain the platform built from what the server sent is disposed as soon as this callback
+                // returns, so copy what is needed out of it now. Its elements are what let JIM offer the issuer,
+                // which is the choice that survives the server's certificate being renewed.
+                if (chain != null)
+                    presentedChain.AddRange(chain.ChainElements.Select(element => X509CertificateLoader.LoadCertificate(element.Certificate.RawData)));
 
                 // Always refuse. Nothing is being connected to here; the handshake exists only to see the certificate.
                 return false;
@@ -73,19 +104,80 @@ public static class ServerCertificateProbe
             return null;
         }
 
-        if (presented == null)
+        try
         {
-            return new ServerCertificateDiagnostic
+            if (presented == null)
             {
-                Host = host,
-                Port = port,
-                FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
-                Remediation = "The directory server offered no certificate. Check that it is configured for LDAPS on this port."
+                return new ServerCertificateReading
+                {
+                    Diagnostic = new ServerCertificateDiagnostic
+                    {
+                        Host = host,
+                        Port = port,
+                        FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
+                        Remediation = $"The {serverDescription} offered no certificate. Check that it is configured for {secureTransportName} on this port."
+                    }
+                };
+            }
+
+            var issuer = FindIssuer(presented, presentedChain);
+            var diagnostic = Describe(presented, host, port, trustedCertificates, serverDescription);
+            diagnostic.IssuerThumbprint = issuer?.Thumbprint;
+
+            return new ServerCertificateReading
+            {
+                Diagnostic = diagnostic,
+                Chain = new PresentedServerCertificateChain
+                {
+                    Host = host,
+                    Port = port,
+                    ReadAt = readAt,
+                    IsSelfSigned = diagnostic.IsSelfSigned,
+                    Leaf = Describe(presented),
+                    Issuer = issuer == null ? null : Describe(issuer)
+                }
             };
         }
+        finally
+        {
+            presented?.Dispose();
+            foreach (var certificate in presentedChain)
+                certificate.Dispose();
+        }
+    }
 
-        using (presented)
-            return Describe(presented, host, port, trustedCertificates);
+    /// <summary>
+    /// The certificate that issued the presented one, from what the server sent alongside it.
+    /// </summary>
+    /// <remarks>
+    /// A self-signed certificate is its own issuer, so it is deliberately not returned here: offering an
+    /// administrator "the authority that issued this" when that is the same certificate would be a choice between
+    /// one thing and itself.
+    /// </remarks>
+    private static X509Certificate2? FindIssuer(X509Certificate2 presented, List<X509Certificate2> presentedChain)
+    {
+        if (string.Equals(presented.Subject, presented.Issuer, StringComparison.Ordinal))
+            return null;
+
+        return presentedChain.FirstOrDefault(candidate =>
+            string.Equals(candidate.Subject, presented.Issuer, StringComparison.Ordinal) &&
+            !string.Equals(candidate.Thumbprint, presented.Thumbprint, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Copies a certificate into the transferable form the trust decision acts on, DER encoded.
+    /// </summary>
+    private static PresentedServerCertificate Describe(X509Certificate2 certificate)
+    {
+        return new PresentedServerCertificate
+        {
+            Thumbprint = certificate.Thumbprint,
+            Subject = certificate.Subject,
+            Issuer = certificate.Issuer,
+            ValidFrom = certificate.NotBefore.ToUniversalTime(),
+            ValidTo = certificate.NotAfter.ToUniversalTime(),
+            Data = certificate.Export(X509ContentType.Cert)
+        };
     }
 
     /// <summary>
@@ -97,7 +189,8 @@ public static class ServerCertificateProbe
         X509Certificate2 certificate,
         string host,
         int port,
-        IReadOnlyCollection<X509Certificate2> trustedCertificates)
+        IReadOnlyCollection<X509Certificate2> trustedCertificates,
+        string serverDescription)
     {
         var diagnostic = new ServerCertificateDiagnostic
         {
@@ -117,14 +210,14 @@ public static class ServerCertificateProbe
         if (diagnostic.ValidTo.HasValue && diagnostic.ValidTo.Value < now)
         {
             diagnostic.FailureReason = ServerCertificateFailureReason.Expired;
-            diagnostic.Remediation = "The certificate expired. Renew it on the directory server; trusting its issuer does not waive the expiry date.";
+            diagnostic.Remediation = $"The certificate expired. Renew it on the {serverDescription}; trusting its issuer does not waive the expiry date.";
             return diagnostic;
         }
 
         if (diagnostic.ValidFrom.HasValue && diagnostic.ValidFrom.Value > now)
         {
             diagnostic.FailureReason = ServerCertificateFailureReason.NotYetValid;
-            diagnostic.Remediation = "The certificate is not valid yet, which usually means the clocks on JIM and the directory server disagree.";
+            diagnostic.Remediation = $"The certificate is not valid yet, which usually means the clocks on JIM and the {serverDescription} disagree.";
             return diagnostic;
         }
 
@@ -139,7 +232,7 @@ public static class ServerCertificateProbe
         {
             diagnostic.FailureReason = ServerCertificateFailureReason.UntrustedIssuer;
             diagnostic.Remediation = diagnostic.IsSelfSigned
-                ? "The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this directory server."
+                ? $"The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this {serverDescription}."
                 : "The issuing certificate authority is not trusted. Add it, and any intermediates, to the JIM certificate store (Admin > Certificates).";
             return diagnostic;
         }

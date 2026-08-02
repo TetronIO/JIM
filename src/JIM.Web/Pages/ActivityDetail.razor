@@ -281,7 +281,13 @@
            the directory by a different name. *@
         @if (_serverCertificate != null)
         {
-            <ServerCertificateCard Diagnostic="_serverCertificate" />
+            @* The action is offered from a historical Activity too. It is safe to do so because the certificate is
+               read from the server again at the moment of the decision: a week-old Activity whose server has since
+               changed certificate stops the action rather than trusting the newer one unseen. *@
+            <ServerCertificateCard Diagnostic="_serverCertificate"
+                                   ConnectedSystemId="@_activity.ConnectedSystemId"
+                                   ConnectedSystemName="@_connectedSystemHeader?.Name"
+                                   OnTrusted="ReloadAfterTrustingCertificateAsync" />
         }
     }
 
@@ -1596,6 +1602,17 @@
         {
             _refreshLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Takes the administrator to the Connected System's settings once they have trusted the certificate, which is
+    /// where they can re-run the connection test. An Activity cannot re-run one itself, and leaving them on a
+    /// finished failure with no next step is the gap this whole action exists to close.
+    /// </summary>
+    private void ReloadAfterTrustingCertificateAsync()
+    {
+        if (_activity?.ConnectedSystemId is { } connectedSystemId)
+            NavManager.NavigateTo($"/admin/connected-systems/{connectedSystemId}/?t=settings");
     }
 
     /// <summary>

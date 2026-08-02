@@ -133,4 +133,81 @@ public class ServerCertificateCardTests : JimComponentTestContext
 
         Assert.That(cut.Markup.Trim(), Is.Empty);
     }
+
+    #region The trust action
+
+    /// <summary>
+    /// The one failure trusting the certificate actually fixes.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithAnUntrustedIssuerAndAConnectedSystem_OffersTheTrustAction()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.UntrustedIssuer))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Is.Not.Empty);
+    }
+
+    /// <summary>
+    /// Offering an action that cannot fix the failure invites the click and the confusion that follows it.
+    /// </summary>
+    [TestCase(ServerCertificateFailureReason.Expired)]
+    [TestCase(ServerCertificateFailureReason.NotYetValid)]
+    [TestCase(ServerCertificateFailureReason.NameMismatch)]
+    [TestCase(ServerCertificateFailureReason.NoCertificatePresented)]
+    public void ServerCertificateCard_WhereTrustingWouldNotHelp_DoesNotOfferTheTrustAction(ServerCertificateFailureReason reason)
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, Diagnostic(reason))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// The card renders in places that cannot act, such as an Activity naming no Connected System. It stays usable
+    /// there; it just does not offer the action.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithoutAConnectedSystem_DoesNotOfferTheTrustAction()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.UntrustedIssuer)));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// The small print names the mechanism: what gets added, and that it can be removed again.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithTheTrustAction_SaysWhereTheCertificateGoes()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.UntrustedIssuer))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("Trusted Certificates"));
+            Assert.That(cut.Markup, Does.Contain("/admin/certificates"));
+        }
+    }
+
+    /// <summary>
+    /// A self-signed certificate has no separate authority, so the note says so rather than implying a choice that
+    /// does not exist.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WithASelfSignedCertificate_SaysThereIsNoAuthorityToTrust()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, Diagnostic(ServerCertificateFailureReason.UntrustedIssuer, selfSigned: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.Markup, Does.Contain("no separate authority to trust"));
+    }
+
+    #endregion
 }
