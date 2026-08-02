@@ -278,6 +278,7 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 2. Add to `JIM.Connectors/` or create new project
 3. Register in DI container
 4. Add tests
+5. **Declare the Connector's phases** via `IConnectorPhases` if it performs internal work an administrator would otherwise wait through blind (a file load, a paged fetch), and enter them through the `IConnectorProgress` it is handed. Derive the Connector's tests from `ConnectorPhaseConformanceTests` (JIM.Worker.Tests), which enforces the declaration rules. Declaring nothing is a valid answer where per-item counts already say more; say so where the interface is implemented. Author guidance: `docs/developer/connectors.md` > Declaring the steps of your work; design: `engineering/notes/RUN_PROFILE_PHASES.md`
 
 **Adding a built-in (seeded) object or audited configuration entity:**
 

@@ -19,7 +19,8 @@ Administrators see all of it in one place: the [Activity](../configuration/activ
 | Channel | Use it for | Where it surfaces |
 |---------|-----------|-------------------|
 | `ValidateSettingValues` | Bad or incomplete configuration, before any run happens | Inline in the portal when settings are saved or tested |
-| `progressCallback` | Narrating a long phase while it is running | The Activity message, replacing the previous message |
+| `IConnectorPhases` | Declaring the steps your work goes through, before it starts | The Activity's step list, so an administrator sees what is still to come |
+| `IConnectorProgress` | Moving between those steps, and narrating one while it runs | The Activity's stepper and message |
 | `ConnectedSystemExportResult.Failed(...)` | One Pending Export failed; the rest are fine | One Run Profile Execution Item per failed object |
 | `ConnectedSystemImportObject.ErrorType` | One imported object has a problem; the rest are fine | One Run Profile Execution Item per flagged object |
 | `ConnectedSystemImportResult.WarningMessage` | The run succeeded but the administrator should know something | A warning on the Activity |
@@ -32,9 +33,48 @@ Administrators see all of it in one place: the [Activity](../configuration/activ
 
 This is the cheapest feedback in the whole system: it costs the administrator seconds at configuration time instead of a failed run later. Validate as much as you reasonably can here, including a live connection attempt if your Connected System supports one.
 
+### Declaring the steps of your work
+
+A Connector owns work JIM cannot see inside: loading a file before merging changes into it, asking a directory what has changed, fetching page after page from a container. Left undeclared, that time reads as one long unexplained pause in the middle of a run.
+
+Implement `IConnectorPhases` to say up-front what your work goes through. JIM reads it once, before the run starts, and shows your steps inside the JIM step that calls you:
+
+```csharp
+public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+{
+    return runProfile.RunType switch
+    {
+        ConnectedSystemRunType.Export =>
+        [
+            new ConnectorPhase("load-existing-file", "Loading existing export file"),
+            new ConnectorPhase("merge", "Merging changes into file"),
+            new ConnectorPhase("write", "Writing the output file")
+        ],
+        ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
+        [
+            new ConnectorPhase("read", "Reading the file")
+        ],
+        _ => []
+    };
+}
+```
+
+Declaring up-front is what makes the steps you have not reached yet visible; steps discovered as they happen can only ever show where you are, never how much is left.
+
+Rules worth following:
+
+- **Declare the steps you can perform, in the order they would occur.**<br /> A step this run turns out not to need is recorded as skipped, not left looking like work still to come, so there is no need to predict the run exactly.
+- **A step is a phase of work, not a progress tick.**<br /> JIM's File Connector declares one step for an import, because reading and parsing are one pass over the file; declaring "read" then "parse" would be a fiction. Its export declares three, because loading, merging and writing genuinely happen in turn.
+- **Keys are internal and permanent; names are what people read.**<br /> Keys are stored against historic Activities, so renaming one orphans the runs that used it. Improve the name instead.
+- **Return an empty list for run types you do not act in.**<br /> Synchronisation never calls a Connector, so a step declared there could never be entered.
+- **Keep it cheap and deterministic.**<br /> It is called before the run, so no calls to the Connected System. The list may vary with the Connected System's configuration; it must not vary between two calls with the same configuration.
+- **Declaring nothing is a valid answer.**<br /> JIM's LDAP Connector declares no export steps: its export iterates per object, and JIM already reports accurate per-item counts, so a step would say less than the counts do.
+
+A `ConnectorPhaseConformanceTests` base class in the test suite enforces these rules; derive from it in your Connector's tests and supply an instance.
+
 ### Narrating progress during a run
 
-All four interaction interfaces (`IConnectorImportUsingCalls`, `IConnectorImportUsingFiles`, `IConnectorExportUsingCalls`, `IConnectorExportUsingFiles`) accept an optional progress callback:
+All four interaction interfaces (`IConnectorImportUsingCalls`, `IConnectorImportUsingFiles`, `IConnectorExportUsingCalls`, `IConnectorExportUsingFiles`) are handed an `IConnectorProgress`. It is never null, so there is nothing to check before using it:
 
 ```csharp
 public async Task<ConnectedSystemImportResult> ImportAsync(
@@ -42,26 +82,28 @@ public async Task<ConnectedSystemImportResult> ImportAsync(
     ConnectedSystemRunProfile runProfile,
     ILogger logger,
     CancellationToken cancellationToken,
-    Func<string, Task>? progressCallback = null)
+    IConnectorProgress progress)
 {
-    if (progressCallback != null)
-        await progressCallback("Reading CSV file...");
+    await progress.EnterPhaseAsync("read");
 
-    // ... and on each subsequent phase or page boundary
+    // ... and as the read goes on
+    await progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
 }
 ```
 
-JIM's own object counts cannot move while your call is running, because you have not returned any objects yet. A message that keeps changing is the only thing that tells an administrator the difference between a healthy long phase and a stuck run.
+`EnterPhaseAsync` moves to one of the steps you declared: the stepper advances, and the step's own name is shown unless you supply a message. `ReportAsync` narrates within the step already running, for detail the step's name cannot carry.
+
+JIM's own object counts cannot move while your call is running, because you have not returned any objects yet. A step that advances, and a message that keeps changing, are the only things that tell an administrator the difference between a healthy long phase and a stuck run.
 
 Rules worth following:
 
 - **Emit on phase and page boundaries, never per object.**<br /> Each emit writes to the Activity. A phase that is naturally repetitive should pace itself: JIM's File Connector reports every 10,000 rows parsed, and its LDAP Connector reports once per page fetched.
-- **The vocabulary is yours.**<br /> JIM owns the phase and the counts and does not interpret your message. Say what you are doing in the administrator's language, not your internal one: "Loading existing export file..." rather than "LoadExistingFileContent".
+- **The vocabulary is yours.**<br /> JIM owns the orchestration phase and the counts and does not interpret your message. Say what you are doing in the administrator's language, not your internal one: "Loading existing export file..." rather than "LoadExistingFileContent".
 - **Include scale and identity where you have them.**<br /> "Fetching User objects from Employees (page 3)..." tells an administrator far more than "Fetching...".
-- **Skip the work when the callback is null.**<br /> A null callback means nobody is listening; do not build messages for nothing.
+- **Entering a step you did not declare still works.**<br /> It is appended to the stepper rather than dropped, so nothing you narrate is lost; it just cannot be shown in advance.
 - **Do not depend on it succeeding.**<br /> JIM serialises the emits (safe to call from parallel internal work) and swallows any failure to record one, because narration must never fail a synchronisation run. Blank messages are ignored rather than clearing the Activity message.
 
-The design behind this, and the vocabulary the built-in Connectors use, is recorded in [`engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md`](https://github.com/TetronIO/JIM/blob/main/engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md).
+The design behind this, and the vocabulary the built-in Connectors use, is recorded in [`engineering/notes/RUN_PROFILE_PHASES.md`](https://github.com/TetronIO/JIM/blob/main/engineering/notes/RUN_PROFILE_PHASES.md).
 
 ### Reporting a single object that failed to export
 

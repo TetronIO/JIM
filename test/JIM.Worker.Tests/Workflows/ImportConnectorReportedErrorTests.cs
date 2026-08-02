@@ -269,7 +269,7 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
             string? persistedConnectorData,
             ILogger logger,
             CancellationToken cancellationToken,
-            Func<string, Task>? progressCallback = null)
+            IConnectorProgress progress)
         {
             return Task.FromResult(new ConnectedSystemImportResult { ImportObjects = importObjects });
         }

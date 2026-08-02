@@ -221,7 +221,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         string? persistedConnectorData,
         ILogger logger,
         CancellationToken cancellationToken,
-        Func<string, Task>? progressCallback = null)
+        IConnectorProgress progress)
     {
         // Record the persisted data passed on each call for test verification
         ImportPersistedDataHistory.Add(persistedConnectorData);
@@ -256,7 +256,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         // No-op for mock
     }
 
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         if (ExportExceptionToThrow != null)
             throw ExportExceptionToThrow;

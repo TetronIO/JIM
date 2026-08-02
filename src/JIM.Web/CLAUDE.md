@@ -21,6 +21,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<PrefilledFormValidator />` | Inside any `MudForm` prefilled with an existing entity, so validity-gated buttons enable on load | "Form action gating" below |
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
+| `<RunPhaseStepper Phases="@x" Message="@y" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 
 ## Form action gating and input immediacy
 

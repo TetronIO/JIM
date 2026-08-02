@@ -56,6 +56,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
     private readonly Dictionary<Guid, MetaverseObjectChange> _mvoChanges = new();
+    private readonly Dictionary<Guid, ActivityPhase> _activityPhases = new();
 
     // Secondary indexes
     private readonly Dictionary<int, HashSet<Guid>> _csosByConnectedSystem = new();
@@ -1469,6 +1470,29 @@ public class SyncRepository : ISyncRepository
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// When set, <see cref="SaveActivityPhasesAsync"/> throws. Lets tests prove that a failure to
+    /// record a step (a database blip on a cosmetic write) does not fail the run itself.
+    /// </summary>
+    public bool FailActivityPhaseSaves { get; set; }
+
+    public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
+    {
+        if (FailActivityPhaseSaves)
+            throw new InvalidOperationException("Simulated failure recording Activity phases.");
+
+        foreach (var phase in phases)
+            _activityPhases[phase.Id] = phase;
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The Activity phases recorded so far, keyed by phase id, for tests asserting how a run
+    /// narrated its steps.
+    /// </summary>
+    public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
