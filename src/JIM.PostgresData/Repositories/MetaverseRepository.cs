@@ -2575,9 +2575,13 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.LastConnectorDisconnectedDate != null &&
                 // Must be projected (not internal admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have deletion rule WhenLastConnectorDisconnected
+                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
+                // (GetMetaverseObjectsEligibleForDeletionAsync): the page must show every MVO
+                // housekeeping will delete, including authoritative-source-scheduled MVOs that may
+                // retain target connectors during their grace period (#119)
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
 
         // Apply object type filter if specified
         if (objectTypeId.HasValue)
@@ -2652,9 +2656,11 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.LastConnectorDisconnectedDate != null &&
                 // Must be projected (not internal admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have deletion rule WhenLastConnectorDisconnected
+                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
+                // and the listing query above (#119)
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
 
         // Apply object type filter if specified
         if (objectTypeId.HasValue)
