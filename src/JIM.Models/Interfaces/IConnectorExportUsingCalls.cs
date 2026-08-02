@@ -7,7 +7,12 @@ namespace JIM.Models.Interfaces;
 
 public interface IConnectorExportUsingCalls
 {
-    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings);
+    /// <summary>
+    /// Opens a connection to the Connected System, ready for export operations.
+    /// </summary>
+    /// <param name="settings">The Connected System's configured setting values (host, credentials, etc).</param>
+    /// <param name="persistedConnectorData">The previously persisted connector state, replayed so the connector can use it when establishing the connection (for example, a pinned directory server); null when nothing has been persisted yet.</param>
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData);
 
     /// <summary>
     /// Exports pending changes to the Connected System.
@@ -20,5 +25,9 @@ public interface IConnectorExportUsingCalls
     /// <returns>A list of ConnectedSystemExportResult objects corresponding to each Pending Export.</returns>
     public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress);
 
-    public void CloseExportConnection();
+    /// <summary>
+    /// Closes the connection to the Connected System opened by <see cref="OpenExportConnection"/>.
+    /// </summary>
+    /// <returns>Return null to leave the persisted connector state unchanged (the normal case); return a value only when the connector needs JIM to persist updated state that no import result carried (for example, connection-open failed in a way that must invalidate persisted state). A non-null return is persisted by the worker AFTER any import-result persistence, so only return non-null when that override is intended.</returns>
+    public string? CloseExportConnection();
 }
