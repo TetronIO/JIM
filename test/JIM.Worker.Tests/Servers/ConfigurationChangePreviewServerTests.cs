@@ -143,18 +143,18 @@ public class ConfigurationChangePreviewServerTests
         {
             Assert.That(_activity, Is.Not.Null);
             Assert.That(result.ActivityId, Is.EqualTo(_activity!.Id));
-            Assert.That(_activity.TargetType, Is.EqualTo(ActivityTargetType.MetaverseObjectType),
+            Assert.That(_activity!.TargetType, Is.EqualTo(ActivityTargetType.MetaverseObjectType),
                 "A preview Activity must attach to the object it previewed, or it cannot be found from that object.");
-            Assert.That(_activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Preview),
+            Assert.That(_activity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Preview),
                 "A preview must never be mistakable for the change it was previewing.");
-            Assert.That(_activity.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
-            Assert.That(_activity.TargetName, Is.EqualTo("User"));
+            Assert.That(_activity!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
+            Assert.That(_activity!.TargetName, Is.EqualTo("User"));
             Assert.That(_preview, Is.Not.Null);
             Assert.That(_preview!.Surface, Is.EqualTo(ConfigurationChangePreviewSurface.MetaverseObjectType));
-            Assert.That(_preview.ProposedConfigurationSnapshot, Is.EqualTo("""{"deletionRule":"AllTriggersLost"}"""));
-            Assert.That(_preview.ValidationStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
-            Assert.That(_preview.EstimatedAffectedObjects, Is.EqualTo(1_200));
-            Assert.That(_preview.EstimatedDeltaRows, Is.EqualTo(2_400));
+            Assert.That(_preview!.ProposedConfigurationSnapshot, Is.EqualTo("""{"deletionRule":"AllTriggersLost"}"""));
+            Assert.That(_preview!.ValidationStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
+            Assert.That(_preview!.EstimatedAffectedObjects, Is.EqualTo(1_200));
+            Assert.That(_preview!.EstimatedDeltaRows, Is.EqualTo(2_400));
             Assert.That(result.IsBlocked, Is.False);
         });
     }
@@ -171,7 +171,7 @@ public class ConfigurationChangePreviewServerTests
         {
             Assert.That(stored, Has.Count.EqualTo(1));
             Assert.That(stored![0].Message, Is.EqualTo("No trigger systems are selected."));
-            Assert.That(stored[0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
+            Assert.That(stored![0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
         });
     }
 
@@ -189,9 +189,9 @@ public class ConfigurationChangePreviewServerTests
                 "Costing a change that cannot be applied spends work on an answer nobody can use.");
             Assert.That(_preview!.ValidationStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete),
                 "Validation found what it was asked to find; the proposal failed, not the stage.");
-            Assert.That(_preview.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
-            Assert.That(_preview.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
-            Assert.That(_preview.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
+            Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
+            Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
+            Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
         });
     }
@@ -207,9 +207,9 @@ public class ConfigurationChangePreviewServerTests
         {
             Assert.That(result.Failed, Is.True);
             Assert.That(_preview!.ValidationStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
-            Assert.That(_preview.HasFailed, Is.True);
+            Assert.That(_preview!.HasFailed, Is.True);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
-            Assert.That(_activity.ErrorMessage, Does.Contain("could not read the current configuration"));
+            Assert.That(_activity!.ErrorMessage, Does.Contain("could not read the current configuration"));
         });
     }
 
@@ -233,12 +233,12 @@ public class ConfigurationChangePreviewServerTests
         {
             Assert.That(counts, Has.Count.EqualTo(1));
             Assert.That(counts![0].ObjectCount, Is.EqualTo(4_812));
-            Assert.That(_preview.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
+            Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(_adapter.EvaluateCalls, Is.Zero);
-            Assert.That(_preview.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable),
+            Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable),
                 "An adapter that does not evaluate objects has not 'found nothing'; it has not looked.");
-            Assert.That(_preview.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
-            Assert.That(_preview.IsComplete, Is.True);
+            Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
+            Assert.That(_preview!.IsComplete, Is.True);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
         });
     }
@@ -257,8 +257,8 @@ public class ConfigurationChangePreviewServerTests
         {
             Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
             Assert.That(_adapter.EvaluateCalls, Is.Zero);
-            Assert.That(_preview.HasFailed, Is.True);
-            Assert.That(_preview.IsComplete, Is.False);
+            Assert.That(_preview!.HasFailed, Is.True);
+            Assert.That(_preview!.IsComplete, Is.False);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
         });
     }
@@ -295,8 +295,8 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_persistedGroups[0].ObjectCount, Is.GreaterThanOrEqualTo(_persistedGroups[1].ObjectCount),
                 "The landing view reads largest group first; ordering it at write time keeps every reader consistent.");
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
-            Assert.That(_preview.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
-            Assert.That(_preview.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
+            Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
+            Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
         });
     }
 
@@ -337,10 +337,10 @@ public class ConfigurationChangePreviewServerTests
         Assert.Multiple(() =>
         {
             Assert.That(_activity!.ObjectsToProcess, Is.EqualTo(2));
-            Assert.That(_activity.ObjectsProcessed, Is.EqualTo(2),
+            Assert.That(_activity!.ObjectsProcessed, Is.EqualTo(2),
                 "Progress lives on the Activity because that is the only thing the notification trigger watches; " +
                 "a preview that recorded progress only on its own row would leave the panel silent.");
-            Assert.That(_activity.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
         });
     }
 
@@ -362,8 +362,8 @@ public class ConfigurationChangePreviewServerTests
                 "Groups built from a partial stream would under-count without saying so, which is worse than no answer.");
             _previewRepo.Verify(r => r.CreatePreviewResultsAsync(It.IsAny<IReadOnlyCollection<ConfigurationChangePreviewGroup>>()), Times.Never);
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
-            Assert.That(_preview.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
-            Assert.That(_preview.IsComplete, Is.False);
+            Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
+            Assert.That(_preview!.IsComplete, Is.False);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
         });
     }
@@ -391,8 +391,8 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_adapter.DeltasYielded, Is.LessThan(50), "A cancelled preview must stop evaluating, not merely stop reporting.");
             Assert.That(_persistedGroups, Is.Empty);
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Cancelled));
-            Assert.That(_preview.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Cancelled));
-            Assert.That(_preview.HasFailed, Is.False, "Nothing went wrong; the administrator changed their mind.");
+            Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Cancelled));
+            Assert.That(_preview!.HasFailed, Is.False, "Nothing went wrong; the administrator changed their mind.");
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Cancelled));
         });
     }
@@ -410,8 +410,8 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_adapter.EvaluateCalls, Is.EqualTo(1));
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete),
                 "An adapter that looked and found nothing has answered the question; that is not the same as not looking.");
-            Assert.That(_preview.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
-            Assert.That(_preview.IsComplete, Is.True);
+            Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
+            Assert.That(_preview!.IsComplete, Is.True);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
         });
     }
