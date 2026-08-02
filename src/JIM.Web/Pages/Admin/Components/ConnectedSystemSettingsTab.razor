@@ -80,7 +80,7 @@
                                                                      FileSelected="OnFileSelectedAsync"
                                                                      ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(groupMembers[k])"
                                                                      DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
-                                                                     DirectoryServerDiscoveryDraftSettings="DraftSettingValues"
+                                                                     DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                                      ConnectedSystemId="@ConnectedSystem.Id" />
                                     }
                                 </MudPaper>
@@ -106,7 +106,7 @@
                                                              FileSelected="OnFileSelectedAsync"
                                                              ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(settingValue)"
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
-                                                             DirectoryServerDiscoveryDraftSettings="DraftSettingValues"
+                                                             DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                              ConnectedSystemId="@ConnectedSystem.Id" />
                                 j++;
                             }
@@ -447,6 +447,26 @@
             {
                 SettingId = sv.Setting.Id,
                 StringValue = sv.StringValue,
+                IntValue = sv.IntValue,
+                CheckboxValue = sv.CheckboxValue
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The connectivity settings as they stand on screen for the Discover Domain Controllers action, credential
+    /// included: unlike the certificate trust action above, discovery must bind to the directory, and on a
+    /// Connected System whose settings have never been saved the typed credential is the only one there is.
+    /// The credential travels via the draft's explicit encrypted channel and is never persisted by discovery.
+    /// </summary>
+    private List<ConnectedSystemSettingValueDraft> DiscoveryDraftSettingValues()
+    {
+        return ConnectedSystem.SettingValues
+            .Select(sv => new ConnectedSystemSettingValueDraft
+            {
+                SettingId = sv.Setting.Id,
+                StringValue = sv.Setting.Type == ConnectedSystemSettingType.StringEncrypted ? null : sv.StringValue,
+                StringEncryptedValue = sv.Setting.Type == ConnectedSystemSettingType.StringEncrypted ? sv.StringEncryptedValue : null,
                 IntValue = sv.IntValue,
                 CheckboxValue = sv.CheckboxValue
             })

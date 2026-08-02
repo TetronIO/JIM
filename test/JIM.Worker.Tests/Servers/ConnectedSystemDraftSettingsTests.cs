@@ -60,8 +60,11 @@ public class ConnectedSystemDraftSettingsTests
     }
 
     [Test]
-    public void Apply_DraftForAnEncryptedSetting_LeavesTheSavedValueAlone()
+    public void Apply_PlainStringDraftForAnEncryptedSetting_LeavesTheSavedValueAlone()
     {
+        // A StringValue draft never touches an encrypted setting: flows that do not need a credential (the
+        // certificate read/trust actions) build drafts without encrypted values at all, and a stray plain
+        // value must not overwrite a stored secret.
         var connectedSystem = CreateConnectedSystem();
 
         ConnectedSystemDraftSettings.Apply(connectedSystem,
@@ -72,6 +75,37 @@ public class ConnectedSystemDraftSettingsTests
         var encrypted = connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 3);
         Assert.That(encrypted.StringEncryptedValue, Is.EqualTo("saved-secret"));
         Assert.That(encrypted.StringValue, Is.Null);
+    }
+
+    [Test]
+    public void Apply_EncryptedDraftForAnEncryptedSetting_OverridesTheSavedValue()
+    {
+        // Discover Domain Controllers genuinely needs the credential on screen: a brand-new Connected System
+        // has no saved password yet, and discovery must bind with what the administrator has typed, so an
+        // explicitly-supplied StringEncryptedValue draft applies to the encrypted setting.
+        var connectedSystem = CreateConnectedSystem();
+
+        ConnectedSystemDraftSettings.Apply(connectedSystem,
+        [
+            new ConnectedSystemSettingValueDraft { SettingId = 3, StringEncryptedValue = "typed-but-not-saved" }
+        ]);
+
+        Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 3).StringEncryptedValue,
+            Is.EqualTo("typed-but-not-saved"));
+    }
+
+    [Test]
+    public void Apply_EncryptedDraftForAPlainSetting_IsIgnored()
+    {
+        var connectedSystem = CreateConnectedSystem();
+
+        ConnectedSystemDraftSettings.Apply(connectedSystem,
+        [
+            new ConnectedSystemSettingValueDraft { SettingId = 1, StringEncryptedValue = "wrong-channel" }
+        ]);
+
+        Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 1).StringValue,
+            Is.EqualTo("saved-host.example.org"));
     }
 
     [Test]
