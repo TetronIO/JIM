@@ -106,6 +106,27 @@ public class ExportExecutionResult
     public int OptimisticApplyUnresolvedReferenceCount { get; set; }
 
     #endregion
+
+    #region Initial Password Provisioning (issue #1121)
+
+    /// <summary>
+    /// Number of newly provisioned accounts recorded as owed an initial password. The password itself is
+    /// delivered by a later pass; this counts the work staged, not the passwords set.
+    /// </summary>
+    public int InitialPasswordsStagedCount { get; set; }
+
+    /// <summary>
+    /// Number of newly provisioned accounts JIM failed to record as owed an initial password.
+    /// <para>
+    /// Contained, but never silent. The accounts were created in the Connected System and their exports
+    /// succeeded, so this must not fail the batch; unlike the optimistic apply above, though, nothing
+    /// self-heals a password that nobody knows is owed, so the count is reported on the Activity and an
+    /// administrator can re-stage by exporting again.
+    /// </para>
+    /// </summary>
+    public int InitialPasswordStagingFailedCount { get; set; }
+
+    #endregion
 }
 
 /// <summary>

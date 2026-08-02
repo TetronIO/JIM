@@ -1877,6 +1877,122 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Get a Synchronisation Rule's initial password configuration
+    /// </summary>
+    /// <remarks>
+    /// Whether JIM sets an initial password on the accounts this rule provisions, and how it generates one.
+    /// A rule with nothing configured reports the setting switched off with JIM's defaults, which is how it behaves.
+    ///
+    /// No password value is ever returned: passwords are generated at the moment they are set and are not stored.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <response code="200">The initial password configuration.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    [HttpGet("sync-rules/{id:int}/initial-password", Name = "GetSyncRuleInitialPassword")]
+    [ProducesResponseType(typeof(SyncRuleInitialPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSyncRuleInitialPasswordAsync(int id)
+    {
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        return Ok(SyncRuleInitialPasswordResponse.FromEntity(syncRule.InitialPassword));
+    }
+
+    /// <summary>
+    /// Update a Synchronisation Rule's initial password configuration
+    /// </summary>
+    /// <remarks>
+    /// Every field is optional; an omitted one leaves the stored value unchanged. Supplying `customPolicy`
+    /// replaces the generator settings as a set rather than merging field by field, because they only make
+    /// sense together.
+    ///
+    /// Only Export rules that provision can set an initial password: only an account JIM has just created has
+    /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The settings to change.</param>
+    /// <response code="200">The updated initial password configuration.</response>
+    /// <response code="400">The rule does not provision, or the settings cannot be satisfied.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("sync-rules/{id:int}/initial-password", Name = "UpdateSyncRuleInitialPassword")]
+    [ProducesResponseType(typeof(SyncRuleInitialPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateSyncRuleInitialPasswordAsync(int id, [FromBody] UpdateSyncRuleInitialPasswordRequest request)
+    {
+        _logger.LogInformation("Updating the initial password configuration of Synchronisation Rule: {Id}", id);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for a Synchronisation Rule initial password update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        var configuration = syncRule.InitialPassword ??= new SyncRuleInitialPassword { SyncRuleId = syncRule.Id };
+
+        if (request.Enabled.HasValue)
+            configuration.Enabled = request.Enabled.Value;
+
+        if (request.Source.HasValue)
+            configuration.Source = request.Source.Value;
+
+        request.CustomPolicy?.ApplyTo(configuration.CustomPolicy);
+
+        if (request.ExpiryBehaviour.HasValue)
+            configuration.ExpiryBehaviour = request.ExpiryBehaviour.Value;
+
+        if (request.EnableAccount.HasValue)
+            configuration.EnableAccount = request.EnableAccount.Value;
+
+        // Refused rather than silently accepted: a rule that never creates an account has nothing to give a
+        // first password to, and storing the setting anyway would have it do nothing while reading as configured.
+        if (configuration.Enabled && !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "An initial password can only be set by an Export Synchronisation Rule that provisions to the Connected System."));
+
+        // Checked here rather than left to fail per account: an unsatisfiable configuration parks every account
+        // it touches, and the administrator saving it is the person who can fix it.
+        if (configuration.Enabled)
+        {
+            var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId);
+            var policy = configuration.Source == InitialPasswordSource.Custom
+                ? configuration.CustomPolicy
+                : _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+
+            var assessment = _application.PasswordGenerator.Assess(policy, discoveredPolicy);
+            if (!assessment.IsUsable)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"These password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}"));
+        }
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var success = apiKey != null
+            ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason)
+            : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+
+        if (!success)
+        {
+            var validationErrors = syncRule.Validate();
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Synchronisation Rule validation failed: {string.Join("; ", validationErrors.Select(v => v.Message))}"));
+        }
+
+        _logger.LogInformation("Updated the initial password configuration of Synchronisation Rule: {Id}", id);
+
+        var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        return Ok(SyncRuleInitialPasswordResponse.FromEntity(updated!.InitialPassword));
+    }
+
+    /// <summary>
     /// Delete a Synchronisation Rule
     /// </summary>
     /// <param name="id">The unique identifier of the Synchronisation Rule to delete.</param>

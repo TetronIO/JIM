@@ -292,6 +292,330 @@ public class InitialPasswordProvisioningDatabaseTests
         Assert.That(rule.InitialPassword!.Source, Is.EqualTo(InitialPasswordSource.Custom));
     }
 
+    /// <summary>
+    /// Every field of a staged initial password survives the raw-SQL insert, asserted one by one.
+    /// <para>
+    /// The completeness test beside this proves the column list matches the model; it cannot prove the writer
+    /// puts the right value in each position, nor that each nullable parameter carries the right PostgreSQL
+    /// type. Both faults are invisible to the in-memory provider, and both would show up in production as an
+    /// account whose outstanding password quietly lost its reason or its expiry.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task StageInitialPasswordsAsync_RoundTripsEveryFieldAsync()
+    {
+        var (systemId, syncRuleId, csoId) = await SeedSystemRuleAndAccountAsync();
+
+        var id = Guid.NewGuid();
+        var createdAt = DateTime.UtcNow.AddMinutes(-30);
+        var lastAttemptedAt = DateTime.UtcNow.AddMinutes(-5);
+        var expiresAt = DateTime.UtcNow.AddDays(7);
+
+        await using (var write = NewContext())
+        {
+            await new PostgresDataRepository(write).Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword
+                {
+                    Id = id,
+                    ConnectedSystemObjectId = csoId,
+                    ConnectedSystemId = systemId,
+                    SyncRuleId = syncRuleId,
+                    Status = PendingInitialPasswordStatus.Parked,
+                    FailureReason = PasswordSetFailureReason.PolicyRejection,
+                    TargetMessage = "The password does not meet the length, complexity or history requirements of the domain.",
+                    AttemptCount = 3,
+                    CreatedAt = createdAt,
+                    LastAttemptedAt = lastAttemptedAt,
+                    ExpiresAt = expiresAt
+                }
+            ]);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
+            Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
+            Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Parked));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+            Assert.That(stored.TargetMessage, Is.EqualTo("The password does not meet the length, complexity or history requirements of the domain."));
+            Assert.That(stored.AttemptCount, Is.EqualTo(3));
+            Assert.That(stored.CreatedAt, Is.EqualTo(createdAt).Within(TimeSpan.FromMilliseconds(1)));
+            Assert.That(stored.LastAttemptedAt, Is.EqualTo(lastAttemptedAt).Within(TimeSpan.FromMilliseconds(1)));
+            Assert.That(stored.ExpiresAt, Is.EqualTo(expiresAt).Within(TimeSpan.FromMilliseconds(1)));
+        });
+    }
+
+    /// <summary>
+    /// The nullable columns store nulls rather than tripping over their parameter types, which is what a
+    /// freshly staged record looks like: never attempted, no reason yet, no expiry.
+    /// </summary>
+    [Test]
+    public async Task StageInitialPasswordsAsync_WithNothingAttemptedYet_StoresNullsAsync()
+    {
+        var (systemId, _, csoId) = await SeedSystemRuleAndAccountAsync();
+
+        var id = Guid.NewGuid();
+        await using (var write = NewContext())
+        {
+            await new PostgresDataRepository(write).Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword { Id = id, ConnectedSystemObjectId = csoId, ConnectedSystemId = systemId }
+            ]);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.SyncRuleId, Is.Null);
+            Assert.That(stored.FailureReason, Is.Null);
+            Assert.That(stored.TargetMessage, Is.Null);
+            Assert.That(stored.LastAttemptedAt, Is.Null);
+            Assert.That(stored.ExpiresAt, Is.Null);
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
+            Assert.That(stored.AttemptCount, Is.Zero);
+        });
+    }
+
+    /// <summary>
+    /// Staging the same account twice leaves the first record untouched rather than failing, because
+    /// re-running an export that already staged this work is an ordinary thing for an administrator to do, and
+    /// the second row would be a second delivery racing the first to set a password on the same account.
+    /// </summary>
+    [Test]
+    public async Task StageInitialPasswordsAsync_ForAnAccountAlreadyOutstanding_KeepsTheFirstRecordAsync()
+    {
+        var (systemId, syncRuleId, csoId) = await SeedSystemRuleAndAccountAsync();
+        var firstId = Guid.NewGuid();
+
+        await using (var write = NewContext())
+        {
+            var repository = new PostgresDataRepository(write);
+            await repository.Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword
+                {
+                    Id = firstId,
+                    ConnectedSystemObjectId = csoId,
+                    ConnectedSystemId = systemId,
+                    SyncRuleId = syncRuleId,
+                    AttemptCount = 2,
+                    TargetMessage = "The directory was unreachable."
+                }
+            ]);
+
+            await repository.Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword
+                {
+                    Id = Guid.NewGuid(),
+                    ConnectedSystemObjectId = csoId,
+                    ConnectedSystemId = systemId,
+                    SyncRuleId = syncRuleId
+                }
+            ]);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.Id, Is.EqualTo(firstId));
+            Assert.That(stored.AttemptCount, Is.EqualTo(2), "the existing record's progress must not be reset by re-staging");
+            Assert.That(stored.TargetMessage, Is.EqualTo("The directory was unreachable."));
+        });
+    }
+
+    /// <summary>
+    /// Deleting the account takes its outstanding password with it. A password owed to an object that no
+    /// longer exists is not work anybody can do.
+    /// </summary>
+    [Test]
+    public async Task DeletingTheAccount_RemovesItsOutstandingPasswordAsync()
+    {
+        var (systemId, syncRuleId, csoId) = await SeedSystemRuleAndAccountAsync();
+
+        await using (var write = NewContext())
+        {
+            await new PostgresDataRepository(write).Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword { ConnectedSystemObjectId = csoId, ConnectedSystemId = systemId, SyncRuleId = syncRuleId }
+            ]);
+        }
+
+        await using (var delete = NewContext())
+        {
+            delete.ConnectedSystemObjects.Remove(await delete.ConnectedSystemObjects.SingleAsync(cso => cso.Id == csoId));
+            await delete.SaveChangesAsync();
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.PendingInitialPasswords.AnyAsync(), Is.False);
+    }
+
+    /// <summary>
+    /// Everything an attempt can change round-trips, and nothing it cannot change is touched.
+    /// <para>
+    /// The update is raw SQL, so a value written into the wrong column or with the wrong PostgreSQL type
+    /// persists without an error anywhere, and the in-memory provider goes through EF and cannot see it. The
+    /// second half of the assertion is the exclusion list made real: which account the password is owed to and
+    /// when the work was staged are facts about how the record came to exist, and an attempt does not change
+    /// them.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task RecordInitialPasswordAttemptsAsync_PersistsTheAttemptAndLeavesItsOriginsAloneAsync()
+    {
+        var (systemId, syncRuleId, csoId) = await SeedSystemRuleAndAccountAsync();
+        var id = Guid.NewGuid();
+        var createdAt = DateTime.UtcNow.AddHours(-2);
+
+        await using (var stage = NewContext())
+        {
+            await new PostgresDataRepository(stage).Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword
+                {
+                    Id = id,
+                    ConnectedSystemObjectId = csoId,
+                    ConnectedSystemId = systemId,
+                    SyncRuleId = syncRuleId,
+                    CreatedAt = createdAt
+                }
+            ]);
+        }
+
+        var lastAttemptedAt = DateTime.UtcNow;
+        var expiresAt = DateTime.UtcNow.AddDays(14);
+
+        await using (var write = NewContext())
+        {
+            await new PostgresDataRepository(write).Sync.RecordInitialPasswordAttemptsAsync([
+                new PendingInitialPassword
+                {
+                    Id = id,
+                    Status = PendingInitialPasswordStatus.Parked,
+                    FailureReason = PasswordSetFailureReason.PolicyRejection,
+                    TargetMessage = "The password does not meet the complexity requirements of the domain.",
+                    AttemptCount = 4,
+                    LastAttemptedAt = lastAttemptedAt,
+                    ExpiresAt = expiresAt
+                }
+            ]);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Parked));
+            Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+            Assert.That(stored.TargetMessage, Is.EqualTo("The password does not meet the complexity requirements of the domain."));
+            Assert.That(stored.AttemptCount, Is.EqualTo(4));
+            Assert.That(stored.LastAttemptedAt, Is.EqualTo(lastAttemptedAt).Within(TimeSpan.FromMilliseconds(1)));
+            Assert.That(stored.ExpiresAt, Is.EqualTo(expiresAt).Within(TimeSpan.FromMilliseconds(1)));
+
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId), "an attempt must not move the record to another account");
+            Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
+            Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
+            Assert.That(stored.CreatedAt, Is.EqualTo(createdAt).Within(TimeSpan.FromMilliseconds(1)), "when the work was staged is not something an attempt changes");
+        });
+    }
+
+    /// <summary>
+    /// A delivered password stops being outstanding, which is what makes the table a work list rather than a
+    /// history of every account JIM has ever given a password to.
+    /// </summary>
+    [Test]
+    public async Task DeleteInitialPasswordsAsync_RemovesTheRecordAsync()
+    {
+        var (systemId, syncRuleId, csoId) = await SeedSystemRuleAndAccountAsync();
+        var id = Guid.NewGuid();
+
+        await using (var stage = NewContext())
+        {
+            await new PostgresDataRepository(stage).Sync.StageInitialPasswordsAsync([
+                new PendingInitialPassword { Id = id, ConnectedSystemObjectId = csoId, ConnectedSystemId = systemId, SyncRuleId = syncRuleId }
+            ]);
+        }
+
+        await using (var delete = NewContext())
+        {
+            await new PostgresDataRepository(delete).Sync.DeleteInitialPasswordsAsync([id]);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.PendingInitialPasswords.AnyAsync(), Is.False);
+    }
+
+    /// <summary>
+    /// The outstanding query brings the account with it, and excludes anything parked.
+    /// <para>
+    /// Both are invisible to the in-memory provider: it auto-tracks navigations, so a missing Include reads
+    /// exactly like a present one, and the delivery pass would then have nothing to set a password on. The
+    /// parked exclusion is what stops a target's final answer being re-asked on every export for ever.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task GetOutstandingInitialPasswordsAsync_LoadsTheAccountAndSkipsParkedRecordsAsync()
+    {
+        var (systemId, syncRuleId, pendingCsoId) = await SeedSystemRuleAndAccountAsync();
+        var parkedCsoId = await SeedAccountAsync(systemId);
+        var parkedId = Guid.NewGuid();
+
+        await using (var stage = NewContext())
+        {
+            var repository = new PostgresDataRepository(stage).Sync;
+            await repository.StageInitialPasswordsAsync([
+                new PendingInitialPassword { ConnectedSystemObjectId = pendingCsoId, ConnectedSystemId = systemId, SyncRuleId = syncRuleId },
+                new PendingInitialPassword { Id = parkedId, ConnectedSystemObjectId = parkedCsoId, ConnectedSystemId = systemId, SyncRuleId = syncRuleId }
+            ]);
+            await repository.RecordInitialPasswordAttemptsAsync([
+                new PendingInitialPassword { Id = parkedId, Status = PendingInitialPasswordStatus.Parked, AttemptCount = 1, LastAttemptedAt = DateTime.UtcNow }
+            ]);
+        }
+
+        await using var read = NewContext();
+        var outstanding = await new PostgresDataRepository(read).Sync.GetOutstandingInitialPasswordsAsync(systemId, 100);
+
+        Assert.That(outstanding, Has.Count.EqualTo(1), "a parked record must not be handed back for another attempt");
+        Assert.That(outstanding[0].ConnectedSystemObjectId, Is.EqualTo(pendingCsoId));
+        Assert.That(outstanding[0].ConnectedSystemObject, Is.Not.Null,
+            "the delivery pass sets the password on this object; without it there is nothing to deliver to");
+    }
+
+    private async Task<(int SystemId, int SyncRuleId, Guid CsoId)> SeedSystemRuleAndAccountAsync()
+    {
+        var (systemId, syncRuleId) = await SeedSystemAndRuleAsync();
+        return (systemId, syncRuleId, await SeedAccountAsync(systemId));
+    }
+
+    private async Task<Guid> SeedAccountAsync(int systemId)
+    {
+        await using var seed = NewContext();
+        var csType = await seed.ConnectedSystemObjectTypes.SingleAsync(t => t.ConnectedSystemId == systemId);
+        var externalIdAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            Selected = true,
+            ConnectedSystemObjectType = csType
+        };
+        seed.Add(externalIdAttribute);
+        await seed.SaveChangesAsync();
+
+        var cso = new ConnectedSystemObject
+        {
+            TypeId = csType.Id,
+            ConnectedSystemId = systemId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = externalIdAttribute.Id
+        };
+        seed.Add(cso);
+        await seed.SaveChangesAsync();
+
+        return cso.Id;
+    }
+
     private async Task<(int SystemId, int SyncRuleId)> SeedSystemAndRuleAsync()
     {
         await using var seed = NewContext();

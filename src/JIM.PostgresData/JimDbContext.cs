@@ -61,6 +61,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
     public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
+    public virtual DbSet<PendingInitialPassword> PendingInitialPasswords { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
     public virtual DbSet<PredefinedSearchAttribute> PredefinedSearchAttributes {  get; set; } = null!;
@@ -542,6 +543,37 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
         // PendingExport: filtered unique index to prevent duplicate Pending Exports for the same CSO.
+        // PendingInitialPassword: the account it is owed to. Cascade, because an account that no longer exists
+        // cannot be owed a password.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasOne(pip => pip.ConnectedSystemObject)
+            .WithMany()
+            .HasForeignKey(pip => pip.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The Synchronisation Rule whose configuration governs the delivery. SetNull rather than Cascade:
+        // deleting a rule must not erase the record that an account is still waiting, which is a fact about the
+        // account rather than about the rule. Without a rule there is no configuration to generate from, so the
+        // delivery cannot proceed, and that is a thing an administrator needs to be able to see.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasOne(pip => pip.SyncRule)
+            .WithMany()
+            .HasForeignKey(pip => pip.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // One outstanding initial password per account. A second would mean two deliveries racing to set a
+        // password on the same object, with the later one silently winning.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasIndex(pip => pip.ConnectedSystemObjectId)
+            .IsUnique()
+            .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemObjectId_Unique");
+
+        // What the worker asks for on every export run, and what the portal's needs-attention indicators ask
+        // for on every page load: what is outstanding on this Connected System, in this state.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasIndex(pip => new { pip.ConnectedSystemId, pip.Status })
+            .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
+
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
         modelBuilder.Entity<PendingExport>()

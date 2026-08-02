@@ -123,6 +123,11 @@ public class SyncExportTaskProcessor
         {
             Log.Information("PerformExportAsync: No Pending Exports for {SystemName}", _connectedSystem.Name);
             await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
+
+            // #1121: still worth a delivery pass. An account whose initial password could not be set last time
+            // is waiting on a retry, and a run with nothing to export is exactly what an administrator does
+            // after granting the missing right or bringing the directory back up.
+            await DeliverOutstandingInitialPasswordsAsync();
             return;
         }
 
@@ -233,6 +238,11 @@ public class SyncExportTaskProcessor
                 }
             }
 
+            // #1121: after the export phase, because delivery needs the accounts to exist and to carry the
+            // external ids the Create results assigned. Inside the try so a failure here is reported the same
+            // way any other part of the run is.
+            await DeliverOutstandingInitialPasswordsAsync();
+
             exportSpan.SetSuccess();
         }
         catch (OperationCanceledException)
@@ -246,6 +256,56 @@ public class SyncExportTaskProcessor
             await _syncServer.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Gives the accounts this Connected System has provisioned the initial passwords they are owed (#1121).
+    /// <para>
+    /// Runs over everything outstanding, not only what this run staged, so an export run is also the retry
+    /// vehicle for an account whose password could not be set last time.
+    /// </para>
+    /// </summary>
+    private async Task DeliverOutstandingInitialPasswordsAsync()
+    {
+        // A preview run answers "what would happen"; setting a password is not a preview of anything, and an
+        // account given one cannot be un-given it.
+        if (_runMode != SyncRunMode.PreviewAndSync)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("DeliverInitialPasswords")
+            .SetTag("connectedSystemId", _connectedSystem.Id);
+
+        var result = await _syncServer.DeliverOutstandingInitialPasswordsAsync(
+            _connectedSystem, _connector, _cancellationTokenSource.Token);
+
+        span.SetTag("attempted", result.AttemptedCount);
+        span.SetTag("delivered", result.DeliveredCount);
+        span.SetTag("parked", result.ParkedCount);
+
+        if (!result.HasSomethingToReport)
+            return;
+
+        await _syncRepo.UpdateActivityMessageAsync(_activity, DescribeInitialPasswordOutcome(result));
+    }
+
+    /// <summary>
+    /// Puts an initial password pass into words for the Activity, leading with whatever needs an administrator.
+    /// </summary>
+    private static string DescribeInitialPasswordOutcome(InitialPasswordRunResult result)
+    {
+        if (result.ConnectorCannotSetPasswords)
+            return "Initial passwords: this Connected System's Connector cannot set passwords";
+
+        if (result.CouldNotOpenPasswordConnection)
+            return $"Initial passwords: the password connection could not be opened; {result.PasswordConnectionErrorMessage}";
+
+        var parts = new List<string> { $"{result.DeliveredCount:N0} delivered" };
+        if (result.ParkedCount > 0)
+            parts.Add($"{result.ParkedCount:N0} needing attention");
+        if (result.RetryingCount > 0)
+            parts.Add($"{result.RetryingCount:N0} to retry");
+
+        return $"Initial passwords: {string.Join(", ", parts)}";
     }
 
     /// <summary>

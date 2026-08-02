@@ -60,6 +60,8 @@
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
         'Remove-JIMSyncRule',
+        'Get-JIMSyncRuleInitialPassword',
+        'Set-JIMSyncRuleInitialPassword',
 
         # Configuration Change History
         'Get-JIMConfigurationChangeHistory',

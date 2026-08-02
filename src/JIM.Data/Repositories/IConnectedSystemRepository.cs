@@ -783,6 +783,17 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// <para>
+    /// Read on its own rather than through a Connected System navigation, because the caller that needs it (the
+    /// Synchronisation Rule editor) reaches the system through a rule, whose include chain does not carry it. An
+    /// unloaded navigation is indistinguishable from a target that published no policy, and that difference
+    /// decides whether JIM validates a generator configuration against anything at all.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();
