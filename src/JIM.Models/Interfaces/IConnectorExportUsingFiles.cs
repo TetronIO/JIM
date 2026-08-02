@@ -16,7 +16,7 @@ public interface IConnectorExportUsingFiles
     /// <param name="settings">The Connected System settings the user has specified. Recommend this is where you pass in the output file path.</param>
     /// <param name="pendingExports">The Connected System Object Pending Exports that need to write to the output file for the Connected System to consume.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the export operation.</param>
-    /// <param name="progressCallback">Optional callback for narrating the connector's internal sub-phases (i.e. "Loading existing export file...", "Writing 100,000 rows to output file..."). JIM surfaces each message on the Activity, replacing the previous one, so operators can tell a healthy long-running export from a stuck one. The vocabulary is yours; emit on phase transitions rather than per item, and skip building messages entirely when this is null.</param>
+    /// <param name="progress">Narrates what you are doing, and moves between the phases you declared through <see cref="IConnectorPhases"/> (i.e. "Loading existing export file...", "Writing 100,000 rows to output file..."). Never null. The vocabulary is yours; emit on phase boundaries rather than per item.</param>
     /// <returns>A list of ConnectedSystemExportResult objects corresponding to each Pending Export. For file-based exports, ExternalId is typically not available.</returns>
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null);
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress);
 }

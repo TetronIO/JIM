@@ -15,11 +15,11 @@ using Serilog;
 namespace JIM.Worker.Tests.Workflows;
 
 /// <summary>
-/// Issue #637: a call-based connector's page can spend minutes inside a single ImportAsync call
-/// (root DSE query, container enumeration, paged fetch), and a file-based connector reads the whole
-/// file in one call. The import processor must hand connectors a progress callback and write whatever
-/// they narrate straight to the Activity message, so operators can tell a healthy long-running import
-/// from a stuck one.
+/// Issues #637 and #454: a call-based connector's page can spend minutes inside a single ImportAsync
+/// call (root DSE query, container enumeration, paged fetch), and a file-based connector reads the
+/// whole file in one call. The import processor must hand connectors a progress reporter and write
+/// whatever they narrate straight to the Activity message, so administrators can tell a healthy
+/// long-running import from a stuck one.
 /// </summary>
 [TestFixture]
 public class ImportSubPhaseProgressTests : WorkflowTestBase
@@ -43,10 +43,10 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
         var messagesSeenOnActivity = new List<string?>();
         var mockConnector = new MockSubPhaseReportingConnector(csoType, async progress =>
         {
-            await progress("Querying root DSE...");
+            await progress.ReportAsync("Querying root DSE...");
             messagesSeenOnActivity.Add(activity.Message);
 
-            await progress("Fetching User objects from Employees (page 1)...");
+            await progress.ReportAsync("Fetching User objects from Employees (page 1)...");
             messagesSeenOnActivity.Add(activity.Message);
         });
 
@@ -60,8 +60,8 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
         await processor.PerformImportAsync();
 
         // Assert
-        Assert.That(mockConnector.ReceivedProgressCallback, Is.True,
-            "The import processor must offer call-based connectors a sub-phase progress callback");
+        Assert.That(mockConnector.ReceivedProgressReporter, Is.True,
+            "The import processor must hand call-based Connectors a progress reporter");
         Assert.That(messagesSeenOnActivity, Is.EqualTo(new[]
         {
             "Querying root DSE...",
@@ -86,10 +86,10 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
         var messagesSeenOnActivity = new List<string?>();
         var mockConnector = new MockSubPhaseReportingFileConnector(async progress =>
         {
-            await progress("Reading CSV file...");
+            await progress.ReportAsync("Reading CSV file...");
             messagesSeenOnActivity.Add(activity.Message);
 
-            await progress("Parsed 10,000 rows...");
+            await progress.ReportAsync("Parsed 10,000 rows...");
             messagesSeenOnActivity.Add(activity.Message);
         });
 
@@ -103,8 +103,8 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
         await processor.PerformImportAsync();
 
         // Assert
-        Assert.That(mockConnector.ReceivedProgressCallback, Is.True,
-            "The import processor must offer file-based connectors a sub-phase progress callback");
+        Assert.That(mockConnector.ReceivedProgressReporter, Is.True,
+            "The import processor must hand file-based Connectors a progress reporter");
         Assert.That(messagesSeenOnActivity, Is.EqualTo(new[]
         {
             "Reading CSV file...",
@@ -128,7 +128,7 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
 
         SyncRepo.FailActivityMessageUpdateFor = "Querying root DSE...";
         var mockConnector = new MockSubPhaseReportingConnector(csoType, async progress =>
-            await progress("Querying root DSE..."));
+            await progress.ReportAsync("Querying root DSE..."));
 
         var processor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
@@ -163,13 +163,13 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
     /// </summary>
     private class MockSubPhaseReportingConnector(
         ConnectedSystemObjectType csoType,
-        Func<Func<string, Task>, Task> narrate) : IConnector, IConnectorImportUsingCalls
+        Func<IConnectorProgress, Task> narrate) : IConnector, IConnectorImportUsingCalls
     {
         public string Name => "MockConnector";
         public string? Description => null;
         public string? Url => null;
 
-        public bool ReceivedProgressCallback { get; private set; }
+        public bool ReceivedProgressReporter { get; private set; }
 
         public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger) { }
 
@@ -182,11 +182,10 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
             string? persistedConnectorData,
             ILogger logger,
             CancellationToken cancellationToken,
-            Func<string, Task>? progressCallback = null)
+            IConnectorProgress progress)
         {
-            ReceivedProgressCallback = progressCallback != null;
-            if (progressCallback != null)
-                await narrate(progressCallback);
+            ReceivedProgressReporter = true;
+            await narrate(progress);
 
             return new ConnectedSystemImportResult
             {
@@ -198,25 +197,24 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
     /// <summary>
     /// File-based connector that narrates sub-phases through the callback JIM supplies.
     /// </summary>
-    private class MockSubPhaseReportingFileConnector(Func<Func<string, Task>, Task> narrate)
+    private class MockSubPhaseReportingFileConnector(Func<IConnectorProgress, Task> narrate)
         : IConnector, IConnectorImportUsingFiles
     {
         public string Name => "MockFileConnector";
         public string? Description => null;
         public string? Url => null;
 
-        public bool ReceivedProgressCallback { get; private set; }
+        public bool ReceivedProgressReporter { get; private set; }
 
         public async Task<ConnectedSystemImportResult> ImportAsync(
             ConnectedSystem connectedSystem,
             ConnectedSystemRunProfile runProfile,
             ILogger logger,
             CancellationToken cancellationToken,
-            Func<string, Task>? progressCallback = null)
+            IConnectorProgress progress)
         {
-            ReceivedProgressCallback = progressCallback != null;
-            if (progressCallback != null)
-                await narrate(progressCallback);
+            ReceivedProgressReporter = true;
+            await narrate(progress);
 
             return new ConnectedSystemImportResult { ImportObjects = [] };
         }

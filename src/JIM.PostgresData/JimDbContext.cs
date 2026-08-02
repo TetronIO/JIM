@@ -21,6 +21,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
     public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
+    public virtual DbSet<ActivityPhase> ActivityPhases { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
     public virtual DbSet<ConnectedSystem> ConnectedSystems { get; set; } = null!;
     public virtual DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; } = null!;
@@ -219,6 +220,21 @@ public class JimDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(c => c.ActivityId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Activity phases (#454): the steps of a Run Profile execution, read in run order by the
+        // portal, the API and PowerShell, and entered by key while the run progresses. Both access
+        // patterns get an index, and the key is unique per Activity so entering a phase is
+        // unambiguous. Cascades away with the owning Activity.
+        modelBuilder.Entity<ActivityPhase>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.HasOne<Activity>()
+                .WithMany()
+                .HasForeignKey(p => p.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(p => new { p.ActivityId, p.Order });
+            entity.HasIndex(p => new { p.ActivityId, p.Key }).IsUnique();
         });
 
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted

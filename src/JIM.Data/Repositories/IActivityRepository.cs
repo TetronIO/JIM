@@ -93,6 +93,12 @@ public interface IActivityRepository
     public Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId);
 
     /// <summary>
+    /// The recorded phases of a Run Profile execution (#454), in run order. Empty for Activities
+    /// that are not Run Profile executions, and for runs that predate phase recording.
+    /// </summary>
+    public Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId);
+
+    /// <summary>
     /// Finalises the Activity's Run Profile execution stat counters: recomputes the stats exactly
     /// from the persisted Run Profile Execution Items and Sync Outcomes, replaces the incremental
     /// counter rows with the exact values, and sets

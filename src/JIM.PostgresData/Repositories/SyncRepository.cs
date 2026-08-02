@@ -298,6 +298,45 @@ public partial class SyncRepository : ISyncRepository
             message, objectsProcessedParam, objectsToProcessParam, activity.Id);
     }
 
+    public async Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
+    {
+        if (phases.Count == 0)
+            return;
+
+        // Raw SQL for the same reason as UpdateActivityMessageAsync above: the worker's DbContext
+        // carries the run's tracked entities, and a SaveChangesAsync here would run DetectChanges
+        // across all of them just to record a step transition.
+        // The values written below MUST match the order of ActivityPhaseBulkColumns.ActivityPhases.
+        var parameters = new List<object>(phases.Count * ActivityPhaseBulkColumns.ActivityPhases.Length);
+        var rows = new List<string>(phases.Count);
+
+        foreach (var phase in phases)
+        {
+            var offset = parameters.Count;
+            parameters.Add(phase.Id);
+            parameters.Add(phase.ActivityId);
+            parameters.Add(phase.Order);
+            parameters.Add(phase.Key);
+            parameters.Add(phase.Name);
+            parameters.Add(BulkSqlHelpers.NullableParam(phase.ParentKey, NpgsqlTypes.NpgsqlDbType.Text));
+            parameters.Add((int)phase.Status);
+            parameters.Add(BulkSqlHelpers.NullableParam(phase.Started, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+            parameters.Add(BulkSqlHelpers.NullableParam(phase.Ended, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+            rows.Add($"({string.Join(", ", Enumerable.Range(offset, ActivityPhaseBulkColumns.ActivityPhases.Length).Select(i => $"{{{i}}}"))})");
+        }
+
+        var updateAssignments = string.Join(", ",
+            ActivityPhaseBulkColumns.ActivityPhasesUpdate.Select(c => $"\"{c}\" = EXCLUDED.\"{c}\""));
+
+        var sql = $"""
+            INSERT INTO "ActivityPhases" ({BulkSqlHelpers.ToQuotedList(ActivityPhaseBulkColumns.ActivityPhases)})
+            VALUES {string.Join(", ", rows)}
+            ON CONFLICT ("Id") DO UPDATE SET {updateAssignments}
+            """;
+
+        await _context.Database.ExecuteSqlRawAsync(sql, parameters);
+    }
+
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _repo.Activity.GetActivityRpeiErrorCountsAsync(activityId);
 

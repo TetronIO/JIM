@@ -52,6 +52,12 @@ public class SyncExportTaskProcessor
     /// </summary>
     private bool _csoChangeTrackingEnabled;
 
+    /// <summary>
+    /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
+    /// not track phases get a reporter that records nothing.
+    /// </summary>
+    private readonly ActivityPhaseReporter _phases;
+
     public SyncExportTaskProcessor(
         ISyncServer syncServer,
         ISyncRepository syncRepository,
@@ -62,7 +68,8 @@ public class SyncExportTaskProcessor
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
         Func<ISyncRepositoryScope>? syncRepoFactory = null,
-        IConnectorFactory? connectorFactory = null)
+        IConnectorFactory? connectorFactory = null,
+        ActivityPhaseReporter? phaseReporter = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;
@@ -77,6 +84,7 @@ public class SyncExportTaskProcessor
         _initiatedByType = workerTask.InitiatedByType;
         _initiatedById = workerTask.InitiatedById;
         _initiatedByName = workerTask.InitiatedByName;
+        _phases = phaseReporter ?? ActivityPhaseReporter.None;
     }
 
     /// <summary>
@@ -93,7 +101,7 @@ public class SyncExportTaskProcessor
         Log.Information("PerformExportAsync: Starting export for {SystemName} (RunMode: {RunMode})",
             _connectedSystem.Name, _runMode);
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing export");
+        await _phases.EnterAsync(RunPhaseKeys.ExportPrepare);
 
         // Load settings once at start of export
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
@@ -161,6 +169,7 @@ public class SyncExportTaskProcessor
 
             var throughput = new ThroughputTracker();
             ExportExecutionResult result;
+            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, $"Exporting {pendingExportCount:N0} changes");
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
                 result = await _syncServer.ExecuteExportsAsync(
@@ -172,9 +181,22 @@ public class SyncExportTaskProcessor
                     async progressInfo =>
                     {
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
-                        var message = $"{progressInfo.Message} — {progressInfo.ProcessedExports:N0} of {progressInfo.TotalExports:N0}" +
+                        var counts = $"{progressInfo.ProcessedExports:N0} of {progressInfo.TotalExports:N0}" +
                             throughput.FormatThroughput(progressInfo.ProcessedExports, progressInfo.TotalExports);
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, message);
+
+                        // A report carrying a Connector phase key is the Connector saying it has moved
+                        // to one of the steps it declared, so it advances the stepper too (#454); the
+                        // counts still travel with it, because they are what say whether it is moving.
+                        if (!string.IsNullOrEmpty(progressInfo.ConnectorPhaseKey))
+                        {
+                            var phaseMessage = string.IsNullOrWhiteSpace(progressInfo.Message)
+                                ? counts
+                                : $"{progressInfo.Message} {counts}";
+                            await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, phaseMessage);
+                            return;
+                        }
+
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, $"{progressInfo.Message} {counts}");
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,
@@ -417,7 +439,7 @@ public class SyncExportTaskProcessor
         // batches, so its statements stay inside the timeout regardless of volume.
         if (_csoChangeTrackingEnabled && _runMode != SyncRunMode.PreviewOnly)
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving change history references");
+            await _phases.EnterAsync(RunPhaseKeys.ExportResolveReferences);
             var changeRecordsResolved = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
             if (changeRecordsResolved > 0)
                 Log.Information("ProcessExportResultAsync: Resolved {Count} cross-batch change record reference FKs after export completion.", changeRecordsResolved);

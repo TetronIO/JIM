@@ -311,6 +311,51 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("Activities");
                 });
 
+            modelBuilder.Entity("JIM.Models.Activities.ActivityPhase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("Ended")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ParentKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("Started")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActivityId", "Key")
+                        .IsUnique();
+
+                    b.HasIndex("ActivityId", "Order");
+
+                    b.ToTable("ActivityPhases");
+                });
+
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3632,6 +3677,15 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany("Activities")
                         .HasForeignKey("SyncRuleId");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityPhase", b =>
+                {
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>

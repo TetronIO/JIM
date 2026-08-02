@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -24,7 +25,7 @@ internal class FileConnectorImport
     private readonly bool _stopOnFirstError;
     private readonly string _multiValueDelimiter;
     private readonly ILogger _logger;
-    private readonly Func<string, Task>? _progressCallback;
+    private readonly IConnectorProgress _progress;
 
     internal FileConnectorImport(
         ConnectedSystem connectedSystem,
@@ -34,7 +35,7 @@ internal class FileConnectorImport
         string multiValueDelimiter,
         ILogger logger,
         CancellationToken cancellationToken,
-        Func<string, Task>? progressCallback = null)
+        IConnectorProgress progress)
     {
         _connectedSystem = connectedSystem;
         _reader = reader;
@@ -43,7 +44,7 @@ internal class FileConnectorImport
         _multiValueDelimiter = multiValueDelimiter;
         _logger = logger;
         _cancellationToken = cancellationToken;
-        _progressCallback = progressCallback;
+        _progress = progress;
     }
 
     internal async Task<ConnectedSystemImportResult> GetFullImportObjectsAsync()
@@ -76,7 +77,7 @@ internal class FileConnectorImport
 
             rowsRead++;
             if (rowsRead % ProgressRowInterval == 0)
-                await ReportProgressAsync($"Parsed {rowsRead:N0} rows...");
+                await _progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
 
             // start building the object that we pass back to JIM, representing the Connected System Object.
             // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
@@ -305,18 +306,9 @@ internal class FileConnectorImport
         // Land on the true total so the last thing an operator sees is the row count actually read,
         // rather than the last interval multiple. Skipped when the interval emit already reported it.
         if (rowsRead > 0 && rowsRead % ProgressRowInterval != 0)
-            await ReportProgressAsync($"Parsed {rowsRead:N0} rows...");
+            await _progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
 
         return FinaliseResult(result, stopwatch);
-    }
-
-    /// <summary>
-    /// Narrates read progress, when the caller asked for sub-phase progress.
-    /// </summary>
-    private async Task ReportProgressAsync(string subPhase)
-    {
-        if (_progressCallback != null)
-            await _progressCallback(subPhase);
     }
 
     /// <summary>

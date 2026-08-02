@@ -91,6 +91,31 @@ public class ActivityProgressDto
     /// </summary>
     public DateTime RetrievedAt { get; set; }
 
+    /// <summary>
+    /// The steps of the run in order (#454): what is done, what is running, and what is still to
+    /// come. Empty for Activities that are not Run Profile executions, and for runs that predate
+    /// phase recording.
+    /// </summary>
+    public List<ActivityPhaseDto> Phases { get; set; } = [];
+
+    /// <summary>
+    /// The step currently running, or null when nothing is running. The most specific one: a
+    /// Connector's step in preference to the JIM step hosting it.
+    /// </summary>
+    public ActivityPhaseDto? CurrentPhase { get; set; }
+
+    /// <summary>
+    /// The current step's position among the run's top-level steps (1-based), or null when nothing
+    /// is running. Pairs with <see cref="TotalPhases"/> to read as "step 3 of 7".
+    /// </summary>
+    public int? CurrentPhaseNumber { get; set; }
+
+    /// <summary>
+    /// How many top-level steps the run has. Connector steps are not counted: they are detail
+    /// within the step that called the Connector, so the count stays comparable across Connectors.
+    /// </summary>
+    public int TotalPhases { get; set; }
+
     public static ActivityProgressDto FromEntity(ActivityProgress progress, ActivityEtaEstimate eta, DateTime utcNow)
     {
         double? percentComplete = null;
@@ -98,6 +123,16 @@ public class ActivityProgressDto
             percentComplete = Math.Round(Math.Clamp(progress.ObjectsProcessed / (double)progress.ObjectsToProcess * 100d, 0d, 100d), 1);
 
         var startedAt = progress.Executed ?? progress.Created;
+
+        // "Step 3 of 7" counts only top-level steps: a Connector's steps are detail inside the step
+        // that called it, so counting them would make the same run read differently per Connector.
+        var topLevelPhases = progress.Phases.Where(p => p.ParentKey == null).OrderBy(p => p.Order).ToList();
+        var current = progress.CurrentPhase;
+        var currentTopLevel = current == null
+            ? null
+            : current.ParentKey == null ? current : progress.Phases.SingleOrDefault(p => p.Key == current.ParentKey);
+        var currentIndex = currentTopLevel == null ? -1 : topLevelPhases.FindIndex(p => p.Key == currentTopLevel.Key);
+        int? currentPhaseNumber = currentIndex >= 0 ? currentIndex + 1 : null;
 
         return new ActivityProgressDto
         {
@@ -114,7 +149,13 @@ public class ActivityProgressDto
             RunType = progress.RunType,
             OperationCounts = progress.OperationCounts,
             TotalErrors = progress.TotalErrors,
-            RetrievedAt = utcNow
+            RetrievedAt = utcNow,
+            // Ordered here rather than relying on the read: the contract is "in run order", and a
+            // client should not have to sort what it is handed.
+            Phases = progress.Phases.OrderBy(p => p.Order).Select(ActivityPhaseDto.FromEntity).ToList(),
+            CurrentPhase = current == null ? null : ActivityPhaseDto.FromEntity(current),
+            CurrentPhaseNumber = currentPhaseNumber,
+            TotalPhases = topLevelPhases.Count
         };
     }
 }
