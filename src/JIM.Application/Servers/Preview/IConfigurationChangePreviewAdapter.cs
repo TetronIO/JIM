@@ -26,6 +26,17 @@ public interface IConfigurationChangePreviewAdapter
     ConfigurationChangePreviewSurface Surface { get; }
 
     /// <summary>
+    /// Whether this adapter evaluates per-object deltas at all. False for a count-only adapter, and the framework
+    /// then records the summary and delta stages as not applicable without calling
+    /// <see cref="EvaluateDeltasAsync"/>.
+    ///
+    /// Declared rather than inferred from an empty stream, because the two are not the same thing: "this adapter
+    /// does not evaluate objects" and "this change would affect no objects" are opposite answers, and an
+    /// administrator reading an empty drill-down needs to know which one they are looking at.
+    /// </summary>
+    bool ProducesDeltas { get; }
+
+    /// <summary>
     /// Stage 1. Structural findings about the proposal itself: what is invalid, contradictory, or blocked. Runs
     /// synchronously in the request path, so it must stay near-instant and must not evaluate any population.
     /// </summary>

@@ -7,6 +7,7 @@ using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
+using System.Text.Json.Nodes;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -81,7 +82,15 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
         Assert.Multiple(() =>
         {
             Assert.That(preview.Surface, Is.EqualTo(ConfigurationChangePreviewSurface.MetaverseObjectType));
-            Assert.That(preview.ProposedConfigurationSnapshot, Is.EqualTo("{\"deletionRule\":\"WhenLastConnectorDisconnected\"}"));
+            // Compared as a document, not as a string: the column is jsonb, and PostgreSQL normalises what it
+            // stores (whitespace, key order, duplicate keys). Nothing reads these snapshots byte-for-byte, but a
+            // test that asserted on the exact text would fail for a reason that says nothing about correctness.
+            Assert.That(JsonNode.DeepEquals(
+                    JsonNode.Parse(preview.ProposedConfigurationSnapshot!),
+                    JsonNode.Parse("{\"deletionRule\":\"WhenLastConnectorDisconnected\"}")),
+                Is.True);
+            Assert.That(preview.ValidationFindings, Does.Contain("No trigger systems are selected."));
+            Assert.That(preview.ImpactCounts, Does.Contain("4812"));
             Assert.That(preview.ValidationStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(preview.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(preview.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
@@ -205,6 +214,8 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             ActivityId = activity.Id,
             Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
             ProposedConfigurationSnapshot = "{\"deletionRule\":\"WhenLastConnectorDisconnected\"}",
+            ValidationFindings = "[{\"Severity\":1,\"Message\":\"No trigger systems are selected.\",\"PropertyName\":\"DeletionTriggers\"}]",
+            ImpactCounts = "[{\"TransitionType\":22,\"ObjectCount\":4812,\"ConnectedSystemId\":3,\"MetaverseObjectTypeId\":11}]",
             ValidationStatus = ConfigurationChangePreviewStageStatus.Complete,
             ValidationStarted = now,
             ValidationCompleted = now.AddSeconds(1),

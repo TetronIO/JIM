@@ -78,7 +78,14 @@ public enum ConfigurationChangePreviewStageStatus
     /// The adapter does not implement this stage. A count-only adapter skips the delta stages, and skipping is a
     /// legitimate end state, not a failure or an omission.
     /// </summary>
-    NotApplicable = 4
+    NotApplicable = 4,
+
+    /// <summary>
+    /// The administrator cancelled the preview while this stage was running. Distinct from
+    /// <see cref="Failed"/> on purpose: nothing went wrong, and a cancelled stage shown as failed would send
+    /// somebody looking for an error that was never raised.
+    /// </summary>
+    Cancelled = 5
 }
 
 /// <summary>

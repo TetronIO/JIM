@@ -20,6 +20,10 @@ namespace JIM.Models.Preview;
 /// objects that are about to be deleted or disconnected, which is exactly when a join would render nothing.
 /// </param>
 /// <param name="ObjectTypeName">The object's type name as it is now, snapshotted for the same reason.</param>
+/// <param name="MetaverseObjectTypeId">
+/// The Metaverse Object Type the object is of, where the transition concerns metaverse objects. Carried alongside
+/// the name because the name is a snapshot for display and the id is what a summary group is filtered by.
+/// </param>
 /// <param name="MetaverseObjectId">The Metaverse Object concerned, where the transition names one.</param>
 /// <param name="ConnectedSystemObjectId">The Connected System Object concerned, where the transition names one.</param>
 /// <param name="ConnectedSystemId">The Connected System concerned, where the transition is per-system.</param>
@@ -32,6 +36,7 @@ public record PreviewDelta(
     ActivityRunProfileExecutionItemSyncOutcomeType TransitionType,
     string? ObjectDisplayName = null,
     string? ObjectTypeName = null,
+    int? MetaverseObjectTypeId = null,
     Guid? MetaverseObjectId = null,
     Guid? ConnectedSystemObjectId = null,
     int? ConnectedSystemId = null,

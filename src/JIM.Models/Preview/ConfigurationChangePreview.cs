@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JIM.Models.Preview;
 
@@ -32,7 +33,25 @@ public class ConfigurationChangePreview
     /// is. Kept so a preview can be read back and explained after the proposal has been applied, abandoned, or
     /// superseded; without it a stored result is a set of numbers about a configuration nobody can reconstruct.
     /// </summary>
+    [Column(TypeName = "jsonb")]
     public string? ProposedConfigurationSnapshot { get; set; }
+
+    /// <summary>
+    /// Stage 1's findings, as a serialised list of <see cref="PreviewValidationFinding"/>. A document rather than a
+    /// table because nothing queries across previews for a finding: they are read as a set, with the row that owns
+    /// them, and a table would buy indexing nobody uses at the cost of a join on every panel refresh.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ValidationFindings { get; set; }
+
+    /// <summary>
+    /// Stage 2's counts, as a serialised list of <see cref="PreviewImpactCount"/>. Stored separately from the
+    /// summary groups, not folded into them: a count comes from set-based SQL over the whole population and a group
+    /// comes from the evaluated stream, and presenting the two as one kind of number would hide which is which when
+    /// an adapter implements only the first.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ImpactCounts { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // Stage state. Explicit per-stage columns rather than a child table: the panel reads this row on every refresh,

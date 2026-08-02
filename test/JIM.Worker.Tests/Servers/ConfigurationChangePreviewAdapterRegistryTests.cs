@@ -94,6 +94,8 @@ public class ConfigurationChangePreviewAdapterRegistryTests
     {
         public ConfigurationChangePreviewSurface Surface { get; } = surface;
 
+        public bool ProducesDeltas => false;
+
         public Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context) => Task.FromResult(new List<PreviewValidationFinding>());
 
         public Task<PreviewCostEstimate> EstimateCostAsync(PreviewContext context) => Task.FromResult(new PreviewCostEstimate(0));
