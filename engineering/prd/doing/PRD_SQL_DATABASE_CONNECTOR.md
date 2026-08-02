@@ -198,7 +198,7 @@ The full matrix must run green for Priority 1 providers (SQL Server, Oracle) bef
 
 Additionally:
 
-- Third-Party Dependency Governance approval for `Microsoft.Data.SqlClient` and `Oracle.ManagedDataAccess.Core` (Priority 1), then `Npgsql` and `MySqlConnector` (Priority 2).
+- Third-Party Dependency Governance: **Priority 1 packages approved 2026-07-31** following the notify-research-present-approve workflow: `Microsoft.Data.SqlClient` 7.0.2 (MIT; Microsoft-maintained; no open vulnerabilities; as of 7.0 the package no longer depends on Azure.Identity or MSAL, and the separate `Microsoft.Data.SqlClient.Extensions.Azure` package must not be added, cloud authentication being a non-goal) and `Oracle.ManagedDataAccess.Core` 23.26.300 (Oracle Free Distribution, Hosting, and Use Terms; a copy of the licence must ship with any JIM distribution containing the driver, and its terms must be documented in the customer-facing connector guide; no open vulnerabilities). Pin exact per `engineering/DEPENDENCY_PINNING.md`. `Npgsql` and `MySqlConnector` (Priority 2) remain subject to governance when their providers are scheduled.
 
 ## Open Questions
 
