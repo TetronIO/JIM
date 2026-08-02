@@ -415,7 +415,7 @@ MetaverseObjectType:
 
 **Description**: Extend `WhenAuthoritativeSourceDisconnected` with a configurable trigger mode: All sources disconnect (default for new configurations), or Specific source(s) disconnect (any one of the selected sources disconnecting triggers deletion; current behaviour, and existing configurations keep it). Also makes grace period cancellation mode-aware, so a rejoin only cancels a scheduled deletion when the mode's trigger condition no longer holds.
 
-**Redesigned 2026-08-01**: the original priority ordering / hierarchy concept was dropped, and a proposed three-mode variant collapsed to two modes over one selection list. Full implementation plan: [`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](AUTHORITATIVE_SOURCE_TRIGGER_MODES.md).
+**Redesigned 2026-08-01**: the original priority ordering / hierarchy concept was dropped, and a proposed three-mode variant collapsed to two modes over one selection list. Full implementation plan: [`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](../done/AUTHORITATIVE_SOURCE_TRIGGER_MODES.md).
 
 **Current State**: ✅ **COMPLETE** (implemented 2026-08-02)
 - ✅ `AuthoritativeSourceTriggerMode` enum + `MetaverseObjectType.DeletionTriggerMode`, with a behaviour-preserving migration: existing rows read the column default (`SpecificSourcesDisconnect`, the pre-#119 semantics) while new entities default to `AllSourcesDisconnect`
@@ -491,7 +491,7 @@ MetaverseObjectType:
 | Feature | Issue | Rationale |
 |---------|-------|-----------|
 | Excluded Systems | #116 | Niche use case |
-| Source Trigger Modes | #119 | ✅ **Implemented** 2026-08-02 ([`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](AUTHORITATIVE_SOURCE_TRIGGER_MODES.md)) |
+| Source Trigger Modes | #119 | ✅ **Implemented** 2026-08-02 ([`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](../done/AUTHORITATIVE_SOURCE_TRIGGER_MODES.md)) |
 
 ---
 
