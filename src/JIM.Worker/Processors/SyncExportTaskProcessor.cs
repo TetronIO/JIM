@@ -187,7 +187,11 @@ public class SyncExportTaskProcessor
                         // The counters are what the portal renders the count, rate and time remaining
                         // from, so the Connector's message travels on its own; repeating the counts
                         // in it printed the same numbers twice on the Activity.
-                        _activity.ObjectsProcessed = progressInfo.ProcessedExports;
+                        //
+                        // The window rather than the raw totals: the deferred pass covers only what
+                        // the first pass could not write, so left on the export's totals it reported
+                        // itself finished from the moment it started.
+                        (_activity.ObjectsToProcess, _activity.ObjectsProcessed) = progressInfo.CountingWindow;
 
                         // The export makes two passes, and the second one is a step of its own: what
                         // the first pass could not write for want of an object that did not exist yet
