@@ -2770,6 +2770,11 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     border: 1px solid var(--jim-inner-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default)));
     border-radius: var(--mud-default-borderradius);
     background-color: var(--mud-palette-background-grey);
+    /* Body colour for the whole panel, so every line in it is secondary by inheritance and only the headline
+       opts out. Setting it per line meant mixing this with MudBlazor's mud-text-secondary, which resolves to
+       the same colour but also applies opacity: 0.8, so a paragraph and the bullets beneath it rendered as
+       two different greys while reporting an identical computed colour. */
+    color: var(--mud-palette-text-secondary);
 }
 
 /* Sentence case: this button carries a Connected System's name and a tab label, and MudBlazor's default
@@ -2789,12 +2794,11 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 }
 
 /* A dot, not an icon. Chevrons read as "expand me" and turned a list of things to check into a row of dead
-   controls. */
+   controls. Colour is inherited from the panel rather than set here; see the note on that rule. */
 .jim-password-guidance-checks li {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
-    color: var(--mud-palette-text-secondary);
 }
 
 .jim-password-guidance-checks li::before {
@@ -2829,7 +2833,6 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     align-items: center;
     gap: 0.4375rem;
     font-weight: 500;
-    color: var(--mud-palette-text-secondary);
 }
 
 .jim-password-guidance-verdict::before {
