@@ -8,6 +8,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Sync;
 using JIM.Models.Tasking;
 using Moq;
 using NUnit.Framework;
@@ -60,8 +61,12 @@ public class ConnectedSystemDeletionTests
         // Default setup for metaverse repository
         _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<MetaverseObject>());
-        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()))
             .ReturnsAsync(0);
+
+        // Default setup for Connected System name resolution (#119 policy snapshots)
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string>());
 
         _jim = new JimApplication(_mockRepository.Object);
         _initiatedBy = TestUtilities.GetInitiatedBy();
@@ -625,7 +630,7 @@ public class ConnectedSystemDeletionTests
 
         _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
             .ReturnsAsync(orphanedMvos);
-        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()))
             .ReturnsAsync(2);
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
@@ -636,7 +641,8 @@ public class ConnectedSystemDeletionTests
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
         _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(
             It.Is<IEnumerable<Guid>>(ids => ids.Count() == 2 &&
-                ids.Contains(orphanedMvo1.Id) && ids.Contains(orphanedMvo2.Id))), Times.Once);
+                ids.Contains(orphanedMvo1.Id) && ids.Contains(orphanedMvo2.Id)),
+            It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Once);
         _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>()), Times.Once);
     }
 
@@ -651,7 +657,7 @@ public class ConnectedSystemDeletionTests
 
         // Assert
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()), Times.Never);
-        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()), Times.Never);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
         _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>()), Times.Once);
     }
 
@@ -668,7 +674,7 @@ public class ConnectedSystemDeletionTests
 
         // Assert
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
-        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()), Times.Never);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
         _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>()), Times.Once);
     }
 
@@ -702,7 +708,7 @@ public class ConnectedSystemDeletionTests
 
         _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
             .ReturnsAsync(orphanedMvos);
-        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()))
             .ReturnsAsync(2);
 
         // Act
@@ -724,7 +730,292 @@ public class ConnectedSystemDeletionTests
 
         // Assert
         Assert.That(result, Is.EqualTo(0));
-        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()), Times.Never);
+        _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Trigger Recording and Policy Snapshot Tests (#119)
+
+    [Test]
+    public async Task MarkOrphanedMvosForDeletionAsync_SpecificMode_RecordsTriggeringSystemAndPolicySnapshotAsync()
+    {
+        // Arrange - Specific mode object type with the deleted system (1) and another source (2) listed;
+        // the MVO retains a joined CSO in the other listed source.
+        var objectType = CreateAuthoritativeSourceType(10, AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect, new List<int> { 1, 2 }, TimeSpan.FromDays(7));
+        var mvo = CreateProjectedMvoWithCsos(objectType, 1, 2);
+
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject> { mvo });
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { { 1, "HR System" }, { 2, "AD System" } });
+
+        var capturedCalls = CaptureMarkMvosAsDisconnectedCalls();
+
+        // Act
+        var markedCount = await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert
+        Assert.That(markedCount, Is.EqualTo(1));
+        Assert.That(capturedCalls, Has.Count.EqualTo(1));
+
+        var call = capturedCalls[0];
+        Assert.That(call.MvoIds, Is.EquivalentTo(new[] { mvo.Id }));
+        Assert.That(call.TriggeredBySystemId, Is.EqualTo(1));
+        Assert.That(call.TriggeredBySystemName, Is.EqualTo("HR System"));
+
+        var snapshot = MvoDeletionPolicySnapshot.FromJson(call.PolicySnapshotJson);
+        Assert.That(snapshot, Is.Not.Null);
+        Assert.That(snapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        Assert.That(snapshot.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
+        Assert.That(snapshot.SelectedSourceSystemIds, Is.EqualTo(new List<int> { 1, 2 }));
+        Assert.That(snapshot.SelectedSourceSystemNames, Is.EqualTo(new List<string> { "HR System", "AD System" }));
+        Assert.That(snapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
+        Assert.That(snapshot.TriggeringSystemId, Is.EqualTo(1));
+        Assert.That(snapshot.TriggeringSystemName, Is.EqualTo("HR System"));
+        Assert.That(snapshot.RemainingConnectedSourceSystemIds, Is.EqualTo(new List<int> { 2 }));
+        Assert.That(snapshot.RemainingConnectedSourceSystemNames, Is.EqualTo(new List<string> { "AD System" }));
+    }
+
+    [Test]
+    public async Task MarkOrphanedMvosForDeletionAsync_AllMode_SnapshotRecordsNoRemainingSourcesAsync()
+    {
+        // Arrange - All mode: a marked MVO by definition has no remaining listed source connections
+        // (only an unlisted target remains joined).
+        var objectType = CreateAuthoritativeSourceType(11, AuthoritativeSourceTriggerMode.AllSourcesDisconnect, new List<int> { 1, 2 }, null);
+        var mvo = CreateProjectedMvoWithCsos(objectType, 1, 3);
+
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject> { mvo });
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { { 1, "HR System" }, { 2, "AD System" }, { 3, "Target App" } });
+
+        var capturedCalls = CaptureMarkMvosAsDisconnectedCalls();
+
+        // Act
+        var markedCount = await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert
+        Assert.That(markedCount, Is.EqualTo(1));
+        Assert.That(capturedCalls, Has.Count.EqualTo(1));
+
+        var snapshot = MvoDeletionPolicySnapshot.FromJson(capturedCalls[0].PolicySnapshotJson);
+        Assert.That(snapshot, Is.Not.Null);
+        Assert.That(snapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.AllSourcesDisconnect));
+        Assert.That(snapshot.RemainingConnectedSourceSystemIds, Is.Empty);
+        Assert.That(snapshot.RemainingConnectedSourceSystemNames, Is.Empty);
+    }
+
+    [Test]
+    public async Task MarkOrphanedMvosForDeletionAsync_WithMultipleObjectTypes_BuildsOneSnapshotPerObjectTypeAsync()
+    {
+        // Arrange - two object types are affected by the same system deletion; each group of MVOs gets
+        // its own decision-time snapshot because the policy facts differ per object type.
+        var authoritativeType = CreateAuthoritativeSourceType(12, AuthoritativeSourceTriggerMode.AllSourcesDisconnect, new List<int> { 1 }, TimeSpan.FromDays(30));
+        var lastConnectorType = new MetaverseObjectType
+        {
+            Id = 13,
+            Name = "Robot",
+            DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            DeletionGracePeriod = TimeSpan.FromDays(1)
+        };
+
+        var authoritativeMvo = CreateProjectedMvoWithCsos(authoritativeType, 1);
+        var lastConnectorMvo = CreateProjectedMvoWithCsos(lastConnectorType, 1);
+
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject> { authoritativeMvo, lastConnectorMvo });
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { { 1, "HR System" } });
+
+        var capturedCalls = CaptureMarkMvosAsDisconnectedCalls();
+
+        // Act
+        var markedCount = await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert - one marking call (and so one snapshot) per object type, all totalling correctly
+        Assert.That(markedCount, Is.EqualTo(2));
+        Assert.That(capturedCalls, Has.Count.EqualTo(2));
+
+        var authoritativeCall = capturedCalls.Single(c => c.MvoIds.Contains(authoritativeMvo.Id));
+        var lastConnectorCall = capturedCalls.Single(c => c.MvoIds.Contains(lastConnectorMvo.Id));
+
+        var authoritativeSnapshot = MvoDeletionPolicySnapshot.FromJson(authoritativeCall.PolicySnapshotJson);
+        Assert.That(authoritativeSnapshot, Is.Not.Null);
+        Assert.That(authoritativeSnapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        Assert.That(authoritativeSnapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
+
+        var lastConnectorSnapshot = MvoDeletionPolicySnapshot.FromJson(lastConnectorCall.PolicySnapshotJson);
+        Assert.That(lastConnectorSnapshot, Is.Not.Null);
+        Assert.That(lastConnectorSnapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected));
+        Assert.That(lastConnectorSnapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(1)));
+    }
+
+    [Test]
+    public async Task MarkOrphanedMvosForDeletionAsync_WithUnknownSystemName_UsesFallbackNameAsync()
+    {
+        // Arrange - name resolution has no entry for the deleted system; a stable fallback keeps the
+        // trigger fields populated rather than failing the deletion.
+        var objectType = CreateAuthoritativeSourceType(14, AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect, new List<int> { 1 }, null);
+        var mvo = CreateProjectedMvoWithCsos(objectType, 1);
+
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
+            .ReturnsAsync(new List<MetaverseObject> { mvo });
+        _mockCsRepo.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string>());
+
+        var capturedCalls = CaptureMarkMvosAsDisconnectedCalls();
+
+        // Act
+        await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert
+        Assert.That(capturedCalls, Has.Count.EqualTo(1));
+        Assert.That(capturedCalls[0].TriggeredBySystemName, Is.EqualTo("Connected System 1"));
+    }
+
+    #endregion
+
+    #region Deletion Preview Mode-Aware Count Tests (#119)
+
+    [Test]
+    public async Task GetDeletionPreviewAsync_PopulatesMvosMarkedForDeletionCountFromSharedPredicateAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System", Status = ConnectedSystemStatus.Active };
+        SetupPreviewCountMocks(connectedSystem);
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionCountAsync(1)).ReturnsAsync(3);
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+
+        // Assert - the preview count comes from the same mode-aware predicate execution marks with
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.MvosWithDeletionRuleCount, Is.EqualTo(3));
+        Assert.That(result.Warnings, Has.Some.Contains("marked for deletion"));
+        _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionCountAsync(1), Times.Once);
+    }
+
+    [Test]
+    public async Task GetDeletionPreviewAsync_WithNoMvosToMark_AddsNoDeletionWarningAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System", Status = ConnectedSystemStatus.Active };
+        SetupPreviewCountMocks(connectedSystem);
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionCountAsync(1)).ReturnsAsync(0);
+
+        // Act
+        var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.MvosWithDeletionRuleCount, Is.EqualTo(0));
+        Assert.That(result.Warnings, Has.None.Contains("marked for deletion"));
+    }
+
+    [Test]
+    public async Task GetDeletionPreviewAsync_CountAgreesWithExecutionMarkingAsync()
+    {
+        // Arrange - back the preview count and the execution list with the same data set, mirroring the
+        // shared repository predicate, and prove the surfaced count equals what execution marks.
+        var objectType = CreateAuthoritativeSourceType(15, AuthoritativeSourceTriggerMode.AllSourcesDisconnect, new List<int> { 1 }, TimeSpan.FromDays(30));
+        var orphanedMvos = new List<MetaverseObject>
+        {
+            CreateProjectedMvoWithCsos(objectType, 1),
+            CreateProjectedMvoWithCsos(objectType, 1)
+        };
+
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System", Status = ConnectedSystemStatus.Active };
+        SetupPreviewCountMocks(connectedSystem);
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionCountAsync(1)).ReturnsAsync(orphanedMvos.Count);
+        _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1)).ReturnsAsync(orphanedMvos);
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((IEnumerable<Guid> ids, int _, string _, string? _) => ids.Count());
+
+        // Act
+        var preview = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+        var markedCount = await _jim.Metaverse.MarkOrphanedMvosForDeletionAsync(1);
+
+        // Assert
+        Assert.That(preview, Is.Not.Null);
+        Assert.That(preview!.MvosWithDeletionRuleCount, Is.EqualTo(markedCount));
+    }
+
+    #endregion
+
+    #region #119 Test Helpers
+
+    private sealed record MarkMvosCall(List<Guid> MvoIds, int TriggeredBySystemId, string TriggeredBySystemName, string? PolicySnapshotJson);
+
+    /// <summary>
+    /// Replaces the MarkMvosAsDisconnectedAsync setup with one that captures every call's arguments and
+    /// returns the number of MVOs passed, so tests can assert on grouping and snapshot content.
+    /// </summary>
+    private List<MarkMvosCall> CaptureMarkMvosAsDisconnectedCalls()
+    {
+        var capturedCalls = new List<MarkMvosCall>();
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((IEnumerable<Guid> ids, int systemId, string systemName, string? snapshotJson) =>
+            {
+                var idList = ids.ToList();
+                capturedCalls.Add(new MarkMvosCall(idList, systemId, systemName, snapshotJson));
+                return idList.Count;
+            });
+        return capturedCalls;
+    }
+
+    private static MetaverseObjectType CreateAuthoritativeSourceType(int id, AuthoritativeSourceTriggerMode triggerMode, List<int> triggerSystemIds, TimeSpan? gracePeriod)
+    {
+        return new MetaverseObjectType
+        {
+            Id = id,
+            Name = $"Person{id}",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerMode = triggerMode,
+            DeletionTriggerConnectedSystemIds = triggerSystemIds,
+            DeletionGracePeriod = gracePeriod
+        };
+    }
+
+    private static MetaverseObject CreateProjectedMvoWithCsos(MetaverseObjectType type, params int[] connectedSystemIds)
+    {
+        var mvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Origin = MetaverseObjectOrigin.Projected,
+            Type = type,
+            ConnectedSystemObjects = new List<ConnectedSystemObject>()
+        };
+
+        foreach (var connectedSystemId in connectedSystemIds)
+        {
+            mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = connectedSystemId,
+                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id
+            });
+        }
+
+        return mvo;
+    }
+
+    /// <summary>
+    /// Sets up the standard Connected System repository count mocks the deletion preview reads.
+    /// </summary>
+    private void SetupPreviewCountMocks(ConnectedSystem connectedSystem)
+    {
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystem.Id, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(connectedSystem.Id)).ReturnsAsync(100);
+        _mockCsRepo.Setup(r => r.GetSyncRuleCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetRunProfileCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetPartitionCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetContainerCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetPendingExportsCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetActivityCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetJoinedMvoCountAsync(connectedSystem.Id)).ReturnsAsync(0);
+        _mockCsRepo.Setup(r => r.GetRunningSyncTaskAsync(connectedSystem.Id)).ReturnsAsync((SynchronisationWorkerTask?)null);
     }
 
     #endregion
@@ -750,7 +1041,7 @@ public class ConnectedSystemDeletionTests
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
         _mockMvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1))
             .ReturnsAsync(new List<MetaverseObject> { orphanedMvo });
-        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>()))
+        _mockMvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()))
             .ReturnsAsync(1);
 
         // Act
@@ -760,7 +1051,8 @@ public class ConnectedSystemDeletionTests
         Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.CompletedImmediately));
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
         _mockMvRepo.Verify(r => r.MarkMvosAsDisconnectedAsync(
-            It.Is<IEnumerable<Guid>>(ids => ids.Contains(orphanedMvo.Id))), Times.Once);
+            It.Is<IEnumerable<Guid>>(ids => ids.Contains(orphanedMvo.Id)),
+            It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Test]

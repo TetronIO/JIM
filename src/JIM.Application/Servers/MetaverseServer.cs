@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
@@ -1575,8 +1576,11 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted.
-    /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period.
+    /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted,
+    /// applying the same mode-aware trigger semantics as the sync engine's disconnect evaluation (#119).
+    /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period, and
+    /// records the deleted system as the deletion trigger plus a decision-time policy snapshot on each
+    /// marked MVO, consistent with the worker path's MarkMvoForDeletionAsync.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System being deleted.</param>
     /// <returns>The number of MVOs marked for deletion.</returns>
@@ -1595,13 +1599,116 @@ public class MetaverseServer
 
         Log.Information("MarkOrphanedMvosForDeletionAsync: Found {Count} orphaned MVOs for Connected System {Id}", orphanedMvos.Count, connectedSystemId);
 
-        // Mark them as disconnected so housekeeping will delete them after the grace period
-        var mvoIds = orphanedMvos.Select(mvo => mvo.Id).ToList();
-        var markedCount = await Application.Repository.Metaverse.MarkMvosAsDisconnectedAsync(mvoIds);
+        // Resolve system names once for the event-time name snapshots; the map survives the deletion of
+        // the system itself on the stored records.
+        var systemNamesById = await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync();
+        var deletedSystemName = ResolveConnectedSystemName(connectedSystemId, systemNamesById);
+
+        // Mark them as disconnected so housekeeping will delete them after the grace period. The policy
+        // facts (rule, mode, sources, grace period) are identical per object type, so one decision-time
+        // snapshot serves every MVO in a group; groups additionally split by which listed sources remain
+        // connected (only possible in Specific mode) so each snapshot's remaining-source facts are exact.
+        var markedCount = 0;
+        var groups = orphanedMvos
+            .GroupBy(mvo => new
+            {
+                TypeId = mvo.Type?.Id ?? 0,
+                RemainingSourcesKey = string.Join(",", GetRemainingConnectedSourceSystemIds(mvo, connectedSystemId))
+            });
+        foreach (var group in groups)
+        {
+            var groupTemplate = group.First();
+            var policySnapshotJson = BuildMvoDeletionPolicySnapshotJson(groupTemplate, connectedSystemId, deletedSystemName, systemNamesById);
+            var groupMvoIds = group.Select(mvo => mvo.Id).ToList();
+            markedCount += await Application.Repository.Metaverse.MarkMvosAsDisconnectedAsync(
+                groupMvoIds, connectedSystemId, deletedSystemName, policySnapshotJson);
+        }
 
         Log.Information("MarkOrphanedMvosForDeletionAsync: Marked {Count} MVOs for deletion for Connected System {Id}", markedCount, connectedSystemId);
 
         return markedCount;
+    }
+
+    /// <summary>
+    /// Builds the serialised decision-time deletion policy snapshot (#119) for an MVO marked because its
+    /// Connected System is being deleted, mirroring the worker path's snapshot content: the rule, trigger
+    /// mode, selected sources, grace period, the deleted system as the triggering system, and the listed
+    /// sources still holding a joined CSO after the deletion. Returns null when the MVO carries no Type
+    /// (the policy facts cannot be determined).
+    /// </summary>
+    private static string? BuildMvoDeletionPolicySnapshotJson(
+        MetaverseObject mvo,
+        int deletedSystemId,
+        string deletedSystemName,
+        IReadOnlyDictionary<int, string> systemNamesById)
+    {
+        var type = mvo.Type;
+        if (type == null)
+            return null;
+
+        var snapshot = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = type.DeletionRule,
+            TriggerMode = type.DeletionTriggerMode,
+            GracePeriod = type.DeletionGracePeriod,
+            TriggeringSystemId = deletedSystemId,
+            TriggeringSystemName = deletedSystemName
+        };
+
+        foreach (var sourceSystemId in type.DeletionTriggerConnectedSystemIds ?? [])
+        {
+            snapshot.SelectedSourceSystemIds.Add(sourceSystemId);
+            snapshot.SelectedSourceSystemNames.Add(ResolveConnectedSystemName(sourceSystemId, systemNamesById));
+        }
+
+        foreach (var remainingSourceSystemId in GetRemainingConnectedSourceSystemIds(mvo, deletedSystemId))
+        {
+            snapshot.RemainingConnectedSourceSystemIds.Add(remainingSourceSystemId);
+            snapshot.RemainingConnectedSourceSystemNames.Add(ResolveConnectedSystemName(remainingSourceSystemId, systemNamesById));
+        }
+
+        return snapshot.ToJson();
+    }
+
+    /// <summary>
+    /// The listed authoritative sources that still hold a joined CSO to the MVO once the deleted system's
+    /// connections are gone, distinct and in stable order. Empty for All mode and
+    /// WhenLastConnectorDisconnected markings by construction; in Specific mode other listed sources may
+    /// legitimately remain connected.
+    /// </summary>
+    private static List<int> GetRemainingConnectedSourceSystemIds(MetaverseObject mvo, int deletedSystemId)
+    {
+        var triggerIds = mvo.Type?.DeletionTriggerConnectedSystemIds;
+        if (triggerIds == null || triggerIds.Count == 0)
+            return [];
+
+        return mvo.ConnectedSystemObjects
+            .Select(cso => cso.ConnectedSystemId)
+            .Where(id => id != deletedSystemId && triggerIds.Contains(id))
+            .Distinct()
+            .OrderBy(id => id)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Resolves a Connected System's display name from the pre-fetched name map, falling back to a stable
+    /// placeholder so marking never fails on a missing name.
+    /// </summary>
+    private static string ResolveConnectedSystemName(int connectedSystemId, IReadOnlyDictionary<int, string> systemNamesById)
+        => systemNamesById.TryGetValue(connectedSystemId, out var name)
+            ? name
+            : $"Connected System {connectedSystemId}";
+
+    /// <summary>
+    /// Counts the MVOs that <see cref="MarkOrphanedMvosForDeletionAsync"/> would mark for deletion if the
+    /// specified Connected System were deleted, using the same mode-aware predicate, for the Connected
+    /// System deletion preview (#119).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being considered for deletion.</param>
+    /// <returns>The number of MVOs that would be marked for deletion.</returns>
+    public async Task<int> GetMvosOrphanedByConnectedSystemDeletionCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
     }
 
     /// <summary>

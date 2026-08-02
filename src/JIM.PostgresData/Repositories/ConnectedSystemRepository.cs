@@ -151,6 +151,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return headers;
     }
 
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        // EF projection is fine here: a tiny table read once per operation that needs name snapshots,
+        // not a per-object hot-path query.
+        => Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Select(cs => new { cs.Id, cs.Name })
+            .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
+
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
     {
         return await Repository.Database.ConnectedSystems.Include(q => q.ConnectorDefinition).Select(cs => new ConnectedSystemHeader

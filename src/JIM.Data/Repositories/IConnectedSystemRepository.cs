@@ -691,6 +691,13 @@ public interface IConnectedSystemRepository
 
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
+
+    /// <summary>
+    /// Returns the display name of every Connected System keyed by id. A lightweight lookup for
+    /// event-time name snapshots (for example deletion policy snapshots, #119); the table is tiny, so a
+    /// single map read replaces per-system queries.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
