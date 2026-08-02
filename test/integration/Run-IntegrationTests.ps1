@@ -592,6 +592,7 @@ function Show-ScenarioMenu {
                 "*Scenario12*" { "Relative-date inbound scoping (joiner / leaver)" }
                 "*Scenario13*" { "Relative-date outbound scoping (staged provisioning)" }
                 "*Scenario14*" { "Attribute priority (multi-source winner resolution)" }
+                "*Scenario15*" { "SCIM 2.0 Client Connector (import, join, bulk export, confirm)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1215,7 +1216,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario11*",  # Scoping Criteria Matrix - bespoke deterministic seed, template informational
     "*Scenario12*",  # Relative-Date Scoping - fixed test users positioned relative to "now"
     "*Scenario13*",  # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
-    "*Scenario14*"   # Attribute Priority - fixed six-user dataset per suffix, no template scaling
+    "*Scenario14*",  # Attribute Priority - fixed six-user dataset per suffix, no template scaling
+    "*Scenario15*"   # SCIM Connector - data comes from the SCIM test provider's own seed and a bespoke CSV
 )
 
 function Test-TemplateRelevant {
@@ -2199,7 +2201,7 @@ if (-not $SkipReset) {
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
-    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap down -v --remove-orphans 2>&1 | Out-Null
+    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap --profile scim down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
@@ -2397,7 +2399,7 @@ $env:OPENLDAP_IMAGE_PRIMARY = $null
 # Check for pre-populated snapshot images (Scenario 1 / primary)
 # Note: "*Scenario1*" also substring-matches "Scenario14-...", so it must be excluded explicitly;
 # Scenario 14 is OpenLDAP only (enforced above) and has no Samba AD snapshot of its own.
-if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*") {
+if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*" -and $Scenario -notlike "*Scenario15*") {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2508,6 +2510,35 @@ else {
         exit 1
     }
     Write-Success "Samba AD Primary started"
+}
+
+# Start the SCIM test service provider if running Scenario 15. Always --build: the image is built
+# from the working tree (test/JIM.TestScimServiceProvider), and running a stale provider against
+# current connector code is exactly the masked-bug class the no-SkipBuild rule exists to prevent.
+if ($Scenario -like "*Scenario15*") {
+    Write-Step "Building and starting the SCIM test service provider..."
+    $scimProviderResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scim up -d --build 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start the SCIM test service provider"
+        Write-Host "${GRAY}$scimProviderResult${NC}"
+        exit 1
+    }
+
+    # The provider writes its self-signed certificate at startup, so the file appearing is the
+    # readiness signal that matters: the scenario cannot trust a certificate that does not exist yet.
+    Write-Step "Waiting for the SCIM test service provider's certificate..."
+    $scimCertReady = $false
+    for ($scimWait = 0; $scimWait -lt 24; $scimWait++) {
+        docker exec scim-provider test -f /certificates/scim-provider.pem 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $scimCertReady = $true; break }
+        Start-Sleep -Seconds 5
+    }
+    if (-not $scimCertReady) {
+        Write-Failure "The SCIM test service provider did not write its certificate within 120s"
+        docker logs scim-provider --tail 20 2>&1 | ForEach-Object { Write-Host "${GRAY}$_${NC}" }
+        exit 1
+    }
+    Write-Success "SCIM test service provider started"
 }
 
 # Start Scenario 2 containers if running Scenario 2
@@ -2696,7 +2727,7 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script
 # Skip when using snapshots — the snapshot already has populated data
-if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
+if ($Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario15*" -and -not $script:UsingSnapshots -and $DirectoryType -eq "SambaAD") {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)

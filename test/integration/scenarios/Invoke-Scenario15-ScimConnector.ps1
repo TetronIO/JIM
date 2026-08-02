@@ -44,6 +44,24 @@
 .PARAMETER ExpectedGroupCount
     How many groups the provider was seeded with (SCIM_GROUP_COUNT on the container).
 
+.PARAMETER ScimBaseUrl
+    The SCIM service provider's base URL. Defaults to the scim-provider container on the Docker
+    network, which is where Run-IntegrationTests.ps1 starts it; the sandbox light stack passes its
+    native address instead.
+
+.PARAMETER ScimCertificatePath
+    The provider's public certificate on the host. When omitted, it is copied out of the scim-provider
+    container, which is the containerised path; the sandbox light stack passes the file the native
+    provider wrote.
+
+.PARAMETER UseBulkOperations
+    Whether the export goes through the provider's /Bulk endpoint. On by default; set false to drive
+    the identical scenario down the per-object path.
+
+.PARAMETER SkipPopulate
+    Accepted for runner compatibility (snapshot runs pass it to every scenario); this scenario has no
+    directory to populate, so it is ignored.
+
 .PARAMETER Template
     Accepted for runner compatibility; this scenario's data comes from the provider and its own CSV.
 
@@ -72,6 +90,18 @@ param(
     [int]$ExpectedGroupCount = 2,
 
     [Parameter(Mandatory=$false)]
+    [string]$ScimBaseUrl = "https://scim-provider:5300",
+
+    [Parameter(Mandatory=$false)]
+    [string]$ScimCertificatePath,
+
+    [Parameter(Mandatory=$false)]
+    [bool]$UseBulkOperations = $true,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate,
+
+    [Parameter(Mandatory=$false)]
     [string]$Template = "Nano",
 
     [Parameter(Mandatory=$false)]
@@ -87,6 +117,7 @@ $ConfirmPreference = 'None'
 
 $null = $DirectoryConfig
 $null = $Template
+$null = $SkipPopulate
 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 
@@ -110,6 +141,32 @@ function Add-StepResult {
 }
 
 try {
+    if ($Step -eq "All") {
+        Write-TestStep "Setup" "Configuring JIM for the scenario"
+
+        if (-not $ScimCertificatePath) {
+            # The containerised provider writes its certificate inside the container; copy it out so
+            # JIM can be told to trust it. The file is written at startup, so a short wait covers a
+            # provider that is still coming up.
+            $ScimCertificatePath = Join-Path ([System.IO.Path]::GetTempPath()) "scim-provider.pem"
+            $certificateCopied = $false
+            for ($attempt = 0; $attempt -lt 12; $attempt++) {
+                docker cp scim-provider:/certificates/scim-provider.pem $ScimCertificatePath 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $ScimCertificatePath)) { $certificateCopied = $true; break }
+                Start-Sleep -Seconds 5
+            }
+            if (-not $certificateCopied) {
+                throw "Could not copy the certificate out of the scim-provider container. Is it running? (Run-IntegrationTests.ps1 starts it with the 'scim' compose profile.)"
+            }
+            Write-Host "  OK Copied the provider's certificate from the scim-provider container" -ForegroundColor Green
+        }
+
+        & "$PSScriptRoot/../Setup-Scenario15.ps1" `
+            -JIMUrl $JIMUrl -ApiKey $ApiKey `
+            -ScimBaseUrl $ScimBaseUrl -ScimCertificatePath $ScimCertificatePath `
+            -UserCount $ExpectedUserCount -UseBulkOperations $UseBulkOperations
+    }
+
     Write-TestStep "Step 0" "Connecting to JIM and resolving the Connected Systems"
 
     if (-not $ApiKey) { throw "API key required for authentication" }
