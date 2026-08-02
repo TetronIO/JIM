@@ -30,11 +30,12 @@ public class ConnectedSystemServer
 {
     private JimApplication Application { get; }
 
-    private readonly IConnectorFactory _connectorFactory = new ConnectorFactory();
+    private readonly IConnectorFactory _connectorFactory;
 
-    internal ConnectedSystemServer(JimApplication application)
+    internal ConnectedSystemServer(JimApplication application, IConnectorFactory? connectorFactory = null)
     {
         Application = application;
+        _connectorFactory = connectorFactory ?? new ConnectorFactory();
     }
 
     /// <summary>
@@ -1852,6 +1853,171 @@ public class ConnectedSystemServer
         return CreateConnector(connectedSystem) is IConnectorPasswordManagement passwordConnector
             ? passwordConnector.SupportedExpiryBehaviours
             : [];
+    }
+
+    /// <summary>
+    /// Sets the password on one account in a Connected System, at an administrator's request (issue #1121).
+    /// <para>
+    /// This is the manual counterpart to the initial password an export delivers: the account whose provisioning
+    /// password was parked, the person who never received theirs, the reset that has to happen now. It writes
+    /// straight to the target and records the attempt as an Activity; nothing is staged, retried or persisted,
+    /// because there is nowhere to keep a password and no second chance worth keeping one for.
+    /// </para>
+    /// <para>
+    /// <b>The password value goes to the Connector and nowhere else.</b> It is never logged, never written to the
+    /// Activity, and never returned. Callers must hold it no longer than the call.
+    /// </para>
+    /// <para>
+    /// This is a password-reset primitive, and JIM's Administrator role is the whole of the authorisation on it:
+    /// an administrator who can reach this can reset the password of any account in the connector space, up to
+    /// and including privileged ones, subject only to what the Connected System's own service account is
+    /// permitted to do. That is the same authority the provisioning path already exercises unattended, so it
+    /// grants nothing new; it does make the target selection a person's rather than a Synchronisation Rule's,
+    /// which is why every attempt is recorded.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the account lives in.</param>
+    /// <param name="connectedSystemObjectId">The Connected System Object to set the password on.</param>
+    /// <param name="password">The password to set. Never logged, never persisted, never returned.</param>
+    /// <param name="options">How to apply it: the expiry behaviour, and whether to enable the account.</param>
+    /// <param name="initiatedBy">The administrator making the request, for attribution on the Activity.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>
+    /// The classified outcome. A target that refuses the password is a result, not an exception: its verbatim
+    /// reason is the single most useful thing to show the administrator who has to choose another one.
+    /// </returns>
+    /// <exception cref="ArgumentException">The password is empty, or no such Connected System Object exists.</exception>
+    /// <exception cref="NotSupportedException">The Connector cannot set passwords.</exception>
+    public async Task<PasswordSetResult> SetConnectedSystemObjectPasswordAsync(
+        int connectedSystemId,
+        Guid connectedSystemObjectId,
+        string password,
+        PasswordSetOptions options,
+        MetaverseObject? initiatedBy,
+        CancellationToken cancellationToken)
+    {
+        return await SetConnectedSystemObjectPasswordCoreAsync(connectedSystemId, connectedSystemObjectId, password, options,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy), cancellationToken);
+    }
+
+    /// <summary>
+    /// Sets the password on one account in a Connected System. API-key initiator overload; see the
+    /// user-initiated overload for the behaviour and the security note.
+    /// </summary>
+    public async Task<PasswordSetResult> SetConnectedSystemObjectPasswordAsync(
+        int connectedSystemId,
+        Guid connectedSystemObjectId,
+        string password,
+        PasswordSetOptions options,
+        ApiKey initiatedByApiKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+
+        return await SetConnectedSystemObjectPasswordCoreAsync(connectedSystemId, connectedSystemObjectId, password, options,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey), cancellationToken);
+    }
+
+    private async Task<PasswordSetResult> SetConnectedSystemObjectPasswordCoreAsync(
+        int connectedSystemId,
+        Guid connectedSystemObjectId,
+        string password,
+        PasswordSetOptions options,
+        Func<Activity, Task> createActivityAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (string.IsNullOrWhiteSpace(password))
+            throw new ArgumentException("A password is required.", nameof(password));
+
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId)
+            ?? throw new ArgumentException($"Connected System {connectedSystemId} does not exist.", nameof(connectedSystemId));
+
+        var connectedSystemObject = await GetConnectedSystemObjectAsync(connectedSystemId, connectedSystemObjectId)
+            ?? throw new ArgumentException(
+                $"Connected System Object {connectedSystemObjectId} does not exist in Connected System {connectedSystemId}.",
+                nameof(connectedSystemObjectId));
+
+        // Both resolved before the Activity is created, so a Connector that cannot do this never leaves an
+        // in-flight Activity behind. Same reasoning as the hierarchy import above.
+        if (CreateConnector(connectedSystem) is not IConnectorPasswordManagement passwordConnector)
+            throw new NotSupportedException(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support setting passwords.");
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemObject.DisplayNameOrId ?? connectedSystemObjectId.ToString(),
+            TargetType = ActivityTargetType.ConnectedSystemObject,
+            TargetOperationType = ActivityTargetOperationType.SetPassword,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemObjectId = connectedSystemObjectId,
+            MetaverseObjectId = connectedSystemObject.MetaverseObjectId
+        };
+        await createActivityAsync(activity);
+
+        var result = await ApplyPasswordAsync(passwordConnector, connectedSystem, connectedSystemObject, password, options, cancellationToken);
+
+        if (result.Success)
+        {
+            // The applied behaviour, not the requested one: a target that could not honour the request says so,
+            // and recording what was asked for would misstate the account's actual state.
+            activity.Message = result.ExpiryBehaviourWarning == null
+                ? $"Password set. Expiry behaviour applied: {result.AppliedExpiryBehaviour}."
+                : $"Password set. Expiry behaviour applied: {result.AppliedExpiryBehaviour}. {result.ExpiryBehaviourWarning}";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        else
+        {
+            // Failed rather than completed: the administrator asked for a password to be set and it was not.
+            // The target's own words are kept verbatim, since why a directory refuses a password is a property
+            // of that directory's policy and is what the administrator has to act on.
+            await Application.Activities.FailActivityWithErrorAsync(activity,
+                $"The password could not be set ({result.FailureReason}): {result.ErrorMessage}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Opens the password connection, sets the password, and closes the connection whatever happens.
+    /// <para>
+    /// A connection that could not be opened, or a Connector that threw rather than classifying, is reported as
+    /// a transient failure: it says nothing about whether the password itself would be acceptable, and an
+    /// administrator's next move is to try again once the target is reachable.
+    /// </para>
+    /// </summary>
+    private static async Task<PasswordSetResult> ApplyPasswordAsync(
+        IConnectorPasswordManagement passwordConnector,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObject connectedSystemObject,
+        string password,
+        PasswordSetOptions options,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            passwordConnector.OpenPasswordConnection(connectedSystem.SettingValues);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "SetConnectedSystemObjectPasswordAsync: Could not open the password connection to Connected System {ConnectedSystemId}", connectedSystem.Id);
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+                $"JIM could not open a password connection to the Connected System: {ex.Message}");
+        }
+
+        try
+        {
+            return await passwordConnector.SetPasswordAsync(connectedSystemObject, password, options, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "SetConnectedSystemObjectPasswordAsync: The Connector threw setting a password on Connected System Object {CsoId}", connectedSystemObject.Id);
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient, ex.Message);
+        }
+        finally
+        {
+            passwordConnector.ClosePasswordConnection();
+        }
     }
 
     /// <summary>

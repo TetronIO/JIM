@@ -44,6 +44,7 @@
         'Approve-JIMConnectedSystemServerCertificate',
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
+        'Set-JIMConnectedSystemObjectPassword',
         'Set-JIMConnectedSystemAttribute',
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',

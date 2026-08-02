@@ -12,6 +12,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -99,6 +100,16 @@
                         @ConnectedSystemObject.JoinType
                     </MudChip>
                 </MudStack>
+            }
+
+            @* Offered only where the Connector can actually set a password, so the action is never presented *@
+            @* against a Connected System that could not carry it out (issue #1121).                          *@
+            @if (_supportedExpiryBehaviours.Count > 0)
+            {
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
+                           data-testid="jim-cso-set-password">Set Password</MudButton>
             }
         </MudStack>
 
@@ -307,6 +318,9 @@
 </LoadingGate>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = null!;
+
     /// <summary>
     /// Connected System ID.
     /// </summary>
@@ -351,6 +365,68 @@
 
     private bool _dense;
     private bool _preferencesLoaded;
+
+    // What the Connector can do with a password, and the generator settings a Generate in the dialog should
+    // follow. Read once with the rest of the page rather than when the dialog opens, so the Set Password action
+    // is either offered or not rather than appearing and then turning out to be unavailable.
+    private IReadOnlyCollection<PasswordExpiryBehaviour> _supportedExpiryBehaviours = [];
+    private PasswordGenerationPolicy _passwordGenerationPolicy = new();
+
+    /// <summary>
+    /// Opens the set-password dialog for this account (issue #1121).
+    /// <para>
+    /// Generation and the set itself are passed in as delegates rather than letting the dialog reach the
+    /// application layer, so the dialog stays a piece of user interface with no knowledge of how JIM talks to a
+    /// Connected System, and so the password it holds never travels further than these two calls.
+    /// </para>
+    /// </summary>
+    private async Task OpenSetPasswordDialogAsync()
+    {
+        if (ConnectedSystemObject == null || ConnectedSystemHeader == null)
+            return;
+
+        var connectedSystemObjectId = ConnectedSystemObject.Id;
+        var parameters = new DialogParameters<SetPasswordDialog>
+        {
+            { x => x.ObjectName, GetDisplayIdentifier() },
+            { x => x.ConnectedSystemName, ConnectedSystemHeader.Name },
+            { x => x.SupportedExpiryBehaviours, _supportedExpiryBehaviours },
+            { x => x.GeneratePassword, GeneratePassword },
+            { x => x.SetPassword, (password, options) => SetPasswordAsync(connectedSystemObjectId, password, options) }
+        };
+
+        await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
+            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
+    private string GeneratePassword()
+    {
+        using var jim = JimFactory.Create();
+        return jim.PasswordGenerator.Generate(_passwordGenerationPolicy);
+    }
+
+    private async Task<PasswordSetResult> SetPasswordAsync(Guid connectedSystemObjectId, string password, PasswordSetOptions options)
+    {
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+        try
+        {
+            return await jim.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(
+                CsId, connectedSystemObjectId, password, options, user, CancellationToken.None);
+        }
+        catch (NotSupportedException ex)
+        {
+            // Only reachable if the Connector's capability changed between the page loading and the dialog being
+            // submitted, since the action is not offered otherwise. Reported rather than thrown so the dialog
+            // shows it in place, as it does every other reason a password did not land.
+            return PasswordSetResult.Failed(PasswordSetFailureReason.UnsupportedOperation, ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound, ex.Message);
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -412,6 +488,15 @@
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
+
+        _supportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(CsId);
+        if (_supportedExpiryBehaviours.Count > 0)
+        {
+            // Derived from what JIM last discovered on the target, so a generated password satisfies the
+            // directory's own rules without an administrator retyping them.
+            var discoveredPolicy = await jim.ConnectedSystems.GetPasswordPolicyAsync(CsId);
+            _passwordGenerationPolicy = jim.PasswordGenerator.DeriveFrom(discoveredPolicy);
+        }
 
         // Fetch Pending Export header (without loading all attribute value changes) for this CSO
         var pendingExportResult = await jim.ConnectedSystems.GetPendingExportHeaderForObjectAsync(connectedSystemObjectId);

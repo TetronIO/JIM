@@ -37,5 +37,11 @@ public enum ActivityTargetOperationType
     /// An authentication event (interactive sign-in or API key authentication); used with
     /// <see cref="ActivityTargetType.Authentication"/> security audit event Activities.
     /// </summary>
-    Authenticate = 10
+    Authenticate = 10,
+    /// <summary>
+    /// Sets the password on a single Connected System Object. Used with
+    /// <see cref="ActivityTargetType.ConnectedSystemObject"/>. The Activity records that a password was set and
+    /// what the target said about it, never the password itself.
+    /// </summary>
+    SetPassword = 11
 }

@@ -49,6 +49,10 @@
                             @* Schema and hierarchy imports deep-link to the tab that shows their subject. *@
                             <MudLink Href="@connectedSystemHref">@_activity.TargetName</MudLink>
                             break;
+                        case ActivityTargetType.ConnectedSystemObject when Helpers.GetConnectedSystemObjectActivityHref(_activity.ConnectedSystemId, _activity.ConnectedSystemObjectId) is { } csoHref:
+                            @* An operation performed on the account itself (a password set); link to the object in the connector space. *@
+                            <MudLink Href="@csoHref">@_activity.TargetName</MudLink>
+                            break;
                         case ActivityTargetType.ConnectedSystemRunProfile when _connectedSystemHeader != null:
                             <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/?t=run-profiles")">@_connectedSystemHeader.Name / @_activity.TargetName</MudLink>
                             break;

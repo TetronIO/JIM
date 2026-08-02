@@ -141,6 +141,31 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 !!! note "The reset rights check needs somewhere to look"
     Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
 
+### Setting the password on one account
+
+Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. This writes the password straight to the Connected System: it is not staged as a Pending Export, not retried, and not stored anywhere in JIM.
+
+Use it for the account whose provisioning password was refused, the person who never received theirs, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
+
+The dialog is built around one rule: **the password is masked from the moment it is generated, and copying it does not require showing it.**
+
+- **Generate** produces a password satisfying the discovered policy, and puts it straight behind a mask.
+- **Copy** works while the value is masked, so handing a password to the person who needs it never means putting it on a screen somebody else can read.
+- **Reveal** is the secondary action, for reading a password aloud or checking a transcription. It hides itself again after thirty seconds.
+- You can type your own password instead of generating one.
+
+Choose what happens to the password once it is set (requiring a change at the next sign-in is the default, and the right one for a password somebody else chose), and whether to enable the account at the same time. Leaving the enable switch off leaves the account's enabled state exactly as it was, which is what a reset on a working account should do.
+
+A Connected System that refuses the password says why, and the dialog stays open carrying its own words so you can try another one. Every attempt is recorded as an Activity against the object, whether it succeeded or not; the Activity records that a password was set, never the password.
+
+!!! warning "This is a password-reset primitive"
+    Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
+
+!!! note "Copying and your operating system's clipboard"
+    Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
+
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, with one difference: you supply the password there rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one.
+
 ## Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
