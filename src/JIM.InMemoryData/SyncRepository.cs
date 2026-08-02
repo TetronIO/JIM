@@ -1669,6 +1669,9 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        => Task.FromResult(_connectedSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Name));
+
     #endregion
 
     #region Settings

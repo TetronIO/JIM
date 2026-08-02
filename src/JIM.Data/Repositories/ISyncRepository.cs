@@ -669,6 +669,13 @@ public interface ISyncRepository
     /// </summary>
     Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
+    /// <summary>
+    /// Gets the id-to-display-name map of every Connected System. Used to resolve source system names
+    /// for decision-time deletion policy snapshots (#119): a tiny table fetched at most once per run
+    /// profile execution and cached by the caller, never per Metaverse Object.
+    /// </summary>
+    Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
+
     #endregion
 
     #region Change Tracker Management

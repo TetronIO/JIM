@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace JIM.Models.Sync;
 
@@ -16,6 +18,16 @@ namespace JIM.Models.Sync;
 /// </summary>
 public class MvoDeletionPolicySnapshot
 {
+    // Follows the established stored-JSON conventions (ConfigurationSnapshotService, ActivityErrorDetail):
+    // camelCase properties, string enum values so the stored document stays self-describing, nulls omitted.
+    private static readonly JsonSerializerOptions SerialiserOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() },
+        WriteIndented = false
+    };
+
     /// <summary>
     /// The deletion rule in force at decision time.
     /// </summary>
@@ -66,4 +78,28 @@ public class MvoDeletionPolicySnapshot
     /// <see cref="RemainingConnectedSourceSystemIds"/>.
     /// </summary>
     public List<string> RemainingConnectedSourceSystemNames { get; set; } = new();
+
+    /// <summary>
+    /// Serialises this snapshot to the JSON document stored on the decision record.
+    /// </summary>
+    public string ToJson() => JsonSerializer.Serialize(this, SerialiserOptions);
+
+    /// <summary>
+    /// Reads back a snapshot written by <see cref="ToJson"/>. Returns null when the value is absent or no
+    /// longer parses, so a rendering caller can fall back to current configuration rather than failing.
+    /// </summary>
+    public static MvoDeletionPolicySnapshot? FromJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<MvoDeletionPolicySnapshot>(json, SerialiserOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }
