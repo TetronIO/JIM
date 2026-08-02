@@ -105,6 +105,11 @@
             <MudText Typo="Typo.button">Status</MudText>
         </MudTh>
         <MudTh>
+            <MudTooltip Text="The Connected System whose disconnection triggered the scheduled deletion" Arrow="true" Placement="Placement.Top">
+                <MudText Typo="Typo.button">Triggered By</MudText>
+            </MudTooltip>
+        </MudTh>
+        <MudTh>
             <MudTableSortLabel SortLabel="disconnected" T="PendingDeletionItem" InitialDirection="SortDirection.Ascending">
                 <MudText Typo="Typo.button">Disconnected</MudText>
             </MudTableSortLabel>
@@ -143,6 +148,16 @@
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                     Ready
                 </MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Triggered By">
+            @if (string.IsNullOrEmpty(context.TriggeredBySystemName))
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                @context.TriggeredBySystemName
             }
         </MudTd>
         <MudTd DataLabel="Disconnected">@context.LastConnectorDisconnectedDate.ToFriendlyDate()</MudTd>
@@ -300,7 +315,8 @@
                     ? (int)Math.Ceiling((mvo.DeletionEligibleDate.Value - DateTime.UtcNow).TotalDays)
                     : (int?)null,
                 GracePeriod = mvo.Type?.DeletionGracePeriod,
-                ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0
+                ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0,
+                TriggeredBySystemName = mvo.DeletionTriggeredBySystemName
             }).ToList();
 
             return new TableData<PendingDeletionItem>
@@ -347,5 +363,11 @@
         public int? DaysUntilDeletion { get; set; }
         public TimeSpan? GracePeriod { get; set; }
         public int ConnectorCount { get; set; }
+
+        /// <summary>
+        /// The name of the Connected System whose disconnection triggered the scheduled deletion (#119).
+        /// Null for deletions scheduled before trigger recording shipped.
+        /// </summary>
+        public string? TriggeredBySystemName { get; set; }
     }
 }

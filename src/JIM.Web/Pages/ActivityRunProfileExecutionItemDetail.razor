@@ -6,6 +6,7 @@
 @using JIM.Models.Enums;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Sync
 @using JIM.Models.Transactional
 @using JIM.Utilities;
 @inject IJimApplicationFactory JimFactory
@@ -578,27 +579,35 @@
                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
                         <MudText Typo="Typo.body1">
                             <strong>The Metaverse Object was not deleted.</strong>
-                            @switch (_metaverseObjectType?.DeletionRule)
+                            @if (_deletionPolicySnapshot != null)
                             {
-                                case MetaverseObjectDeletionRule.Manual:
-                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong>; automatic deletion is disabled.</text>
-                                    break;
-                                case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
-                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other Connected Systems still have active connectors to this Metaverse Object.</text>
-                                    break;
-                                case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
-                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires an <strong>authoritative source</strong> to disconnect.</text>
-                                    @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
-                                         && !_deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
-                                    {
-                                        <text> <strong>@_connectedSystemHeader.Name</strong> is not configured as an authoritative source.</text>
-                                    }
-                                    break;
-                                default:
-                                    <text>The deletion rule did not apply for this disconnection.</text>
-                                    break;
+                                @* Decision-time snapshot (#119): explain from the recorded policy, no caveat needed *@
+                                <DeletionNotTriggeredExplanation Snapshot="_deletionPolicySnapshot" ObjectTypeName="@_metaverseObjectType?.Name" />
                             }
-                            <text> This explanation reflects the current deletion rule configuration, which may have changed since this Activity ran.</text>
+                            else
+                            {
+                                @switch (_metaverseObjectType?.DeletionRule)
+                                {
+                                    case MetaverseObjectDeletionRule.Manual:
+                                        <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong>; automatic deletion is disabled.</text>
+                                        break;
+                                    case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                                        <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other Connected Systems still have active connectors to this Metaverse Object.</text>
+                                        break;
+                                    case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                                        <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires an <strong>authoritative source</strong> to disconnect.</text>
+                                        @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
+                                             && !_deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
+                                        {
+                                            <text> <strong>@_connectedSystemHeader.Name</strong> is not configured as an authoritative source.</text>
+                                        }
+                                        break;
+                                    default:
+                                        <text>The deletion rule did not apply for this disconnection.</text>
+                                        break;
+                                }
+                                <text> This explanation reflects the current deletion rule configuration, which may have changed since this Activity ran.</text>
+                            }
                         </MudText>
                     </MudStack>
                 </MudAlert>
@@ -629,7 +638,14 @@
                     </MudAlert>
                 }
 
-                @* Show concrete deletion rule based on object type configuration *@
+                @if (_deletionPolicySnapshot != null)
+                {
+                    @* Decision-time snapshot (#119): render the policy recorded when the decision was made *@
+                    <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot" ObjectTypeName="@_metaverseObjectType.Name" />
+                }
+                else
+                {
+                @* Legacy record without a snapshot: show the object type's current configuration, with caveat *@
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                     <MudStack Spacing="2">
                         <MudText Typo="Typo.body2">
@@ -724,6 +740,7 @@
                                         </MudText>
                                     </MudStack>
                                 </MudAlert>
+                                }
                         }
 else
                         {
@@ -749,7 +766,7 @@ else
                                     </MudText>
                                 </MudAlert>
                             }
-                            else
+                            else if (_deletionPolicySnapshot == null)
                             {
                                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                                     <MudText Typo="Typo.body1">
@@ -757,6 +774,13 @@ else
                                         the metaverse. The Metaverse Object deletion rule for this object type determines what happens next.
                                     </MudText>
                                 </MudAlert>
+                            }
+
+                            @* Even without a resolvable object type, a decision-time snapshot (#119) can
+                               still explain the deletion policy that was in force *@
+                            @if (_deletionPolicySnapshot != null)
+                            {
+                                <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot" />
                             }
                         }
                     }
@@ -1028,6 +1052,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
+    // Decision-time deletion policy snapshot (#119): when present, the deletion rule context panels render
+    // from the facts recorded when the decision was made rather than the object type's current
+    // configuration, so the explanation stays accurate after an administrator edits the rule.
+    private MvoDeletionPolicySnapshot? _deletionPolicySnapshot;
+
 
     private string GetMvoHref(Guid mvoId) =>
         _metaverseObjectType != null
@@ -1083,6 +1112,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         }
 
         _activity = await jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
+
+        // Parse the decision-time deletion policy snapshot (#119); null for legacy records (which fall
+        // back to current-configuration rendering) and for items with no deletion rule evaluation.
+        _deletionPolicySnapshot = MvoDeletionPolicySnapshot.FromJson(_activityRunProfileExecutionItem.DeletionPolicySnapshotJson);
 
         if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedById: { } initiatedById })
             _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(initiatedById);
@@ -1198,8 +1231,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             {
                 _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
 
-                // For deletion/disconnection items, load authoritative source names for deletion rule display
-                if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected
+                // For deletion/disconnection items, load authoritative source names for deletion rule display.
+                // Skipped when a decision-time policy snapshot is present (#119): the snapshot supplies the
+                // source names, so the live lookup would be wasted round trips.
+                if (_deletionPolicySnapshot == null
+                    && _activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected
                     && _metaverseObjectType?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
                     && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
                 {

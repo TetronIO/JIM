@@ -65,6 +65,7 @@ public class MetaverseRepository : IMetaverseRepository
             Icon = t.Icon,
             HasPredefinedSearches = t.PredefinedSearches.Count > 0,
             DeletionRule = t.DeletionRule,
+            DeletionTriggerMode = t.DeletionTriggerMode,
             DeletionGracePeriod = t.DeletionGracePeriod
         }).ToListAsync();
 
