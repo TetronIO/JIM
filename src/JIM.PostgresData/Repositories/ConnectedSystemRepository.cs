@@ -548,17 +548,35 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Reconciles the attributes of a tracked object type against the supplied (detached) object type:
-    /// existing attributes (matched by Id) have their scalar values updated; new attributes (Id == 0) are
-    /// inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
+    /// existing attributes (matched by Name) have their scalar values updated; new attributes (no matching Name)
+    /// are inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
     /// </summary>
+    /// <remarks>
+    /// Matches by Name rather than Id, mirroring <c>ConnectedSystemServer.MergeSchemaIntoConnectedSystem</c>, which
+    /// already treats Name as an attribute's stable identity during a schema refresh; new attributes only ever
+    /// carry Id == 0 until <see cref="Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(System.Threading.CancellationToken)"/>
+    /// assigns one. Matching on Id let two new attributes on the same tracked object type collide: EF Core's
+    /// navigation fixup adds each newly <c>Add()</c>-ed attribute into <c>trackedType.Attributes</c> immediately
+    /// (before the object type's own reconciliation loop has advanced), so if the same tracked object type is
+    /// reconciled more than once in a pass (see #1171: <c>ConnectedSystem.ObjectTypes</c> containing two entries
+    /// that resolve to the same existing object type), a later call's <c>ToDictionary(a => a.Id)</c> found two
+    /// attributes still sitting at Id == 0 and threw "An item with the same key has already been added. Key: 0".
+    /// Name has no such collision: it is unique per object type by construction of the incoming schema, and
+    /// re-reconciling an already-pending new attribute now updates it in place instead of colliding or duplicating.
+    /// </remarks>
     private void ReconcileAttributes(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
     {
-        var trackedById = trackedType.Attributes.ToDictionary(a => a.Id);
+        var trackedByName = trackedType.Attributes.ToDictionary(a => a.Name);
 
         foreach (var incomingAttribute in incomingType.Attributes)
         {
-            if (incomingAttribute.Id != 0 && trackedById.TryGetValue(incomingAttribute.Id, out var trackedAttribute))
+            if (trackedByName.TryGetValue(incomingAttribute.Name, out var trackedAttribute))
             {
+                // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
+                // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
+                // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
+                // Id == 0), so align the key first; when they already match this is a no-op.
+                incomingAttribute.Id = trackedAttribute.Id;
                 Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
             }
             else
@@ -569,6 +587,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 incomingAttribute.Id = 0;
                 incomingAttribute.ConnectedSystemObjectType = trackedType;
                 Repository.Database.ConnectedSystemAttributes.Add(incomingAttribute);
+
+                // Keep the lookup consistent with trackedType.Attributes for the rest of THIS call: EF's
+                // navigation fixup already added incomingAttribute into that collection (see remarks above), so
+                // mirroring it here means a later duplicate Name within the same incoming list updates the
+                // pending attribute instead of being added twice.
+                trackedByName[incomingAttribute.Name] = incomingAttribute;
             }
         }
     }

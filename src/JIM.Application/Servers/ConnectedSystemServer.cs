@@ -1405,6 +1405,12 @@ public class ConnectedSystemServer
         }
         catch (Exception ex)
         {
+            // Discard whatever the aborted merge left staged on the shared DbContext before recording the
+            // failure: FailActivityWithErrorAsync saves on that same context, and without this it flushed
+            // the half-merged schema alongside the Activity's failure row, so a failed import both
+            // reported an error AND partially applied (found via #1171). The Activity write survives the
+            // cleared tracker by design: UpdateActivityAsync attaches detach-safe.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
@@ -1453,6 +1459,8 @@ public class ConnectedSystemServer
         }
         catch (Exception ex)
         {
+            // Discard staged schema changes before recording the failure: see the user-initiated overload above.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
