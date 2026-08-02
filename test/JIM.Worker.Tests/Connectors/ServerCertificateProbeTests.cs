@@ -135,6 +135,39 @@ public class ServerCertificateProbeTests
     }
 
     [Test]
+    public void Probe_WhenTheServerSendsItsIssuer_ReportsTheIssuerAsSomethingThatCanBeTrusted()
+    {
+        var diagnostic = Probe(_host, _port);
+
+        Assert.That(diagnostic, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            // The test servers are issued by a certificate authority they send alongside their own certificate,
+            // which is what lets an administrator trust the authority instead of repeating this at every renewal.
+            Assert.That(diagnostic!.IsSelfSigned, Is.False);
+            Assert.That(diagnostic!.IsIssuerCertificateAvailable, Is.True);
+            Assert.That(diagnostic!.IssuerThumbprint, Is.Not.EqualTo(diagnostic!.Thumbprint));
+        });
+    }
+
+    [Test]
+    public void Read_ReturnsTheCertificatesThemselvesSoTheyCanBeTrusted()
+    {
+        var reading = ServerCertificateProbe.Read(_host, _port, [], TimeSpan.FromSeconds(10), _logger);
+
+        Assert.That(reading, Is.Not.Null);
+        Assert.That(reading!.Chain, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(reading!.Chain!.Leaf.Thumbprint, Is.EqualTo(reading!.Diagnostic.Thumbprint));
+            Assert.That(reading!.Chain!.Leaf.Data, Is.Not.Empty);
+            Assert.That(reading!.Chain!.Issuer, Is.Not.Null);
+            Assert.That(reading!.Chain!.Issuer!.Data, Is.Not.Empty);
+            Assert.That(reading!.Chain!.Issuer!.Thumbprint, Is.EqualTo(reading!.Diagnostic.IssuerThumbprint));
+        });
+    }
+
+    [Test]
     public void Probe_WithTheJimCertificateStoreSupplied_FindsNothingWrong()
     {
         var diagnostic = Probe(_host, _port, TrustedCertificates());

@@ -23,6 +23,7 @@ public class ActivityProgressReadTests
     private Guid _otherActivityId;
     private List<Activity> _activities = null!;
     private List<ActivityStatCounter> _counters = null!;
+    private List<ActivityPhase> _phases = null!;
 
     [SetUp]
     public void SetUp()
@@ -73,7 +74,26 @@ public class ActivityProgressReadTests
             // Another Activity's counters must not bleed into this Activity's progress.
             NewCounter(_otherActivityId, ActivityStatDimension.ObjectChangeType, (int)ObjectChangeType.Added, 999)
         ];
+
+        _phases =
+        [
+            NewPhase(_activityId, 1, RunPhaseKeys.ImportConnect, "Connecting to Connected System", ActivityPhaseStatus.Completed),
+            NewPhase(_activityId, 0, RunPhaseKeys.ImportFetch, "Importing objects", ActivityPhaseStatus.Active),
+            NewPhase(_activityId, 2, RunPhaseKeys.ImportSave, "Saving changes", ActivityPhaseStatus.Pending),
+            // Another Activity's steps must not bleed into this Activity's progress.
+            NewPhase(_otherActivityId, 0, RunPhaseKeys.ExportPrepare, "Preparing export", ActivityPhaseStatus.Active)
+        ];
     }
+
+    private static ActivityPhase NewPhase(Guid activityId, int order, string key, string name, ActivityPhaseStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        ActivityId = activityId,
+        Order = order,
+        Key = key,
+        Name = name,
+        Status = status
+    };
 
     private static ActivityStatCounter NewCounter(Guid activityId, ActivityStatDimension dimension, int key, long count) => new()
     {
@@ -88,6 +108,7 @@ public class ActivityProgressReadTests
         var mockDbContext = new Mock<JimDbContext>();
         mockDbContext.Setup(db => db.Activities).Returns(_activities.BuildMockDbSet().Object);
         mockDbContext.Setup(db => db.ActivityStatCounters).Returns(_counters.BuildMockDbSet().Object);
+        mockDbContext.Setup(db => db.ActivityPhases).Returns(_phases.BuildMockDbSet().Object);
         return new JimApplication(new PostgresDataRepository(mockDbContext.Object));
     }
 
@@ -157,5 +178,46 @@ public class ActivityProgressReadTests
 
         Assert.That(progress, Is.Not.Null);
         Assert.That(progress!.Executed, Is.Null);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_ActivityWithPhases_ReturnsThemInRunOrderAsync()
+    {
+        // The progress read is the one call the portal, the API and PowerShell all make while a run
+        // executes, so the run's steps travel with it rather than needing a second round trip (#454).
+        using var jim = BuildApplication();
+
+        var progress = await jim.Activities.GetActivityProgressAsync(_activityId);
+
+        Assert.That(progress, Is.Not.Null);
+        Assert.That(progress!.Phases.Select(p => p.Key), Is.EqualTo(new[]
+        {
+            RunPhaseKeys.ImportFetch,
+            RunPhaseKeys.ImportConnect,
+            RunPhaseKeys.ImportSave
+        }), "Steps must read in run order, not the order the rows happen to come back in");
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_ActivityWithPhases_ExposesTheStepCurrentlyRunningAsync()
+    {
+        using var jim = BuildApplication();
+
+        var progress = await jim.Activities.GetActivityProgressAsync(_activityId);
+
+        Assert.That(progress, Is.Not.Null);
+        Assert.That(progress!.CurrentPhase, Is.Not.Null);
+        Assert.That(progress!.CurrentPhase!.Key, Is.EqualTo(RunPhaseKeys.ImportFetch));
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_AnotherActivitysPhases_DoNotBleedInAsync()
+    {
+        using var jim = BuildApplication();
+
+        var progress = await jim.Activities.GetActivityProgressAsync(_activityId);
+
+        Assert.That(progress, Is.Not.Null);
+        Assert.That(progress!.Phases.Any(p => p.Key == RunPhaseKeys.ExportPrepare), Is.False);
     }
 }

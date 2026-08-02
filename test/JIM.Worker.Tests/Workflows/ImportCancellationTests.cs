@@ -200,8 +200,8 @@ public class ImportCancellationTests : WorkflowTestBase
             _onPageReturned = onPageReturned;
         }
 
-        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger) { }
-        public void CloseImportConnection() { }
+        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) { }
+        public string? CloseImportConnection() => null;
 
         public Task<ConnectedSystemImportResult> ImportAsync(
             ConnectedSystem connectedSystem,
@@ -210,7 +210,7 @@ public class ImportCancellationTests : WorkflowTestBase
             string? persistedConnectorData,
             ILogger logger,
             CancellationToken cancellationToken,
-            Func<string, Task>? progressCallback = null)
+            IConnectorProgress progress)
         {
             // Determine current page from pagination tokens
             var currentPage = paginationTokens.Count == 0 ? 1 :

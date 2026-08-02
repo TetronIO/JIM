@@ -187,7 +187,9 @@
                 </MudItem>
             }
 
-            @if (!string.IsNullOrEmpty(_activity.Message))
+            @* While a run is in flight the message is live progress narration, and it belongs with
+               the step it describes rather than repeated in the summary. *@
+            @if (!string.IsNullOrEmpty(_activity.Message) && _activity.Status != ActivityStatus.InProgress)
             {
                 <MudItem xs="12">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Message:</MudText>
@@ -197,45 +199,62 @@
         </MudGrid>
     </MudPaper>
 
-    @if (_activity.Status == ActivityStatus.InProgress)
+    @* Where the run has got to: the steps (#454), and how far through the running step it is. One
+       panel, because they answer the same question at two resolutions. The steps outlive the run;
+       the counters below them only exist while it is in flight. *@
+    @if (_phases.Count > 0 || _activity.Status == ActivityStatus.InProgress)
     {
-        var progress = _activity.ObjectsToProcess > 0
-            ? (double)_activity.ObjectsProcessed / _activity.ObjectsToProcess * 100
-            : 0;
-        var isIndeterminate = _activity.ObjectsToProcess == 0;
-
         <MudPaper Class="pa-4 mt-6" Outlined="true">
-            <MudStack Spacing="2">
-                @if (!string.IsNullOrEmpty(_activity.Message))
-                {
-                    <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
-                }
-                @if (isIndeterminate)
-                {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" />
-                }
-                else
-                {
-                    <MudProgressLinear Value="@progress" Color="Color.Primary" Rounded="true" Size="Size.Large" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        @_activity.ObjectsProcessed.ToString("N0") of @_activity.ObjectsToProcess.ToString("N0") objects
-                        (@progress.ToString("F1")%)
-                    </MudText>
-                }
-                @* Throughput and ETA (issue #202), derived from successive progress samples. *@
-                @if (_etaEstimate.ObjectsPerSecond.HasValue)
-                {
-                    var objectsPerSecond = _etaEstimate.ObjectsPerSecond.Value;
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        @if (_etaEstimate.EstimatedSecondsRemaining.HasValue)
-                        {
-                            var remaining = TimeSpan.FromSeconds(Math.Round(_etaEstimate.EstimatedSecondsRemaining.Value));
-                            <span>About @remaining.ToAbbreviatedString() remaining; </span>
-                        }
-                        <span>@FormatRate(objectsPerSecond) objects/second</span>
-                    </MudText>
-                }
-            </MudStack>
+            <MudText Typo="Typo.h5" Class="mb-4">Progress</MudText>
+
+            @if (_phases.Count > 0)
+            {
+                <RunPhaseStepper Phases="_phases"
+                                 Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)"
+                                 StepProgress="@StepProgressFraction" />
+            }
+
+            @if (_activity.Status == ActivityStatus.InProgress)
+            {
+                var progress = _activity.ObjectsToProcess > 0
+                    ? (double)_activity.ObjectsProcessed / _activity.ObjectsToProcess * 100
+                    : 0;
+                var isIndeterminate = _activity.ObjectsToProcess == 0;
+
+                <MudStack Spacing="2" Class="@(_phases.Count > 0 ? "mt-3" : "")">
+                    @* With steps, the message rides with the step it describes; without them there is
+                       nowhere else for it to go. *@
+                    @if (_phases.Count == 0 && !string.IsNullOrEmpty(_activity.Message))
+                    {
+                        <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
+                    }
+                    @if (isIndeterminate)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" />
+                    }
+                    else
+                    {
+                        <MudProgressLinear Value="@progress" Color="Color.Primary" Rounded="true" Size="Size.Large" />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @_activity.ObjectsProcessed.ToString("N0") of @_activity.ObjectsToProcess.ToString("N0") objects
+                            (@progress.ToString("F1")%)
+                        </MudText>
+                    }
+                    @* Throughput and ETA (issue #202), derived from successive progress samples. *@
+                    @if (_etaEstimate.ObjectsPerSecond.HasValue)
+                    {
+                        var objectsPerSecond = _etaEstimate.ObjectsPerSecond.Value;
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @if (_etaEstimate.EstimatedSecondsRemaining.HasValue)
+                            {
+                                var remaining = TimeSpan.FromSeconds(Math.Round(_etaEstimate.EstimatedSecondsRemaining.Value));
+                                <span>About @remaining.ToAbbreviatedString() remaining; </span>
+                            }
+                            <span>@FormatRate(objectsPerSecond) objects/second</span>
+                        </MudText>
+                    }
+                </MudStack>
+            }
         </MudPaper>
     }
 
@@ -262,7 +281,13 @@
            the directory by a different name. *@
         @if (_serverCertificate != null)
         {
-            <ServerCertificateCard Diagnostic="_serverCertificate" />
+            @* The action is offered from a historical Activity too. It is safe to do so because the certificate is
+               read from the server again at the moment of the decision: a week-old Activity whose server has since
+               changed certificate stops the action rather than trusting the newer one unseen. *@
+            <ServerCertificateCard Diagnostic="_serverCertificate"
+                                   ConnectedSystemId="@_activity.ConnectedSystemId"
+                                   ConnectedSystemName="@_connectedSystemHeader?.Name"
+                                   OnTrusted="ReloadAfterTrustingCertificateAsync" />
         }
     }
 
@@ -932,6 +957,21 @@
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
+
+    /// <summary>
+    /// The steps of this Run Profile execution (#454), refreshed alongside the Activity so the
+    /// stepper tracks the run live and still reads correctly on a page opened after it finished.
+    /// </summary>
+    private IReadOnlyList<ActivityPhase> _phases = [];
+
+    /// <summary>
+    /// How far through its own work the running step is, 0 to 1, or null when it counts nothing it
+    /// can report. Fills the stepper's connector so the rail reads as one progress bar across the
+    /// whole run.
+    /// </summary>
+    private double? StepProgressFraction => _activity is { Status: ActivityStatus.InProgress, ObjectsToProcess: > 0 }
+        ? Math.Clamp((double)_activity.ObjectsProcessed / _activity.ObjectsToProcess, 0d, 1d)
+        : null;
     private string _searchString = "";
     private bool _loading;
     private int _rowsPerPage = 10;
@@ -1049,7 +1089,10 @@
             _parentActivity = await jim.Activities.GetActivityAsync(_activity.ParentActivityId.Value);
 
         if (ShowsExecutionItems)
+        {
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+            _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
+        }
 
         // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
         _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
@@ -1539,7 +1582,10 @@
             // Refresh child activities and stats alongside the activity itself
             _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([updated.Id])).GetValueOrDefault(updated.Id);
             if (ShowsExecutionItems)
+            {
                 _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(updated.Id);
+                _phases = await jim.Activities.GetActivityPhasesAsync(updated.Id);
+            }
 
             await InvokeAsync(StateHasChanged);
 
@@ -1556,6 +1602,17 @@
         {
             _refreshLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Takes the administrator to the Connected System's settings once they have trusted the certificate, which is
+    /// where they can re-run the connection test. An Activity cannot re-run one itself, and leaving them on a
+    /// finished failure with no next step is the gap this whole action exists to close.
+    /// </summary>
+    private void ReloadAfterTrustingCertificateAsync()
+    {
+        if (_activity?.ConnectedSystemId is { } connectedSystemId)
+            NavManager.NavigateTo($"/admin/connected-systems/{connectedSystemId}/?t=settings");
     }
 
     /// <summary>

@@ -2,7 +2,16 @@
 
 > Design note for a standardised sub-phase progress capability across all connector interaction interfaces. Captured ahead of implementation so future PRs have a shared reference.
 
-## Status: Implemented (2026-07-30)
+## Status: Superseded (2026-08-01)
+
+Superseded by [`RUN_PROFILE_PHASES.md`](RUN_PROFILE_PHASES.md) (#454), which keeps this design's principles (connector-defined vocabulary, symmetric across the four interaction interfaces, narration must never fail a run) and adds the step model around them. Two things changed:
+
+- The `Func<string, Task>?` callback became `IConnectorProgress`, always supplied, with `EnterPhaseAsync` alongside `ReportAsync`. A plain string could not carry which step a Connector had moved to.
+- Connectors now declare their phases up-front through `IConnectorPhases`, so their internal work shows as steps with an end in sight rather than only as a message that changes.
+
+The rest of this note is retained as the record of what shipped for #637 and why.
+
+## Status when written: Implemented (2026-07-30)
 
 Implemented under [#637](https://github.com/TetronIO/JIM/issues/637). The design below is what shipped, with these deviations, each explained where it appears:
 
