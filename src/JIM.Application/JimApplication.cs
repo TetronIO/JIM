@@ -67,6 +67,14 @@ public class JimApplication : IDisposable
     public DriftDetectionService DriftDetection { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
+    public InitialPasswordDeliveryServer InitialPasswords { get; }
+
+    /// <summary>
+    /// Generates initial passwords, and tells an administrator in advance what a configuration would produce.
+    /// Exposed on the facade because the Synchronisation Rule editor assesses a configuration as it is typed,
+    /// and the administrator's set-password dialog generates on demand.
+    /// </summary>
+    public IPasswordGeneratorService PasswordGenerator { get; }
     public ScopingEvaluationServer ScopingEvaluation { get; }
     public ScopeReconciliationServer ScopeReconciliation { get; }
     public FileSystemServer FileSystem { get; }
@@ -98,6 +106,8 @@ public class JimApplication : IDisposable
                                      // Bootstrap calls (SSO init, auth) don't use SyncRepo.
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
+        PasswordGenerator = new PasswordGeneratorService();
+        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator);
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);
