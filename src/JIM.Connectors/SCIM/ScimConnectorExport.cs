@@ -21,80 +21,182 @@ namespace JIM.Connectors.SCIM;
 /// an outcome with the change that produced it. A failure is a per-object result rather than an
 /// exception, so one rejected object does not abandon the rest of the batch.
 /// </para>
+/// <para>
+/// Every change is composed into a <see cref="ScimExportOperation"/> first and dispatched second, so
+/// the payload a provider receives is identical whether it arrives on its own or inside a bulk request.
+/// </para>
 /// </summary>
 internal sealed class ScimConnectorExport
 {
     private readonly ScimHttpClient _client;
     private readonly ScimDiscoveryResult _discovery;
     private readonly ILogger _logger;
+    private readonly ScimBulkExporter? _bulkExporter;
 
-    public ScimConnectorExport(ScimHttpClient client, ScimDiscoveryResult discovery, ILogger logger)
+    /// <param name="bulkEndpointState">
+    /// What this run has learned about the provider's bulk endpoint, or null where the administrator has
+    /// not opted into bulk operations.
+    /// </param>
+    public ScimConnectorExport(ScimHttpClient client, ScimDiscoveryResult discovery, ILogger logger, ScimBulkEndpointState? bulkEndpointState = null)
     {
         _client = client;
         _discovery = discovery;
         _logger = logger;
+        _bulkExporter = bulkEndpointState == null ? null : new ScimBulkExporter(client, discovery.Capabilities, bulkEndpointState, logger);
     }
 
     public async Task<List<ConnectedSystemExportResult>> ExecuteAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
-        var results = new List<ConnectedSystemExportResult>(pendingExports.Count);
-        var created = 0;
-        var updated = 0;
-        var deleted = 0;
-        var failed = 0;
-
+        var prepared = new List<ScimPreparedExport>(pendingExports.Count);
         foreach (var pendingExport in pendingExports)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var result = await ExportOneAsync(pendingExport, cancellationToken);
-            results.Add(result);
-
-            if (!result.Success)
-                failed++;
-            else if (pendingExport.ChangeType == PendingExportChangeType.Create)
-                created++;
-            else if (pendingExport.ChangeType == PendingExportChangeType.Delete)
-                deleted++;
-            else
-                updated++;
+            prepared.Add(await PrepareAsync(pendingExport, cancellationToken));
         }
 
-        // Every batch operation reports its totals, so a run's effect is legible without reading each item.
-        _logger.Information("SCIM export: {Created} created, {Updated} updated, {Deleted} deleted, {Failed} failed, out of {Total} Pending Export(s).",
-            created, updated, deleted, failed, pendingExports.Count);
+        var results = await DispatchAsync(prepared, cancellationToken);
+        LogSummary(pendingExports, results);
 
         return results;
     }
 
-    private async Task<ConnectedSystemExportResult> ExportOneAsync(PendingExport pendingExport, CancellationToken cancellationToken)
+    #region dispatch
+    /// <summary>
+    /// Sends whatever preparation did not already settle, either a batch at a time or one request each.
+    /// </summary>
+    private async Task<List<ConnectedSystemExportResult>> DispatchAsync(List<ScimPreparedExport> prepared, CancellationToken cancellationToken)
+    {
+        var outstanding = prepared
+            .Select((item, index) => (item, index))
+            .Where(entry => entry.item.Operation != null)
+            .Select(entry => new ScimBulkExportOperation(entry.index, entry.item.Operation!))
+            .ToList();
+
+        var sent = _bulkExporter is { IsUsable: true }
+            ? await _bulkExporter.ExecuteAsync(outstanding, SendAsync, cancellationToken)
+            : await SendEachAsync(outstanding, cancellationToken);
+
+        var results = new List<ConnectedSystemExportResult>(prepared.Count);
+        for (var index = 0; index < prepared.Count; index++)
+        {
+            results.Add(prepared[index].Settled
+                        ?? sent.GetValueOrDefault(index)
+                        // Unreachable: every operation is either settled or dispatched. Reported as a
+                        // failure regardless, because a result JIM cannot account for must never
+                        // default to success, which is how a caller reads a missing one.
+                        ?? ConnectedSystemExportResult.Failed("JIM did not receive an outcome for this change from the service provider."));
+        }
+
+        return results;
+    }
+
+    private async Task<Dictionary<int, ConnectedSystemExportResult>> SendEachAsync(List<ScimBulkExportOperation> operations, CancellationToken cancellationToken)
+    {
+        var results = new Dictionary<int, ConnectedSystemExportResult>(operations.Count);
+
+        foreach (var operation in operations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results[operation.Index] = await SendAsync(operation.Operation, cancellationToken);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Sends one operation as its own request.
+    /// </summary>
+    private async Task<ConnectedSystemExportResult> SendAsync(ScimExportOperation operation, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (operation.Method == HttpMethod.Post)
+                return await CreateAsync(operation, cancellationToken);
+
+            if (operation.Method == HttpMethod.Delete)
+                return await DeleteAsync(operation, cancellationToken);
+
+            if (operation.Method == HttpMethod.Patch)
+                await _client.PatchAsync<JsonElement>(operation.Path, operation.Body!, cancellationToken, operation.EntityTag);
+            else
+                await _client.PutAsync<JsonElement>(operation.Path, operation.Body!, cancellationToken, operation.EntityTag);
+
+            return ConnectedSystemExportResult.Succeeded(operation.ResourceId);
+        }
+        catch (ScimRequestException ex)
+        {
+            _logger.Warning(ex, "SCIM export: the service provider rejected a {Method} of {Path}.",
+                operation.Method.Method, LogSanitiser.Sanitise(operation.Path));
+
+            return ConnectedSystemExportResult.Failed(ex.Message, ScimExportErrorClassifier.Classify((int?)ex.StatusCode, ex.ScimType));
+        }
+    }
+
+    private async Task<ConnectedSystemExportResult> CreateAsync(ScimExportOperation operation, CancellationToken cancellationToken)
+    {
+        var response = await _client.PostAsync<JsonElement>(operation.Path, operation.Body!, cancellationToken);
+
+        // The provider assigns the id, and JIM has to record it: without it the new object cannot be
+        // updated or deleted later, and the confirming import would create a second Connected System
+        // Object for the same resource.
+        var externalId = ReadId(response);
+
+        return externalId == null
+            ? ConnectedSystemExportResult.Failed("The service provider accepted the create but returned no id, so JIM has nothing to identify the new resource by.")
+            : ConnectedSystemExportResult.Succeeded(externalId);
+    }
+
+    private async Task<ConnectedSystemExportResult> DeleteAsync(ScimExportOperation operation, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _client.DeleteAsync(operation.Path, cancellationToken);
+        }
+        catch (ScimRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // The intended end state is that the resource is gone, and it is. Failing here would leave a
+            // Pending Export retrying for ever against a provider that has already done what was asked.
+            _logger.Debug("SCIM export: the resource to delete was already absent from the service provider, which is the intended outcome.");
+        }
+
+        return ConnectedSystemExportResult.Succeeded();
+    }
+    #endregion
+
+    #region preparation
+    /// <summary>
+    /// Turns one Pending Export into the request that applies it, or into the outcome that settles it
+    /// without one.
+    /// </summary>
+    private async Task<ScimPreparedExport> PrepareAsync(PendingExport pendingExport, CancellationToken cancellationToken)
     {
         var objectTypeName = ResolveObjectTypeName(pendingExport);
         if (objectTypeName == null)
-            return ConnectedSystemExportResult.Failed("The Pending Export does not say which Connected System Object Type it applies to, so JIM cannot tell the service provider where to send it.");
+            return ScimPreparedExport.From(ConnectedSystemExportResult.Failed("The Pending Export does not say which Connected System Object Type it applies to, so JIM cannot tell the service provider where to send it."));
 
         var target = ResolveTarget(objectTypeName);
         if (target == null)
-            return ConnectedSystemExportResult.Failed($"The service provider does not publish a resource type named '{objectTypeName}', so there is nowhere to send this change. Re-import the schema to pick up what it does publish.");
+            return ScimPreparedExport.From(ConnectedSystemExportResult.Failed($"The service provider does not publish a resource type named '{LogSanitiser.Sanitise(objectTypeName)}', so there is nowhere to send this change. Re-import the schema to pick up what it does publish."));
 
         try
         {
             return pendingExport.ChangeType switch
             {
-                PendingExportChangeType.Create => await CreateAsync(pendingExport, target, cancellationToken),
-                PendingExportChangeType.Delete => await DeleteAsync(pendingExport, target, cancellationToken),
-                _ => await UpdateAsync(pendingExport, target, cancellationToken)
+                PendingExportChangeType.Create => PrepareCreate(pendingExport, target),
+                PendingExportChangeType.Delete => PrepareDelete(pendingExport, target),
+                _ => await PrepareUpdateAsync(pendingExport, target, cancellationToken)
             };
         }
         catch (ScimRequestException ex)
         {
-            _logger.Warning(ex, "SCIM export: the service provider rejected a {ChangeType} of a {ObjectType}.", pendingExport.ChangeType, LogSanitiser.Sanitise(objectTypeName));
-            return ConnectedSystemExportResult.Failed(ex.Message, ClassifyError(ex));
+            // Only the read that precedes a whole-resource replace can fail here; nothing has been
+            // written, so this is a rejection of the read rather than an unknown outcome.
+            _logger.Warning(ex, "SCIM export: the service provider would not return a {ObjectType} JIM needed to read before writing it back.", LogSanitiser.Sanitise(objectTypeName));
+            return ScimPreparedExport.From(ConnectedSystemExportResult.Failed(ex.Message, ScimExportErrorClassifier.Classify((int?)ex.StatusCode, ex.ScimType)));
         }
     }
 
-    #region operations
-    private async Task<ConnectedSystemExportResult> CreateAsync(PendingExport pendingExport, ScimExportTarget target, CancellationToken cancellationToken)
+    private static ScimPreparedExport PrepareCreate(PendingExport pendingExport, ScimExportTarget target)
     {
         var writes = pendingExport.AttributeValueChanges
             .Where(c => c.ChangeType != PendingExportAttributeChangeType.Remove)
@@ -104,60 +206,52 @@ internal sealed class ScimConnectorExport
 
         var built = ScimResourceWriter.BuildResource(writes, target.Attributes, target.SchemaUrn);
         if (built.UnknownAttributes.Count > 0)
-            return UnknownAttributesFailure(built.UnknownAttributes);
+            return ScimPreparedExport.From(UnknownAttributesFailure(built.UnknownAttributes));
 
-        var response = await _client.PostAsync<JsonElement>(ScimQueryBuilder.NormaliseEndpoint(target.Endpoint), built.Resource, cancellationToken);
-
-        // The provider assigns the id, and JIM has to record it: without it the new object cannot be
-        // updated or deleted later, and the confirming import would create a second Connected System
-        // Object for the same resource.
-        var externalId = ReadId(response);
-        if (externalId == null)
-            return ConnectedSystemExportResult.Failed("The service provider accepted the create but returned no id, so JIM has nothing to identify the new resource by.");
-
-        return ConnectedSystemExportResult.Succeeded(externalId);
+        return ScimPreparedExport.From(new ScimExportOperation(
+            HttpMethod.Post, ScimQueryBuilder.NormaliseEndpoint(target.Endpoint), built.Resource, EntityTag: null, ResourceId: null));
     }
 
-    private async Task<ConnectedSystemExportResult> UpdateAsync(PendingExport pendingExport, ScimExportTarget target, CancellationToken cancellationToken)
+    private static ScimPreparedExport PrepareDelete(PendingExport pendingExport, ScimExportTarget target)
     {
         var resourceId = ResolveResourceId(pendingExport);
         if (resourceId == null)
-            return MissingResourceIdFailure();
+            return ScimPreparedExport.From(MissingResourceIdFailure());
+
+        return ScimPreparedExport.From(new ScimExportOperation(
+            HttpMethod.Delete, ResourcePath(target, resourceId), Body: null, EntityTag: null, resourceId));
+    }
+
+    /// <summary>
+    /// Prefers PATCH, which is what it exists for: a whole-resource PUT would assert every attribute,
+    /// including ones JIM does not manage.
+    /// </summary>
+    private async Task<ScimPreparedExport> PrepareUpdateAsync(PendingExport pendingExport, ScimExportTarget target, CancellationToken cancellationToken)
+    {
+        var resourceId = ResolveResourceId(pendingExport);
+        if (resourceId == null)
+            return ScimPreparedExport.From(MissingResourceIdFailure());
 
         var changes = pendingExport.AttributeValueChanges
             .Select(c => new ScimAttributeChange(c.Attribute.Name, PatchOperation(c), ValueOf(c)))
             .ToList();
 
-        var path = $"{ScimQueryBuilder.NormaliseEndpoint(target.Endpoint)}/{Uri.EscapeDataString(resourceId)}";
+        var path = ResourcePath(target, resourceId);
 
-        return _discovery.Capabilities.SupportsPatch
-            ? await PatchAsync(pendingExport, target, path, resourceId, changes, cancellationToken)
-            : await ReplaceAsync(target, path, resourceId, changes, cancellationToken);
-    }
+        if (_discovery.Capabilities.SupportsPatch)
+        {
+            var built = ScimPatchBuilder.Build(changes, target.Attributes);
+            if (built.UnknownAttributes.Count > 0)
+                return ScimPreparedExport.From(UnknownAttributesFailure(built.UnknownAttributes));
 
-    /// <summary>
-    /// Sends only what changed, which is what PATCH exists for: a whole-resource PUT would assert every
-    /// attribute, including ones JIM does not manage.
-    /// </summary>
-    private async Task<ConnectedSystemExportResult> PatchAsync(
-        PendingExport pendingExport,
-        ScimExportTarget target,
-        string path,
-        string resourceId,
-        List<ScimAttributeChange> changes,
-        CancellationToken cancellationToken)
-    {
-        var built = ScimPatchBuilder.Build(changes, target.Attributes);
-        if (built.UnknownAttributes.Count > 0)
-            return UnknownAttributesFailure(built.UnknownAttributes);
+            if (built.Operations.Count == 0)
+                return ScimPreparedExport.From(ConnectedSystemExportResult.Succeeded());
 
-        if (built.Operations.Count == 0)
-            return ConnectedSystemExportResult.Succeeded();
+            return ScimPreparedExport.From(new ScimExportOperation(
+                HttpMethod.Patch, path, new ScimPatchRequest { Operations = built.Operations }, EntityTagFor(pendingExport), resourceId));
+        }
 
-        var patch = new ScimPatchRequest { Operations = built.Operations };
-        await _client.PatchAsync<JsonElement>(path, patch, cancellationToken, EntityTagFor(pendingExport));
-
-        return ConnectedSystemExportResult.Succeeded(resourceId);
+        return await PrepareReplaceAsync(target, path, resourceId, changes, cancellationToken);
     }
 
     /// <summary>
@@ -166,11 +260,11 @@ internal sealed class ScimConnectorExport
     /// <para>
     /// Read-modify-write rather than a PUT built from JIM's changes alone, because a PUT asserts the
     /// entire resource: building one from the changes would clear every attribute the provider holds
-    /// that JIM does not manage. The entity tag from the read is sent as <c>If-Match</c>, so the window
-    /// between the read and the write cannot silently swallow someone else's change.
+    /// that JIM does not manage. The entity tag from the read guards the write, so the window between
+    /// the read and the write cannot silently swallow someone else's change.
     /// </para>
     /// </summary>
-    private async Task<ConnectedSystemExportResult> ReplaceAsync(
+    private async Task<ScimPreparedExport> PrepareReplaceAsync(
         ScimExportTarget target,
         string path,
         string resourceId,
@@ -179,15 +273,14 @@ internal sealed class ScimConnectorExport
     {
         var current = await _client.GetWithMetadataAsync<JsonNode>(path, cancellationToken);
         if (current.Body is not JsonObject resource)
-            return ConnectedSystemExportResult.Failed("The service provider did not return the resource to update, so JIM cannot apply the change without risking clearing attributes it does not manage.");
+            return ScimPreparedExport.From(ConnectedSystemExportResult.Failed("The service provider did not return the resource to update, so JIM cannot apply the change without risking clearing attributes it does not manage."));
 
         var applied = ScimResourceWriter.ApplyChanges(resource, changes, target.Attributes);
         if (applied.UnknownAttributes.Count > 0)
-            return UnknownAttributesFailure(applied.UnknownAttributes);
+            return ScimPreparedExport.From(UnknownAttributesFailure(applied.UnknownAttributes));
 
-        await _client.PutAsync<JsonElement>(path, applied.Resource, cancellationToken, current.ETag ?? EntityTagOf(resource));
-
-        return ConnectedSystemExportResult.Succeeded(resourceId);
+        return ScimPreparedExport.From(new ScimExportOperation(
+            HttpMethod.Put, path, applied.Resource, current.ETag ?? EntityTagOf(resource), resourceId));
     }
 
     /// <summary>
@@ -215,29 +308,14 @@ internal sealed class ScimConnectorExport
             ? meta["version"]?.GetValue<string>()
             : null;
     }
-
-    private async Task<ConnectedSystemExportResult> DeleteAsync(PendingExport pendingExport, ScimExportTarget target, CancellationToken cancellationToken)
-    {
-        var resourceId = ResolveResourceId(pendingExport);
-        if (resourceId == null)
-            return MissingResourceIdFailure();
-
-        try
-        {
-            await _client.DeleteAsync($"{ScimQueryBuilder.NormaliseEndpoint(target.Endpoint)}/{Uri.EscapeDataString(resourceId)}", cancellationToken);
-        }
-        catch (ScimRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            // The intended end state is that the resource is gone, and it is. Failing here would leave a
-            // Pending Export retrying for ever against a provider that has already done what was asked.
-            _logger.Debug("SCIM export: the resource to delete was already absent from the service provider, which is the intended outcome.");
-        }
-
-        return ConnectedSystemExportResult.Succeeded();
-    }
     #endregion
 
     #region translation
+    private static string ResourcePath(ScimExportTarget target, string resourceId)
+    {
+        return $"{ScimQueryBuilder.NormaliseEndpoint(target.Endpoint)}/{Uri.EscapeDataString(resourceId)}";
+    }
+
     /// <summary>
     /// Maps JIM's attribute change type onto the SCIM operation that expresses it. Add and Update differ
     /// on a multi-valued attribute (append versus replace the lot) and are the same on a single-valued
@@ -322,24 +400,6 @@ internal sealed class ScimConnectorExport
         return null;
     }
 
-    /// <summary>
-    /// Classifies a provider rejection so JIM can react to it. A missing reference is the one worth
-    /// telling apart: RFC 7644 makes the client responsible for creating dependencies first, so this
-    /// says the referenced object has not been exported yet rather than that the data is wrong.
-    /// </summary>
-    private static ConnectedSystemExportErrorType ClassifyError(ScimRequestException exception)
-    {
-        // A 412 means the resource moved on between JIM reading it and writing it back. Retrying blindly
-        // would just race again; the next import reconciles what actually changed.
-        if (exception.StatusCode == HttpStatusCode.PreconditionFailed)
-            return ConnectedSystemExportErrorType.ConcurrencyConflict;
-
-        return exception.StatusCode == HttpStatusCode.BadRequest
-               && string.Equals(exception.ScimType, ScimErrorTypes.InvalidValue, StringComparison.OrdinalIgnoreCase)
-            ? ConnectedSystemExportErrorType.MissingDependency
-            : ConnectedSystemExportErrorType.General;
-    }
-
     private static ConnectedSystemExportResult UnknownAttributesFailure(List<string> unknownAttributes)
     {
         return ConnectedSystemExportResult.Failed(
@@ -353,6 +413,32 @@ internal sealed class ScimConnectorExport
             "The Connected System Object has no External ID, so JIM does not know which resource on the service provider to change. A Full Import will re-establish it.");
     }
     #endregion
+
+    /// <summary>
+    /// Every batch operation reports its totals, so a run's effect is legible without reading each item.
+    /// </summary>
+    private void LogSummary(IList<PendingExport> pendingExports, List<ConnectedSystemExportResult> results)
+    {
+        var created = 0;
+        var updated = 0;
+        var deleted = 0;
+        var failed = 0;
+
+        for (var index = 0; index < pendingExports.Count; index++)
+        {
+            if (!results[index].Success)
+                failed++;
+            else if (pendingExports[index].ChangeType == PendingExportChangeType.Create)
+                created++;
+            else if (pendingExports[index].ChangeType == PendingExportChangeType.Delete)
+                deleted++;
+            else
+                updated++;
+        }
+
+        _logger.Information("SCIM export: {Created} created, {Updated} updated, {Deleted} deleted, {Failed} failed, out of {Total} Pending Export(s).",
+            created, updated, deleted, failed, pendingExports.Count);
+    }
 
     /// <summary>
     /// Where a resource type's changes are sent, and the schema they are shaped by.

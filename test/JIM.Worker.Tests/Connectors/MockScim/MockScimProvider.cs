@@ -28,6 +28,7 @@ namespace JIM.Worker.Tests.Connectors.MockScim;
 internal sealed class MockScimProvider
 {
     private const string ListResponseSchema = "urn:ietf:params:scim:api:messages:2.0:ListResponse";
+    private const string BulkResponseSchema = "urn:ietf:params:scim:api:messages:2.0:BulkResponse";
     private const string UserSchemaUrn = "urn:ietf:params:scim:schemas:core:2.0:User";
     private const string GroupSchemaUrn = "urn:ietf:params:scim:schemas:core:2.0:Group";
 
@@ -113,6 +114,9 @@ internal sealed class MockScimProvider
         if (path.EndsWith("/Schemas", StringComparison.Ordinal))
             return Options.PublishesSchemas ? Schemas() : NotFound();
 
+        if (path.EndsWith("/Bulk", StringComparison.Ordinal))
+            return Bulk(request);
+
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var collection = segments.Length > 0 ? ResourceTypeOf(segments[^1]) : null;
 
@@ -149,11 +153,18 @@ internal sealed class MockScimProvider
     #region discovery
     private HttpResponseMessage ServiceProviderConfig()
     {
+        var bulk = new Dictionary<string, object?>(StringComparer.Ordinal) { ["supported"] = Options.SupportsBulk };
+        if (Options.BulkMaxOperations.HasValue)
+            bulk["maxOperations"] = Options.BulkMaxOperations.Value;
+        if (Options.BulkMaxPayloadSize.HasValue)
+            bulk["maxPayloadSize"] = Options.BulkMaxPayloadSize.Value;
+
         var config = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["patch"] = new Dictionary<string, object?> { ["supported"] = Options.SupportsPatch },
             ["filter"] = new Dictionary<string, object?> { ["supported"] = Options.AdvertisesFiltering },
-            ["etag"] = new Dictionary<string, object?> { ["supported"] = Options.SupportsETag }
+            ["etag"] = new Dictionary<string, object?> { ["supported"] = Options.SupportsETag },
+            ["bulk"] = bulk
         };
 
         return Json(JsonSerializer.Serialize(config));
@@ -450,6 +461,90 @@ internal sealed class MockScimProvider
             resource.Version = $"W/\"{Guid.NewGuid()}\"";
 
         return response;
+    }
+
+    /// <summary>
+    /// Applies a bulk request (RFC 7644 section 3.7) by replaying each operation through the ordinary
+    /// resource handlers, so a bulk export and a per-object export meet exactly the same provider
+    /// behaviour: entity tags, missing resources and dependency rejections all answer identically.
+    /// </summary>
+    private HttpResponseMessage Bulk(HttpRequestMessage request)
+    {
+        if (!Options.SupportsBulk)
+            return Error(HttpStatusCode.NotFound, detail: "This service provider has no bulk endpoint.");
+
+        if (Options.BulkEndpointStatus.HasValue)
+            return Error(Options.BulkEndpointStatus.Value, detail: "The bulk endpoint refused the request.");
+
+        var payload = request.Content?.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
+        if (Options.BulkMaxPayloadSize.HasValue && Encoding.UTF8.GetByteCount(payload ?? string.Empty) > Options.BulkMaxPayloadSize.Value)
+            return Error(HttpStatusCode.RequestEntityTooLarge, detail: "The bulk request was larger than this provider accepts.");
+
+        if (string.IsNullOrWhiteSpace(payload) || JsonNode.Parse(payload) is not JsonObject parsed || parsed["Operations"] is not JsonArray operations)
+            return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidSyntax, "The bulk request carried no operations.");
+
+        if (Options.BulkMaxOperations.HasValue && operations.Count > Options.BulkMaxOperations.Value)
+            return Error(HttpStatusCode.BadRequest, ScimErrorTypes.TooMany, "The bulk request carried more operations than this provider accepts.");
+
+        var results = operations.OfType<JsonObject>().Select(operation => ApplyBulkOperation(request, operation)).ToList();
+
+        if (Options.BulkOperationsOmittedFromResponse > 0)
+            results = results.Take(Math.Max(0, results.Count - Options.BulkOperationsOmittedFromResponse)).ToList();
+
+        if (Options.ReturnsBulkOperationsOutOfOrder)
+            results.Reverse();
+
+        return Json(JsonSerializer.Serialize(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["schemas"] = new[] { BulkResponseSchema },
+            ["Operations"] = results
+        }));
+    }
+
+    private Dictionary<string, object?> ApplyBulkOperation(HttpRequestMessage bulkRequest, JsonObject operation)
+    {
+        var bulkUri = bulkRequest.RequestUri!;
+        var method = operation["method"]?.GetValue<string>() ?? HttpMethod.Post.Method;
+        var relativePath = (operation["path"]?.GetValue<string>() ?? string.Empty).TrimStart('/');
+        var bulkId = operation["bulkId"]?.GetValue<string>();
+
+        using var inner = new HttpRequestMessage(new HttpMethod(method), new Uri(bulkUri, relativePath));
+
+        // Authentication travels on the bulk request itself, so the replayed operation carries it too.
+        inner.Headers.Authorization = bulkRequest.Headers.Authorization;
+
+        if (operation["data"] is { } data)
+            inner.Content = new StringContent(data.ToJsonString(), Encoding.UTF8, "application/scim+json");
+
+        if (operation["version"]?.GetValue<string>() is { } version)
+            inner.Headers.TryAddWithoutValidation("If-Match", version);
+
+        using var response = Respond(inner);
+        var body = response.Content.ReadAsStringAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var parsedBody = string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
+
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["method"] = method,
+            ["status"] = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture)
+        };
+
+        if (bulkId != null && !Options.OmitsBulkIdInResponses)
+            result["bulkId"] = bulkId;
+
+        if (response.IsSuccessStatusCode)
+        {
+            var assignedId = (parsedBody as JsonObject)?["id"]?.GetValue<string>();
+            result["location"] = assignedId != null && string.Equals(method, HttpMethod.Post.Method, StringComparison.OrdinalIgnoreCase)
+                ? new Uri(new Uri(bulkUri, relativePath + "/"), assignedId).AbsoluteUri
+                : new Uri(bulkUri, relativePath).AbsoluteUri;
+        }
+        else
+        {
+            result["response"] = parsedBody;
+        }
+
+        return result;
     }
 
     private static Dictionary<string, JsonNode?>? ReadBody(HttpRequestMessage request)

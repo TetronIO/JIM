@@ -38,6 +38,10 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private ScimDiscoveryResult? _exportDiscovery;
     private List<ConnectedSystemSettingValue>? _exportSettings;
 
+    // Null unless the administrator has opted into bulk operations, which is what tells the export
+    // whether to try the provider's Bulk endpoint at all.
+    private ScimBulkEndpointState? _bulkEndpointState;
+
     #region IConnector members
     public string Name => ConnectorConstants.ScimClientConnectorName;
 
@@ -146,7 +150,10 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             new() { Name = "Retry Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = ScimConnectorConstants.SettingMaxRetries, Required = false, DefaultIntValue = ScimConnectorConstants.DefaultMaxRetries, Description = "Maximum number of retry attempts for transient failures (i.e. HTTP 429, 503, 504). Default is 3.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
-            new() { Name = ScimConnectorConstants.SettingRetryDelay, Required = false, DefaultIntValue = ScimConnectorConstants.DefaultRetryDelayMs, Description = "Initial delay between retries in milliseconds. Uses exponential backoff with jitter, and honours Retry-After response headers. Default is 1000ms.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer }
+            new() { Name = ScimConnectorConstants.SettingRetryDelay, Required = false, DefaultIntValue = ScimConnectorConstants.DefaultRetryDelayMs, Description = "Initial delay between retries in milliseconds. Uses exponential backoff with jitter, and honours Retry-After response headers. Default is 1000ms.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = ScimConnectorConstants.SettingUseBulkOperations, Required = false, DefaultCheckboxValue = false, Description = "Send exports in batches through the service provider's Bulk endpoint instead of one request per object, which is considerably faster over a high-latency connection. Only used where the service provider advertises bulk support, and only within the limits it states. Off by default: per-object exports are always correct, whereas a provider whose Bulk implementation reports outcomes inaccurately would have JIM record changes as applied that were not. Turn it on once you have seen an export succeed against your provider.", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox }
         };
     }
 
@@ -407,6 +414,13 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportSettings = settings.ToList();
         _exportClient = Task.Run(async () => await CreateClientAsync(_exportSettings, Log.Logger)).GetAwaiter().GetResult();
         _exportDiscovery = null;
+
+        // Held for the run rather than per batch, so a provider that advertises bulk without serving it
+        // is discovered once instead of by every batch in turn.
+        _bulkEndpointState = _exportSettings
+            .FirstOrDefault(s => s.Setting.Name == ScimConnectorConstants.SettingUseBulkOperations)?.CheckboxValue == true
+            ? new ScimBulkEndpointState()
+            : null;
     }
 
     /// <summary>
@@ -423,7 +437,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportDiscovery ??= await WithCertificateDiagnosisAsync(_exportSettings ?? [], Log.Logger,
             () => new ScimConnectorSchema(_exportClient, Log.Logger).DiscoverAsync(cancellationToken));
 
-        return await new ScimConnectorExport(_exportClient, _exportDiscovery, Log.Logger).ExecuteAsync(pendingExports, cancellationToken);
+        return await new ScimConnectorExport(_exportClient, _exportDiscovery, Log.Logger, _bulkEndpointState).ExecuteAsync(pendingExports, cancellationToken);
     }
 
     public void CloseExportConnection()
@@ -432,6 +446,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportClient = null;
         _exportDiscovery = null;
         _exportSettings = null;
+        _bulkEndpointState = null;
     }
     #endregion
 

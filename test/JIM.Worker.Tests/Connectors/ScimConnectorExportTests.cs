@@ -8,6 +8,7 @@ using JIM.Models.Transactional;
 using JIM.Worker.Tests.Connectors.MockScim;
 using Serilog;
 using ILogger = Serilog.ILogger;
+using static JIM.Worker.Tests.Connectors.ScimExportTestObjects;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -32,95 +33,6 @@ public class ScimConnectorExportTests
     public void TearDown()
     {
         (_logger as IDisposable)?.Dispose();
-    }
-
-    #region building Pending Exports
-    private static ConnectedSystemObjectType ObjectType(string name)
-    {
-        return new ConnectedSystemObjectType { Id = name == "User" ? 1 : 2, Name = name, Selected = true };
-    }
-
-    private static ConnectedSystemObjectTypeAttribute Attribute(string name, ConnectedSystemObjectType objectType, AttributeDataType type = AttributeDataType.Text)
-    {
-        return new ConnectedSystemObjectTypeAttribute
-        {
-            Name = name,
-            Type = type,
-            ConnectedSystemObjectType = objectType
-        };
-    }
-
-    private static PendingExportAttributeValueChange Change(
-        string attributeName,
-        ConnectedSystemObjectType objectType,
-        string? value,
-        PendingExportAttributeChangeType changeType = PendingExportAttributeChangeType.Update)
-    {
-        return new PendingExportAttributeValueChange
-        {
-            Attribute = Attribute(attributeName, objectType),
-            StringValue = value,
-            ChangeType = changeType
-        };
-    }
-
-    private static PendingExport Create(ConnectedSystemObjectType objectType, params PendingExportAttributeValueChange[] changes)
-    {
-        return new PendingExport
-        {
-            ChangeType = PendingExportChangeType.Create,
-            AttributeValueChanges = changes.ToList()
-        };
-    }
-
-    /// <summary>
-    /// A Pending Export against an existing resource, whose External ID is the provider's own id for it.
-    /// </summary>
-    private static PendingExport Against(
-        string resourceId,
-        ConnectedSystemObjectType objectType,
-        PendingExportChangeType changeType,
-        params PendingExportAttributeValueChange[] changes)
-    {
-        var externalIdAttribute = Attribute("id", objectType);
-        externalIdAttribute.Id = 99;
-        externalIdAttribute.IsExternalId = true;
-
-        var connectedSystemObject = new ConnectedSystemObject
-        {
-            Type = objectType,
-            TypeId = objectType.Id,
-            ExternalIdAttributeId = externalIdAttribute.Id,
-            AttributeValues =
-            [
-                new ConnectedSystemObjectAttributeValue { Attribute = externalIdAttribute, AttributeId = externalIdAttribute.Id, StringValue = resourceId }
-            ]
-        };
-
-        return new PendingExport
-        {
-            ChangeType = changeType,
-            ConnectedSystemObject = connectedSystemObject,
-            AttributeValueChanges = changes.ToList()
-        };
-    }
-    #endregion
-
-    /// <summary>
-    /// Gives the Connected System Object the entity tag a previous import would have brought back, which
-    /// is what the connector sends as <c>If-Match</c>.
-    /// </summary>
-    private static void WithImportedEntityTag(PendingExport pendingExport, ConnectedSystemObjectType objectType, string entityTag)
-    {
-        var versionAttribute = Attribute("meta.version", objectType);
-        versionAttribute.Id = 98;
-
-        pendingExport.ConnectedSystemObject!.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            Attribute = versionAttribute,
-            AttributeId = versionAttribute.Id,
-            StringValue = entityTag
-        });
     }
 
     private async Task<List<ConnectedSystemExportResult>> ExportAsync(MockScimProvider provider, StubHttpMessageHandler handler, params PendingExport[] pendingExports)

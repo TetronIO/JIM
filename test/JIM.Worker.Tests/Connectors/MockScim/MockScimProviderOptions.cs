@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Net;
+
 namespace JIM.Worker.Tests.Connectors.MockScim;
 
 /// <summary>
@@ -41,6 +43,53 @@ internal sealed class MockScimProviderOptions
 
     /// <summary>What <c>/ServiceProviderConfig</c> claims about entity tags.</summary>
     public bool SupportsETag { get; set; } = true;
+
+    /// <summary>
+    /// What <c>/ServiceProviderConfig</c> claims about bulk operations, and whether <c>/Bulk</c>
+    /// answers at all. Off by default: bulk is optional in RFC 7644 and plenty of providers omit it.
+    /// </summary>
+    public bool SupportsBulk { get; set; }
+
+    /// <summary>
+    /// The provider's stated cap on operations per bulk request, which it also enforces: a client that
+    /// advertised-but-ignored the limit gets the whole batch rejected rather than a partial apply.
+    /// </summary>
+    public int? BulkMaxOperations { get; set; }
+
+    /// <summary>
+    /// The provider's stated cap on bulk payload size in bytes, enforced with a 413 as a real provider
+    /// (or the gateway in front of it) does.
+    /// </summary>
+    public long? BulkMaxPayloadSize { get; set; }
+
+    /// <summary>
+    /// Answers <c>/Bulk</c> with this status instead of processing it. A 501 models a provider that
+    /// advertises bulk and never implemented the endpoint, where nothing was applied; a 500 models one
+    /// that failed part way through, where what applied is unknowable and the two cases must not be
+    /// treated alike.
+    /// </summary>
+    public HttpStatusCode? BulkEndpointStatus { get; set; }
+
+    /// <summary>
+    /// Leaves <c>bulkId</c> off every operation in a BulkResponse. RFC 7644 section 3.7 only requires
+    /// it for a POST, so this is conformant, and a client correlating solely on <c>bulkId</c> would
+    /// lose track of every update and delete it sent.
+    /// </summary>
+    public bool OmitsBulkIdInResponses { get; set; }
+
+    /// <summary>
+    /// Drops this many operations from the end of a BulkResponse, as a provider that stopped early
+    /// does. It reports nothing about what it never reached, and a client that assumed success would
+    /// record changes as applied that were not.
+    /// </summary>
+    public int BulkOperationsOmittedFromResponse { get; set; }
+
+    /// <summary>
+    /// Returns the BulkResponse operations in reverse order. Nothing in RFC 7644 promises response
+    /// order matches request order, so a client correlating by position would attribute every outcome
+    /// to the wrong object.
+    /// </summary>
+    public bool ReturnsBulkOperationsOutOfOrder { get; set; }
 
     /// <summary>
     /// Changes a resource's entity tag the moment it is read, so the write that follows carries a stale

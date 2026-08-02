@@ -34,6 +34,17 @@ public static class ScimConnectorConstants
     public const string SettingExcludedAttributes = "Excluded Attributes";
     public const string SettingChangeDetection = "Change Detection";
 
+    // Export settings
+    public const string SettingUseBulkOperations = "Use Bulk Operations";
+
+    /// <summary>
+    /// How many operations a bulk request carries when the provider advertises bulk support without
+    /// stating a maximum, which is common. RFC 7644 defines no default, and an unbounded batch would
+    /// let whatever the export pipeline handed over decide the payload size, so JIM picks a figure
+    /// large enough to be worth batching and small enough that a rejection costs little.
+    /// </summary>
+    public const int DefaultBulkMaxOperations = 100;
+
     // Pagination Mode drop-down values
     public const string PaginationModeAuto = "Auto-detect";
     public const string PaginationModeIndex = "Index-based";

@@ -29,6 +29,7 @@ The connector requires no internet access of its own and adds no cloud-service d
 | Paging | ✅ | The Run Profile's Page Size becomes the requested page size. |
 | Partitions and Containers | ❌ | SCIM has no partition concept; resource types are Connected System Object Types. |
 | Parallel Export | ✅ | Bounded by the provider's own rate limits, which the connector honours. |
+| Bulk Operations | ✅ | Optional. Sends exports a batch at a time where the provider advertises `/Bulk`. See [Bulk Operations](#bulk-operations). |
 
 ### Schema Discovery
 
@@ -85,6 +86,24 @@ An attribute the provider's schema does not have, or will not accept a write to,
 
 !!! note "Referenced objects are exported first"
     RFC 7644 makes the client responsible for creating dependencies before the things that refer to them. JIM orders exports accordingly, and where a provider still rejects a change because something it references is missing, that is reported as a dependency-ordering problem and retried once the dependency lands.
+
+### Bulk Operations
+
+By default each change is its own HTTP request. Where a provider advertises SCIM's `/Bulk` endpoint, turning on **Use Bulk Operations** sends them a batch at a time instead, which is considerably faster over a high-latency connection: an export of ten thousand objects becomes tens of requests rather than ten thousand.
+
+It is off by default, and worth understanding why before turning it on. Per-object export is always correct. Bulk moves responsibility for reporting each outcome to the provider, and a provider whose implementation reports them inaccurately would have JIM record changes as applied that were not, which surfaces later as drift nobody can explain. `/Bulk` is also the least consistently implemented part of SCIM. Turn it on once you have seen an export succeed against your provider, and check the Activity afterwards.
+
+What JIM does with it:
+
+- **The provider's advertised limits are respected.** Batches stay within the `maxOperations` and `maxPayloadSize` the provider publishes; a change too large for any batch is sent on its own instead. Where the provider advertises bulk without stating a limit, JIM batches 100 operations at a time.
+- **One bad object never abandons the rest.** JIM does not set `failOnErrors`, so the provider is asked to process everything regardless, exactly as the per-object path behaves.
+- **Outcomes are matched to changes, never counted off.** A bulk response is not required to list operations in the order they were sent. JIM correlates each outcome to the change that produced it.
+- **An operation the provider does not report on is treated as failed.** A provider that stops early says nothing about what it never reached, and a change JIM cannot confirm was applied is never recorded as exported. It stays pending and is reported on the Activity.
+- **A provider that advertises `/Bulk` and does not serve it is survived, not failed.** JIM falls back to one request per object for the rest of the run and warns.
+- **A bulk request that fails after being sent fails its changes rather than resending them.** How far the provider got is unknowable, and resending a create that did apply would duplicate the resource. Those changes stay pending; the next import establishes what actually landed before they are retried.
+
+!!! note "Bulk changes throughput, not behaviour"
+    The same request bodies, entity tags, dependency ordering and error classification apply either way. If an export is failing, turning bulk off will not change the outcome; it will only change how many requests it takes to reach it.
 
 ### Rate Limits and Throttling
 
@@ -168,6 +187,12 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 |---|---|---|
 | Maximum Retries | 3 | Retry attempts for transient failures. |
 | Retry Delay (ms) | 1000 | The initial backoff delay. Backoff is exponential with jitter, and `Retry-After` always takes precedence. |
+
+### Export Settings
+
+| Setting | Default | Description |
+|---|---|---|
+| Use Bulk Operations | Off | Send exports in batches through the provider's `/Bulk` endpoint instead of one request per object. Only used where the provider advertises bulk support, and only within the limits it states. See [Bulk Operations](#bulk-operations). |
 
 ## Security Considerations
 
