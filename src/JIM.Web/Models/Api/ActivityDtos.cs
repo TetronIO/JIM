@@ -412,6 +412,14 @@ public class ActivityDetailDto
     public ActivityRunProfileExecutionStatsDto? ExecutionStats { get; set; }
 
     /// <summary>
+    /// The steps the Run Profile execution moved through (#454), in run order, each with how it
+    /// turned out and how long it took. This is what answers "where did the four hours go?" on a
+    /// run that finished days ago. Empty for other Activity types, and for runs that predate phase
+    /// recording.
+    /// </summary>
+    public List<ActivityPhaseDto> Phases { get; set; } = [];
+
+    /// <summary>
     /// For a configuration-change activity, the optional reason supplied for the change.
     /// </summary>
     public string? ChangeReason { get; set; }
@@ -429,10 +437,14 @@ public class ActivityDetailDto
     /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
-    public static ActivityDetailDto FromEntity(Activity activity, ActivityRunProfileExecutionStats? stats = null)
+    public static ActivityDetailDto FromEntity(
+        Activity activity,
+        ActivityRunProfileExecutionStats? stats = null,
+        IReadOnlyList<ActivityPhase>? phases = null)
     {
         return new ActivityDetailDto
         {
+            Phases = (phases ?? []).OrderBy(p => p.Order).Select(ActivityPhaseDto.FromEntity).ToList(),
             Id = activity.Id,
             ParentActivityId = activity.ParentActivityId,
             Created = activity.Created,

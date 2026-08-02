@@ -3,6 +3,7 @@
 
 using System.Text;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
@@ -703,6 +704,114 @@ public partial class SyncRepository
     #endregion
 
     #region Pending Export — Worker-Only Bulk Operations
+
+    public async Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
+    {
+        var staging = pendingInitialPasswords.ToList();
+        if (staging.Count == 0)
+            return;
+
+        foreach (var pending in staging.Where(p => p.Id == Guid.Empty))
+            pending.Id = Guid.NewGuid();
+
+        // ON CONFLICT DO NOTHING against the one-per-account unique index, rather than reading first and then
+        // inserting: re-running an export that already staged this work is an ordinary thing to do.
+        //
+        // Column list comes from the constant so it cannot drift from the model; the parameter order below MUST
+        // match PendingInitialPasswordBulkColumns.PendingInitialPasswords exactly.
+        var columns = BulkSqlHelpers.ToQuotedList(PendingInitialPasswordBulkColumns.PendingInitialPasswords);
+        var placeholders = string.Join(", ", Enumerable.Range(0, PendingInitialPasswordBulkColumns.PendingInitialPasswords.Length).Select(i => $"{{{i}}}"));
+        var sql = $"""
+            INSERT INTO "PendingInitialPasswords" ({columns}) VALUES ({placeholders})
+            ON CONFLICT ("ConnectedSystemObjectId") DO NOTHING
+            """;
+
+        foreach (var pending in staging)
+        {
+            await _context.Database.ExecuteSqlRawAsync(sql,
+                pending.Id,
+                pending.ConnectedSystemObjectId,
+                pending.ConnectedSystemId,
+                BulkSqlHelpers.NullableParam(pending.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+                (int)pending.Status,
+                BulkSqlHelpers.NullableParam((int?)pending.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
+                BulkSqlHelpers.NullableParam(pending.TargetMessage, NpgsqlTypes.NpgsqlDbType.Text),
+                pending.AttemptCount,
+                pending.CreatedAt,
+                BulkSqlHelpers.NullableParam(pending.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(pending.ExpiresAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+        }
+    }
+
+    public async Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
+    {
+        return await _context.PendingInitialPasswords
+            .AsNoTracking()
+            // The delivery pass sets the password on this object, so it comes with the record rather than
+            // being fetched per account; the in-memory provider auto-tracks navigations and cannot tell a
+            // missing Include from a present one, so the guard for this is a RequiresPostgres test.
+            .Include(p => p.ConnectedSystemObject)
+            .ThenInclude(cso => cso.AttributeValues)
+            .Where(p => p.ConnectedSystemId == connectedSystemId && p.Status == PendingInitialPasswordStatus.Pending)
+            .OrderBy(p => p.CreatedAt)
+            .Take(maximum)
+            .ToListAsync();
+    }
+
+    public async Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        return await _context.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .Where(ip => syncRuleIds.Contains(ip.SyncRuleId))
+            .ToDictionaryAsync(ip => ip.SyncRuleId);
+    }
+
+    public async Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await _context.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
+    {
+        var attemptsList = attempts.ToList();
+        if (attemptsList.Count == 0)
+            return;
+
+        // Column list comes from the constant so a migration cannot leave this writer behind; the parameter
+        // order below MUST match PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate, with
+        // the record's Id last.
+        var assignments = string.Join(", ", PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate
+            .Select((column, index) => $"\"{column}\" = {{{index}}}"));
+        var idPlaceholder = $"{{{PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate.Length}}}";
+        var sql = $"""UPDATE "PendingInitialPasswords" SET {assignments} WHERE "Id" = {idPlaceholder}""";
+
+        foreach (var attempt in attemptsList)
+        {
+            await _context.Database.ExecuteSqlRawAsync(sql,
+                (int)attempt.Status,
+                BulkSqlHelpers.NullableParam((int?)attempt.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
+                BulkSqlHelpers.NullableParam(attempt.TargetMessage, NpgsqlTypes.NpgsqlDbType.Text),
+                attempt.AttemptCount,
+                BulkSqlHelpers.NullableParam(attempt.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(attempt.ExpiresAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                attempt.Id);
+        }
+    }
+
+    public async Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            """DELETE FROM "PendingInitialPasswords" WHERE "Id" = ANY({0})""", idList);
+    }
 
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {

@@ -56,6 +56,19 @@ public class ServerCertificateDiagnostic
     public bool IsSelfSigned { get; set; }
 
     /// <summary>
+    /// SHA-1 thumbprint of the certificate that issued this one, where the server sent it alongside its own. Null
+    /// where it did not, which is what makes the difference between offering an administrator the durable choice
+    /// (trust the authority, and the decision survives renewal) and having only the leaf to offer.
+    /// </summary>
+    public string? IssuerThumbprint { get; set; }
+
+    /// <summary>
+    /// Whether the server sent the certificate authority that issued its own certificate, so it can be trusted
+    /// directly. Self-signed certificates have no separate authority and so never do.
+    /// </summary>
+    public bool IsIssuerCertificateAvailable => !string.IsNullOrEmpty(IssuerThumbprint);
+
+    /// <summary>
     /// A sentence naming what to do about it, shown alongside the certificate.
     /// </summary>
     public string? Remediation { get; set; }

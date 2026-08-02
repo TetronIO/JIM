@@ -58,6 +58,9 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_LDAPS_PORT = 636;
     internal const int DEFAULT_LDAP_PORT = 389;
 
+    // How long to wait for a connection when the administrator has not said, in seconds.
+    internal const int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 10;
+
     // Retry settings
     internal const int DEFAULT_MAX_RETRIES = 3;
     internal const int DEFAULT_RETRY_DELAY_MS = 1000;

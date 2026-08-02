@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="JIM.Worker.Tests" />
+    <InternalsVisibleTo Include="JIM.Web.Api.Tests" />
   </ItemGroup>
 
   <ItemGroup>
