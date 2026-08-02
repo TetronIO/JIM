@@ -113,6 +113,30 @@ public class ScimConnectorDiscoveryTests
     }
 
     [Test]
+    public async Task GetSchemaAsync_ProviderPublishesNothing_ReportsTheShortfallOnTheSchemaAsync()
+    {
+        // Falling back to the core schemas is a workaround, not a clean result; the schema carries the
+        // warnings so the import's Activity and refresh result can put them in front of the administrator.
+        using var handler = new StubHttpMessageHandler(_ => Status(HttpStatusCode.NotFound));
+        var connector = new StubbedTransportScimConnector(handler);
+
+        var schema = await connector.GetSchemaAsync(Settings(), _logger);
+
+        Assert.That(schema.Warnings, Is.Not.Empty);
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_ConformantProvider_ReportsNoWarningsAsync()
+    {
+        using var handler = ConformantProvider();
+        var connector = new StubbedTransportScimConnector(handler);
+
+        var schema = await connector.GetSchemaAsync(Settings(), _logger);
+
+        Assert.That(schema.Warnings, Is.Empty);
+    }
+
+    [Test]
     public void GetSchemaAsync_ProviderFails_PropagatesRatherThanReturningAnEmptySchema()
     {
         // Persisting an empty schema over a good one would unmap every Attribute Flow pointing at it.

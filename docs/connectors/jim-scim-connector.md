@@ -52,6 +52,8 @@ Every resource also carries `id`, `externalId` and the `meta` attributes, which 
 !!! warning "Two entries sharing a canonical type"
     A provider is free to hold two `work` email addresses. `emails.work` holds one, so the first is imported and the run reports a warning naming the attribute. Nothing is silently dropped, but the second value does not reach JIM.
 
+Where discovery had to work around a gap in what the provider publishes (no `/Schemas` document, an attribute definition that could not be fully interpreted), the schema import says so rather than presenting an unqualified success: the warnings appear on the schema screen's refresh summary, and the import's Activity completes with a warning carrying the same detail, so they are visible from the REST API and PowerShell too. Use them to tell a provider gap from a JIM one when an expected attribute is missing.
+
 ### Change Detection
 
 SCIM defines no change feed, so a Delta Import asks the provider for the resources modified since the last completed import: `filter=meta.lastModified gt "<watermark>"`. This needs the provider to support filtering.

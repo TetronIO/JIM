@@ -232,10 +232,12 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var result = await WithCertificateDiagnosisAsync(settingValues, logger, () => discovery.DiscoverAsync(CancellationToken.None));
 
         // Discovery shortfalls are never absorbed: an administrator has to be able to tell a provider
-        // gap from a JIM one when an expected attribute is missing.
+        // gap from a JIM one when an expected attribute is missing. They travel on the schema so the
+        // import's Activity and refresh result can surface them, and are logged for the operator too.
         foreach (var warning in result.Warnings)
             logger.Warning("SCIM schema discovery: {Warning}", warning);
 
+        result.Schema.Warnings.AddRange(result.Warnings);
         return result.Schema;
     }
     #endregion
