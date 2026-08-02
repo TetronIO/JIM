@@ -381,5 +381,11 @@ public class SyncServer : ISyncServer
             connectedSystem, connector, runMode, options, cancellationToken,
             progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
 
+    public Task<InitialPasswordRunResult> DeliverOutstandingInitialPasswordsAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        CancellationToken cancellationToken)
+        => _jim.InitialPasswords.DeliverOutstandingAsync(connectedSystem, connector, cancellationToken);
+
     #endregion
 }

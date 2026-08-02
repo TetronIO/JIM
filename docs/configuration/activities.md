@@ -108,6 +108,29 @@ While a Run Profile executes, its progress is available in real time on every su
 
 Throughput and the estimated time remaining are derived from recent progress samples, so they reflect the current phase of the run rather than a whole-run average; they appear once enough samples exist and adapt as the run moves between phases.
 
+### The steps of a run
+
+A Run Profile execution is a journey through several steps, and the Activity shows all of them: what is done, what is running now, and what is still to come. An import, for example, connects to the Connected System, imports objects, processes deletions, resolves references, saves changes, reconciles Pending Exports and records its results.
+
+- **Completed steps** carry how long they took, so a run that took four hours can be read afterwards to see where the four hours went.
+- **The step running now** is highlighted, with the Connector's own steps and the current message shown beneath it.
+- **Steps still to come** are greyed, so "how much is left" is answerable at a glance.
+- **A green ring with a dash** marks a step that was not needed on this run: a Delta Import performs no deletion detection, for example. It is green because the run is past it; it is a ring rather than a filled tick because it did no work of its own. Hovering the step says so. This is normal, not a problem. Work a run could never do at all (a file-based import opens no connection) is not shown as a step.
+- **A failed run** marks the step it failed in, which is where to look first.
+
+The progress bar beneath the steps counts objects within the step currently running, and the leg of the rail leaving that step fills to match, so the same progress reads at a glance and in exact numbers. Several steps count their own work, so the bar restarts as the run moves between them: that is the step advancing, not progress being lost.
+
+### Connector steps and messages
+
+Some of a run's wall-clock time is spent inside the Connector, on work JIM cannot count objects for: reading an export file before merging changes into it, writing the merged file back out, querying a directory's root DSE, or fetching a page of objects from a container. Connectors declare these as their own steps, shown inside the step that called them, and narrate what they are doing as they go:
+
+- **File connector**<br /> "Loading existing export file", "Merging changes into file" and "Writing the output file" during an export; "Reading the file", with a rolling "Parsed 50,000 rows...", during an import.
+- **LDAP connector**<br /> "Querying the directory" and "Fetching objects" during a Full Import, with messages naming the container and page ("Fetching User objects from Employees (page 3)..."); a Delta Import adds "Querying changes" and "Querying deleted objects", with the watermark in the message ("Querying changes since USN 1,204,933...").
+
+Object counts do not move while a Connector step is running, because the Connector has not returned any objects yet. That is the point of these steps and messages: something that keeps changing is how you tell a healthy long-running phase from a stuck one. The counts resume as soon as the Connector returns.
+
+The steps are also available to automation: the Activity progress endpoint reports the current step and its position in the run, and `Start-JIMRunProfile -Wait` and `Get-JIMActivity -Follow` display it as "Step 3 of 7: Saving changes".
+
 ## Common workflows
 
 **Monitoring a Run Profile execution:**

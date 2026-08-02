@@ -93,8 +93,16 @@ elif [ -x "/.codespaces/bin/gh-gpgsign" ]; then
     :
 else
     # Local devcontainer (or other non-Codespace environment): rely on SSH
-    # agent forwarding with a loaded key. Verify both.
-    if ! ssh-add -l >/dev/null 2>&1; then
+    # agent forwarding with a loaded key. Verify both. On a native Windows
+    # checkout (Git Bash), the MSYS ssh-add cannot reach the Windows OpenSSH
+    # agent's named pipe, so probe the Windows ssh-add directly as a fallback.
+    agent_ok=false
+    if ssh-add -l >/dev/null 2>&1; then
+        agent_ok=true
+    elif [ -x "/c/Windows/System32/OpenSSH/ssh-add.exe" ] && "/c/Windows/System32/OpenSSH/ssh-add.exe" -l >/dev/null 2>&1; then
+        agent_ok=true
+    fi
+    if [ "$agent_ok" = "false" ]; then
         fail "SSH agent not available or has no keys" \
             "" \
             "Git cannot sign this commit because the host's SSH agent is" \

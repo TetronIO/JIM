@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="JIM.Worker.Tests" />
+    <InternalsVisibleTo Include="JIM.Web.Api.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,18 @@
     <ProjectReference Include="..\JIM.Data\JIM.Data.csproj" />
     <ProjectReference Include="..\JIM.Models\JIM.Models.csproj" />
     <ProjectReference Include="..\JIM.Utilities\JIM.Utilities.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded rather than copied to the output directory: the password word list is read on the credential
+         generation path, so it must be part of the assembly rather than a file that can go missing from a
+         container image. -->
+    <!-- WithCulture=false because the ".en" in the file name is otherwise read as a culture code, which quietly
+         diverts the list into an "en" satellite assembly instead of embedding it. That builds and publishes
+         perfectly happily and then fails at run time when the list cannot be found. -->
+    <EmbeddedResource Include="Resources/PasswordWords.en.txt"
+                      LogicalName="JIM.Application.Resources.PasswordWords.en.txt"
+                      WithCulture="false" />
   </ItemGroup>
 
   <ItemGroup>

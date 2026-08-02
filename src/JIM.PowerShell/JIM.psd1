@@ -40,6 +40,8 @@
         'Remove-JIMConnectedSystem',
         'Import-JIMConnectedSystemSchema',
         'Import-JIMConnectedSystemHierarchy',
+        'Get-JIMConnectedSystemServerCertificate',
+        'Approve-JIMConnectedSystemServerCertificate',
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
         'Set-JIMConnectedSystemAttribute',
@@ -60,6 +62,8 @@
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
         'Remove-JIMSyncRule',
+        'Get-JIMSyncRuleInitialPassword',
+        'Set-JIMSyncRuleInitialPassword',
 
         # Configuration Change History
         'Get-JIMConfigurationChangeHistory',

@@ -109,6 +109,22 @@ public class ConfigurationChangeCaptureTests
     }
 
     [Test]
+    public async Task DeleteSyncRuleAsync_RecordsOwningConnectedSystemIdAsync()
+    {
+        // The rule id is deliberately not recorded (the rule is about to cease to exist), so without the Connected
+        // System id the deletion would be attributable to nothing, and invisible to the "configuration changed since
+        // last Full Synchronisation" indicator: a false negative on one of the most consequential changes there is.
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        _csRepo.Setup(r => r.DeleteSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.DeleteSyncRuleAsync(BuildExportRule(), NewApiKey());
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConnectedSystemId, Is.EqualTo(3), "the surviving Connected System is the deletion's durable link");
+    }
+
+    [Test]
     public async Task GetNextConfigurationChangeVersionAsync_ReturnsExistingMaximumPlusOneAsync()
     {
         _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, 9)).ReturnsAsync(3);

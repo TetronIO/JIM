@@ -65,11 +65,12 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
-                              Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Immediate="true" DebounceInterval="500"
-                              OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
+                <SearchField Value="@_filterInitiatedBy"
+                             ValueChanged="OnInitiatedByFilterChanged"
+                             Label="Initiated By"
+                             Placeholder="Search by name..."
+                             DebounceInterval="500"
+                             Margin="Margin.None" />
             </MudItem>
             <MudItem Class="d-flex align-end">
                 <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
@@ -771,11 +772,7 @@
                             <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
                                 @_selectedActivity.ErrorMessage
                             </MudText>
-                            @if (!string.IsNullOrEmpty(_selectedActivity.ErrorStackTrace))
-                            {
-                                <MudDivider Class="my-2" />
-                                <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@_selectedActivity.ErrorStackTrace</pre>
-                            }
+                            <CollapsibleStackTrace StackTrace="@_selectedActivity.ErrorStackTrace" />
                         </ChildContent>
                     </MudExpansionPanel>
                 </MudExpansionPanels>

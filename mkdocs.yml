@@ -103,6 +103,7 @@ nav:
       - Object Naming: concepts/object-naming.md
   - Configuration:
       - configuration/index.md
+      - Configuration Changes: configuration/configuration-changes.md
       - Connected Systems: configuration/connected-systems.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md

@@ -211,6 +211,8 @@ IConnectorExportUsingCalls    // Push data via API calls (async with Cancellatio
 IConnectorExportUsingFiles    // Write to files (async with CancellationToken)
 ```
 
+All four interaction interfaces take an optional `Func<string, Task>? progressCallback`, which connectors use to narrate their internal sub-phases onto the Activity message ("Loading existing export file...", "Querying root DSE..."). JIM owns the phase and the counts; the connector supplies only the message. See `engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md`.
+
 Connectors also declare capability flags via `IConnectorCapabilities`:
 - `SupportsParallelExport`: enables per-system `MaxExportParallelism` setting for parallel batch processing
 - LDAP connectors additionally support configurable "Export Concurrency" (1-16) for async LDAP operation pipelining

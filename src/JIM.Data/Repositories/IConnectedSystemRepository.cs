@@ -783,6 +783,17 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// <para>
+    /// Read on its own rather than through a Connected System navigation, because the caller that needs it (the
+    /// Synchronisation Rule editor) reaches the system through a rule, whose include chain does not carry it. An
+    /// unloaded navigation is indistinguishable from a target that published no policy, and that difference
+    /// decides whether JIM validates a generator configuration against anything at all.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();
@@ -891,6 +902,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
+    /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
+    /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
+    /// setting-value instances the in-memory system happened to carry (composed with a Setting navigation but no
+    /// FK scalar) were faithfully written back with SettingId 0, failing the export run on a foreign key
+    /// violation the moment a connector first returned close-time state. A watermark write must never be able
+    /// to touch configuration rows.
+    /// </summary>
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
+
+    /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.
     /// Unlike <see cref="UpdateConnectedSystemAsync"/>, which only persists the root plus partitions and
     /// setting values, this method also adds newly-discovered object types/attributes and applies updates to
@@ -909,6 +931,17 @@ public interface IConnectedSystemRepository
     public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
     public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+
+    /// <summary>
+    /// Deletes settings a Connector no longer declares, along with any values administrators saved against them.
+    /// </summary>
+    /// <remarks>
+    /// Detaching the setting from its Connector Definition is not sufficient: the relationship's foreign key is
+    /// nullable, so the row survives with no definition while still being referenced by saved values, and the
+    /// withdrawn setting keeps appearing on Connected Systems that hold one.
+    /// </remarks>
+    public Task DeleteConnectorDefinitionSettingsAsync(IList<ConnectorDefinitionSetting> connectorDefinitionSettings);
+
     public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task DeleteSyncRuleAsync(SyncRule syncRule);
 
@@ -1044,5 +1077,16 @@ public interface IConnectedSystemRepository
     /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
     /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
     Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems, the configuration objects whose change affects that system's
+    /// synchronisation outcomes: its Synchronisation Rules, the Metaverse Object Types those rules target, and the
+    /// Metaverse Attributes those rules reference. Backs the "configuration changed since last Full Synchronisation"
+    /// indicator, which uses these sets to attribute each recorded change to precisely the systems it affects.
+    ///
+    /// Every requested system gets an entry, including ones with no Synchronisation Rules at all (an empty scope, so
+    /// only changes to the system itself count).
+    /// </summary>
+    Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds);
     #endregion
 }

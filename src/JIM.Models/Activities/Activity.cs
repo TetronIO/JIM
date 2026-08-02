@@ -30,6 +30,18 @@ public class Activity
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
+    /// <summary>
+    /// When this Activity applied a configuration change that was previewed first, the preview's Activity. Null
+    /// means the change was applied without a preview, which is a legitimate choice and is recorded as such: an
+    /// auditor asking "did anyone look at what this would do before doing it?" gets an answer either way, and a
+    /// null that meant "unknown" would answer nothing.
+    ///
+    /// A plain column rather than a foreign key, matching <see cref="ParentActivityId"/>. A preview ages out under
+    /// retention long before the change it informed does, and a foreign key would either block that cleanup or null
+    /// this link; keeping the raw id preserves "this was previewed" even once the preview's own rows have gone.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>
@@ -66,6 +78,17 @@ public class Activity
     public string? ErrorMessage { get; set; }
 
     public string? ErrorStackTrace { get; set; }
+
+    /// <summary>
+    /// Structured detail about the failure, as JSON, for failures where there is something specific worth showing an
+    /// administrator beyond the message. Populated today by LDAPS certificate rejections, which record the certificate
+    /// the directory server presented so the portal can show it and name what to do about it.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately open-ended: the shape is owned by whatever produced the failure, and the portal renders what it
+    /// recognises. Never holds secrets; a certificate is public by definition.
+    /// </remarks>
+    public string? ErrorDetail { get; set; }
 
     /// <summary>
     /// Connector-level warning message describing a non-fatal operational note about the activity.
@@ -471,6 +494,17 @@ public class Activity
     /// Null for non-configuration activities.
     /// </summary>
     public int? ConfigurationChangeVersion { get; set; }
+
+    /// <summary>
+    /// How consequential this configuration change was: destructive, sync-affecting, or cosmetic. Computed from the
+    /// properties that actually changed, so consumers (the changed-since-last-synchronisation indicator, apply-time
+    /// messaging, and the preview adapters) can filter to changes that matter without re-diffing history.
+    ///
+    /// <see cref="ConfigurationChangeClass.NotClassified"/> for creates (no prior snapshot to diff), for
+    /// non-configuration activities, and where classification could not be determined. See
+    /// engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md.
+    /// </summary>
+    public ConfigurationChangeClass ConfigurationChangeClass { get; set; } = ConfigurationChangeClass.NotClassified;
 
     /// <summary>
     /// Records which integer-keyed configuration object this activity's configuration change belongs to, by setting

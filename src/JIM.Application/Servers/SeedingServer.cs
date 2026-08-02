@@ -12,6 +12,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Application.Utilities;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 
@@ -1258,6 +1259,18 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Configuration change preview (#827) - where a preview runs
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold,
+            DisplayName = "Preview worker threshold",
+            Description = "The estimated number of affected objects above which a configuration change preview is evaluated by JIM.Worker rather than in the portal's own process. Smaller previews run in-process so they return without waiting for the worker to pick them up. Both paths produce identical results.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "2500",
+            IsReadOnly = false
+        });
+
         // Security Settings
         await SeedSettingAsync(new ServiceSetting
         {
@@ -1421,37 +1434,17 @@ internal class SeedingServer
     /// </summary>
     internal static bool ApplyConnectorDeclarations(IConnectorCapabilities connectorCapabilities, ConnectorDefinition definition)
     {
-        var changed =
-            definition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
-            definition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
-            definition.SupportsExport != connectorCapabilities.SupportsExport ||
-            definition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
-            definition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
-            definition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
-            definition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
-            definition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
-            definition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
-            definition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
-            definition.SupportsPaging != connectorCapabilities.SupportsPaging ||
-            definition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths ||
-            definition.SchemaStandard != connectorCapabilities.SchemaStandard;
-
-        if (!changed)
+        // Driven off the shape of IConnectorCapabilities rather than a written-out list of every declaration.
+        // A hand-written list is the failure this exists to avoid: declaring a capability and forgetting to add
+        // it here leaves the flag permanently false in the database with nothing failing, so the Connector
+        // advertises a feature the rest of JIM cannot see. Declaring it on the interface is the only step.
+        var changed = ConnectorCapabilityMirror.GetDifferences(connectorCapabilities, definition);
+        if (changed.Count == 0)
             return false;
 
-        definition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
-        definition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
-        definition.SupportsExport = connectorCapabilities.SupportsExport;
-        definition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
-        definition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
-        definition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
-        definition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
-        definition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
-        definition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
-        definition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
-        definition.SupportsPaging = connectorCapabilities.SupportsPaging;
-        definition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
-        definition.SchemaStandard = connectorCapabilities.SchemaStandard;
+        ConnectorCapabilityMirror.CopyTo(connectorCapabilities, definition);
+        Log.Debug("ApplyConnectorDeclarations: Updated declarations for '{ConnectorName}': {ChangedDeclarations}",
+            LogSanitiser.Sanitise(definition.Name), string.Join(", ", changed));
         return true;
     }
 
@@ -1576,6 +1569,14 @@ internal class SeedingServer
                 ActivityInitiatorType.System, null, "System",
                 changeReason: "Connector Definition updated automatically by JIM to match the latest connector.",
                 parentActivityId: parentActivityId);
+
+            // Detaching an obsolete setting from the definition above only severs it: its foreign key is nullable, so
+            // the row survives holding no definition while every value an administrator saved against it still points
+            // at it, and the withdrawn setting keeps appearing on Connected Systems that hold one. Delete the rows so
+            // those values cascade away with them.
+            if (settingsToRemove.Count > 0)
+                await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionSettingsAsync(settingsToRemove);
+
             Log.Information($"SyncConnectorDefinitionAsync: Saved changes for '{connector.Name}'");
         }
         else

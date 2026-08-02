@@ -6,6 +6,8 @@ title: Certificates
 
 **Certificates** store trusted CA and intermediate certificates used by [connectors](../connectors/index.md) for LDAP and HTTPS authentication. Each certificate can be enabled or disabled independently without removing it.
 
+Certificates added here are trusted **in addition to** the operating system's own trust store, never in place of it, so adding one can only ever allow more connections to succeed. A directory server's own self-signed certificate can be added directly, not just the certificate authority that issued it. Certificate validation itself cannot be switched off for an individual Connected System; see [certificate validation](../connectors/jim-ldap-connector.md#certificate-validation) in the LDAP Connector documentation for what is checked.
+
 ## Two source types
 
 Certificates can be added in one of two ways:

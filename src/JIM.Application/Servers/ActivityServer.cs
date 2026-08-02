@@ -330,6 +330,7 @@ public class ActivityServer
     {
         var now = DateTime.UtcNow;
         activity.ErrorMessage = GetFullExceptionMessage(exception);
+        activity.ErrorDetail = ActivityErrorDetail.TryDescribe(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
         // that have clear, user-actionable messages
@@ -525,6 +526,16 @@ public class ActivityServer
     public async Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId)
     {
         return await Application.Repository.Activity.GetActivityProgressAsync(activityId);
+    }
+
+    /// <summary>
+    /// Gets the recorded phases of a Run Profile execution (#454), in run order: what each step
+    /// was, how it turned out and how long it took. Empty for Activities that are not Run Profile
+    /// executions, and for runs that predate phase recording.
+    /// </summary>
+    public async Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId)
+    {
+        return await Application.Repository.Activity.GetActivityPhasesAsync(activityId);
     }
 
     /// <summary>

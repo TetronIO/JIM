@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -10,6 +11,13 @@ namespace JIM.Connectors.File;
 
 internal class FileConnectorImport
 {
+    /// <summary>
+    /// How often to narrate row progress while reading the file. A file import is a single call that
+    /// returns only once the whole file is read, so this is the only movement an operator sees; the
+    /// interval is coarse enough that the Activity write cost stays negligible even for a million rows.
+    /// </summary>
+    private const int ProgressRowInterval = 10_000;
+
     private readonly CancellationToken _cancellationToken;
     private readonly ConnectedSystem _connectedSystem;
     private readonly FileConnectorReader _reader;
@@ -17,6 +25,7 @@ internal class FileConnectorImport
     private readonly bool _stopOnFirstError;
     private readonly string _multiValueDelimiter;
     private readonly ILogger _logger;
+    private readonly IConnectorProgress _progress;
 
     internal FileConnectorImport(
         ConnectedSystem connectedSystem,
@@ -25,7 +34,8 @@ internal class FileConnectorImport
         bool stopOnFirstError,
         string multiValueDelimiter,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IConnectorProgress progress)
     {
         _connectedSystem = connectedSystem;
         _reader = reader;
@@ -34,6 +44,7 @@ internal class FileConnectorImport
         _multiValueDelimiter = multiValueDelimiter;
         _logger = logger;
         _cancellationToken = cancellationToken;
+        _progress = progress;
     }
 
     internal async Task<ConnectedSystemImportResult> GetFullImportObjectsAsync()
@@ -54,6 +65,7 @@ internal class FileConnectorImport
         await _reader.CsvReader.ReadAsync();
         _reader.CsvReader.ReadHeader();
 
+        var rowsRead = 0;
         while (await _reader.CsvReader.ReadAsync())
         {
             // always check to see if this task has been cancelled by the user.
@@ -62,6 +74,10 @@ internal class FileConnectorImport
                 _logger.Information("GetFullImportObjects: O2 Cancellation requested. Stopping.");
                 return result;
             }
+
+            rowsRead++;
+            if (rowsRead % ProgressRowInterval == 0)
+                await _progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
 
             // start building the object that we pass back to JIM, representing the Connected System Object.
             // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
@@ -286,6 +302,11 @@ internal class FileConnectorImport
 
             result.ImportObjects.Add(importObject);
         }
+
+        // Land on the true total so the last thing an operator sees is the row count actually read,
+        // rather than the last interval multiple. Skipped when the interval emit already reported it.
+        if (rowsRead > 0 && rowsRead % ProgressRowInterval != 0)
+            await _progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
 
         return FinaliseResult(result, stopwatch);
     }

@@ -2,6 +2,9 @@
   JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component
   tests (bUnit + NUnit). Scope rules live in test/CLAUDE.md.
 
+  Also home to convention sweeps over JIM.Web's Razor sources (SearchFieldConventionTests),
+  which catch a shared component being bypassed on a page a per-component test cannot see.
+
   This project uses Microsoft.NET.Sdk.Razor (not the plain SDK) because bUnit renders
   Razor components and requires the Razor SDK's compilation support.
 -->

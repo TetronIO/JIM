@@ -3,6 +3,7 @@
 
 using JIM.Connectors.LDAP;
 using JIM.Models.Interfaces;
+using JIM.Utilities;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -111,16 +112,14 @@ public class LdapConnectorTests
     }
 
     [Test]
-    public void GetSettings_CertificateValidation_IsRequiredWhenSecureConnectionEnabled()
+    public void GetSettings_DoesNotOfferACertificateValidationChoice()
     {
-        // Certificate Validation is only relevant when LDAPS is enabled (#828)
+        // LDAPS certificate validation is not configurable per Connected System (#1132). The platform LDAP client
+        // validates the certificate and offers no supported way to relax that for one connection, so offering the
+        // choice could only ever mislead. Certificates an administrator trusts go in the JIM certificate store.
         var settings = _connector.GetSettings();
-        var certificateValidation = settings.Single(s => s.Name == "Certificate Validation");
 
-        Assert.That(certificateValidation.RequiredWhenSetting, Is.EqualTo("Use Secure Connection (LDAPS)?"));
-        Assert.That(certificateValidation.RequiredWhenValue, Is.EqualTo("true"));
-        // a sensible default so the conditional requirement is pre-satisfied when LDAPS is switched on
-        Assert.That(certificateValidation.DefaultStringValue, Is.EqualTo("Full Validation"));
+        Assert.That(settings.Any(s => s.Name == "Certificate Validation"), Is.False);
     }
 
     [Test]
@@ -277,20 +276,6 @@ public class LdapConnectorTests
         Assert.That(secureConnectionSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
     }
 
-    [Test]
-    public void GetSettings_ContainsCertificateValidationSetting()
-    {
-        var settings = _connector.GetSettings();
-        var certValidationSetting = settings.FirstOrDefault(s => s.Name == "Certificate Validation");
-
-        Assert.That(certValidationSetting, Is.Not.Null);
-        Assert.That(certValidationSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
-        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Full Validation"));
-        Assert.That(certValidationSetting.DropDownValues, Does.Contain("Skip Validation (Not Recommended)"));
-        Assert.That(certValidationSetting.DropDownValues!.Count, Is.EqualTo(2));
-        Assert.That(certValidationSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
-    }
-
     #endregion
 
     #region Retry settings tests
@@ -386,7 +371,7 @@ public class LdapConnectorTests
         var pendingExports = new List<JIM.Models.Transactional.PendingExport>();
 
         var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _connector.ExportAsync(pendingExports, CancellationToken.None));
+            await _connector.ExportAsync(pendingExports, CancellationToken.None, ConnectorProgress.None));
         Assert.That(exception!.Message, Does.Contain("OpenExportConnection"));
     }
 

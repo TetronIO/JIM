@@ -376,7 +376,9 @@
                                 @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
                                 Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes)
+                                @* Credential attributes are excluded entirely: they are handled by JIM's password channel, never by Attribute Flow *@
+                                @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+                                            !CredentialAttributes.IsCredentialAttribute(q.Name)))
                                 {
                                     <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span
                                             style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
@@ -702,8 +704,15 @@
     /// The Connected System attributes the target picker offers on an export rule; the export-side sibling of
     /// <see cref="AvailableTargetMetaverseAttributes"/>.
     /// </summary>
+    /// <summary>
+    /// The Connected System attributes an Attribute Flow may target: everything not already taken by another
+    /// flow on this rule, less anything holding credential material. Credential attributes are excluded
+    /// entirely because they are written by JIM's password channel and must never travel through Attribute
+    /// Flow; naming one through the REST API or PowerShell is rejected for the same reason.
+    /// </summary>
     private IEnumerable<ConnectedSystemObjectTypeAttribute> AvailableTargetConnectedSystemAttributes() =>
         SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+            !CredentialAttributes.IsCredentialAttribute(q.Name) &&
             !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
                                                     afr.TargetConnectedSystemAttribute != null &&
                                                     afr.TargetConnectedSystemAttribute.Id == q.Id));

@@ -1177,6 +1177,11 @@ public class ActivityRepository : IActivityRepository
         if (progress == null)
             return null;
 
+        // The run's steps (#454). A handful of rows per Activity, and the progress read is the one
+        // call the portal, the API and PowerShell all make while a run is executing, so the steps
+        // travel with the progress rather than needing a second round trip.
+        progress.Phases = await GetActivityPhasesAsync(activityId);
+
         // Operation breakdown from the stat counter rows (#1078): advisory incremental values
         // while the run is in flight, exact values once finalised. O(counter rows) either way.
         var counters = await Repository.Database.ActivityStatCounters
@@ -1199,6 +1204,15 @@ public class ActivityRepository : IActivityRepository
         }
 
         return progress;
+    }
+
+    public async Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId)
+    {
+        return await Repository.Database.ActivityPhases
+            .AsNoTracking()
+            .Where(p => p.ActivityId == activityId)
+            .OrderBy(p => p.Order)
+            .ToListAsync();
     }
 
     private static bool IsTerminalActivityStatus(ActivityStatus status) => status.IsTerminal();
@@ -1602,6 +1616,49 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(c => c!.AttributeChanges)
             .ThenInclude(ac => ac.ValueChanges)
             .SingleOrDefaultAsync(q => q.Id == id);
+    }
+    #endregion
+
+    #region configuration drift
+    public async Task<Dictionary<int, DateTime>> GetLastFullSynchronisationStartsAsync(IList<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return new Dictionary<int, DateTime>();
+
+        // TargetOperationType must be Execute: Run Profile CRUD activities carry ConnectedSystemRunType too (so the
+        // run type survives the profile's deletion), and without this filter deleting a Full Synchronisation Run
+        // Profile would be mistaken for having run one.
+        //
+        // CompleteWithWarning counts: a warning is a non-fatal operational note (e.g. a delta falling back to a full
+        // import), not a reason to distrust that the run applied the configuration. Errors, failures and cancellations
+        // do not count, so a system whose Full Synchronisation failed keeps reporting its changes as pending.
+        return await Repository.Database.Activities
+            .Where(a => a.ConnectedSystemId != null
+                        && connectedSystemIds.Contains(a.ConnectedSystemId!.Value)
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.TargetOperationType == ActivityTargetOperationType.Execute
+                        && a.ConnectedSystemRunType == ConnectedSystemRunType.FullSynchronisation
+                        && (a.Status == ActivityStatus.Complete || a.Status == ActivityStatus.CompleteWithWarning))
+            .GroupBy(a => a.ConnectedSystemId!.Value)
+            .Select(g => new { ConnectedSystemId = g.Key, LastStart = g.Max(a => a.Executed) })
+            .ToDictionaryAsync(x => x.ConnectedSystemId, x => x.LastStart);
+    }
+
+    public async Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass)
+    {
+        return await Repository.Database.Activities
+            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass)
+            .Select(a => new ConfigurationChangeImpactData
+            {
+                When = a.Created,
+                Class = a.ConfigurationChangeClass,
+                ConnectedSystemId = a.ConnectedSystemId,
+                SyncRuleId = a.SyncRuleId,
+                MetaverseObjectTypeId = a.MetaverseObjectTypeId,
+                MetaverseAttributeId = a.MetaverseAttributeId,
+                ServiceSettingKey = a.ServiceSettingKey
+            })
+            .ToListAsync();
     }
     #endregion
 

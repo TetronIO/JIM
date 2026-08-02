@@ -54,15 +54,9 @@
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" />
             <MudSpacer />
-            <MudTextField T="string"
-                          ValueChanged="@(s => OnSearch(s))"
-                          Variant="Variant.Outlined"
-                          Placeholder="Search target, source MVO, or errors"
-                          Margin="Margin.Dense"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          IconSize="Size.Medium"
-                          Class="mt-0" />
+            <SearchField ValueChanged="@(s => OnSearch(s))"
+                         Placeholder="Search target, source MVO, or errors"
+                         Class="mt-0" />
         </ToolBarContent>
         <HeaderContent>
             <MudTh>

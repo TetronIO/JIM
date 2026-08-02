@@ -226,6 +226,12 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     internal Action? OnCsoProcessedInPass2 { get; set; }
 
+    /// <summary>
+    /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
+    /// not track phases get a reporter that records nothing.
+    /// </summary>
+    protected readonly ActivityPhaseReporter _phases;
+
     protected SyncTaskProcessorBase(
         ISyncEngine syncEngine,
         ISyncServer syncServer,
@@ -233,7 +239,8 @@ public abstract class SyncTaskProcessorBase
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
-        CancellationTokenSource cancellationTokenSource)
+        CancellationTokenSource cancellationTokenSource,
+        ActivityPhaseReporter? phaseReporter = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -242,6 +249,7 @@ public abstract class SyncTaskProcessorBase
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
         _cancellationTokenSource = cancellationTokenSource;
+        _phases = phaseReporter ?? ActivityPhaseReporter.None;
     }
 
     /// <summary>
@@ -2102,7 +2110,7 @@ public abstract class SyncTaskProcessorBase
             managedBytesAtStart / (1024.0 * 1024.0),
             workingSetBytesAtStart / (1024.0 * 1024.0));
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity,
+        await _phases.EnterAsync(RunPhaseKeys.SyncResolveCrossPageReferences,
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.

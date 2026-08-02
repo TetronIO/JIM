@@ -256,7 +256,7 @@
                 <ToolBarContent>
                     <MudText Typo="Typo.h6">Attributes on this Object Type</MudText>
                     <MudSpacer />
-                    <MudTextField @bind-Value="_attributeSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    <SearchField @bind-Value="_attributeSearchString" Class="mt-0" />
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
                                DropShadow="false" Class="ml-3" OnClick="OpenAddAttributeBindingDialogAsync">Add Attribute</MudButton>
                 </ToolBarContent>
@@ -456,15 +456,6 @@
         if (newAction == header.OutboundDeprovisionAction)
             return;
 
-        // offer an optional reason for the configuration change history; cancelling aborts the change
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
-        if (cancelled)
-        {
-            // re-render so the select reverts to the unchanged header value
-            StateHasChanged();
-            return;
-        }
-
         try
         {
             using var jim = JimFactory.Create();
@@ -475,7 +466,27 @@
                 return;
             }
 
+            // This dropdown changes a Synchronisation Rule's Deprovisioning Action without going near the rule editor,
+            // so it needs the same acknowledgement the editor gives: switching to Delete means deprovisioned objects
+            // are deleted in the Connected System rather than disconnected from JIM.
             rule.OutboundDeprovisionAction = newAction;
+            var preflight = await jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(rule);
+            if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                    "Synchronisation Rule", rule.Name))
+            {
+                // re-render so the select reverts to the unchanged header value
+                StateHasChanged();
+                return;
+            }
+
+            // offer an optional reason for the configuration change history; cancelling aborts the change
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+            {
+                StateHasChanged();
+                return;
+            }
+
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             var success = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, user, changeReason: changeReason);
             if (!success)
@@ -580,14 +591,23 @@
     {
         if (_metaverseObjectType == null) return;
 
-        // offer an optional reason for the configuration change history; cancelling aborts the save
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
-        if (cancelled)
-            return;
+        // What is on the entity now, so an abandoned save leaves it as it was persisted. The form keeps the
+        // administrator's edits either way; only the entity is rolled back.
+        var persistedRule = _metaverseObjectType.DeletionRule;
+        var persistedGracePeriod = _metaverseObjectType.DeletionGracePeriod;
+        var persistedTriggers = _metaverseObjectType.DeletionTriggerConnectedSystemIds;
+
+        void RollBack()
+        {
+            _metaverseObjectType.DeletionRule = persistedRule;
+            _metaverseObjectType.DeletionGracePeriod = persistedGracePeriod;
+            _metaverseObjectType.DeletionTriggerConnectedSystemIds = persistedTriggers;
+        }
 
         try
         {
-            // Update the object type
+            // Update the object type. Applied to the entity before the preflight runs, because the preflight compares
+            // the entity as it will be saved against its last captured snapshot.
             _metaverseObjectType.DeletionRule = _deletionRule;
             var gracePeriod = new TimeSpan(_gracePeriodDays, _gracePeriodHours, _gracePeriodMinutes, 0);
             _metaverseObjectType.DeletionGracePeriod = gracePeriod == TimeSpan.Zero ? null : gracePeriod;
@@ -596,6 +616,25 @@
                 : new List<int>();
 
             using var jim = JimFactory.Create();
+
+            // Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects
+            // eligible for deletion, with no synchronisation run in between; the acknowledgement says so.
+            var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(_metaverseObjectType);
+            if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                    "Metaverse Object Type", _metaverseObjectType.Name))
+            {
+                RollBack();
+                return;
+            }
+
+            // offer an optional reason for the configuration change history; cancelling aborts the save
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+            {
+                RollBack();
+                return;
+            }
+
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason);
 
@@ -612,6 +651,9 @@
         }
         catch (Exception ex)
         {
+            // The entity was mutated before the save was attempted; leaving it mutated would make a failed save look
+            // like a successful one everywhere else on the page.
+            RollBack();
             Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
         }
     }

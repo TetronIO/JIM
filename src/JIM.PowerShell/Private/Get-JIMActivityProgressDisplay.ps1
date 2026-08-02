@@ -42,6 +42,20 @@ function Get-JIMActivityProgressDisplay {
     $objectsProcessed = [int]($Progress.objectsProcessed ?? 0)
     $message = "$($Progress.message ?? '')"
 
+    # The step the run is on, where the server records them (#454). Shown as "step 3 of 7: Saving
+    # changes" so the counter restarting between steps reads as progress rather than lost work.
+    $stepText = ''
+    $currentPhaseName = "$($Progress.currentPhase.name ?? '')"
+    if ($currentPhaseName) {
+        $stepNumber = $Progress.currentPhaseNumber
+        $totalPhases = [int]($Progress.totalPhases ?? 0)
+        $stepText = if ($null -ne $stepNumber -and $totalPhases -gt 0) {
+            "Step $([int]$stepNumber) of ${totalPhases}: $currentPhaseName"
+        } else {
+            $currentPhaseName
+        }
+    }
+
     $statusText = $status
     $percent = -1  # Indeterminate
 
@@ -57,7 +71,13 @@ function Get-JIMActivityProgressDisplay {
         $statusText += " - Elapsed: ${ElapsedSeconds}s"
     }
 
-    if ($message) {
+    if ($stepText) {
+        $statusText += " - $stepText"
+    }
+
+    # The message says what is happening inside the step, so it only adds something when it is not
+    # simply repeating the step's own name.
+    if ($message -and $message -ne $currentPhaseName) {
         $statusText += " - $message"
     }
 

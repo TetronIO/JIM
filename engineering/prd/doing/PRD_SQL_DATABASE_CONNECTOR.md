@@ -15,9 +15,9 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 ## Goals
 
-- An administrator can configure a Connected System against Microsoft SQL Server or Oracle Database entirely from the admin UI, with credentials encrypted at rest and connectivity validated at save time.
+- An administrator can configure a Connected System against Microsoft SQL Server or Oracle Database from any of the three admin surfaces (portal, REST API, PowerShell), with credentials encrypted at rest and connectivity validated at save time.
 - JIM can discover schema (tables, views, columns, data types) from a configured database and map columns onto Connected System Object Types and attributes.
-- Full imports work against tables or views, including multi-valued attributes and reference attributes sourced from related tables, at 100,000-row scale within existing Run Profile paging behaviour.
+- Full imports work against tables or views, including multi-valued attributes and reference attributes sourced from related tables, at 500,000-row scale (the platform's supported scale, per the passing `Scale500k25kGroups` template) within existing Run Profile paging behaviour.
 - Delta imports work via at least two dialect-agnostic mechanisms (change-log table and watermark column), with the same graceful fallback-to-full-import behaviour the LDAP Connector established.
 - Exports create, update and delete rows (including related-table rows) transactionally per object, returning database-generated keys as external IDs.
 - All operations surface as Activities with per-object Run Profile Execution Items, identical to the existing connectors.
@@ -47,7 +47,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 **Connectivity and configuration**
 
-1. The connector must present discrete Connectivity settings (database type, host, port, database/service name, username, password, TLS options, connection timeout) and build the provider connection string internally. The password must use the `StringEncrypted` setting type so it is encrypted at rest via the existing credential protection mechanism and redacted from configuration snapshots.
+1. The connector must present discrete Connectivity settings (database type, host, port, database/service name, username, password, TLS options, connection timeout) and build the provider connection string internally. The password must use the `StringEncrypted` setting type so it is encrypted at rest via the existing credential protection mechanism and redacted from configuration snapshots. TLS server-certificate validation must follow the certificate-store precedent established by [#1142](https://github.com/TetronIO/JIM/pull/1142): certificates added in Admin > Certificates are supplied as additional trust anchors alongside the operating system's bundle (never in place of it), and a refused server certificate is surfaced to the administrator with its details rather than a generic connectivity error. A blanket trust-server-certificate toggle is not an acceptable substitute.
 2. Provider-specific settings (for example Oracle service name vs SID) must use the existing conditional-settings framework (`RequiredWhenSetting`/`RequiredWhenValue`, `RequiredGroup` cardinalities) rather than free-text conventions.
 3. `IConnectorSettings.ValidateSettingValues` must perform a live connectivity test (open connection, trivial query, close), following the LDAP Connector's pattern, so invalid configuration cannot be saved.
 4. Priority 1 providers: Microsoft SQL Server and Oracle Database. Priority 2: PostgreSQL and MySQL/MariaDB. The provider abstraction (`ISqlProvider` or equivalent) must isolate dialect differences: parameter prefix, identifier quoting, paging syntax, schema-catalogue queries, type mapping, and generated-key retrieval.
@@ -73,10 +73,10 @@ The integration test infrastructure already anticipates this connector: dormant 
 | UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | |
 | VARBINARY/BLOB/RAW | Binary | |
 | DECIMAL/NUMERIC/MONEY | Decimal | Type delivered by prerequisite #1046 |
-| FLOAT/REAL | Per #1046's decision | Decimal with a documented precision caveat, or Text; decided within #1046 |
+| FLOAT/REAL | Decimal | Approximate binary types; documented precision caveat (decided 2026-07-30, as #1046 closed without recording it): binary-to-decimal round-trips are not bit-exact, and a Text mapping would reintroduce the lexicographic-comparison defect #1046 exists to fix |
 | Foreign-key columns holding another object type's anchor | Reference | Explicit per-column configuration, not inferred |
 
-9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model.
+9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model. The setting is required and defaults to UTC, visible to the administrator at configuration time (decided 2026-07-31); the connector never refuses zoneless columns.
 
 **Import**
 
@@ -92,12 +92,12 @@ The integration test infrastructure already anticipates this connector: dormant 
 14. Export must translate Pending Exports into parameterised `INSERT`/`UPDATE`/`DELETE` statements (values always as parameters, identifiers quoted through the provider), maintaining related-table rows for multi-valued attribute changes within the same database transaction as the parent row.
 15. Creates against database-generated keys (identity/sequence columns) must return the generated value as the object's external ID in `ConnectedSystemExportResult`, following the LDAP and File Connector precedents.
 16. The connector must declare `SupportsAutoConfirmExport = true`; a committed transaction is a verified write, so a confirming import is not required for correctness.
-17. Optional stored-procedure export (one procedure per create/update/delete, receiving attribute values as parameters) may ship in the first release if design review confirms it does not complicate the transactional path; otherwise it is the first fast-follow.
+17. Optional stored-procedure export (one procedure per create/update/delete, receiving attribute values as parameters) is a fast-follow, not part of the first release (decided 2026-07-31); the first release ships direct-statement export only.
 18. Export failures must map per-object onto `ConnectedSystemExportResult` errors, feeding the existing Pending Export retry/backoff machinery; a failed object must not poison its batch.
 
 **Capabilities declaration**
 
-19. The connector must declare: `SupportsFullImport`, `SupportsDeltaImport`, `SupportsExport`, `SupportsPaging`, `SupportsAutoConfirmExport`, `SupportsUserSelectedExternalId` true; `SupportsPartitions`, `SupportsPartitionContainers`, `SupportsSecondaryExternalId`, `SupportsFilePaths` false. `SupportsParallelExport` is an open question (see below).
+19. The connector must declare: `SupportsFullImport`, `SupportsDeltaImport`, `SupportsExport`, `SupportsPaging`, `SupportsAutoConfirmExport`, `SupportsUserSelectedExternalId` true; `SupportsPartitions`, `SupportsPartitionContainers`, `SupportsSecondaryExternalId`, `SupportsFilePaths` false. `SupportsParallelExport` false for the first release (decided 2026-07-31); the provider abstraction must keep enabling it later a capability flip, not a reshape.
 
 **Security**
 
@@ -109,7 +109,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 ### Non-Functional Requirements
 
-- 100,000-row full import completes within the same order of magnitude as the LDAP Connector at equivalent scale, without unbounded memory growth (streaming reads, page-at-a-time materialisation).
+- 500,000-row full import completes within the same order of magnitude as the LDAP Connector at equivalent scale, without unbounded memory growth (streaming reads, page-at-a-time materialisation).
 - Air-gap deployable: no internet access at runtime, no native driver installation, all providers bundled as managed NuGet packages.
 - Every new NuGet package passes the Third-Party Dependency Governance workflow before adoption, including licence review (the Oracle managed driver ships under Oracle's free-use distribution licence and needs explicit sign-off and customer-facing documentation of its terms).
 
@@ -132,7 +132,7 @@ Integration coverage must be a **provider × capability matrix**, not a single h
 | Type-mapping round-trip | Each mapped SQL type imports and exports losslessly, including zoneless DateTime interpretation and exact-numeric Decimal round-trip |
 | Configuration validation | Save-time connectivity test passes/fails correctly (wrong credentials, unreachable host) |
 
-The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 100,000-row scale import.
+The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 500,000-row scale import.
 
 ## Examples and Scenarios
 
@@ -183,7 +183,8 @@ The full matrix must run green for Priority 1 providers (SQL Server, Oracle) bef
 
 | Doc | Change |
 |------|--------|
-| `docs/connectors/jim-sql-connector.md` | New connector guide: configuration per provider, delta mode guidance (change-log table recommended; watermark limitations), type mapping, security/least-privilege guidance, Oracle driver licence note |
+| `docs/connectors/jim-sql-connector.md` | New connector guide: configuration per provider, delta mode guidance (change-log table recommended; watermark limitations), type mapping, security/least-privilege guidance, Oracle driver licence note. Must also state that JIM is open to supporting a wider range of database servers (PostgreSQL, MySQL/MariaDB and others) when there is demand, inviting feedback via the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas) |
+| Delta import setup guides | Public documentation must cover setting up each delta import mode end to end (change-log table; watermark column). If a mode needs a full page to cover properly, give it a dedicated page linked from the SQL Connector page rather than compressing it |
 | `docs/connectors/index.md` (or equivalent nav) | Add the new connector |
 | `engineering/DEVELOPER_GUIDE.md` | Note the provider abstraction if it introduces a new architectural component |
 
@@ -197,28 +198,28 @@ The full matrix must run green for Priority 1 providers (SQL Server, Oracle) bef
 
 Additionally:
 
-- Third-Party Dependency Governance approval for `Microsoft.Data.SqlClient` and `Oracle.ManagedDataAccess.Core` (Priority 1), then `Npgsql` and `MySqlConnector` (Priority 2).
+- Third-Party Dependency Governance: **Priority 1 packages approved 2026-07-31** following the notify-research-present-approve workflow: `Microsoft.Data.SqlClient` 7.0.2 (MIT; Microsoft-maintained; no open vulnerabilities; as of 7.0 the package no longer depends on Azure.Identity or MSAL, and the separate `Microsoft.Data.SqlClient.Extensions.Azure` package must not be added, cloud authentication being a non-goal) and `Oracle.ManagedDataAccess.Core` 23.26.300 (Oracle Free Distribution, Hosting, and Use Terms; a copy of the licence must ship with any JIM distribution containing the driver, and its terms must be documented in the customer-facing connector guide; no open vulnerabilities). Pin exact per `engineering/DEPENDENCY_PINNING.md`. `Npgsql` and `MySqlConnector` (Priority 2) remain subject to governance when their providers are scheduled.
 
 ## Open Questions
 
 1. **Decimal support** (resolved; tracked as #1046, a child issue of #170 and a hard prerequisite per the Dependencies section): a Text mapping for DECIMAL/NUMERIC/MONEY columns is a proven pattern in this product class and fine for pass-through flows, but it breaks numeric semantics where JIM itself evaluates the value: scoping criteria compare Text lexicographically ("0.5" > "0.25" works, "9" > "10" fails), so a rule like "FTE less than 0.5" cannot be expressed reliably, and identity-relevant decimal data is real (FTE fraction, contracted hours, salary banding). SCIM (RFC 7643) also defines `decimal` as a core attribute type, so the planned SCIM work (#545) meets the same gap. A first-class `Decimal` `AttributeDataType` is therefore tracked as #1046 and sequenced before this connector, which maps exact-numeric columns to Decimal natively from day one.
-2. **Zoneless DateTime default**: when the administrator does not set the time-zone interpretation setting, should the connector default to UTC (predictable, sometimes wrong) or refuse to import zoneless datetime columns until configured (safe, more friction)?
-3. **Multiple multi-valued related tables per object type**: the first release supports N related tables per object type in the data model; is there a UI complexity argument for capping at one initially?
-4. **`SupportsParallelExport`**: parallel batches against one database can deadlock on hot pages and interleave parent/child writes; start sequential and revisit, or design for parallelism from the outset?
-5. **Stored-procedure export in the first release** (requirement 17): include or fast-follow?
-6. **Project placement**: bundling four ADO.NET providers into `JIM.Connectors` grows every deployment; is a separate `JIM.Connectors.Sql` project (still built-in, but isolating the dependency graph) worth the structural deviation from the LDAP/File folder pattern?
+2. **Zoneless DateTime default** (resolved 2026-07-31): the time-zone interpretation setting is required and defaults to UTC, visible to the administrator at configuration time; the connector never refuses zoneless columns. Recorded in requirement 9.
+3. **Multiple multi-valued related tables per object type** (resolved 2026-07-31): N related tables supported from day one; no UI cap. Capping at one saves little and forces a migration later.
+4. **`SupportsParallelExport`** (resolved 2026-07-31): declared false for the first release; parallel batches against one database can deadlock on hot pages. The provider abstraction must keep enabling it later a capability flip, not a reshape. Recorded in requirement 19.
+5. **Stored-procedure export in the first release** (resolved 2026-07-31): fast-follow; the first release ships direct-statement export only, keeping the transactional path simple. Recorded in requirement 17.
+6. **Project placement** (resolved 2026-07-31): stay in `JIM.Connectors` under `Sql/`, matching the LDAP/File folder pattern; everything ships in one container image, so a separate project buys dependency-graph hygiene nobody currently needs. Revisit only if provider count or image-size pressure demands it.
 
 ## Acceptance Criteria
 
-- [ ] An administrator can configure, validate and save a SQL Server Connected System and an Oracle Connected System entirely via the admin UI, with the password encrypted at rest via the existing credential protection mechanism.
+- [ ] An administrator can configure, validate and save a SQL Server Connected System and an Oracle Connected System from each of the three admin surfaces (portal, REST API, PowerShell), with the password encrypted at rest via the existing credential protection mechanism.
 - [ ] Schema discovery lists tables/views and columns with correct JIM type mapping for both Priority 1 providers.
-- [ ] Full import stages objects from a table/view including multi-valued attributes from a related table and reference attributes carrying anchors, verified at 100,000 rows.
+- [ ] Full import stages objects from a table/view including multi-valued attributes from a related table and reference attributes carrying anchors, verified at 500,000 rows.
 - [ ] Delta import works in change-log-table mode including deletion propagation, and in watermark mode with documented create/update-only semantics; a missing watermark falls back with the standard warning.
 - [ ] Export creates, updates and deletes rows transactionally including related-table maintenance, returning database-generated keys as external IDs, with per-object error isolation and auto-confirmation.
 - [ ] All operations are recorded as Activities with per-object Run Profile Execution Items.
 - [ ] No native drivers: fully managed providers, air-gap deployable, dependency governance completed for each provider package.
 - [ ] The full provider × capability integration matrix (see Testing Requirements) runs green against real SQL Server and Oracle Database Free containers in the existing runner; unit tests cover the provider dialect layer, type mapping and query generation.
-- [ ] Public documentation ships in the same release: per-provider configuration guide, delta mode guidance, type mapping and licensing notes.
+- [ ] Public documentation ships in the same release: per-provider configuration guide, delta import setup guidance for both modes (dedicated pages if a single page cannot cover a mode's setup end to end), type mapping and licensing notes, and the wider-database-support feedback callout pointing at GitHub Discussions Ideas.
 
 ## Additional Context
 

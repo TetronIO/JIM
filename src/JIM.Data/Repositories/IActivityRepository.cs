@@ -93,6 +93,12 @@ public interface IActivityRepository
     public Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId);
 
     /// <summary>
+    /// The recorded phases of a Run Profile execution (#454), in run order. Empty for Activities
+    /// that are not Run Profile executions, and for runs that predate phase recording.
+    /// </summary>
+    public Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId);
+
+    /// <summary>
     /// Finalises the Activity's Run Profile execution stat counters: recomputes the stats exactly
     /// from the persisted Run Profile Execution Items and Sync Outcomes, replaces the incremental
     /// counter rows with the exact values, and sets
@@ -257,4 +263,25 @@ public interface IActivityRepository
     /// <returns>True if a matching row was found and incremented; false if no row exists yet for this window bucket
     /// (the caller must then create one).</returns>
     public Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems that has one, the <see cref="Activity.Executed"/> time of its
+    /// most recent successfully completed Full Synchronisation. Systems that have never completed one are absent from
+    /// the dictionary rather than carrying a sentinel date, so callers must distinguish "never" from "long ago".
+    ///
+    /// Runs that failed, errored or were cancelled do not count: a Full Synchronisation that did not finish cleanly
+    /// cannot be relied on to have applied the configuration, so treating it as a reference point would hide real
+    /// pending changes.
+    /// </summary>
+    public Task<Dictionary<int, DateTime>> GetLastFullSynchronisationStartsAsync(IList<int> connectedSystemIds);
+
+    /// <summary>
+    /// Returns the target columns and classification of every configuration change recorded at or after
+    /// <paramref name="since"/> whose class is at least <paramref name="minimumClass"/>, for the caller to attribute
+    /// to the Connected Systems it affects.
+    ///
+    /// Unlike the per-object configuration history queries, this deliberately does not require a captured version:
+    /// deletions are recorded without one and are precisely the changes that most need surfacing.
+    /// </summary>
+    public Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass);
 }

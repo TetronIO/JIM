@@ -127,47 +127,60 @@ public class PaginationRequestTests
     }
 
     [Test]
-    public void MaxPage_IsOneThousand()
-    {
-        // The page-depth cap is a single named constant so it can be tuned in one place.
-        Assert.That(PaginationRequest.MaxPage, Is.EqualTo(1000));
-    }
-
-    [Test]
-    public void Page_AtMaxPage_PassesValidation()
+    public void Page_AtTheDepthCeiling_PassesValidation()
     {
         // The boundary itself is allowed; only requests beyond it are rejected.
-        var request = new PaginationRequest { Page = PaginationRequest.MaxPage };
+        var request = new PaginationRequest { Page = PaginationLimits.MaxPageFor(100), PageSize = 100 };
         var results = Validate(request);
         Assert.That(results, Is.Empty);
     }
 
     [Test]
-    public void Page_JustUnderMaxPage_PassesValidation()
+    public void Page_JustUnderTheDepthCeiling_PassesValidation()
     {
-        var request = new PaginationRequest { Page = PaginationRequest.MaxPage - 1 };
+        var request = new PaginationRequest { Page = PaginationLimits.MaxPageFor(100) - 1, PageSize = 100 };
         var results = Validate(request);
         Assert.That(results, Is.Empty);
     }
 
     [Test]
-    public void Page_JustOverMaxPage_FailsValidationWithHelpfulMessage()
+    public void Page_JustOverTheDepthCeiling_FailsValidationWithHelpfulMessage()
     {
         // Beyond the cap must fail validation, which [ApiController] surfaces as a 400 rather than
         // silently clamping, so the caller learns they have over-paged.
-        var request = new PaginationRequest { Page = PaginationRequest.MaxPage + 1 };
+        var request = new PaginationRequest { Page = PaginationLimits.MaxPageFor(100) + 1, PageSize = 100 };
         var results = Validate(request);
         Assert.That(results, Is.Not.Empty);
         Assert.That(results[0].MemberNames, Does.Contain(nameof(PaginationRequest.Page)));
-        Assert.That(results[0].ErrorMessage, Does.Contain("1000"));
+        Assert.That(results[0].ErrorMessage, Does.Contain("10001").Or.Contain("10,001"));
     }
 
     [Test]
-    public void Page_FarBeyondMaxPage_FailsValidation()
+    public void Page_FarBeyondTheDepthCeiling_FailsValidation()
     {
         var request = new PaginationRequest { Page = int.MaxValue };
         var results = Validate(request);
         Assert.That(results, Is.Not.Empty);
         Assert.That(results.Exists(r => r.MemberNames.Contains(nameof(PaginationRequest.Page))), Is.True);
+    }
+
+    [Test]
+    public void Page_DeepAtASmallPageSize_PassesValidation()
+    {
+        // The ceiling is an offset, not a page number: 20,000 pages of 10 rows costs the database the same
+        // as 2,000 pages of 100, so both must be allowed. The previous page-number cap rejected this.
+        var request = new PaginationRequest { Page = 20_000, PageSize = 10 };
+        var results = Validate(request);
+        Assert.That(results, Is.Empty);
+    }
+
+    [Test]
+    public void Skip_AtTheDeepestAllowedPage_DoesNotOverflow()
+    {
+        // Skip is int arithmetic; the depth ceiling is what keeps it inside the range. If the ceiling is ever
+        // raised past int.MaxValue rows, Skip needs widening too, and this test is where that shows up.
+        var request = new PaginationRequest { Page = PaginationLimits.MaxPageFor(100), PageSize = 100 };
+        Assert.That(request.Skip, Is.EqualTo(PaginationLimits.MaxSkip));
+        Assert.That(request.Skip, Is.GreaterThan(0));
     }
 }

@@ -4,6 +4,7 @@
 # Shell scripts - always LF
 *.sh text eol=lf
 .devcontainer/** text eol=lf
+.githooks/* text eol=lf
 
 # Batch files - always CRLF
 *.bat text eol=crlf

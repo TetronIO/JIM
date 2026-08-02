@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -27,8 +28,10 @@ internal class LdapConnectorImport
     private readonly int _importConcurrency;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
+    private readonly string? _preferredDomainController;
     private readonly TimeSpan _searchTimeout;
     private readonly string _placeholderMemberDn;
+    private readonly IConnectorProgress _progress;
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
@@ -40,8 +43,10 @@ internal class LdapConnectorImport
         int importConcurrency,
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
+        string? preferredDomainController,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IConnectorProgress progress)
     {
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
@@ -50,8 +55,10 @@ internal class LdapConnectorImport
         _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
         _paginationTokens = paginationTokens;
         _persistedConnectorData = persistedConnectorData;
+        _preferredDomainController = preferredDomainController;
         _logger = logger;
         _cancellationToken = cancellationToken;
+        _progress = progress;
 
         // Get search timeout from settings, defaulting to 5 minutes
         var searchTimeoutSetting = connectedSystem.SettingValues
@@ -79,7 +86,7 @@ internal class LdapConnectorImport
         }
     }
 
-    internal ConnectedSystemImportResult GetFullImportObjects()
+    internal async Task<ConnectedSystemImportResult> GetFullImportObjectsAsync()
     {
         _logger.Verbose("GetFullImportObjects: Started");
 
@@ -101,11 +108,16 @@ internal class LdapConnectorImport
             // initial-page call. we have no paging tokens to use (yet) to resume a query
 
             // get information about the directory we're connected to
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
             _currentRootDse = GetRootDseInformation();
 
             // Serialise the rootDSE info to JSON for persistence
             // This captures the current USN/changelog position for use in future delta imports
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
+
+            // Guard against silently importing zero objects from a Partition the connected domain
+            // controller does not host (see #230). AD-family only; a no-op for other directory types.
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, GetTargetPartitions(), _logger);
         }
 
         // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same
@@ -149,13 +161,13 @@ internal class LdapConnectorImport
                 // Parallel path: one dedicated connection per combo, capped by semaphore.
                 // Each combo fully drains all pages on its own connection, so no pagination
                 // tokens are returned — the import processor sees this as a single-page result.
-                GetFullImportObjectsParallel(result, combos);
+                await GetFullImportObjectsParallelAsync(result, combos);
             }
             else
             {
                 // Sequential fallback: use the primary connection, one combo at a time.
                 // Each combo is fully drained before moving to the next.
-                GetFullImportObjectsSequential(result, combos);
+                await GetFullImportObjectsSequentialAsync(result, combos);
             }
 
             return result;
@@ -181,6 +193,7 @@ internal class LdapConnectorImport
                         return result;
                     }
 
+                    await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching {selectedObjectType.Name} objects from {selectedContainer.Name}...");
                     GetFisoResults(result, selectedContainer, selectedObjectType, lastRunsCookie);
                 }
             }
@@ -194,7 +207,7 @@ internal class LdapConnectorImport
         return result;
     }
 
-    internal ConnectedSystemImportResult GetDeltaImportObjects()
+    internal async Task<ConnectedSystemImportResult> GetDeltaImportObjectsAsync()
     {
         _logger.Verbose("GetDeltaImportObjects: Started");
 
@@ -228,8 +241,20 @@ internal class LdapConnectorImport
         if (_paginationTokens.Count == 0)
         {
             // Initial page - get the current RootDSE info
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
             _currentRootDse = GetRootDseInformation();
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
+
+            // Guard against a USN-based delta import silently connecting to a different domain
+            // controller than the one that produced the persisted watermark (see #230). This must
+            // run before any delta querying below, on the same connection that just answered the
+            // rootDSE query above.
+            if (_previousRootDse.UseUsnDeltaImport)
+                LdapConnectorUtilities.VerifyDomainControllerIdentity(_previousRootDse, _currentRootDse, _logger);
+
+            // Guard against silently importing zero objects from a Partition the connected domain
+            // controller does not host (see #230). AD-family only; a no-op for other directory types.
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, GetTargetPartitions(), _logger);
         }
 
         // Determine which delta strategy to use
@@ -242,6 +267,8 @@ internal class LdapConnectorImport
 
             _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}",
                 _previousRootDse.HighestCommittedUsn);
+
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since USN {_previousRootDse.HighestCommittedUsn.Value:N0}...");
 
             // For AD, query objects where uSNChanged > previous HighestCommittedUSN
             foreach (var selectedPartition in GetTargetPartitions())
@@ -265,6 +292,7 @@ internal class LdapConnectorImport
                         if (_paginationTokens.Count > 0 && paginationToken == null)
                             continue;
 
+                        await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching changed {selectedObjectType.Name} objects from {selectedContainer.Name}...");
                         GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
                     }
                 }
@@ -278,6 +306,7 @@ internal class LdapConnectorImport
                     return result;
                 }
 
+                await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryDeletions, $"Querying deleted objects in {selectedPartition.Name}...");
                 GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
             }
         }
@@ -298,7 +327,7 @@ internal class LdapConnectorImport
                     "Falling back to full import to establish baseline. " +
                     "Future delta imports should work normally after this full import completes.");
 
-                result = GetFullImportObjects();
+                result = await GetFullImportObjectsAsync();
                 result.WarningMessage = "Delta import was requested but the accesslog watermark was not available " +
                     "(the cn=accesslog database may have exceeded the server's size limit for the bind account). " +
                     "A full import was performed instead. The watermark has been established and future " +
@@ -309,6 +338,8 @@ internal class LdapConnectorImport
 
             _logger.Debug("GetDeltaImportObjects: Using accesslog-based delta import. Previous timestamp: {PreviousTimestamp}",
                 _previousRootDse.LastAccesslogTimestamp);
+
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since {_previousRootDse.LastAccesslogTimestamp}...");
 
             // Pass the target partitions so the method can filter accesslog entries by DN suffix.
             // OpenLDAP uses a shared cn=accesslog for all databases, so entries from other suffixes
@@ -327,6 +358,7 @@ internal class LdapConnectorImport
             _logger.Debug("GetDeltaImportObjects: Using changelog-based delta import. Previous ChangeNumber: {PreviousChange}",
                 _previousRootDse.LastChangeNumber);
 
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {_previousRootDse.LastChangeNumber.Value:N0}...");
             GetDeltaResultsUsingChangelog(result, _previousRootDse.LastChangeNumber.Value);
         }
 
@@ -355,7 +387,7 @@ internal class LdapConnectorImport
     /// Each combo fully drains all pages on its own connection, avoiding the RFC 2696 connection-scoped
     /// paging cookie limitation. Concurrency is capped by <see cref="_importConcurrency"/>.
     /// </summary>
-    private void GetFullImportObjectsParallel(
+    private async Task GetFullImportObjectsParallelAsync(
         ConnectedSystemImportResult result,
         List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
     {
@@ -388,7 +420,7 @@ internal class LdapConnectorImport
                         index + 1, combos.Count, container.Name, objectType.Name);
 
                     // Fully drain all pages for this combo on its dedicated connection
-                    DrainAllPages(comboResults[index], comboConnection, container, objectType);
+                    await DrainAllPagesAsync(comboResults[index], comboConnection, container, objectType);
                 }
                 catch (OperationCanceledException)
                 {
@@ -408,21 +440,25 @@ internal class LdapConnectorImport
             }, _cancellationToken);
         }
 
+        var allCombos = Task.WhenAll(tasks);
         try
         {
-            Task.WaitAll(tasks, _cancellationToken);
+            await allCombos;
         }
         catch (OperationCanceledException)
         {
             _logger.Debug("GetFullImportObjectsParallel: Cancelled while waiting for combos to complete");
             return;
         }
-        catch (AggregateException ae)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Unwrap and rethrow the first real exception so the import processor sees it
-            var inner = ae.Flatten().InnerExceptions.FirstOrDefault(e => e is not OperationCanceledException);
+            // Awaiting rethrows only the first exception; unwrap and rethrow the first real
+            // (non-cancellation) failure so the import processor sees it
+            var inner = allCombos.Exception?.Flatten().InnerExceptions.FirstOrDefault(e => e is not OperationCanceledException);
             if (inner != null)
                 throw inner;
+
+            _logger.Warning(ex, "GetFullImportObjectsParallel: Combos faulted but no failure could be unwrapped to report");
             return;
         }
 
@@ -442,7 +478,7 @@ internal class LdapConnectorImport
     /// Each combo is fully drained (all pages) before moving to the next.
     /// Used as a fallback when the connection factory is unavailable or concurrency is 1.
     /// </summary>
-    private void GetFullImportObjectsSequential(
+    private async Task GetFullImportObjectsSequentialAsync(
         ConnectedSystemImportResult result,
         List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
     {
@@ -454,7 +490,7 @@ internal class LdapConnectorImport
                 return;
             }
 
-            DrainAllPages(result, _connection, container, objectType);
+            await DrainAllPagesAsync(result, _connection, container, objectType);
         }
     }
 
@@ -462,18 +498,22 @@ internal class LdapConnectorImport
     /// Fully drains all pages for a single container+objectType combination on the given connection.
     /// Keeps issuing paged search requests until the server returns an empty paging cookie.
     /// </summary>
-    private void DrainAllPages(
+    private async Task DrainAllPagesAsync(
         ConnectedSystemImportResult result,
         LdapConnection connection,
         ConnectedSystemContainer container,
         ConnectedSystemObjectType objectType)
     {
         byte[]? pagingCookie = null;
+        var page = 0;
 
         while (true)
         {
             if (_cancellationToken.IsCancellationRequested)
                 return;
+
+            page++;
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching {objectType.Name} objects from {container.Name} (page {page:N0})...");
 
             var comboResult = new ConnectedSystemImportResult();
             GetFisoResults(comboResult, connection, container, objectType, pagingCookie);
@@ -726,7 +766,9 @@ internal class LdapConnectorImport
             "HighestCommittedUSN",
             "supportedCapabilities",
             "vendorName",
-            "structuralObjectClass"
+            "structuralObjectClass",
+            "dsServiceName",
+            "namingContexts"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -753,8 +795,28 @@ internal class LdapConnectorImport
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
             DirectoryType = directoryType,
-            VendorName = vendorName
+            VendorName = vendorName,
+            NamingContexts = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "namingContexts")
         };
+
+        // For AD-family directories, capture the DC's invocationId so a later delta import can detect
+        // it has connected to a different DC than the one that produced the persisted USN watermark
+        // (see VerifyDomainControllerIdentity in LdapConnectorUtilities). invocationId is not itself
+        // a rootDSE attribute: dsServiceName gives the DN of the DC's NTDS Settings object, which is
+        // queried separately below.
+        if (rootDse.UseUsnDeltaImport)
+        {
+            var dsServiceName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "dsServiceName");
+            if (string.IsNullOrEmpty(dsServiceName))
+            {
+                _logger.Warning("GetRootDseInformation: rootDSE did not return dsServiceName. " +
+                    "Domain controller identity cannot be verified for this import.");
+            }
+            else
+            {
+                rootDse.InvocationId = QueryInvocationId(dsServiceName);
+            }
+        }
 
         // For non-AD directories, capture the current delta watermark.
         // This must run during BOTH full and delta imports:
@@ -784,9 +846,73 @@ internal class LdapConnectorImport
             }
         }
 
-        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}",
-            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)");
+        // Pin creation and self-healing (issue #230 Phase 2): the connection that answered this rootDSE
+        // query was itself opened via the resolved pin (or Host, on a first connection or after a pin was
+        // just invalidated), so setting the pin to the domain controller reached here both establishes the
+        // pin on first-ever connection and re-affirms/self-heals it on every later import. When a Preferred
+        // Domain Controller is configured, the setting owns selection, so any pin from a previous
+        // configuration is cleared rather than carried forward into the new baseline.
+        rootDse.PinnedDirectoryServer = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            rootDse.UseUsnDeltaImport, _preferredDomainController, rootDse.DnsHostName);
+
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}, InvocationId={InvocationId}, PinnedDirectoryServer={PinnedDirectoryServer}",
+            rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)", rootDse.InvocationId, LogSanitiser.Sanitise(rootDse.PinnedDirectoryServer) ?? "(not set)");
         return rootDse;
+    }
+
+    /// <summary>
+    /// Queries the DC's NTDS Settings object (identified by the rootDSE's dsServiceName) for its
+    /// invocationId, a binary GUID attribute that is not itself exposed on the rootDSE. Used by
+    /// <see cref="LdapConnectorUtilities.VerifyDomainControllerIdentity"/> to detect a delta import
+    /// connecting to a different DC than the one that produced the persisted USN watermark.
+    /// Never throws: a missing attribute or an LDAP-level failure (permissions, a non-AD server that
+    /// still claims AD capabilities) is logged as a warning and returns null, since this is a
+    /// defence-in-depth guard, not itself required for the import to proceed.
+    /// </summary>
+    private Guid? QueryInvocationId(string dsServiceNameDn)
+    {
+        var request = new SearchRequest(dsServiceNameDn, "(objectClass=*)", SearchScope.Base, "invocationId");
+
+        try
+        {
+            var response = (SearchResponse)_connection.SendRequest(request, _searchTimeout);
+            if (response == null || response.Entries.Count == 0)
+            {
+                _logger.Warning("QueryInvocationId: No entries returned when querying the NTDS Settings object at {Dn}. " +
+                    "Domain controller identity cannot be verified for this import.", LogSanitiser.Sanitise(dsServiceNameDn));
+                return null;
+            }
+
+            var invocationId = LdapConnectorUtilities.GetEntryAttributeGuidValue(response.Entries[0], "invocationId");
+            if (invocationId == null)
+            {
+                _logger.Warning("QueryInvocationId: The NTDS Settings object at {Dn} did not return an invocationId value. " +
+                    "Domain controller identity cannot be verified for this import.", LogSanitiser.Sanitise(dsServiceNameDn));
+            }
+
+            return invocationId;
+        }
+        catch (DirectoryOperationException ex)
+        {
+            LogInvocationIdQueryFailure(dsServiceNameDn, ex);
+            return null;
+        }
+        catch (LdapException ex)
+        {
+            LogInvocationIdQueryFailure(dsServiceNameDn, ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Shared warning log for <see cref="QueryInvocationId"/>'s two identical-shaped catch clauses
+    /// (permissions, or a non-AD server that still claims AD capabilities).
+    /// </summary>
+    private void LogInvocationIdQueryFailure(string dsServiceNameDn, Exception ex)
+    {
+        _logger.Warning("QueryInvocationId: Failed to query the NTDS Settings object at {Dn}. " +
+            "Domain controller identity cannot be verified for this import. Error: {Message}",
+            LogSanitiser.Sanitise(dsServiceNameDn), LogSanitiser.Sanitise(ex.Message));
     }
 
     /// <summary>

@@ -151,6 +151,11 @@ try
         var jim = new JimApplication(repo, syncRepository: syncRepo);
         // Inject credential protection service for connector password encryption/decryption
         jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
+
+        // Let small configuration change previews (#827) run in this process rather than waiting for JIM.Worker to
+        // poll for them. Same injection point and reasoning as the line above: the implementation is a JIM.Web
+        // concern the application layer declares but cannot construct.
+        jim.ConfigurationChangePreviews.BackgroundRunner = sp.GetService<IConfigurationChangePreviewBackgroundRunner>();
         return jim;
     });
     builder.Services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
@@ -424,7 +429,10 @@ try
 
     // Add API controller support with JSON serialisation policy centralised in
     // ApiJsonConfiguration (see that class for the rationale and for unit tests).
-    builder.Services.AddControllers()
+    // The pagination depth filter (issue #487) applies the shared retrieval depth ceiling to every action,
+    // including the endpoints that bind page/pageSize as bare query parameters rather than a PaginationRequest.
+    // Registered globally so a new paginated endpoint is guarded by default rather than by the author remembering.
+    builder.Services.AddControllers(options => options.Filters.Add<PaginationDepthActionFilter>())
         .AddJsonOptions(options => JIM.Web.ApiJsonConfiguration.Configure(options.JsonSerializerOptions));
     builder.Services.AddEndpointsApiExplorer();
 
@@ -560,6 +568,12 @@ try
     builder.Services.AddSingleton<IDatabaseNotificationListener>(_ =>
         new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
     builder.Services.AddHostedService<NotificationListenerService>();
+
+    // One instance serving both roles: the hosted service that drains the queue, and the runner the application
+    // layer hands previews to. Registering it twice would give the enqueuing half a consumer that never runs.
+    builder.Services.AddSingleton<ConfigurationChangePreviewBackgroundRunner>();
+    builder.Services.AddSingleton<IConfigurationChangePreviewBackgroundRunner>(sp => sp.GetRequiredService<ConfigurationChangePreviewBackgroundRunner>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationChangePreviewBackgroundRunner>());
 
     // Live run-profile progress (issue #202): one shared ETA tracker so the progress API endpoint
     // and the Activity detail page derive their throughput estimates from the same sample history.

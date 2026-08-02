@@ -24,9 +24,8 @@
         else
         {
             <MudStack Spacing="3">
-                <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Immediate="true" DebounceInterval="200"
-                              Placeholder="Search attributes" Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                <SearchField @bind-Value="_search" DebounceInterval="200"
+                             Placeholder="Search attributes" Margin="Margin.None" />
 
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">Not yet on this Object Type</MudText>
                 <MudList T="int" SelectionMode="SelectionMode.MultiSelection" @bind-SelectedValues="_selectedIds" Dense="true">

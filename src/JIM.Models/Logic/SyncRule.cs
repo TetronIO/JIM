@@ -137,6 +137,16 @@ public class SyncRule : IAuditable, IValidated
     public List<ObjectMatchingRule> ObjectMatchingRules { get; set; } = new();
 
     /// <summary>
+    /// Whether, and how, this rule gives a newly provisioned account its first password.
+    /// <para>
+    /// Null means no initial password, which is where every rule starts. Only meaningful alongside
+    /// <see cref="ProvisionToConnectedSystem"/>, since a rule that never creates anything never has an account
+    /// to set a first password on.
+    /// </para>
+    /// </summary>
+    public SyncRuleInitialPassword? InitialPassword { get; set; }
+
+    /// <summary>
     /// Backlink for Entity Framework purposes to all Activities for this SyncRule.
     /// </summary>
     public List<Activity> Activities { get; set; } = null!;

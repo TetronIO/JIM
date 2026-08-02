@@ -67,7 +67,21 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull] =
             new OutcomeDisplay("Blank asserted", "MVO Null Asserted", CausalityTone.Warning, Icons.Material.Filled.DoNotDisturbOn),
         [ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor] =
-            new OutcomeDisplay("Value cleared", "MVO No Contributor", CausalityTone.Warning, Icons.Material.Filled.HighlightOff)
+            new OutcomeDisplay("Value cleared", "MVO No Contributor", CausalityTone.Warning, Icons.Material.Filled.HighlightOff),
+
+        // Configuration change preview (#827): transitions a proposed configuration would cause. Nothing writes
+        // these during a run, so they never reach an Activity's causality views; they are mapped because this is
+        // the one place an outcome type's vocabulary lives, and a preview surface rendering through it should
+        // inherit the same labels rather than grow a second, drifting set. Conditional tone throughout: a preview
+        // states what would happen, so the tone marks the consequence's weight, not a failure that has occurred.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] =
+            new OutcomeDisplay("Would enter scope", "Would Fall In Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] =
+            new OutcomeDisplay("Would leave scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] =
+            new OutcomeDisplay("Would become deletion eligible", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] =
+            new OutcomeDisplay("Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash)
     };
 
     /// <summary>

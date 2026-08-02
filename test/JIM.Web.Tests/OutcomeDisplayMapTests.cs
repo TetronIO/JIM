@@ -43,7 +43,11 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, "Deprovisioned", "CSO Deprovisioned", CausalityTone.Error, Icons.Material.Filled.CloudOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, "Identity deletion scheduled", "MVO Deletion Scheduled", CausalityTone.Warning, Icons.Material.Filled.HourglassBottom),
         (ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull, "Blank asserted", "MVO Null Asserted", CausalityTone.Warning, Icons.Material.Filled.DoNotDisturbOn),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, "Value cleared", "MVO No Contributor", CausalityTone.Warning, Icons.Material.Filled.HighlightOff)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, "Value cleared", "MVO No Contributor", CausalityTone.Warning, Icons.Material.Filled.HighlightOff),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope, "Would enter scope", "Would Fall In Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, "Would leave scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Would become deletion eligible", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash)
     ];
 
     [Test]
