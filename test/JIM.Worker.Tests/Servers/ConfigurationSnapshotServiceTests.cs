@@ -675,7 +675,7 @@ public class ConfigurationSnapshotServiceTests
         var mode = Child(snapshot.Root, "deletionTriggerMode");
         Assert.That(mode, Is.Not.Null, "the deletion trigger mode must be snapshotted");
         Assert.That(mode!.Value, Is.EqualTo("SpecificSourcesDisconnect"));
-        Assert.That(mode.Label, Is.EqualTo("Deletion trigger mode"));
+        Assert.That(mode!.Label, Is.EqualTo("Deletion trigger mode"));
     }
 
     [Test]

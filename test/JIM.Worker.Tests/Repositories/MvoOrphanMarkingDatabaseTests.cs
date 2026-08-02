@@ -170,11 +170,11 @@ public class MvoOrphanMarkingDatabaseTests
         var persistedSnapshot = MvoDeletionPolicySnapshot.FromJson(persisted.DeletionPolicySnapshotJson);
         Assert.That(persistedSnapshot, Is.Not.Null, "The decision-time policy snapshot must deserialise after the round trip.");
         Assert.That(persistedSnapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
-        Assert.That(persistedSnapshot.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.AllSourcesDisconnect));
-        Assert.That(persistedSnapshot.SelectedSourceSystemIds, Is.EqualTo(new List<int> { hr.SystemId }));
-        Assert.That(persistedSnapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
-        Assert.That(persistedSnapshot.TriggeringSystemId, Is.EqualTo(hr.SystemId));
-        Assert.That(persistedSnapshot.TriggeringSystemName, Is.EqualTo("HR System"));
+        Assert.That(persistedSnapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.AllSourcesDisconnect));
+        Assert.That(persistedSnapshot!.SelectedSourceSystemIds, Is.EqualTo(new List<int> { hr.SystemId }));
+        Assert.That(persistedSnapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
+        Assert.That(persistedSnapshot!.TriggeringSystemId, Is.EqualTo(hr.SystemId));
+        Assert.That(persistedSnapshot!.TriggeringSystemName, Is.EqualTo("HR System"));
     }
 
     [Test]

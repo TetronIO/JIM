@@ -767,14 +767,14 @@ public class ConnectedSystemDeletionTests
         var snapshot = MvoDeletionPolicySnapshot.FromJson(call.PolicySnapshotJson);
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
-        Assert.That(snapshot.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
-        Assert.That(snapshot.SelectedSourceSystemIds, Is.EqualTo(new List<int> { 1, 2 }));
-        Assert.That(snapshot.SelectedSourceSystemNames, Is.EqualTo(new List<string> { "HR System", "AD System" }));
-        Assert.That(snapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
-        Assert.That(snapshot.TriggeringSystemId, Is.EqualTo(1));
-        Assert.That(snapshot.TriggeringSystemName, Is.EqualTo("HR System"));
-        Assert.That(snapshot.RemainingConnectedSourceSystemIds, Is.EqualTo(new List<int> { 2 }));
-        Assert.That(snapshot.RemainingConnectedSourceSystemNames, Is.EqualTo(new List<string> { "AD System" }));
+        Assert.That(snapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
+        Assert.That(snapshot!.SelectedSourceSystemIds, Is.EqualTo(new List<int> { 1, 2 }));
+        Assert.That(snapshot!.SelectedSourceSystemNames, Is.EqualTo(new List<string> { "HR System", "AD System" }));
+        Assert.That(snapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
+        Assert.That(snapshot!.TriggeringSystemId, Is.EqualTo(1));
+        Assert.That(snapshot!.TriggeringSystemName, Is.EqualTo("HR System"));
+        Assert.That(snapshot!.RemainingConnectedSourceSystemIds, Is.EqualTo(new List<int> { 2 }));
+        Assert.That(snapshot!.RemainingConnectedSourceSystemNames, Is.EqualTo(new List<string> { "AD System" }));
     }
 
     [Test]
@@ -802,8 +802,8 @@ public class ConnectedSystemDeletionTests
         var snapshot = MvoDeletionPolicySnapshot.FromJson(capturedCalls[0].PolicySnapshotJson);
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.AllSourcesDisconnect));
-        Assert.That(snapshot.RemainingConnectedSourceSystemIds, Is.Empty);
-        Assert.That(snapshot.RemainingConnectedSourceSystemNames, Is.Empty);
+        Assert.That(snapshot!.RemainingConnectedSourceSystemIds, Is.Empty);
+        Assert.That(snapshot!.RemainingConnectedSourceSystemNames, Is.Empty);
     }
 
     [Test]
@@ -843,12 +843,12 @@ public class ConnectedSystemDeletionTests
         var authoritativeSnapshot = MvoDeletionPolicySnapshot.FromJson(authoritativeCall.PolicySnapshotJson);
         Assert.That(authoritativeSnapshot, Is.Not.Null);
         Assert.That(authoritativeSnapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
-        Assert.That(authoritativeSnapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
+        Assert.That(authoritativeSnapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
 
         var lastConnectorSnapshot = MvoDeletionPolicySnapshot.FromJson(lastConnectorCall.PolicySnapshotJson);
         Assert.That(lastConnectorSnapshot, Is.Not.Null);
         Assert.That(lastConnectorSnapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected));
-        Assert.That(lastConnectorSnapshot.GracePeriod, Is.EqualTo(TimeSpan.FromDays(1)));
+        Assert.That(lastConnectorSnapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(1)));
     }
 
     [Test]
@@ -910,7 +910,7 @@ public class ConnectedSystemDeletionTests
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.MvosWithDeletionRuleCount, Is.EqualTo(0));
-        Assert.That(result.Warnings, Has.None.Contains("marked for deletion"));
+        Assert.That(result!.Warnings, Has.None.Contains("marked for deletion"));
     }
 
     [Test]
