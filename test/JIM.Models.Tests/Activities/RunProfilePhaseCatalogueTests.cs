@@ -104,6 +104,8 @@ public class RunProfilePhaseCatalogueTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeferred),
+                "An export's second pass re-resolves references that did not exist yet and writes what it can; at scale that pass is most of the run.");
             Assert.That(keys, Does.Contain(RunPhaseKeys.ExportSelectNewContainers),
                 "An export that creates containers then goes and selects them; that is Connected System work with no step of its own.");
             Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeliverInitialPasswords),
@@ -120,6 +122,7 @@ public class RunProfilePhaseCatalogueTests
         {
             RunPhaseKeys.ExportPrepare,
             RunPhaseKeys.ExportExecute,
+            RunPhaseKeys.ExportDeferred,
             RunPhaseKeys.ExportResolveReferences,
             RunPhaseKeys.ExportSelectNewContainers,
             RunPhaseKeys.ExportDeliverInitialPasswords

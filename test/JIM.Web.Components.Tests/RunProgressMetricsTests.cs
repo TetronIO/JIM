@@ -142,6 +142,25 @@ public class RunProgressMetricsTests : JimComponentTestContext
     }
 
     [Test]
+    public void RunProgressMetrics_AlmostFinished_DoesNotRoundUpToAHundredPercent()
+    {
+        // 99.95% rounds to "100.0%", which sits on screen beside a time remaining for as long as
+        // the last few objects take. A percentage claiming completion is the one figure that must
+        // never overstate itself.
+        var cut = RenderMetrics(processed: 100000, total: 100050, objectsPerSecond: 15d, secondsRemaining: 3d);
+
+        Assert.That(cut.Find(".jim-run-percent").TextContent.Trim(), Is.EqualTo("99.9%"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_EveryObjectProcessed_ReadsAsAHundredPercent()
+    {
+        var cut = RenderMetrics(processed: 100050, total: 100050, objectsPerSecond: 15d, secondsRemaining: 0d);
+
+        Assert.That(cut.Find(".jim-run-percent").TextContent.Trim(), Is.EqualTo("100.0%"));
+    }
+
+    [Test]
     public void RunProgressMetrics_UnknownTotal_StillSaysHowMuchHasBeenProcessed()
     {
         // Paged imports never learn a total. The panel used to show a bare indeterminate bar and

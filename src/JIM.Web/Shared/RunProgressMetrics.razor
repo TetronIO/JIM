@@ -132,9 +132,15 @@
 
     private bool IsIndeterminate => ObjectsToProcess <= 0;
 
+    /// <summary>
+    /// Truncated to the tenth rather than rounded, so the only thing that reads as 100% is a step
+    /// that has genuinely finished. Rounding put "100.0%" on screen beside a time remaining for as
+    /// long as the last handful of objects took, which is the one figure that must not overstate
+    /// itself.
+    /// </summary>
     private double PercentComplete => IsIndeterminate
         ? 0d
-        : Math.Clamp((double)ObjectsProcessed / ObjectsToProcess * 100d, 0d, 100d);
+        : Math.Floor(Math.Clamp((double)ObjectsProcessed / ObjectsToProcess * 100d, 0d, 100d) * 10d) / 10d;
 
     /// <summary>
     /// A rate of zero once the run is under way means samples exist but the counter has not moved,

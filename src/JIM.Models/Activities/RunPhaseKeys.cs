@@ -60,6 +60,9 @@ public static class RunPhaseKeys
     /// <summary>Writing changes to the Connected System. Hosts the Connector's own phases.</summary>
     public const string ExportExecute = "export.execute";
 
+    /// <summary>The export's second pass: re-resolving references whose target did not exist during the first pass, and writing what that makes exportable.</summary>
+    public const string ExportDeferred = "export.deferred";
+
     /// <summary>Resolving references recorded in export change history once every exported object exists.</summary>
     public const string ExportResolveReferences = "export.references";
 

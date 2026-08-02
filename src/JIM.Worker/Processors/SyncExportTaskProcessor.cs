@@ -171,6 +171,7 @@ public class SyncExportTaskProcessor
             };
 
             var throughput = new ThroughputTracker();
+            var enteredDeferredPass = false;
             ExportExecutionResult result;
             await _phases.EnterAsync(RunPhaseKeys.ExportExecute, $"Exporting {pendingExportCount:N0} changes");
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
@@ -187,6 +188,20 @@ public class SyncExportTaskProcessor
                         // from, so the Connector's message travels on its own; repeating the counts
                         // in it printed the same numbers twice on the Activity.
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
+
+                        // The export makes two passes, and the second one is a step of its own: what
+                        // the first pass could not write for want of an object that did not exist yet
+                        // is re-resolved against what now does, then written.
+                        //
+                        // Latched rather than mapped report by report, because the deferred pass goes
+                        // back to reporting ExportPhase.Executing once it starts writing; without the
+                        // latch the rail would step backwards into Exporting mid-pass. Nothing after
+                        // the deferred pass belongs to the first one, so once it starts, it holds.
+                        if (!enteredDeferredPass && progressInfo.Phase == ExportPhase.ResolvingReferences)
+                        {
+                            enteredDeferredPass = true;
+                            await _phases.EnterAsync(RunPhaseKeys.ExportDeferred);
+                        }
 
                         // A report carrying a Connector phase key is the Connector saying it has moved
                         // to one of the steps it declared, so it advances the stepper too (#454).

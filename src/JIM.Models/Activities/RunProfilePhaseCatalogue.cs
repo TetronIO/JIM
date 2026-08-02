@@ -51,6 +51,10 @@ public static class RunProfilePhaseCatalogue
     [
         new(RunPhaseKeys.ExportPrepare, "Preparing export"),
         new(RunPhaseKeys.ExportExecute, "Exporting", HostsConnectorPhases: true),
+        // The second pass, reached only when the first left something referencing an object that
+        // did not exist yet. Most exports skip it, which is exactly what the skipped state is for;
+        // when it is reached it can be most of the run's wall-clock (#985).
+        new(RunPhaseKeys.ExportDeferred, "Exporting deferred changes"),
         new(RunPhaseKeys.ExportResolveReferences, "Resolving change history references"),
         // Both of these follow writing the objects and were previously invisible: the run went on
         // working against the Connected System, and narrating what it was doing, while the rail
