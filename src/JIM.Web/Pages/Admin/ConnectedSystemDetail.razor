@@ -44,20 +44,20 @@
             ? "Run a Full Synchronisation for it to take effect."
             : "Run a Full Synchronisation for them to take effect.";
     <MudAlert Severity="@(driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning)"
-              Variant="Variant.Outlined" Class="mt-2">
+              Variant="Variant.Outlined" Class="mt-2 mb-6">
         @driftLead @driftGuidance
     </MudAlert>
 }
 else if (_drift is { NeverFullySynchronised: true })
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
         This Connected System has never completed a Full Synchronisation, so its configuration has never been applied
         in full.
     </MudAlert>
 }
 else if (_drift is { TrackingDisabled: true })
 {
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-6">
         Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has
         configuration changes waiting for a Full Synchronisation.
     </MudAlert>

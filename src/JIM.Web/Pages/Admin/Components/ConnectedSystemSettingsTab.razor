@@ -171,8 +171,39 @@
            one was presented, and what to do about it, is the whole answer here. *@
         @if (_serverCertificate != null)
         {
-            <ServerCertificateCard Diagnostic="_serverCertificate" Compact="true" />
+            @* The settings that produced this failure are the ones on screen, and they are not saved: JIM does not
+               save settings that fail validation, and a certificate it does not trust is a validation failure. They
+               are handed to the action so the certificate trusted belongs to the endpoint the administrator is
+               configuring, rather than to whatever was saved last. *@
+            <ServerCertificateCard Diagnostic="_serverCertificate" Compact="true"
+                                   ConnectedSystemId="@(ConnectedSystem.Id > 0 ? ConnectedSystem.Id : null)"
+                                   ConnectedSystemName="@ConnectedSystem.Name"
+                                   DraftSettingValues="@DraftSettingValues()"
+                                   OnTrusted="HandleValidSettingsSubmitAsync" />
         }
+    }
+
+    @* The same capability from the other direction (#1139): the certificate can be looked at before anything has
+       failed, so configuring a new system is not a cycle of save, fail, come back. Fetching only reads and shows;
+       nothing is stored until the trust action on the card below is confirmed. *@
+    @if (_fetchedCertificate != null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+            @if (_fetchedCertificate.FailureReason == ServerCertificateFailureReason.None)
+            {
+                <text>JIM already trusts this certificate. Nothing needs adding.</text>
+            }
+            else
+            {
+                <text>JIM does not yet trust this certificate. Nothing has been saved; trusting it is a separate step.</text>
+            }
+        </MudAlert>
+
+        <ServerCertificateCard Diagnostic="_fetchedCertificate" Compact="true"
+                               ConnectedSystemId="@(ConnectedSystem.Id > 0 ? ConnectedSystem.Id : null)"
+                               ConnectedSystemName="@ConnectedSystem.Name"
+                               DraftSettingValues="@DraftSettingValues()"
+                               OnTrusted="FetchServerCertificateAsync" />
     }
 </MudForm>
 <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
@@ -186,6 +217,23 @@
         <text>Save Settings</text>
     }
 </MudButton>
+
+@if (_supportsCertificateFetch)
+{
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-5 ml-2" DropShadow="false"
+               StartIcon="@Icons.Material.Filled.Search" Disabled="_fetchingCertificate"
+               OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">
+        @if (_fetchingCertificate)
+        {
+            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+            <span class="ms-2">Fetching</span>
+        }
+        else
+        {
+            <text>Fetch certificate</text>
+        }
+    </MudButton>
+}
 
 @code {
     [Parameter, EditorRequired]
@@ -208,8 +256,33 @@
     /// The certificate a directory server presented when it refused the connection, when that is why validation failed.
     /// </summary>
     private ServerCertificateDiagnostic? _serverCertificate;
+
+    /// <summary>
+    /// The certificate an administrator asked to see before anything failed, via Fetch certificate.
+    /// </summary>
+    private ServerCertificateDiagnostic? _fetchedCertificate;
+
+    /// <summary>
+    /// Whether this system's connector makes encrypted connections at all, and so whether Fetch certificate means
+    /// anything for it. A property of the connector, so it is asked once.
+    /// </summary>
+    private bool _supportsCertificateFetch;
+
+    private bool _fetchingCertificate;
     private bool _settingsBeingSaved;
     private MudForm? _settingsForm;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ConnectedSystem.Id <= 0)
+        {
+            _supportsCertificateFetch = false;
+            return;
+        }
+
+        using var jim = JimFactory.Create();
+        _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
+    }
 
     /// <summary>
     /// Per-category (and Import Behaviour / Export Performance) expanded state for the settings accordion.
@@ -259,6 +332,17 @@
             return;
         }
 
+        // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
+        // are saving it. Connector settings are the connector's instructions (where it reads from, what it filters),
+        // so a change here is always sync-affecting; cancelling aborts the save.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+        {
+            _settingsBeingSaved = false;
+            return;
+        }
+
         // offer an optional reason for the configuration change history once validation has passed;
         // cancelling aborts the save
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
@@ -274,6 +358,57 @@
         _settingsBeingSaved = false;
 
         await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Reads the certificate the configured endpoint is presenting, before anything has been saved or has failed,
+    /// so an administrator setting a system up can see and trust it rather than saving, failing, and coming back.
+    /// </summary>
+    private async Task FetchServerCertificateAsync()
+    {
+        if (_fetchingCertificate || ConnectedSystem.Id <= 0)
+            return;
+
+        _fetchingCertificate = true;
+        _fetchedCertificate = null;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var result = await jim.Certificates.ReadServerCertificateAsync(ConnectedSystem.Id, DraftSettingValues());
+
+            if (result.Outcome == ServerCertificateReadOutcome.Read)
+                _fetchedCertificate = result.Diagnostic;
+            else
+                Snackbar.Add(result.Message ?? "JIM could not read a certificate from this endpoint.", Severity.Warning);
+        }
+        finally
+        {
+            _fetchingCertificate = false;
+        }
+    }
+
+    /// <summary>
+    /// The connectivity settings as they stand on screen, handed to the trust action so it looks at the endpoint the
+    /// administrator is configuring. They are not saved, and cannot be: JIM does not save settings that fail
+    /// validation, and a certificate it does not trust is a validation failure.
+    /// </summary>
+    /// <remarks>
+    /// Encrypted settings are left out; nothing needed to work out where a system connects is a secret, and there is
+    /// no reason to hand a credential to a certificate lookup.
+    /// </remarks>
+    private List<ConnectedSystemSettingValueDraft> DraftSettingValues()
+    {
+        return ConnectedSystem.SettingValues
+            .Where(sv => sv.Setting is { Type: not ConnectedSystemSettingType.StringEncrypted })
+            .Select(sv => new ConnectedSystemSettingValueDraft
+            {
+                SettingId = sv.Setting.Id,
+                StringValue = sv.StringValue,
+                IntValue = sv.IntValue,
+                CheckboxValue = sv.CheckboxValue
+            })
+            .ToList();
     }
 
     /// <summary>

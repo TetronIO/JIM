@@ -311,6 +311,14 @@ public class Worker : BackgroundService
                                             var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
                                             if (runProfile != null)
                                             {
+                                                // Record the steps this run can perform before it starts, so the
+                                                // Activity shows the whole journey rather than only the step it has
+                                                // reached (#454). Owned here because every run type needs it declared
+                                                // the same way, and closed out in the finally below whatever happens.
+                                                var phaseReporter = await ActivityPhaseReporter.StartAsync(
+                                                    syncRepo, newWorkerTask.Activity, connector, connectedSystem, runProfile);
+                                                var runFailed = false;
+
                                                 try
                                                 {
                                                     switch (runProfile.RunType)
@@ -319,7 +327,7 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.FullImport:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory);
+                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory, phaseReporter);
                                                             await importProcessor.PerformImportAsync();
                                                             break;
                                                         }
@@ -329,14 +337,14 @@ public class Worker : BackgroundService
                                                             // The connector's ImportAsync method checks the Run Profile type
                                                             // to determine whether to do full or delta import.
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory);
+                                                            var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory, phaseReporter);
                                                             await importProcessor.PerformImportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.FullSynchronisation:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter);
                                                             await syncFullSyncTaskProcessor.PerformFullSyncAsync();
                                                             break;
                                                         }
@@ -350,14 +358,15 @@ public class Worker : BackgroundService
                                                                                             var parallelJim = _jimFactory.Create();
                                                                                             return new SyncRepositoryScope(parallelJim.SyncRepository, parallelJim);
                                                                                         },
-                                                                                        connectorFactory: _connectorFactory);
+                                                                                        connectorFactory: _connectorFactory,
+                                                                                        phaseReporter: phaseReporter);
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
                                                         case ConnectedSystemRunType.DeltaSynchronisation:
                                                         {
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
-                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource);
+                                                            var syncDeltaSyncTaskProcessor = new SyncDeltaSyncTaskProcessor(syncEngine, syncServer, syncRepo, connectedSystem, runProfile, newWorkerTask.Activity, cancellationTokenSource, phaseReporter);
                                                             await syncDeltaSyncTaskProcessor.PerformDeltaSyncAsync();
                                                             break;
                                                         }
@@ -375,16 +384,22 @@ public class Worker : BackgroundService
                                                 {
                                                     // Connector threw OperationCanceledException in response to the CTS being cancelled.
                                                     // Activity is already marked Cancelled by CancelWorkerTaskAsync — nothing more to do.
+                                                    runFailed = true;
                                                     Log.Information("ExecuteAsync: Task {TaskId} cancelled during processing.", newWorkerTask.Id);
                                                 }
                                                 catch (Exception ex)
                                                 {
                                                     // we log unhandled exceptions to the history to enable sync operators/admins to be able to easily view
                                                     // issues with connectors through JIM, rather than an admin having to dig through server logs.
+                                                    runFailed = true;
                                                     await SafeFailActivityAsync(taskJim, newWorkerTask.Activity, ex, "Unhandled exception whilst executing sync run");
                                                 }
                                                 finally
                                                 {
+                                                    // Close the run's steps out: whatever was running is completed, or recorded as
+                                                    // the step the run failed in, which is where an administrator needs to look.
+                                                    await phaseReporter.FinishAsync(runFailed || cancellationTokenSource.IsCancellationRequested);
+
                                                     // record how long the sync run took, whether it was successful, or not.
                                                     var parallelSuffix = isParallel ? " [PARALLEL]" : "";
                                                     Log.Information("ExecuteAsync: Completed processing of {TargetName} sync run in {ExecutionTime}{ParallelSuffix}",

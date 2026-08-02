@@ -90,6 +90,24 @@ public interface IConnectorCapabilities
     public bool SupportsFilePaths { get; }
 
     /// <summary>
+    /// Does the Connector support setting a password on an object in the Connected System? When true, the
+    /// Connector must also implement IConnectorPasswordManagement.
+    /// Passwords travel on their own write-only channel rather than through Attribute Flow, so this capability
+    /// is independent of SupportsExport: a Connector can export attributes without being able to set a password,
+    /// and the reverse is possible too.
+    /// </summary>
+    public bool SupportsPasswordSet { get; }
+
+    /// <summary>
+    /// Can the Connector read the password policy the Connected System enforces? When true, the Connector must
+    /// also implement IConnectorPasswordPolicyDiscovery, and JIM reads the policy during schema import so that
+    /// initial password settings can be pre-filled from the target rather than typed out by an administrator.
+    /// This lets the portal tell "this Connector cannot discover policies" apart from "nothing discovered yet",
+    /// which lead an administrator to quite different conclusions.
+    /// </summary>
+    public bool SupportsPasswordPolicyDiscovery { get; }
+
+    /// <summary>
     /// Which wire standard's vocabulary the Connected System's schema follows, if any. Purely advisory:
     /// the portal uses it to show the right Standard Mapping hints in the Attribute Flow editor, so an
     /// administrator mapping an LDAP system's "givenName" can see which Metaverse Attribute the standard

@@ -178,6 +178,22 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void ActivityPhaseBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityPhase), "ActivityPhases", ActivityPhaseBulkColumns.ActivityPhases);
+    }
+
+    [Test]
+    public void ActivityPhaseUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "ActivityPhases",
+            ActivityPhaseBulkColumns.ActivityPhases,
+            [ActivityPhaseBulkColumns.ActivityPhasesUpdate],
+            ActivityPhaseBulkColumns.ActivityPhasesUpdateExclusions);
+    }
+
+    [Test]
     public void PendingExportBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExport), "PendingExports", PendingExportBulkColumns.PendingExports);
@@ -197,6 +213,22 @@ public class BulkInsertColumnCompletenessTests
             PendingExportBulkColumns.PendingExports,
             [PendingExportBulkColumns.PendingExportsRetryUpdate, PendingExportBulkColumns.PendingExportsExportResultUpdate],
             PendingExportBulkColumns.PendingExportsUpdateExclusions);
+    }
+
+    [Test]
+    public void PendingInitialPasswordBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingInitialPassword), "PendingInitialPasswords", PendingInitialPasswordBulkColumns.PendingInitialPasswords);
+    }
+
+    [Test]
+    public void PendingInitialPasswordUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "PendingInitialPasswords",
+            PendingInitialPasswordBulkColumns.PendingInitialPasswords,
+            [PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate],
+            PendingInitialPasswordBulkColumns.PendingInitialPasswordsUpdateExclusions);
     }
 
     [Test]

@@ -38,7 +38,7 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid|string>
 | `Id` | `int`, `guid` or `string` | Yes | | All | The ID of the configuration object: an integer for a Synchronisation Rule, Connected System, Metaverse Object Type, Metaverse Attribute, Role, Predefined Search, Connector Definition, Example Data Set, or Example Data Template; a GUID for a Schedule, Trusted Certificate, or API Key; the dot-notation setting key for a Service Setting. Accepts the `id` property from the pipeline, so a piped object binds automatically. |
 | `Page` | `int` | No | `1` | Page | Page number for the summary list. |
 | `PageSize` | `int` | No | `50` | Page, All | Items per page. Maximum: `100`. |
-| `All` | `switch` | No | | All | Automatically paginate through, and return, every change-history entry. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | | All | Automatically paginate through, and return, every change-history entry. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | | All | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Version` | `int` | Yes | | Version | Retrieve a single change by its per-object version number, returning the snapshot and the diff against the previous version. |
 | `CompareFrom` | `int` | Yes | | Compare | The earlier version to compare from. |

@@ -321,6 +321,7 @@
             <MudTextField T="string" Label="Text Field" Variant="Variant.Outlined" @bind-Value="_textFieldValue" />
         </MudItem>
         <MudItem xs="12" sm="6">
+            @* search-convention: exempt - previews how the theme paints a MudTextField adornment, alongside the plain and password tiles; it filters nothing. *@
             <MudTextField T="string" Label="Search Field" Variant="Variant.Outlined"
                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                 Placeholder="Search..." />
@@ -388,8 +389,7 @@
     <ToolBarContent>
         <MudText Typo="Typo.h6">Sample Data</MudText>
         <MudSpacer />
-        <MudTextField @bind-Value="_tableSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start"
-            AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true" />
+        <SearchField @bind-Value="_tableSearchString" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<SampleRow, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
@@ -487,8 +487,7 @@
                 <ToolBarContent>
                     <MudText Typo="Typo.subtitle2">Attributes</MudText>
                     <MudSpacer />
-                    <MudTextField T="string" Placeholder="Search..." Variant="Variant.Outlined" Margin="Margin.Dense"
-                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" />
+                    <SearchField Placeholder="Search..." />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>Attribute</MudTh>

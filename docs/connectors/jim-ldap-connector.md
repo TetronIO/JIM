@@ -167,12 +167,31 @@ There is no per Connected System option to relax any of this.
 
 #### Trusting an internal certificate authority, or a self-signed certificate
 
-Upload the certificate to JIM via **Admin > Certificates**. Both work:
+**The quickest route is the certificate JIM already shows you.** When an LDAPS connection is refused because JIM does not trust the issuer, the certificate card carries a **Trust this certificate** action. JIM reads the certificate from the directory server again, checks it is still the one you were shown, and adds it to the Trusted Certificates store. There is nothing to obtain, export or upload.
+
+You are asked to confirm first, because this is a security decision: compare the thumbprint against the one the directory's administrator gives you. Where the server sent the authority that issued its certificate, JIM offers that as well and recommends it, because trusting the authority survives the server's certificate being renewed. A self-signed certificate has no separate authority, so there is only one thing to trust.
+
+Reading the certificate again at the moment you confirm is what makes a change detectable. If the server is presenting something other than what you were shown, JIM trusts nothing and shows you both thumbprints; expected after a renewal, worth investigating otherwise.
+
+**Fetch certificate** on the Connected System's settings does the same reading before anything has failed, so setting a new system up does not mean saving, failing and coming back. Fetching stores nothing.
+
+You can still upload a certificate by hand via **Admin > Certificates**, which is the route to take when the directory is not reachable from JIM at the time you are configuring it. Both kinds work:
 
 - **An internal certificate authority**<br /> Upload the CA (and any intermediates). Every directory server whose certificate it issued is then trusted.
 - **The directory server's own self-signed certificate**<br /> Upload the server certificate itself. Only that certificate is then trusted, which is the tighter option where a directory has no certificate authority behind it.
 
 Certificates added this way are trusted **in addition to** the operating system's trust store, so adding one never stops a publicly-issued or already-trusted certificate from working.
+
+To do the same from a script:
+
+```powershell
+$reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+$reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint $reading.certificate.issuerThumbprint `
+    -ChangeReason 'Trusting the corporate issuing CA.'
+```
 
 #### When the certificate name does not match the host you connect to
 
@@ -192,6 +211,22 @@ Set the Host setting to `dc01.corp.local`. The name now resolves inside the cont
 !!! warning "Disabling validation entirely"
     OpenLDAP's own `LDAPTLS_REQCERT=never` environment variable is honoured by the LDAP client library JIM's containers use, and switches certificate validation off. It applies to the whole container, so it affects **every** LDAPS Connected System that container serves, and it cannot be scoped to one directory. JIM's development and integration test stacks set it for their throw-away directories. Never set it in production: it exposes the service account's credentials to anyone able to intercept the connection.
 
+### Setting Passwords
+
+Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel, with two rules specific to directories.
+
+**Use LDAPS.** A password set puts the password on the wire, so an unencrypted connection exposes it to anyone on the network path. JIM will not stop you: if "Use Secure Connection (LDAPS)?" is off, passwords are still set and a warning is written to the service log on every run, because some deployments genuinely cannot offer TLS on their directory and locking them out of password management entirely helps nobody. It is your decision, and enabling LDAPS is strongly recommended.
+
+Active Directory decides for itself regardless. It refuses a password write unless the connection is encrypted or the bind is signed and sealed, so in practice LDAPS is required there; JIM reports that refusal with encryption named as the likely fix.
+
+**Directories other than Active Directory use the standard extended operation.** JIM sets passwords through the LDAP Password Modify extended operation (RFC 3062) and never writes the `userPassword` attribute directly. Directories apply their configured password hashing to the extended operation, but store a directly written `userPassword` value exactly as supplied, which would leave the password readable in the directory. If a directory does not advertise support for the extended operation, JIM reports a configuration fault rather than falling back to an unsafe write.
+
+Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
+
+**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the domain password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
+
+There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
+
 ### Service Account Permissions
 
 The LDAP service account used by JIM should follow the principle of least privilege:
@@ -200,6 +235,9 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
 - **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
 - **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
+- **For setting passwords**<br /> Grant the **Reset Password** permission on the containers JIM manages. In Active Directory this is a control access right, delegated on the OU (Delegate Control, "Reset user passwords and force password change at next logon"), and it is a separate thing from write access to attributes: an account with full write permission on an OU still cannot set a password without it. **The service account does not need to be a Domain Admin**, and should not be.
+- **For checking reset rights**<br /> To answer the reset-rights preflight rather than reporting that it could not tell, the service account also needs read access to the `nTSecurityDescriptor` attribute of accounts in those containers. Reading an object's permissions is normally covered by ordinary read access; where it is not, the check reports an unknown rather than a denial.
+- **For discovering Fine-Grained Password Policies**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.

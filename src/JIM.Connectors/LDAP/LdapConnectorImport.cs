@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -30,7 +31,7 @@ internal class LdapConnectorImport
     private readonly string? _preferredDomainController;
     private readonly TimeSpan _searchTimeout;
     private readonly string _placeholderMemberDn;
-    private readonly Func<string, Task>? _progressCallback;
+    private readonly IConnectorProgress _progress;
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
@@ -45,7 +46,7 @@ internal class LdapConnectorImport
         string? preferredDomainController,
         ILogger logger,
         CancellationToken cancellationToken,
-        Func<string, Task>? progressCallback = null)
+        IConnectorProgress progress)
     {
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
@@ -57,7 +58,7 @@ internal class LdapConnectorImport
         _preferredDomainController = preferredDomainController;
         _logger = logger;
         _cancellationToken = cancellationToken;
-        _progressCallback = progressCallback;
+        _progress = progress;
 
         // Get search timeout from settings, defaulting to 5 minutes
         var searchTimeoutSetting = connectedSystem.SettingValues
@@ -107,7 +108,7 @@ internal class LdapConnectorImport
             // initial-page call. we have no paging tokens to use (yet) to resume a query
 
             // get information about the directory we're connected to
-            await ReportProgressAsync("Querying root DSE...");
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
             _currentRootDse = GetRootDseInformation();
 
             // Serialise the rootDSE info to JSON for persistence
@@ -192,7 +193,7 @@ internal class LdapConnectorImport
                         return result;
                     }
 
-                    await ReportProgressAsync($"Fetching {selectedObjectType.Name} objects from {selectedContainer.Name}...");
+                    await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching {selectedObjectType.Name} objects from {selectedContainer.Name}...");
                     GetFisoResults(result, selectedContainer, selectedObjectType, lastRunsCookie);
                 }
             }
@@ -240,7 +241,7 @@ internal class LdapConnectorImport
         if (_paginationTokens.Count == 0)
         {
             // Initial page - get the current RootDSE info
-            await ReportProgressAsync("Querying root DSE...");
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
             _currentRootDse = GetRootDseInformation();
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
 
@@ -267,7 +268,7 @@ internal class LdapConnectorImport
             _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}",
                 _previousRootDse.HighestCommittedUsn);
 
-            await ReportProgressAsync($"Querying changes since USN {_previousRootDse.HighestCommittedUsn.Value:N0}...");
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since USN {_previousRootDse.HighestCommittedUsn.Value:N0}...");
 
             // For AD, query objects where uSNChanged > previous HighestCommittedUSN
             foreach (var selectedPartition in GetTargetPartitions())
@@ -291,7 +292,7 @@ internal class LdapConnectorImport
                         if (_paginationTokens.Count > 0 && paginationToken == null)
                             continue;
 
-                        await ReportProgressAsync($"Fetching changed {selectedObjectType.Name} objects from {selectedContainer.Name}...");
+                        await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching changed {selectedObjectType.Name} objects from {selectedContainer.Name}...");
                         GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
                     }
                 }
@@ -305,7 +306,7 @@ internal class LdapConnectorImport
                     return result;
                 }
 
-                await ReportProgressAsync($"Querying deleted objects in {selectedPartition.Name}...");
+                await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryDeletions, $"Querying deleted objects in {selectedPartition.Name}...");
                 GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
             }
         }
@@ -338,7 +339,7 @@ internal class LdapConnectorImport
             _logger.Debug("GetDeltaImportObjects: Using accesslog-based delta import. Previous timestamp: {PreviousTimestamp}",
                 _previousRootDse.LastAccesslogTimestamp);
 
-            await ReportProgressAsync($"Querying changes since {_previousRootDse.LastAccesslogTimestamp}...");
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since {_previousRootDse.LastAccesslogTimestamp}...");
 
             // Pass the target partitions so the method can filter accesslog entries by DN suffix.
             // OpenLDAP uses a shared cn=accesslog for all databases, so entries from other suffixes
@@ -357,7 +358,7 @@ internal class LdapConnectorImport
             _logger.Debug("GetDeltaImportObjects: Using changelog-based delta import. Previous ChangeNumber: {PreviousChange}",
                 _previousRootDse.LastChangeNumber);
 
-            await ReportProgressAsync($"Querying changelog since change number {_previousRootDse.LastChangeNumber.Value:N0}...");
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {_previousRootDse.LastChangeNumber.Value:N0}...");
             GetDeltaResultsUsingChangelog(result, _previousRootDse.LastChangeNumber.Value);
         }
 
@@ -512,7 +513,7 @@ internal class LdapConnectorImport
                 return;
 
             page++;
-            await ReportProgressAsync($"Fetching {objectType.Name} objects from {container.Name} (page {page:N0})...");
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching {objectType.Name} objects from {container.Name} (page {page:N0})...");
 
             var comboResult = new ConnectedSystemImportResult();
             GetFisoResults(comboResult, connection, container, objectType, pagingCookie);
@@ -533,17 +534,6 @@ internal class LdapConnectorImport
     }
 
     #region private methods
-    /// <summary>
-    /// Narrates the directory work JIM is currently doing, when the caller asked for sub-phase progress.
-    /// Emits are cheap but not free (each one updates the Activity), so they belong on phase and page
-    /// boundaries, never per object.
-    /// </summary>
-    private async Task ReportProgressAsync(string subPhase)
-    {
-        if (_progressCallback != null)
-            await _progressCallback(subPhase);
-    }
-
     /// <summary>
     /// For directories that support changelog.
     /// </summary>

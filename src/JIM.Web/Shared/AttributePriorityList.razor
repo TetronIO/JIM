@@ -1,4 +1,5 @@
 @using JIM.Models.Logic
+@using JIM.Web.Models
 @using JIM.Web.Models.Api
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
@@ -209,14 +210,16 @@ else
         await LoadAsync();
     }
 
-    private async Task SaveAsync()
+    /// <summary>
+    /// Asks the administrator to acknowledge a priority reorder before it saves, through the same shared
+    /// <see cref="ConsequenceConfirmationDialog"/> every other sync-affecting save uses, so this reads as one feature
+    /// rather than a page with its own conventions. The copy stays specific: a generic diff of the reordered mapping
+    /// rows could not name the Connected Systems that have to be synchronised, and that is the part an administrator
+    /// new to JIM will not work out on their own. See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2).
+    /// </summary>
+    private async Task<bool> ConfirmPriorityChangeAsync()
     {
-        if (!_dirty || _saving)
-            return;
-
-        // HTML-encode interpolated names: they go into a MarkupString, which bypasses Razor's auto-encoding.
-        var encodedAttribute = System.Net.WebUtility.HtmlEncode(
-            string.IsNullOrWhiteSpace(MetaverseAttributeName) ? "this attribute" : MetaverseAttributeName);
+        var attributeName = string.IsNullOrWhiteSpace(MetaverseAttributeName) ? "this attribute" : MetaverseAttributeName;
 
         // Name the Connected Systems the admin must synchronise to apply the new order: the (enabled)
         // contributors to this attribute. A newbie will not otherwise know where to run the synchronisation.
@@ -224,25 +227,43 @@ else
             .Where(c => c.SyncRuleEnabled)
             .Select(c => c.ConnectedSystemName)
             .Where(n => !string.IsNullOrWhiteSpace(n))
+            // Null-state does not flow through Where, so the compiler still sees string? here.
+            .Select(n => n!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var systemsPhrase = contributingSystems.Count > 0
-            ? "each of these Connected Systems (in any order): " + string.Join(", ", contributingSystems.Select(n => $"<strong>{System.Net.WebUtility.HtmlEncode(n)}</strong>"))
-            : "each Connected System that contributes this attribute (in any order)";
 
-        var options = new MessageBoxOptions
+        var consequences = new ConsequenceGroup
         {
-            Title = "Apply priority changes?",
-            MarkupMessage = (MarkupString)(
-                $"Priority changes for <code class=\"jim-code-inline\">{encodedAttribute}</code> take effect as the contributing systems next synchronise; existing Metaverse Objects keep their current values until then." +
-                "<br /><br />" +
-                $"To apply the new order to your existing objects, run a <strong>Full Synchronisation</strong> Run Profile on {systemsPhrase}. A Delta Synchronisation only re-resolves recently-changed objects."),
-            YesText = "Apply",
-            CancelText = "Cancel"
+            Headline = $"Priority changes for {attributeName} take effect as the contributing systems next synchronise",
+            Note = "Existing Metaverse Objects keep their current values until then. To apply the new order to them, " +
+                   "run a Full Synchronisation Run Profile (in any order) on:",
+            Items = contributingSystems.Count > 0
+                ? contributingSystems.Select(name => new ConsequenceItem { Text = name }).ToList()
+                : [new ConsequenceItem { Text = "each Connected System that contributes this attribute" }]
         };
 
-        var confirmed = await DialogService.ShowMessageBoxAsync(options);
-        if (confirmed != true)
+        var parameters = new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.Consequences, consequences },
+            { x => x.Warnings, new[] { "A Delta Synchronisation only re-resolves recently-changed objects, so it will not apply the new order to everything." } },
+            { x => x.ConfirmButtonText, "Apply" },
+            { x => x.BusyText, "Applying..." },
+            { x => x.ConfirmButtonColour, Color.Warning }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+
+        var dialog = await DialogService.ShowAsync<ConsequenceConfirmationDialog>("Apply priority changes?", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_dirty || _saving)
+            return;
+
+        if (!await ConfirmPriorityChangeAsync())
             return;
 
         _saving = true;

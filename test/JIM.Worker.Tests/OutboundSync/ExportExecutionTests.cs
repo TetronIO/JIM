@@ -767,7 +767,7 @@ public class ExportExecutionTests
         var mockContainerCreation = mockConnector.As<IConnectorContainerCreation>();
 
         mockConnector.Setup(c => c.Name).Returns("Test Container Creation Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         // Simulate that the connector created two OUs during export
@@ -843,7 +843,7 @@ public class ExportExecutionTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
 
         mockConnector.Setup(c => c.Name).Returns("Test Regular Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         // Act
@@ -924,7 +924,7 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Failed("Connection to target system failed")
@@ -1032,7 +1032,7 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Successful Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Succeeded(generatedObjectGuid.ToString())
@@ -1142,7 +1142,7 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Failed("LDAP error: The object exists. Attribute member already exists")
@@ -1242,7 +1242,7 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
             .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
                 ConnectedSystemExportResult.Failed("Connection timeout")
@@ -1635,8 +1635,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
 
         var progressReports = new List<ExportProgressInfo>();
@@ -1819,8 +1819,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
 
         Func<IConnector> connectorFactory = () =>
@@ -1828,8 +1828,8 @@ public class ExportExecutionTests
             var factoryConnector = new Mock<IConnector>();
             var factoryExportConnector = factoryConnector.As<IConnectorExportUsingCalls>();
             factoryConnector.Setup(c => c.Name).Returns("Test Connector");
-            factoryExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+            factoryExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                     exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
             return factoryConnector.Object;
         };
@@ -1985,8 +1985,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
 
         Func<IConnector> connectorFactory = () =>
@@ -1994,8 +1994,8 @@ public class ExportExecutionTests
             var factoryConnector = new Mock<IConnector>();
             var factoryExportConnector = factoryConnector.As<IConnectorExportUsingCalls>();
             factoryConnector.Setup(c => c.Name).Returns("Test Connector");
-            factoryExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+            factoryExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                     exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
             return factoryConnector.Object;
         };
@@ -2140,7 +2140,7 @@ public class ExportExecutionTests
                 It.IsAny<IList<ConnectedSystemSettingValue>>(),
                 It.IsAny<IList<PendingExport>>(),
                 It.IsAny<CancellationToken>(),
-                It.IsAny<Func<string, Task>?>()))
+                It.IsAny<IConnectorProgress>()))
             .ThrowsAsync(new IOException("Permission denied: /connector-files/export.csv"));
 
         // Act
@@ -2329,8 +2329,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
 
         // Act
@@ -2944,8 +2944,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
         return mockConnector;
     }
@@ -3309,8 +3309,8 @@ public class ExportExecutionTests
             var mock = new Mock<IConnector>();
             var export = mock.As<IConnectorExportUsingCalls>();
             mock.Setup(c => c.Name).Returns("Recording Test Connector");
-            export.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+            export.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 {
                     foreach (var pe in exports)
                         foreach (var avc in pe.AttributeValueChanges.Where(a => a.AttributeId == managerAttr.Id))
@@ -3374,8 +3374,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
             {
                 lock (exportedIds)
                 {
@@ -3425,11 +3425,10 @@ public class ExportExecutionTests
                 It.IsAny<IList<ConnectedSystemSettingValue>>(),
                 It.IsAny<IList<PendingExport>>(),
                 It.IsAny<CancellationToken>(),
-                It.IsAny<Func<string, Task>?>()))
-            .Returns(async (IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, Func<string, Task>? subPhase) =>
+                It.IsAny<IConnectorProgress>()))
+            .Returns(async (IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, IConnectorProgress progress) =>
             {
-                Assert.That(subPhase, Is.Not.Null, "The server must offer file connectors a sub-phase progress callback");
-                await subPhase!("Writing 1 rows to output file...");
+                await progress.EnterPhaseAsync("write", "Writing 1 rows to output file...");
                 return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
             });
 
@@ -3449,7 +3448,8 @@ public class ExportExecutionTests
                     Phase = info.Phase,
                     Message = info.Message,
                     TotalExports = info.TotalExports,
-                    ProcessedExports = info.ProcessedExports
+                    ProcessedExports = info.ProcessedExports,
+                    ConnectorPhaseKey = info.ConnectorPhaseKey
                 });
                 return Task.CompletedTask;
             });
@@ -3458,6 +3458,8 @@ public class ExportExecutionTests
         Assert.That(result.SuccessCount, Is.EqualTo(1));
         var subPhaseReport = progressReports.SingleOrDefault(p => p.Message == "Writing 1 rows to output file...");
         Assert.That(subPhaseReport, Is.Not.Null, "The connector's sub-phase message should reach the caller's progress callback");
+        Assert.That(subPhaseReport!.ConnectorPhaseKey, Is.EqualTo("write"),
+            "A Connector entering one of its declared phases must carry the key, so the worker can advance the step (#454)");
         Assert.That(subPhaseReport!.Phase, Is.EqualTo(ExportPhase.Executing),
             "Sub-phase detail rides in the message; the orchestration-level phase stays JIM's");
         Assert.That(subPhaseReport.TotalExports, Is.EqualTo(result.TotalPendingExports),
@@ -3483,11 +3485,10 @@ public class ExportExecutionTests
         mockExportConnector.Setup(c => c.ExportAsync(
                 It.IsAny<IList<PendingExport>>(),
                 It.IsAny<CancellationToken>(),
-                It.IsAny<Func<string, Task>?>()))
-            .Returns(async (IList<PendingExport> exports, CancellationToken _, Func<string, Task>? subPhase) =>
+                It.IsAny<IConnectorProgress>()))
+            .Returns(async (IList<PendingExport> exports, CancellationToken _, IConnectorProgress progress) =>
             {
-                Assert.That(subPhase, Is.Not.Null, "The server must offer call connectors a sub-phase progress callback");
-                await subPhase!("Creating parent containers...");
+                await progress.ReportAsync("Creating parent containers...");
                 return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
             });
 
@@ -3507,7 +3508,8 @@ public class ExportExecutionTests
                     Phase = info.Phase,
                     Message = info.Message,
                     TotalExports = info.TotalExports,
-                    ProcessedExports = info.ProcessedExports
+                    ProcessedExports = info.ProcessedExports,
+                    ConnectorPhaseKey = info.ConnectorPhaseKey
                 });
                 return Task.CompletedTask;
             });
@@ -3521,12 +3523,12 @@ public class ExportExecutionTests
     }
 
     /// <summary>
-    /// With no caller progress callback there is nowhere for sub-phase messages to go, so the
-    /// connector must be handed null and skip building them. This also keeps the callback optional
-    /// for every existing connector.
+    /// A Connector never has to check whether anybody is listening: it is always handed a reporter,
+    /// even when the caller wants no progress, and narrating into that reporter is a no-op rather
+    /// than a crash.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_WithoutProgressCallback_PassesNoSubPhaseCallbackToTheConnectorAsync()
+    public async Task ExecuteExportsAsync_WithoutProgressCallback_StillHandsTheConnectorAReporterAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -3534,17 +3536,19 @@ public class ExportExecutionTests
         var pendingExport = CreateSeededCreateExport(targetSystem, targetUserType, DateTime.UtcNow, hasUnresolvedReferences: false);
         SyncRepo.SeedPendingExport(pendingExport);
 
-        Func<string, Task>? receivedSubPhaseCallback = null;
+        IConnectorProgress? receivedProgress = null;
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
         mockExportConnector.Setup(c => c.ExportAsync(
                 It.IsAny<IList<PendingExport>>(),
                 It.IsAny<CancellationToken>(),
-                It.IsAny<Func<string, Task>?>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? subPhase) =>
+                It.IsAny<IConnectorProgress>()))
+            .Returns(async (IList<PendingExport> exports, CancellationToken _, IConnectorProgress progress) =>
             {
-                receivedSubPhaseCallback = subPhase;
+                receivedProgress = progress;
+                await progress.EnterPhaseAsync("write", "Writing 1 rows to output file...");
+                await progress.ReportAsync("Merging 1 changes into file...");
                 return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
             });
 
@@ -3555,8 +3559,8 @@ public class ExportExecutionTests
             SyncRunMode.PreviewAndSync);
 
         // Assert
-        Assert.That(result.SuccessCount, Is.EqualTo(1));
-        Assert.That(receivedSubPhaseCallback, Is.Null);
+        Assert.That(result.SuccessCount, Is.EqualTo(1), "Narrating into a reporter nobody is listening to must not disturb the export");
+        Assert.That(receivedProgress, Is.Not.Null, "Connectors are always handed a reporter, so they never have to null-check it");
     }
 
     #endregion
