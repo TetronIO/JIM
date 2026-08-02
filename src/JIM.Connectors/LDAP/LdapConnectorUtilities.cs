@@ -729,6 +729,98 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Reads configurationNamingContext from the rootDSE, the DN of the Configuration partition
+    /// ("CN=Configuration,DC=..."), used to locate the CN=Sites subtree for domain controller discovery
+    /// (issue #1167).
+    /// </summary>
+    internal static string? GetConfigurationNamingContext(LdapConnection connection, ILogger logger)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("configurationNamingContext");
+        var response = (SearchResponse)connection.SendRequest(request);
+
+        if (response.ResultCode != ResultCode.Success)
+        {
+            logger.Warning("GetConfigurationNamingContext: No success. Result code: {ResultCode}", response.ResultCode);
+            return null;
+        }
+
+        if (response.Entries.Count == 0)
+        {
+            logger.Warning("GetConfigurationNamingContext: Didn't get any results!");
+            return null;
+        }
+
+        return GetEntryAttributeStringValue(response.Entries[0], "configurationNamingContext");
+    }
+
+    /// <summary>
+    /// Derives the Distinguished Name of the server object that owns an nTDSDSA (NTDS Settings) object, used
+    /// during domain controller discovery (issue #1167). An nTDSDSA object's DN takes the shape
+    /// "CN=NTDS Settings,CN=&lt;server&gt;,CN=Servers,CN=&lt;site&gt;,CN=Sites,CN=Configuration,..."; the
+    /// server object is its immediate parent.
+    /// </summary>
+    /// <param name="ntdsDsaDn">The Distinguished Name of an nTDSDSA object.</param>
+    /// <returns>The server object's Distinguished Name, or null if <paramref name="ntdsDsaDn"/> does not parse, or has no parent (a single-RDN DN, which an nTDSDSA object can never genuinely be).</returns>
+    internal static string? GetServerDnFromNtdsDsaDn(string ntdsDsaDn)
+    {
+        return LdapDistinguishedName.TryParse(ntdsDsaDn, out var parsed) ? parsed.Parent?.ToString() : null;
+    }
+
+    /// <summary>
+    /// Derives the Active Directory Site name an nTDSDSA object belongs to, used during domain controller
+    /// discovery (issue #1167). The Site name is the DN component three levels up from the nTDSDSA object:
+    /// "CN=NTDS Settings,CN=&lt;server&gt;,CN=Servers,CN=&lt;site&gt;,CN=Sites,...".
+    /// </summary>
+    /// <param name="ntdsDsaDn">The Distinguished Name of an nTDSDSA object.</param>
+    /// <returns>The Site name, or null if <paramref name="ntdsDsaDn"/> does not parse, or does not have at least four RDN components above the nTDSDSA object itself.</returns>
+    internal static string? GetSiteNameFromNtdsDsaDn(string ntdsDsaDn)
+    {
+        if (!LdapDistinguishedName.TryParse(ntdsDsaDn, out var parsed))
+            return null;
+
+        // parsed is "CN=NTDS Settings,...". Three levels up: Parent = server, Parent.Parent = CN=Servers,
+        // Parent.Parent.Parent = CN=<site>.
+        var siteRdn = parsed.Parent?.Parent?.Parent?.LeafRdn;
+        return siteRdn?.Components.Count > 0 ? siteRdn.Components[0].Value : null;
+    }
+
+    /// <summary>
+    /// Maps discovered nTDSDSA objects (paired with the dNSHostName read from each one's parent server object)
+    /// into the <see cref="ConnectorDirectoryServer"/> list JIM's Discover Domain Controllers action shows an
+    /// administrator (issue #1167). Kept independent of any live LDAP connection so the mapping is unit
+    /// testable: the only inputs are the nTDSDSA DN (Site is derived from it) and whatever dNSHostName value
+    /// (if any) was read for its server object.
+    /// </summary>
+    /// <param name="entries">Each nTDSDSA object's own DN, paired with the dNSHostName read from its parent server object (null when the server object had none, or could not be read).</param>
+    /// <param name="logger">Logger for a skipped-entry warning; DNs are sanitised before logging.</param>
+    /// <returns>One <see cref="ConnectorDirectoryServer"/> per entry with a usable dNSHostName, ordered by hostname. Entries with no dNSHostName are skipped: JIM has nothing to offer the administrator for a domain controller it cannot name.</returns>
+    internal static List<ConnectorDirectoryServer> MapNtdsDsaEntriesToDirectoryServers(
+        IEnumerable<(string NtdsDsaDn, string? DnsHostName)> entries,
+        ILogger logger)
+    {
+        // Materialised once: it is enumerated twice below (the warning pass, then the projection), and the
+        // parameter type is IEnumerable so a caller-supplied lazy sequence must not be evaluated twice over.
+        var entryList = entries.ToList();
+
+        foreach (var skipped in entryList.Where(e => string.IsNullOrEmpty(e.DnsHostName)))
+        {
+            logger.Warning("MapNtdsDsaEntriesToDirectoryServers: The server object for nTDSDSA object '{Dn}' has no dNSHostName. Skipping; JIM cannot offer a domain controller it cannot name.",
+                LogSanitiser.Sanitise(skipped.NtdsDsaDn));
+        }
+
+        return entryList
+            .Where(e => !string.IsNullOrEmpty(e.DnsHostName))
+            .Select(e => new ConnectorDirectoryServer
+            {
+                HostName = e.DnsHostName!,
+                Site = GetSiteNameFromNtdsDsaDn(e.NtdsDsaDn)
+            })
+            .OrderBy(s => s.HostName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
     /// Resolves which server a connection should be opened against, and why (issue #230 Phase 2). This
     /// is the single point where the domain controller/directory server for a connection is decided, so
     /// that the connection factory (and therefore every parallel connection in a run) resolves to the

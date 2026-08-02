@@ -672,6 +672,46 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPartition
 
 ---
 
+## Get-JIMConnectedSystemDirectoryServer
+
+Discovers the domain controllers in a Connected System's directory, with the Active Directory Site each belongs to. Only Connected Systems using the LDAP connector against an Active Directory or Samba AD directory support this; other connectors, and non-AD-family LDAP directories (OpenLDAP, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+One object per discovered domain controller: `hostName` (its FQDN) and `site` (the Active Directory Site it belongs to, or `$null` for directories without Sites).
+
+### Examples
+
+```powershell title="Discover domain controllers for a Connected System"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3
+```
+
+```powershell title="Filter to a specific Active Directory Site"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3 | Where-Object { $_.site -eq 'London' }
+```
+
+```powershell title="Pipeline from Get-JIMConnectedSystem"
+Get-JIMConnectedSystem -Name "Corp AD" | Get-JIMConnectedSystemDirectoryServer
+```
+
+### Notes
+
+- This is a discovery aid, not a configuration write: use `Set-JIMConnectedSystem` to set the Preferred Domain Controller setting once you have chosen one.
+
+---
+
 ## Set-JIMConnectedSystemPartition
 
 Updates the selection state of a partition on a Connected System.

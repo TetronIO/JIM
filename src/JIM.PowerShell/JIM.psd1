@@ -48,6 +48,7 @@
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
+        'Get-JIMConnectedSystemDirectoryServer',
         'Get-JIMConnectedSystemObject',
         'Get-JIMConnectedSystemObjectType',
         'Get-JIMConnectedSystemObjectAttributeValue',
@@ -222,7 +223,9 @@
     VariablesToExport = @()
 
     # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
+    AliasesToExport = @(
+        'Get-JIMConnectedSystemDomainController'
+    )
 
     # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
     PrivateData = @{
