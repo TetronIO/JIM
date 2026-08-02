@@ -253,6 +253,15 @@ services:
     build:
       context: ../../..
       dockerfile: test/integration/docker/scim/Dockerfile
+      # Build-environment passthroughs, all empty/default outside constrained networks: an extra CA for
+      # TLS-inspecting proxies, standard proxy variables, and host networking where the proxy listens on
+      # the host's loopback (JIM_BUILD_NETWORK=host).
+      network: ${JIM_BUILD_NETWORK:-default}
+      args:
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+        HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
     container_name: scim-provider
     environment:
       # Must match the container name: the certificate is issued for this, and the scenario connects
