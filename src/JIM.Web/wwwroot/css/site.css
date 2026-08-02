@@ -2807,23 +2807,50 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     background-color: var(--mud-palette-text-disabled);
 }
 
-/* The verdict is the line that decides whether to press the button again, so it gets a shape of its own: a
-   coloured dot and small caps, rather than another sentence in the same grey as everything around it. */
+/* One weight for an emphasised line anywhere in this dialog, so a Connected System's name in the picker, the
+   same name in the results, and the guidance headline all read as the same rank. <b> was giving 700 in the
+   lists against 600 here, which is two answers to one question. */
+.jim-password-system-name,
+.jim-password-guidance-headline {
+    font-weight: 600;
+}
+
+/* The headline names what went wrong, so it leads: the panel's one emphasised line, at the same size as the
+   prose under it. Weight and colour carry the hierarchy; nothing here changes size. */
+.jim-password-guidance-headline {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+/* The verdict is the line that decides whether to press the button again, so it is set apart by weight and a
+   dot rather than by a third size or a third text colour. */
 .jim-password-guidance-verdict {
     display: inline-flex;
     align-items: center;
     gap: 0.4375rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-weight: 500;
+    color: var(--mud-palette-text-secondary);
 }
 
 .jim-password-guidance-verdict::before {
     content: "";
     flex: none;
-    width: 0.375rem;
-    height: 0.375rem;
+    width: 0.4375rem;
+    height: 0.4375rem;
     border-radius: 50%;
-    background-color: currentColor;
+    background-color: var(--jim-verdict-dot, var(--mud-palette-text-secondary));
+}
+
+.jim-password-guidance-verdict--retry {
+    --jim-verdict-dot: var(--mud-palette-info);
+}
+
+.jim-password-guidance-verdict--somebody-else {
+    --jim-verdict-dot: var(--mud-palette-warning);
+}
+
+.jim-password-guidance-verdict--never {
+    --jim-verdict-dot: var(--mud-palette-error);
 }
 
 /* The account picker's control sits against the Connected System's name rather than halfway down a two-line

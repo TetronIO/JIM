@@ -200,4 +200,33 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     }
 
     #endregion
+
+    #region how the verdict is coloured
+
+    /// <summary>
+    /// The verdict's colour lives in its dot, carried by a modifier class, rather than in MudBlazor's
+    /// <c>mud-*-text</c> classes, which would colour the sentence too and put a third text colour into a
+    /// six-line panel. The sentence already says what the colour says, so the dot is a second cue rather than
+    /// the only one.
+    /// </summary>
+    [TestCase(PasswordSetFailureReason.PolicyRejection, "jim-password-guidance-verdict--retry")]
+    [TestCase(PasswordSetFailureReason.Transient, "jim-password-guidance-verdict--retry")]
+    [TestCase(PasswordSetFailureReason.ConfigurationFault, "jim-password-guidance-verdict--somebody-else")]
+    [TestCase(PasswordSetFailureReason.UnsupportedOperation, "jim-password-guidance-verdict--never")]
+    public void PasswordFailureGuidancePanel_ForEachVerdict_CarriesItsOwnDotColour(
+        PasswordSetFailureReason reason, string expectedModifier)
+    {
+        var panel = Render(reason);
+        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+
+        var verdict = panel.Find($"[data-testid='{VerdictMarker}']");
+        Assert.Multiple(() =>
+        {
+            Assert.That(verdict.ClassName, Does.Contain(expectedModifier));
+            Assert.That(verdict.ClassName, Does.Not.Contain("mud-info-text").And.Not.Contain("mud-warning-text")
+                .And.Not.Contain("mud-error-text"), "colouring the sentence is what the dot exists to avoid");
+        });
+    }
+
+    #endregion
 }
