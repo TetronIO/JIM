@@ -3581,9 +3581,9 @@ public class SyncImportTaskProcessor
             if (isFirstPage)
                 Log.Information("ReconcilePendingExportsAsync: Page 1 flush total: {ElapsedMs:F0}ms", flushSw!.ElapsedMilliseconds);
 
-            // Update activity progress after each page
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Reconciling Pending Exports ({processedCount:N0}/{csoList.Count:N0})");
+            // Update activity progress after each page. The counters set above are what the portal
+            // renders the count from; the step's own name says the rest.
+            await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
             await _syncRepo.UpdateActivityAsync(_activity);
         }
 

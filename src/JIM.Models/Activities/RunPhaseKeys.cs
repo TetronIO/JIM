@@ -49,6 +49,9 @@ public static class RunPhaseKeys
     /// <summary>Resolving references whose target object was only created on a later page of the run.</summary>
     public const string SyncResolveCrossPageReferences = "sync.crosspagereferences";
 
+    /// <summary>Re-evaluating export scope for Metaverse Objects whose scope drifted with the clock rather than with a data change (#892).</summary>
+    public const string SyncReviewExportScope = "sync.scopereview";
+
     // ─── Export ───
 
     /// <summary>Loading Pending Exports and counting the work before the Connector is called.</summary>
@@ -59,4 +62,10 @@ public static class RunPhaseKeys
 
     /// <summary>Resolving references recorded in export change history once every exported object exists.</summary>
     public const string ExportResolveReferences = "export.references";
+
+    /// <summary>Bringing containers the export created into JIM's picture of the Connected System, and selecting them.</summary>
+    public const string ExportSelectNewContainers = "export.containers";
+
+    /// <summary>Giving the accounts this export provisioned the initial passwords they are owed, and retrying any still outstanding.</summary>
+    public const string ExportDeliverInitialPasswords = "export.passwords";
 }

@@ -33,11 +33,14 @@ public static class RunPhaseIcons
         [RunPhaseKeys.SyncPrepare] = Icons.Material.Filled.Rule,
         [RunPhaseKeys.SyncProcessObjects] = Icons.Material.Filled.Sync,
         [RunPhaseKeys.SyncResolveCrossPageReferences] = Icons.Material.Filled.Link,
+        [RunPhaseKeys.SyncReviewExportScope] = Icons.Material.Filled.Schedule,
 
         // Export
         [RunPhaseKeys.ExportPrepare] = Icons.Material.Filled.Rule,
         [RunPhaseKeys.ExportExecute] = Icons.Material.Filled.CloudUpload,
-        [RunPhaseKeys.ExportResolveReferences] = Icons.Material.Filled.Link
+        [RunPhaseKeys.ExportResolveReferences] = Icons.Material.Filled.Link,
+        [RunPhaseKeys.ExportSelectNewContainers] = Icons.Material.Filled.CreateNewFolder,
+        [RunPhaseKeys.ExportDeliverInitialPasswords] = Icons.Material.Filled.Key
     };
 
     /// <summary>

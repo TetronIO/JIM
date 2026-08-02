@@ -122,12 +122,15 @@ public class SyncExportTaskProcessor
         if (pendingExportCount == 0)
         {
             Log.Information("PerformExportAsync: No Pending Exports for {SystemName}", _connectedSystem.Name);
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
 
             // #1121: still worth a delivery pass. An account whose initial password could not be set last time
             // is waiting on a retry, and a run with nothing to export is exactly what an administrator does
             // after granting the missing right or bringing the directory back up.
             await DeliverOutstandingInitialPasswordsAsync();
+
+            // Last, because the delivery pass above enters a step of its own and narrates into the
+            // Activity's message; the run's outcome has to be what an administrator is left reading.
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
             return;
         }
 
@@ -209,10 +212,13 @@ public class SyncExportTaskProcessor
             exportSpan.SetTag("failedCount", result.FailedCount);
             exportSpan.SetTag("deferredCount", result.DeferredCount);
 
-            // Finalise activity with completion message and stats (RPEIs already persisted per-batch)
+            // Finalise activity stats (RPEIs already persisted per-batch). The completion message it
+            // builds is written at the end of the run rather than here: the steps that follow narrate
+            // into the Activity's message as they are entered, and would bury it.
+            string completionMessage;
             using (Diagnostics.Sync.StartSpan("ProcessExportResult"))
             {
-                await ProcessExportResultAsync(result, throughput);
+                completionMessage = await ProcessExportResultAsync(result, throughput);
             }
 
             // Auto-select any containers created during export.
@@ -222,6 +228,7 @@ public class SyncExportTaskProcessor
                 Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection",
                     result.CreatedContainerExternalIds.Count);
 
+                await _phases.EnterAsync(RunPhaseKeys.ExportSelectNewContainers);
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
                     await _syncServer.RefreshAndAutoSelectContainersWithTriadAsync(
@@ -239,6 +246,10 @@ public class SyncExportTaskProcessor
             // external ids the Create results assigned. Inside the try so a failure here is reported the same
             // way any other part of the run is.
             await DeliverOutstandingInitialPasswordsAsync();
+
+            // The run's own outcome has the last word, after every step that narrates into the
+            // message has finished doing so.
+            await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
 
             exportSpan.SetSuccess();
         }
@@ -265,9 +276,15 @@ public class SyncExportTaskProcessor
     private async Task DeliverOutstandingInitialPasswordsAsync()
     {
         // A preview run answers "what would happen"; setting a password is not a preview of anything, and an
-        // account given one cannot be un-given it.
+        // account given one cannot be un-given it. Deliberately before entering the step, so a preview run
+        // records it skipped rather than entered-and-instantly-finished.
         if (_runMode != SyncRunMode.PreviewAndSync)
             return;
+
+        // Its own step: this opens a second connection to the Connected System and sets passwords on
+        // accounts, which is Connected System work rather than bookkeeping, and it narrates its own
+        // outcome. Without a step of its own that narration landed under whichever step ran last.
+        await _phases.EnterAsync(RunPhaseKeys.ExportDeliverInitialPasswords);
 
         using var span = Diagnostics.Sync.StartSpan("DeliverInitialPasswords")
             .SetTag("connectedSystemId", _connectedSystem.Id);
@@ -426,7 +443,11 @@ public class SyncExportTaskProcessor
     /// Finalises the export activity with completion message and stats.
     /// RPEIs are already persisted per-batch via PersistBatchRpeisAsync callback.
     /// </summary>
-    private async Task ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
+    /// <summary>
+    /// Resolves what the export left outstanding and returns the run's completion message for the
+    /// caller to write once every step has finished narrating.
+    /// </summary>
+    private async Task<string> ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
     {
         // Resolve reference FKs on the change records this export wrote, plus any left over from the
         // preceding sync stage for this system (both persist reference DNs with ReferenceValueId
@@ -458,7 +479,6 @@ public class SyncExportTaskProcessor
                 throughput.FormatCompletion(processed);
         }
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
         await _syncRepo.UpdateActivityAsync(_activity);
 
         // Log summary
@@ -472,6 +492,8 @@ public class SyncExportTaskProcessor
             Log.Information("ProcessExportResultAsync: Export completed successfully. {Success} succeeded, {Deferred} deferred",
                 result.SuccessCount, result.DeferredCount);
         }
+
+        return completionMessage;
     }
 
     /// <summary>

@@ -100,7 +100,7 @@ Throughput and the estimated time remaining are derived from recent progress sam
 
 ### The steps of a run
 
-A Run Profile execution is a journey through several steps, and the Activity shows all of them: what is done, what is running now, and what is still to come. An import, for example, connects to the Connected System, imports objects, processes deletions, resolves references, saves changes, reconciles Pending Exports and records its results.
+A Run Profile execution is a journey through several steps, and the Activity shows all of them: what is done, what is running now, and what is still to come. An import, for example, connects to the Connected System, imports objects, processes deletions, resolves references, saves changes, reconciles Pending Exports and records its results. An export prepares, writes the changes, resolves change history references, selects any containers it created, and delivers initial passwords to the accounts it provisioned. A Synchronisation prepares, processes Connected System Objects, resolves cross-page references and reviews export scope.
 
 - **Completed steps** carry how long they took, so a run that took four hours can be read afterwards to see where the four hours went.
 - **The step running now** is highlighted, with the Connector's own steps and the current message shown beneath it.
