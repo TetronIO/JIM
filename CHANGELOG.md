@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Saving a Metaverse Object Type's Deletion Rules now works. It previously failed with a database error on any object type that had attributes bound, which is every real one: the save re-inserted the type's existing attribute bindings instead of leaving them alone. Nothing was written, and the change history recorded the attempt with no detail.
 - 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
 - 🐛 Selecting a Partition for a domain the connected Active Directory / Samba AD domain controller does not host now fails the import with clear guidance, instead of silently importing nothing. Partition discovery lists every domain in the forest, but a domain controller only holds its own domain's naming context and does not chase referrals to other domains. (#230)
+- 🐛 Re-running Schema Import on a Connected System whose directory schema gained new attributes no longer fails with a duplicate key error. A failed Schema Import also no longer partially applies: previously, recording the failure could flush the half-merged schema to the database alongside the Activity's error, so an import that reported failure had still changed the schema. (#1171)
 
 ### Changed
 
