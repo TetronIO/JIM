@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.SCIM;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using ILogger = Serilog.ILogger;
 
@@ -25,7 +26,8 @@ internal static class ScimImportRunner
         ILogger logger,
         string? persistedConnectorData = null,
         Action<int>? afterPage = null,
-        int maximumPages = 10)
+        int maximumPages = 10,
+        IConnectorProgress? progress = null)
     {
         connector.OpenImportConnection(connectedSystem.SettingValues!, logger);
 
@@ -36,7 +38,7 @@ internal static class ScimImportRunner
         {
             for (var page = 1; page <= maximumPages; page++)
             {
-                var result = await connector.ImportAsync(connectedSystem, runProfile, tokens, persistedConnectorData, logger, CancellationToken.None, new RecordingConnectorProgress());
+                var result = await connector.ImportAsync(connectedSystem, runProfile, tokens, persistedConnectorData, logger, CancellationToken.None, progress ?? new RecordingConnectorProgress());
                 results.Add(result);
                 afterPage?.Invoke(page);
 

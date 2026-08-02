@@ -4,6 +4,7 @@
 using System.Text.Json;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Scim.Discovery;
 using JIM.Scim.Messages;
@@ -36,6 +37,7 @@ internal sealed class ScimConnectorImport
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
     private readonly ILogger _logger;
+    private readonly IConnectorProgress _progress;
     private readonly ScimWatermarkTracker _watermark;
     private readonly List<string> _excludedAttributes;
 
@@ -49,7 +51,8 @@ internal sealed class ScimConnectorImport
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         ScimWatermarkTracker watermark,
-        ILogger logger)
+        ILogger logger,
+        IConnectorProgress progress)
     {
         _client = client;
         _discovery = discovery;
@@ -57,6 +60,7 @@ internal sealed class ScimConnectorImport
         _runProfile = runProfile;
         _watermark = watermark;
         _logger = logger;
+        _progress = progress;
         _excludedAttributes = ScimQueryBuilder.ParseExcludedAttributes(
             connectedSystem.SettingValues?.SingleOrDefault(s => s.Setting.Name == ScimConnectorConstants.SettingExcludedAttributes)?.StringValue);
     }
@@ -90,6 +94,11 @@ internal sealed class ScimConnectorImport
 
         var target = targets[position.ResourceTypeIndex];
         var query = ScimQueryBuilder.BuildPageQuery(target.Endpoint, position, _runProfile.PageSize, filter, _excludedAttributes);
+
+        // JIM's own counts cannot move while this request is in flight, so this is the only thing telling
+        // an administrator a slow page apart from a stuck one.
+        await _progress.EnterPhaseAsync(ScimConnectorPhases.Fetch,
+            $"Fetching {target.Name} resources (page {position.PagesRead + 1:N0})...");
 
         _logger.Debug("SCIM import: reading {ObjectType} page from {Query}", LogSanitiser.Sanitise(target.Name), LogSanitiser.Sanitise(query));
 

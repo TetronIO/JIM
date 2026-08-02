@@ -21,7 +21,7 @@ namespace JIM.Connectors.SCIM;
 /// SCIM service providers to discover schemas, import resources, and export provisioning changes.
 /// Implementation plan: engineering/plans/doing/SCIM_CLIENT_CONNECTOR_DESIGN.md (issue #545).
 /// </summary>
-public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSecureEndpoint
+public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSecureEndpoint, IConnectorPhases
 {
     private ICredentialProtection? _credentialProtection;
     private ICertificateProvider? _certificateProvider;
@@ -248,6 +248,32 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _importWatermark = null;
     }
 
+    #region IConnectorPhases members
+    /// <summary>
+    /// The steps this Connector performs, so an administrator watching an import can see where the time
+    /// is going rather than one message at a time. A run asks the provider what it is before reading
+    /// anything from it, and both are network round trips against a service that may be slow or far away.
+    /// </summary>
+    /// <remarks>
+    /// A Delta Import declares the same journey as a Full Import: the delta is the same paged read with
+    /// a filter on it rather than a separate query, so a step of its own would show work that never
+    /// happens separately. Export declares nothing, because it acts per object and JIM already reports
+    /// accurate per-batch counts around the call, which say more than a step would.
+    /// </remarks>
+    public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        return runProfile.RunType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
+            [
+                new ConnectorPhase(ScimConnectorPhases.Discover, ScimConnectorPhases.DiscoverName),
+                new ConnectorPhase(ScimConnectorPhases.Fetch, ScimConnectorPhases.FetchName)
+            ],
+            _ => []
+        };
+    }
+    #endregion
+
     /// <summary>
     /// Reads one page of resources. JIM calls this repeatedly until no pagination tokens come back.
     /// </summary>
@@ -266,8 +292,12 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // Discovery runs once per run, on the first page. Capabilities and endpoints are read fresh each
         // run rather than persisted, so a provider that gained or lost a feature is followed immediately.
         // This is the run's first request, so it is where a refused certificate surfaces.
-        _importDiscovery ??= await WithCertificateDiagnosisAsync(connectedSystem.SettingValues, logger,
-            () => new ScimConnectorSchema(_importClient, logger).DiscoverAsync(cancellationToken));
+        if (_importDiscovery == null)
+        {
+            await progress.EnterPhaseAsync(ScimConnectorPhases.Discover, "Asking the service provider what it supports...");
+            _importDiscovery = await WithCertificateDiagnosisAsync(connectedSystem.SettingValues, logger,
+                () => new ScimConnectorSchema(_importClient, logger).DiscoverAsync(cancellationToken));
+        }
 
         // Likewise decided once and held for the run: every page must ask the same question, or the
         // pages would not add up to one consistent view of what changed.
@@ -283,7 +313,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
 
         var position = ScimImportPosition.FromTokens(paginationTokens, ReadPaginationMode(connectedSystem));
-        var import = new ScimConnectorImport(_importClient, _importDiscovery, connectedSystem, runProfile, _importWatermark!, logger);
+        var import = new ScimConnectorImport(_importClient, _importDiscovery, connectedSystem, runProfile, _importWatermark!, logger, progress);
 
         ConnectedSystemImportResult result;
         try
