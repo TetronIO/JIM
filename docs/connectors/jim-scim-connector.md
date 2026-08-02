@@ -95,7 +95,7 @@ It is off by default, and worth understanding why before turning it on. Per-obje
 
 What JIM does with it:
 
-- **The provider's advertised limits are respected.** Batches stay within the `maxOperations` and `maxPayloadSize` the provider publishes; a change too large for any batch is sent on its own instead. Where the provider advertises bulk without stating a limit, JIM batches 100 operations at a time.
+- **The provider's advertised limits are respected, and a provider that under-states them is adapted to.** Batches stay within the `maxOperations` and `maxPayloadSize` the provider publishes; a change too large for any batch is sent on its own instead. Where the provider advertises bulk without stating a limit, JIM batches 100 operations at a time. A provider that then refuses a batch as too large has enforced a limit it did not publish, and since it refuses before applying anything, JIM halves the batch and retries rather than failing the changes.
 - **One bad object never abandons the rest.** JIM does not set `failOnErrors`, so the provider is asked to process everything regardless, exactly as the per-object path behaves.
 - **Outcomes are matched to changes, never counted off.** A bulk response is not required to list operations in the order they were sent. JIM correlates each outcome to the change that produced it.
 - **An operation the provider does not report on is treated as failed.** A provider that stops early says nothing about what it never reached, and a change JIM cannot confirm was applied is never recorded as exported. It stays pending and is reported on the Activity.

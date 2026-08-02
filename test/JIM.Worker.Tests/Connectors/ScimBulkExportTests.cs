@@ -309,6 +309,28 @@ public class ScimBulkExportTests
     }
 
     [Test]
+    public async Task ExportAsync_Bulk_WhenTheProviderRefusesABatchAsTooLarge_SplitsItRatherThanFailingTheChangesAsync()
+    {
+        // A provider that enforces a limit it never advertised refuses the request outright, having
+        // applied none of it. Treating that like a failure of unknown outcome would strand the changes:
+        // the next run would size the batch from the same discovery document and be refused again, so
+        // the export could never succeed against that provider at all.
+        var provider = BulkProvider();
+        provider.Options.BulkMaxOperationsEnforcedButNotAdvertised = 2;
+        var handler = provider.CreateHandler();
+
+        var results = await ExportAsync(
+            handler, BulkEnabled(),
+            NewUser("ada"), NewUser("grace"), NewUser("katherine"), NewUser("dorothy"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results.Select(r => r.Success), Is.All.True);
+            Assert.That(results.Select(r => r.ExternalId), Is.Unique, "each create should have its own provider-assigned id");
+        });
+    }
+
+    [Test]
     public async Task ExportAsync_Bulk_WhenTheProviderStatesNoLimits_StillBoundsTheBatchAsync()
     {
         // Bulk support without a stated maximum is common, and an unbounded batch is a payload whose

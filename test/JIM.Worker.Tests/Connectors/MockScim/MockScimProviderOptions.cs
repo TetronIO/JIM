@@ -63,6 +63,13 @@ internal sealed class MockScimProviderOptions
     public long? BulkMaxPayloadSize { get; set; }
 
     /// <summary>
+    /// A cap on operations per bulk request that the provider enforces without advertising, so a client
+    /// sizing batches from the discovery document sends more than it will accept. A provider that
+    /// over-promises this way refuses the request outright, having applied none of it.
+    /// </summary>
+    public int? BulkMaxOperationsEnforcedButNotAdvertised { get; set; }
+
+    /// <summary>
     /// Answers <c>/Bulk</c> with this status instead of processing it. A 501 models a provider that
     /// advertises bulk and never implemented the endpoint, where nothing was applied; a 500 models one
     /// that failed part way through, where what applied is unknowable and the two cases must not be

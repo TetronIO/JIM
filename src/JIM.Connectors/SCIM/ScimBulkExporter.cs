@@ -188,11 +188,13 @@ internal sealed class ScimBulkExporter
 
             return await SendIndividuallyAsync(batch, sendIndividually, cancellationToken);
         }
-        catch (ScimRequestException ex) when (ex.StatusCode == HttpStatusCode.RequestEntityTooLarge && batch.Count > 1)
+        catch (ScimRequestException ex) when (IsBatchTooLarge(ex) && batch.Count > 1)
         {
-            // The provider rejected the request before applying any of it, which the payload limit it
-            // advertised evidently did not describe. Halving is safe for the same reason.
-            _logger.Warning("SCIM export: the service provider rejected a bulk request of {OperationCount} operation(s) as too large, despite it fitting the limit it advertises. Splitting it and retrying.",
+            // The provider refused the request outright rather than applying part of it, so nothing
+            // landed and splitting is safe. It matters that this is not treated as an unknown outcome:
+            // the next run would size the batch from the same discovery document and be refused again,
+            // so the changes would never reach a provider whose real limit is lower than its stated one.
+            _logger.Warning("SCIM export: the service provider refused a bulk request of {OperationCount} operation(s) as too large, despite it fitting the limits it advertises. Splitting it and retrying.",
                 batch.Count);
 
             var half = batch.Count / 2;
@@ -242,6 +244,19 @@ internal sealed class ScimBulkExporter
     private static bool IsEndpointMissing(ScimRequestException exception)
     {
         return exception.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NotImplemented or HttpStatusCode.MethodNotAllowed;
+    }
+
+    /// <summary>
+    /// The provider saying the batch was more than it accepts, which it decides before processing any of
+    /// it. A gateway answers 413 on size; the provider itself answers 400 <c>tooMany</c> on a count or a
+    /// size it enforces without advertising. Both mean nothing was applied, which is what makes sending
+    /// the operations again safe here and nowhere else.
+    /// </summary>
+    private static bool IsBatchTooLarge(ScimRequestException exception)
+    {
+        return exception.StatusCode == HttpStatusCode.RequestEntityTooLarge
+               || (exception.StatusCode == HttpStatusCode.BadRequest
+                   && string.Equals(exception.ScimType, ScimErrorTypes.TooMany, StringComparison.OrdinalIgnoreCase));
     }
     #endregion
 

@@ -483,7 +483,8 @@ internal sealed class MockScimProvider
         if (string.IsNullOrWhiteSpace(payload) || JsonNode.Parse(payload) is not JsonObject parsed || parsed["Operations"] is not JsonArray operations)
             return Error(HttpStatusCode.BadRequest, ScimErrorTypes.InvalidSyntax, "The bulk request carried no operations.");
 
-        if (Options.BulkMaxOperations.HasValue && operations.Count > Options.BulkMaxOperations.Value)
+        var enforcedLimit = Options.BulkMaxOperationsEnforcedButNotAdvertised ?? Options.BulkMaxOperations;
+        if (enforcedLimit.HasValue && operations.Count > enforcedLimit.Value)
             return Error(HttpStatusCode.BadRequest, ScimErrorTypes.TooMany, "The bulk request carried more operations than this provider accepts.");
 
         var results = operations.OfType<JsonObject>().Select(operation => ApplyBulkOperation(request, operation)).ToList();
