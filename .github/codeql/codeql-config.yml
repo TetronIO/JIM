@@ -32,6 +32,33 @@
 #   deployment-level controls (file permissions, log retention, SIEM
 #   access controls) which are outside CodeQL's visibility.
 
+#
+# Excluded paths (with rationale):
+#
+#   test/JIM.*.Tests/** (unit and component test projects)
+#   ------------------------------------------------------
+#   CodeQL's taint analysis treats environment-variable reads as sensitive
+#   sources, so tests that read fixture values such as JIM_TEST_LDAP_HOST
+#   and store them in plain fields are repeatedly flagged as "clear-text
+#   storage of sensitive information". These are test hostnames and fixture
+#   data, not secrets, and the alerts re-mint on every push that touches
+#   the files (dismissals do not carry across analyses), producing a
+#   recurring false-positive dance on any PR touching connector tests
+#   (first seen on PR #1169, five alerts).
+#
+#   The exclusion is deliberately scoped to the unit/component test
+#   projects only, not the whole test/ tree: integration scripts under
+#   test/integration/ can handle real credentials for a running stack, so
+#   anything scannable there stays in scope. Test project code never ships
+#   in a JIM deployment.
+#
+#   Note: for compiled languages (C#) paths-ignore cannot limit what gets
+#   built and extracted; it filters the alerts produced. That is exactly
+#   the intent here.
+
+paths-ignore:
+  - test/JIM.*.Tests/**
+
 query-filters:
   - exclude:
       id: cs/exposure-of-sensitive-information

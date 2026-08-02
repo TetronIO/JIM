@@ -34,9 +34,25 @@ If `$ARGUMENTS` is non-empty, treat it as the proposed PR title (still under 70 
 
 3. **Check whether a PR already exists for this branch:**
    ```
-   gh pr list --head "$(git branch --show-current)" --state open --json number,title,mergeStateStatus,autoMergeRequest
+   gh pr list --head "$(git branch --show-current)" --state open --json number,title,baseRefName,mergeStateStatus,autoMergeRequest
    ```
    - If a PR already exists, skip the "Create PR" step below and resume from "Queue auto-merge" / "Resolve code-quality issues" depending on its state. Note the existing number.
+
+4. **Check for a stack (see "Stacked PRs" below):**
+   ```
+   gh pr list --state open --json number,headRefName,baseRefName
+   ```
+   - If this branch's PR has `baseRefName` other than `main`, or another open PR has `baseRefName` equal to this branch, the branch is a **layer in a stack**. Follow "Stacked PRs" below instead of the ordinary flow: stacks rebase rather than merge to stay current, and auto-merge is unsupported.
+
+## Stacked PRs
+
+Per CLAUDE.md ("Stacked PRs for discovered work"), a branch may be a layer in a GitHub native stack: a sequential chain where each PR targets the branch of the PR below it and the bottom PR targets `main`. Landing a stack differs from the ordinary flow in four ways:
+
+- **Rebase, not merge, to stay current.** Stacks require fully linear history. If the merge box shows the stack is non-linear (a lower layer changed, or `main` advanced), restack with the web "Rebase stack" button, or locally with `gh stack rebase` followed by `gh stack push` (cascading rebase + force-push of the layers). Skip this skill's "up to date with origin/main" merge section entirely for stack layers.
+- **No auto-merge.** `--auto` is unsupported for stacked PRs. Instead, wait for green with a background waiter on the checks, then merge. Every PR in the stack is evaluated against `main`'s branch protections (all seven required checks), regardless of its direct base.
+- **Land bottom-up, atomically from wherever you merge.** Merging any PR in the stack also merges all unmerged PRs below it in a single operation, ordered bottom-up, each recorded individually. A mid-stack PR cannot merge in isolation. The normal move when the objective is complete is to merge from the **top** of the stack; merge a lower layer earlier only when it is ready and independently valuable. After a partial merge, GitHub automatically rebases the next unmerged PR to target `main`.
+- **Merge mechanics:** try `gh pr merge <n> --squash --delete-branch` once everything below is green. If the CLI refuses because the PR is stacked, merge from the PR's merge box on the web (it shows the stack map) - the stack merge API is distinct from the ordinary merge endpoint.
+- **Cleanup:** delete every landed layer's local branch with `git branch -D` in the final cleanup step.
 
 ## Get the branch up to date with origin/main (CRITICAL)
 

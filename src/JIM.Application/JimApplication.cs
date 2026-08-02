@@ -3,6 +3,7 @@
 
 using JIM.Application.Interfaces;
 using JIM.Application.Servers;
+using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
 using JIM.Data;
 using JIM.Data.Repositories;
@@ -59,6 +60,7 @@ public class JimApplication : IDisposable
     public ChangeHistoryServer ChangeHistory { get; }
     public ConfigurationChangeCaptureService ConfigurationChangeCapture { get; }
     public ConfigurationChangePreflightService ConfigurationChangePreflight { get; }
+    public ConfigurationChangePreviewServer ConfigurationChangePreviews { get; }
     public ConfigurationDiffService ConfigurationDiffs { get; }
     public ConfigurationDriftService ConfigurationDrift { get; }
     public ConfigurationSnapshotService ConfigurationSnapshots { get; }
@@ -96,6 +98,13 @@ public class JimApplication : IDisposable
         ChangeHistory = new ChangeHistoryServer(this);
         ConfigurationChangeCapture = new ConfigurationChangeCaptureService(this);
         ConfigurationChangePreflight = new ConfigurationChangePreflightService(this);
+
+        // Preview adapters are listed here rather than discovered by reflection, so what can be previewed is one
+        // readable list that cannot vary with assembly load order. The list is empty until the first adapter ships
+        // (#1114); until then every surface keeps its save-time acknowledgement, which is the intended behaviour
+        // for a surface with no adapter and not a gap.
+        ConfigurationChangePreviews = new ConfigurationChangePreviewServer(this,
+            new ConfigurationChangePreviewAdapterRegistry([]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);

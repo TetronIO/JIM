@@ -12,6 +12,14 @@ namespace JIM.Application.Servers
 {
     public class ServiceSettingsServer
     {
+        /// <summary>
+        /// The configuration change preview dispatch threshold used when the setting is absent or nonsensical
+        /// (#827). 2,500 objects is the point at which evaluation stops being something a web request's process
+        /// should be doing in the background; it is a starting position to be tuned against what previews actually
+        /// cost, which is why every preview records its estimate and its elapsed time.
+        /// </summary>
+        public const int DefaultConfigurationChangePreviewWorkerThreshold = 2_500;
+
         private JimApplication Application { get; }
 
         internal ServiceSettingsServer(JimApplication application)
@@ -98,6 +106,20 @@ namespace JIM.Application.Servers
             return await GetSettingValueAsync(
                 Constants.SettingKeys.PartitionValidationMode,
                 PartitionValidationMode.Error);
+        }
+
+        /// <summary>
+        /// The estimated affected-object count above which a configuration change preview is handed to JIM.Worker
+        /// (#827). A non-positive stored value would send every preview, however small, to the worker; it is
+        /// treated as the default instead, because an administrator typing 0 has misconfigured a threshold rather
+        /// than asked for that.
+        /// </summary>
+        public async Task<int> GetConfigurationChangePreviewWorkerThresholdAsync()
+        {
+            var threshold = await GetSettingValueAsync(
+                Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold,
+                DefaultConfigurationChangePreviewWorkerThreshold);
+            return threshold > 0 ? threshold : DefaultConfigurationChangePreviewWorkerThreshold;
         }
 
         /// <summary>
