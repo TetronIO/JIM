@@ -76,7 +76,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 | FLOAT/REAL | Decimal | Approximate binary types; documented precision caveat (decided 2026-07-30, as #1046 closed without recording it): binary-to-decimal round-trips are not bit-exact, and a Text mapping would reintroduce the lexicographic-comparison defect #1046 exists to fix |
 | Foreign-key columns holding another object type's anchor | Reference | Explicit per-column configuration, not inferred |
 
-9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model.
+9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model. The setting is required and defaults to UTC, visible to the administrator at configuration time (decided 2026-07-31); the connector never refuses zoneless columns.
 
 **Import**
 
@@ -92,12 +92,12 @@ The integration test infrastructure already anticipates this connector: dormant 
 14. Export must translate Pending Exports into parameterised `INSERT`/`UPDATE`/`DELETE` statements (values always as parameters, identifiers quoted through the provider), maintaining related-table rows for multi-valued attribute changes within the same database transaction as the parent row.
 15. Creates against database-generated keys (identity/sequence columns) must return the generated value as the object's external ID in `ConnectedSystemExportResult`, following the LDAP and File Connector precedents.
 16. The connector must declare `SupportsAutoConfirmExport = true`; a committed transaction is a verified write, so a confirming import is not required for correctness.
-17. Optional stored-procedure export (one procedure per create/update/delete, receiving attribute values as parameters) may ship in the first release if design review confirms it does not complicate the transactional path; otherwise it is the first fast-follow.
+17. Optional stored-procedure export (one procedure per create/update/delete, receiving attribute values as parameters) is a fast-follow, not part of the first release (decided 2026-07-31); the first release ships direct-statement export only.
 18. Export failures must map per-object onto `ConnectedSystemExportResult` errors, feeding the existing Pending Export retry/backoff machinery; a failed object must not poison its batch.
 
 **Capabilities declaration**
 
-19. The connector must declare: `SupportsFullImport`, `SupportsDeltaImport`, `SupportsExport`, `SupportsPaging`, `SupportsAutoConfirmExport`, `SupportsUserSelectedExternalId` true; `SupportsPartitions`, `SupportsPartitionContainers`, `SupportsSecondaryExternalId`, `SupportsFilePaths` false. `SupportsParallelExport` is an open question (see below).
+19. The connector must declare: `SupportsFullImport`, `SupportsDeltaImport`, `SupportsExport`, `SupportsPaging`, `SupportsAutoConfirmExport`, `SupportsUserSelectedExternalId` true; `SupportsPartitions`, `SupportsPartitionContainers`, `SupportsSecondaryExternalId`, `SupportsFilePaths` false. `SupportsParallelExport` false for the first release (decided 2026-07-31); the provider abstraction must keep enabling it later a capability flip, not a reshape.
 
 **Security**
 
@@ -203,11 +203,11 @@ Additionally:
 ## Open Questions
 
 1. **Decimal support** (resolved; tracked as #1046, a child issue of #170 and a hard prerequisite per the Dependencies section): a Text mapping for DECIMAL/NUMERIC/MONEY columns is a proven pattern in this product class and fine for pass-through flows, but it breaks numeric semantics where JIM itself evaluates the value: scoping criteria compare Text lexicographically ("0.5" > "0.25" works, "9" > "10" fails), so a rule like "FTE less than 0.5" cannot be expressed reliably, and identity-relevant decimal data is real (FTE fraction, contracted hours, salary banding). SCIM (RFC 7643) also defines `decimal` as a core attribute type, so the planned SCIM work (#545) meets the same gap. A first-class `Decimal` `AttributeDataType` is therefore tracked as #1046 and sequenced before this connector, which maps exact-numeric columns to Decimal natively from day one.
-2. **Zoneless DateTime default**: when the administrator does not set the time-zone interpretation setting, should the connector default to UTC (predictable, sometimes wrong) or refuse to import zoneless datetime columns until configured (safe, more friction)?
-3. **Multiple multi-valued related tables per object type**: the first release supports N related tables per object type in the data model; is there a UI complexity argument for capping at one initially?
-4. **`SupportsParallelExport`**: parallel batches against one database can deadlock on hot pages and interleave parent/child writes; start sequential and revisit, or design for parallelism from the outset?
-5. **Stored-procedure export in the first release** (requirement 17): include or fast-follow?
-6. **Project placement**: bundling four ADO.NET providers into `JIM.Connectors` grows every deployment; is a separate `JIM.Connectors.Sql` project (still built-in, but isolating the dependency graph) worth the structural deviation from the LDAP/File folder pattern?
+2. **Zoneless DateTime default** (resolved 2026-07-31): the time-zone interpretation setting is required and defaults to UTC, visible to the administrator at configuration time; the connector never refuses zoneless columns. Recorded in requirement 9.
+3. **Multiple multi-valued related tables per object type** (resolved 2026-07-31): N related tables supported from day one; no UI cap. Capping at one saves little and forces a migration later.
+4. **`SupportsParallelExport`** (resolved 2026-07-31): declared false for the first release; parallel batches against one database can deadlock on hot pages. The provider abstraction must keep enabling it later a capability flip, not a reshape. Recorded in requirement 19.
+5. **Stored-procedure export in the first release** (resolved 2026-07-31): fast-follow; the first release ships direct-statement export only, keeping the transactional path simple. Recorded in requirement 17.
+6. **Project placement** (resolved 2026-07-31): stay in `JIM.Connectors` under `Sql/`, matching the LDAP/File folder pattern; everything ships in one container image, so a separate project buys dependency-graph hygiene nobody currently needs. Revisit only if provider count or image-size pressure demands it.
 
 ## Acceptance Criteria
 
