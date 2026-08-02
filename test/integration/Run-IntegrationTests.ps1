@@ -2250,6 +2250,10 @@ if (-not $SkipBuild -and -not $SkipReset) {
     $now = (Get-Date).ToUniversalTime()
     $minutesSinceMidnight = $now.Hour * 60 + $now.Minute
     $env:VERSION_SUFFIX = "dev.$($now.ToString('yyyyMMdd')).$minutesSinceMidnight"
+    # Skip the openapi-gen Dockerfile stage (src/JIM.Web/Dockerfile). It boots JIM.Web solely to emit the static
+    # OpenAPI document, which costs several minutes of pegged CPU on every run and is irrelevant to integration
+    # tests; the jim-build-* aliases skip it for the same reason. CI/release builds still generate it.
+    $env:OPENAPI_STAGE = "publish"
     $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml build 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to build JIM stack"
