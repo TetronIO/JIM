@@ -34,9 +34,31 @@ If `$ARGUMENTS` is non-empty, treat it as the proposed PR title (still under 70 
 
 3. **Check whether a PR already exists for this branch:**
    ```
-   gh pr list --head "$(git branch --show-current)" --state open --json number,title,mergeStateStatus,autoMergeRequest
+   gh pr list --head "$(git branch --show-current)" --state open --json number,title,baseRefName,mergeStateStatus,autoMergeRequest
    ```
    - If a PR already exists, skip the "Create PR" step below and resume from "Queue auto-merge" / "Resolve code-quality issues" depending on its state. Note the existing number.
+
+4. **Check for a stack (see "Stacked PRs" below):**
+   ```
+   gh pr list --state open --json number,headRefName,baseRefName
+   ```
+   - If this branch's PR has `baseRefName` other than `main`, it is the **upper PR of a stack**: its prerequisite PR must land first. Drive the prerequisite through this skill bottom-up, then return here.
+   - If another open PR has `baseRefName` equal to this branch, this branch is a **stack base**: land it normally, then run the post-land steps in "Stacked PRs" for the upper branch.
+
+## Stacked PRs
+
+Per CLAUDE.md ("Stacked PRs for discovered blockers"), a feature PR may be based on a prerequisite branch (`feature/<feature>-prereq-<desc>`) whose own PR targets `main`. Rules for landing:
+
+- **Always land bottom-up.** Never try to merge an upper PR while its base PR is open; GitHub would merge the feature into the prerequisite branch, not into `main`.
+- **While the prerequisite PR is open**, the upper PR's "up to date" target is the prerequisite branch, not `origin/main`: `git merge <prereq-branch>` on the feature branch. Skip the "up to date with origin/main" section for the upper PR until its base has landed.
+- **After the prerequisite squash-merges** (with `--delete-branch`), GitHub auto-retargets the upper PR to `main`. Verify with `gh pr view <n> --json baseRefName`; if it still points at the deleted branch, `gh pr edit <n> --base main`. Then, on the feature branch:
+  ```
+  git fetch origin --prune
+  git merge origin/main
+  git push
+  ```
+  The squash commit supersedes the prerequisite's commits; conflicts, if any, are content-identical and trivial. Eyeball `CHANGELOG.md` `[Unreleased]` for a doubled bullet (union driver duplication) and tidy. The upper PR's diff returns to feature-only work; from here it is an ordinary PR and the rest of this skill applies unchanged.
+- **Cleanup:** the prerequisite's local branch also needs `git branch -D <prereq-branch>` in the final cleanup step.
 
 ## Get the branch up to date with origin/main (CRITICAL)
 

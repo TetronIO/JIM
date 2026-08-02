@@ -185,8 +185,8 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
 
 - Always work on a feature branch; never commit directly to `main`
 - Branch naming: `feature/description`
-- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, or when you have just merged/finished the previous branch and are starting fresh from a clean `main`.
-- Never automatically create a PR or merge to `main` - the user must explicitly instruct
+- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, when you have just merged/finished the previous branch and are starting fresh from a clean `main`, or when creating a prerequisite branch for a stacked PR (see "Stacked PRs for discovered blockers" below; that is the one sanctioned mid-task branch creation).
+- Never automatically create a PR or merge to `main` - the user must explicitly instruct. One standing exception: prerequisite PRs in the stacked-PR flow below are pre-authorised; opening and auto-merging them is part of delivering the feature.
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
 - **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
@@ -194,6 +194,22 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
   - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
   - Pick blocked-by for ordering and parent/sub-issue for hierarchy; they are not interchangeable. Issue bodies may state the *rationale* for a relationship, but the relationship itself must exist as the native link (it shows in the sidebar, rolls up, and is queryable; prose goes stale).
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
+
+### Stacked PRs for discovered blockers
+
+When feature work surfaces something that must be solved to deliver the feature but is not semantically part of it (a bug in existing code, a missing capability, a prerequisite refactor), do NOT fold it into the feature branch and do NOT defer it to an issue. Fix it immediately in its own stacked PR, then resume the feature. `/stack-pr` encodes the full flow; the shape is:
+
+1. **Announce, don't ask.** State the blocker in one line and proceed with the stack. "Ask before significant changes" still applies to *how* an architecturally significant prerequisite is solved, never to *whether* it gets its own stacked PR.
+2. **Commit feature WIP** (a `wip:` commit is fine; squash-merge collapses it), then branch the prerequisite off `origin/main`, named for its parent: `feature/<feature>-prereq-<desc>`.
+3. **Implement the prerequisite to full standard**: TDD, build/test gates, changelog and docs if user-facing. Being unplanned lowers no bars.
+4. **Open its PR against `main` and queue it**: `gh pr create`, then `gh pr merge <n> --squash --delete-branch --auto`. Zero required approvals means the base of a stack should land in hours, not days.
+5. **Fold it into the feature branch and resume**: `git checkout feature/<feature> && git merge feature/<feature>-prereq-<desc>`.
+6. **Point the feature PR at the prerequisite branch** while the prerequisite is open (`gh pr create --base` / `gh pr edit --base feature/<feature>-prereq-<desc>`) so its diff shows only feature work.
+7. **Land bottom-up.** When the prerequisite squash-merges and its branch is deleted, GitHub retargets the feature PR back to `main`. Then `git merge origin/main` into the feature branch and push: the squash commit supersedes the prerequisite commits, any conflicts are content-identical and trivial, and the feature PR's diff returns to feature-only. Eyeball `CHANGELOG.md` `[Unreleased]` for a doubled bullet (the union driver can duplicate an entry that arrived via both the prerequisite branch and the squash) and tidy.
+
+- Stacks may nest (a prerequisite of a prerequisite) using the same pattern; keep them shallow and always land the bottom first.
+- Prerequisite branches belong to the same session and objective as their parent feature branch; the `-prereq-` naming keeps the lineage visible across parallel sessions.
+- GitHub issues remain only for genuine observations that are NOT needed to deliver the current objective (link them with native blocked-by/sub-issue relationships per the rules above).
 
 ### Bringing a feature branch up to date with `main`
 
@@ -206,6 +222,7 @@ git merge origin/main      # then git push (no force needed)
 
 - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After merging, eyeball that section for duplicated `###` headers or bullets and tidy if needed.
 - Only rebase when the user explicitly wants linear pre-squash history. If you do, and the merge backend reports a misleading "local changes would be overwritten" on a clean tree, `git -c rebase.backend=apply rebase origin/main` gets past it.
+- **Stacked feature PRs:** while a prerequisite PR is still open, the feature PR's base is the prerequisite branch, so "up to date" is measured against that branch (`git merge feature/<feature>-prereq-<desc>`), not `origin/main`. Once the prerequisite lands and the PR retargets to `main`, this section applies as normal.
 
 ### Merging via gh CLI
 
