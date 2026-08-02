@@ -14,7 +14,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -96,7 +96,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
-    private readonly string _settingPreferredDomainController = "Preferred Domain Controller";
+    private readonly string _settingPreferredDomainController = ConnectorSettingNames.LdapPreferredDomainController;
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
@@ -280,6 +280,40 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
             return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorDirectoryServers members
+    /// <summary>
+    /// Lists the domain controllers in the connected AD-family directory's forest, with the Active Directory Site
+    /// each belongs to, so an administrator can choose one for the Preferred Domain Controller setting (issue
+    /// #1167) rather than having to already know a hostname. Purely informational: this never writes to any
+    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the
+    /// CN=Sites,CN=Configuration hierarchy that other LDAP directories do not have.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The connected directory is not AD-family.</exception>
+    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        // No persisted connector state applies to a discovery-only connection.
+        OpenImportConnection(settingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to discover directory servers with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            if (!rootDse.UseUsnDeltaImport)
+                throw new NotSupportedException(
+                    $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
+
+            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
+            return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
         }
         finally
         {

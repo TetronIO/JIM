@@ -77,7 +77,11 @@
                                                                      Immediate="true"
                                                                      IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                                      ValueChanged="OnSettingValueChanged"
-                                                                     FileSelected="OnFileSelectedAsync" />
+                                                                     FileSelected="OnFileSelectedAsync"
+                                                                     ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(groupMembers[k])"
+                                                                     DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
+                                                                     DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
+                                                                     ConnectedSystemId="@ConnectedSystem.Id" />
                                     }
                                 </MudPaper>
                             }
@@ -99,7 +103,11 @@
                                                              Immediate="true"
                                                              IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                              ValueChanged="OnSettingValueChanged"
-                                                             FileSelected="OnFileSelectedAsync" />
+                                                             FileSelected="OnFileSelectedAsync"
+                                                             ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(settingValue)"
+                                                             DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
+                                                             DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
+                                                             ConnectedSystemId="@ConnectedSystem.Id" />
                                 j++;
                             }
                         }
@@ -272,16 +280,50 @@
     private bool _settingsBeingSaved;
     private MudForm? _settingsForm;
 
+    /// <summary>
+    /// Whether this Connected System's Connector supports Discover Domain Controllers (issue #1167), asked once
+    /// per the same reasoning as <see cref="_supportsCertificateFetch"/>: a property of the Connector, stable
+    /// for the life of the Connected System.
+    /// </summary>
+    private bool _supportsDirectoryServerDiscovery;
+
     protected override async Task OnParametersSetAsync()
     {
         if (ConnectedSystem.Id <= 0)
         {
             _supportsCertificateFetch = false;
+            _supportsDirectoryServerDiscovery = false;
             return;
         }
 
         using var jim = JimFactory.Create();
         _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
+        _supportsDirectoryServerDiscovery = await jim.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="settingValue"/> is the field the Discover Domain Controllers action targets:
+    /// identified by the connector-agnostic <see cref="ConnectorSettingNames.LdapPreferredDomainController"/>
+    /// name rather than by display text, so the field's label can change without silently breaking this match.
+    /// </summary>
+    private bool ShowDirectoryServerDiscoveryFor(ConnectedSystemSettingValue settingValue) =>
+        _supportsDirectoryServerDiscovery && settingValue.Setting.Name == ConnectorSettingNames.LdapPreferredDomainController;
+
+    /// <summary>
+    /// Gates the Discover... action on the Connected System's required Connectivity settings currently having a
+    /// value on screen (not necessarily saved), so an administrator cannot open the dialog before there is
+    /// anything to connect with.
+    /// </summary>
+    private bool CanDiscoverDirectoryServers()
+    {
+        if (!_supportsDirectoryServerDiscovery)
+            return false;
+
+        return ConnectedSystem.SettingValues
+            .Where(sv => sv.Setting.Category == ConnectedSystemSettingCategory.Connectivity)
+            .Where(sv => sv.Setting.Type is not (ConnectedSystemSettingType.Heading or ConnectedSystemSettingType.Label or ConnectedSystemSettingType.Divider or ConnectedSystemSettingType.CheckBox))
+            .Where(sv => ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, sv.Setting))
+            .All(sv => sv.HasUserSuppliedValue());
     }
 
     /// <summary>
@@ -405,6 +447,26 @@
             {
                 SettingId = sv.Setting.Id,
                 StringValue = sv.StringValue,
+                IntValue = sv.IntValue,
+                CheckboxValue = sv.CheckboxValue
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The connectivity settings as they stand on screen for the Discover Domain Controllers action, credential
+    /// included: unlike the certificate trust action above, discovery must bind to the directory, and on a
+    /// Connected System whose settings have never been saved the typed credential is the only one there is.
+    /// The credential travels via the draft's explicit encrypted channel and is never persisted by discovery.
+    /// </summary>
+    private List<ConnectedSystemSettingValueDraft> DiscoveryDraftSettingValues()
+    {
+        return ConnectedSystem.SettingValues
+            .Select(sv => new ConnectedSystemSettingValueDraft
+            {
+                SettingId = sv.Setting.Id,
+                StringValue = sv.Setting.Type == ConnectedSystemSettingType.StringEncrypted ? null : sv.StringValue,
+                StringEncryptedValue = sv.Setting.Type == ConnectedSystemSettingType.StringEncrypted ? sv.StringEncryptedValue : null,
                 IntValue = sv.IntValue,
                 CheckboxValue = sv.CheckboxValue
             })
