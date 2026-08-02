@@ -86,7 +86,7 @@
     [Parameter]
     public double? StepProgress { get; set; }
 
-    private List<ActivityPhase> TopLevelPhases => Phases.Where(p => p.ParentKey == null).OrderBy(p => p.Order).ToList();
+    private List<ActivityPhase> TopLevelPhases => RunPhaseReading.TopLevel(Phases).ToList();
 
     /// <summary>
     /// The most specific step running: a Connector's step in preference to the JIM step hosting it.
@@ -97,7 +97,7 @@
         .ThenByDescending(p => p.Order)
         .FirstOrDefault();
 
-    private ActivityPhase? CurrentTopLevelPhase => TopLevelPhases.FirstOrDefault(p => p.Status == ActivityPhaseStatus.Active);
+    private ActivityPhase? CurrentTopLevelPhase => RunPhaseReading.ActiveTopLevel(Phases);
 
     /// <summary>
     /// The message, or null when it says nothing the rail does not already say. A message that

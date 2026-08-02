@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Bunit;
+using JIM.Models.Activities;
 using JIM.Web.Shared;
 using MudBlazor;
 using NUnit.Framework;
@@ -42,6 +43,64 @@ public class RunProgressMetricsTests : JimComponentTestContext
         cut.FindAll(".jim-run-metric-label")
             .Select(e => e.TextContent.Trim())
             .ToList();
+
+    /// <summary>
+    /// An import midway through fetching, with the Connector reporting a step of its own.
+    /// </summary>
+    private static List<ActivityPhase> ImportFetching() =>
+    [
+        Phase(RunPhaseKeys.ImportConnect, "Connecting to Connected System", 0, ActivityPhaseStatus.Completed),
+        Phase(RunPhaseKeys.ImportFetch, "Importing objects", 1, ActivityPhaseStatus.Active),
+        Phase(ActivityPhase.QualifyConnectorKey("read"), "Reading the file", 2, ActivityPhaseStatus.Active, RunPhaseKeys.ImportFetch),
+        Phase(RunPhaseKeys.ImportSave, "Saving changes", 3, ActivityPhaseStatus.Pending)
+    ];
+
+    private static ActivityPhase Phase(string key, string name, int order, ActivityPhaseStatus status, string? parentKey = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        Key = key,
+        Name = name,
+        Order = order,
+        Status = status,
+        ParentKey = parentKey
+    };
+
+    [Test]
+    public void RunProgressMetrics_RunWithSteps_ScopesTheFiguresToTheStepTheyMeasure()
+    {
+        // Every figure here is reset by each step that counts its own work, so without this the
+        // panel reads as an estimate for the whole run. The rail scrolls sideways, so pointing at
+        // "the step running now" is not enough; the step has to be named.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.ObjectsProcessed, 3500)
+            .Add(c => c.ObjectsToProcess, 10527)
+            .Add(c => c.Phases, ImportFetching()));
+
+        Assert.That(cut.Find(".jim-run-scope").TextContent.Trim(),
+            Is.EqualTo("Step 2 of 3: Importing objects"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_ConnectorStepRunning_NamesTheStepTheFiguresBelongTo()
+    {
+        // "Reading the file" is the Connector's own step and counts nothing; the counters belong
+        // to the JIM step hosting it, so naming the inner one would mislabel the figures.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.ObjectsProcessed, 3500)
+            .Add(c => c.ObjectsToProcess, 10527)
+            .Add(c => c.Phases, ImportFetching()));
+
+        Assert.That(cut.Find(".jim-run-scope").TextContent, Does.Not.Contain("Reading the file"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_RunWithoutSteps_OmitsTheScopeRatherThanShowingAnEmptyOne()
+    {
+        // Activities that are not Run Profile executions, and runs predating step recording.
+        var cut = RenderMetrics();
+
+        Assert.That(cut.FindAll(".jim-run-scope"), Is.Empty);
+    }
 
     [Test]
     public void RunProgressMetrics_RunInFlight_StatesEachFactExactlyOnce()
@@ -132,6 +191,16 @@ public class RunProgressMetricsTests : JimComponentTestContext
         var cut = RenderMetrics(processed: 0, objectsPerSecond: 0d, secondsRemaining: null);
 
         Assert.That(Values(cut), Does.Not.Contain("Finishing up"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_ZeroRate_LeavesTheRateEmptyRatherThanReportingNoneAsANumber()
+    {
+        // A step that has not moved its counter yet reports a rate of zero. "0.0 /sec" reads as a
+        // measurement; there is nothing to measure.
+        var cut = RenderMetrics(processed: 0, total: 0, objectsPerSecond: 0d, secondsRemaining: null);
+
+        Assert.That(Values(cut).Any(v => v.Contains("/sec")), Is.False);
     }
 
     [Test]

@@ -1,3 +1,5 @@
+@using JIM.Models.Activities
+
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
@@ -9,6 +11,15 @@
    columns in place as the digits change. *@
 
 <div class="jim-run-progress">
+    @* Every figure below is reset by each step that counts its own work, so the panel would
+       otherwise read as an estimate for the whole run. Naming the step rather than pointing at it
+       ("the step running now") matters because the rail above scrolls sideways, and on a long run
+       in a narrow window the running step can be off screen while this readout is not. *@
+    @if (StepScope is { } scope)
+    {
+        <MudText Typo="Typo.caption" Class="jim-run-scope">@scope</MudText>
+    }
+
     <div class="jim-run-bar-row">
         @if (IsIndeterminate)
         {
@@ -89,6 +100,36 @@
     [Parameter]
     public double? EstimatedSecondsRemaining { get; set; }
 
+    /// <summary>
+    /// The run's steps, used to name the one these figures measure. Empty for Activities that are
+    /// not Run Profile executions and for runs that predate step recording, where the scope line
+    /// is omitted rather than left blank.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
+
+    /// <summary>
+    /// "Step 2 of 3: Importing objects", matching what PowerShell's live progress already prints,
+    /// so the surfaces do not describe the same run differently. The word "Step" is what scopes the
+    /// figures; the position answers the run-level question they deliberately cannot.
+    /// </summary>
+    private string? StepScope
+    {
+        get
+        {
+            var step = RunPhaseReading.ActiveTopLevel(Phases);
+            if (step == null)
+                return null;
+
+            var position = RunPhaseReading.PositionOf(Phases, step);
+            var total = RunPhaseReading.TopLevel(Phases).Count;
+
+            return position.HasValue && total > 0
+                ? $"Step {position} of {total}: {step.Name}"
+                : step.Name;
+        }
+    }
+
     private bool IsIndeterminate => ObjectsToProcess <= 0;
 
     private double PercentComplete => IsIndeterminate
@@ -108,7 +149,12 @@
         ? ObjectsProcessed.ToString("N0")
         : $"{ObjectsProcessed:N0} / {ObjectsToProcess:N0}";
 
-    private string? RateText => ObjectsPerSecond is { } rate && !IsStalled
+    /// <summary>
+    /// No rate at all rather than a rate of none: "0.0 /sec" reads as a measurement, and a counter
+    /// that has not moved has nothing to measure. What that means for the estimate is said by
+    /// <see cref="RemainingText"/> instead.
+    /// </summary>
+    private string? RateText => ObjectsPerSecond is { } rate && rate > 0
         ? $"{(rate >= 10 ? rate.ToString("N0") : rate.ToString("N1"))} /sec"
         : null;
 

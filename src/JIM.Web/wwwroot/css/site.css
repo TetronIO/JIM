@@ -2626,6 +2626,16 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     gap: 0.75rem;
 }
 
+/* Which step these figures measure. Sits above the bar so it governs the percentage too, and is
+   set apart from the readout it scopes rather than reading as a heading for the panel.
+   Deliberately not uppercased, unlike the column labels below it: those are single words, whereas
+   this carries a step's name, and upper-casing a sentence both slows it down and erases the Proper
+   Case that distinguishes a JIM entity ("Connected System Objects") from an ordinary noun. */
+.jim-run-scope {
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.02em;
+}
+
 .jim-run-bar-row {
     display: flex;
     align-items: center;

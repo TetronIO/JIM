@@ -67,6 +67,8 @@ The rule exists because the alternative shipped: the worker built progress messa
 - A message that merely repeats the running step's name is suppressed by `RunPhaseStepper`, so do not hand-roll that check at a call site.
 - Two states have to say something rather than nothing, and both are easy to lose in a refactor: an unknown total (a paged import) reports what has been processed with no percentage or time remaining, and a counter that has reached its total while the step finishes reads "Finishing up". `RunProgressMetricsTests` pins both.
 - PowerShell's `Get-JIMActivityProgressDisplay` is the sibling surface and follows the same rule; keep the two in step.
+- **Every figure is scoped to the running step, and the readout must say so.** Each counting step resets `ObjectsToProcess`, and the ETA tracker discards its samples when that total changes, so the count, the percentage, the rate and the time remaining all describe one step. `<RunProgressMetrics />` names it ("Step 2 of 3: Processing Connected System Objects"), matching PowerShell's own phrasing. Naming rather than pointing ("the step running now") is deliberate: the stepper rail is `overflow-x: auto`, so on a long run in a narrow window the running step can be scrolled out of view while the readout is not.
+- **Read a run's steps through `RunPhaseReading` (JIM.Models), never by filtering `ParentKey == null` at the call site.** Three surfaces have to agree on what "step 2 of 3" means: the progress API, the stepper and this readout. In particular a Connector's step is never the answer to "which step is running" for the figures, because the counters belong to the JIM step hosting it.
 
 ## Row density (compact-row toggle)
 
