@@ -12,9 +12,10 @@ using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -286,6 +287,67 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             CloseImportConnection();
         }
     }
+    #endregion
+
+    #region IConnectorDetectedCapabilities members
+    /// <summary>
+    /// Maps the rootDSE facts JIM already persists between synchronisation runs (issue #230's
+    /// <see cref="LdapConnectorRootDse"/>) to human-readable capability facts for display on the Connected
+    /// System details page. Tolerates null/empty/corrupt persisted data (returns an empty list) and old
+    /// baselines missing newer properties (those simply deserialise to their defaults and, where the
+    /// property is optional, are omitted below rather than shown blank).
+    /// </summary>
+    public List<ConnectorCapability> GetDetectedCapabilities(string? persistedConnectorData, ILogger logger)
+    {
+        if (string.IsNullOrEmpty(persistedConnectorData))
+            return [];
+
+        LdapConnectorRootDse? rootDse;
+        try
+        {
+            rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+        }
+        catch (JsonException ex)
+        {
+            logger.Warning(ex, "GetDetectedCapabilities: Failed to deserialise persisted connector data. Returning no detected capabilities.");
+            return [];
+        }
+
+        if (rootDse == null)
+            return [];
+
+        var capabilities = new List<ConnectorCapability>
+        {
+            new() { Name = "Directory Type", Value = DescribeDirectoryTypeForCapabilities(rootDse.DirectoryType) }
+        };
+
+        if (!string.IsNullOrEmpty(rootDse.VendorName))
+            capabilities.Add(new ConnectorCapability { Name = "Vendor", Value = rootDse.VendorName });
+
+        if (!string.IsNullOrEmpty(rootDse.DnsHostName))
+            capabilities.Add(new ConnectorCapability { Name = "DNS Host Name", Value = rootDse.DnsHostName });
+
+        // Boolean fact: always shown, unlike the optional string facts above, because "Not Supported" is
+        // itself useful information and there is no "not yet known" state distinct from it here.
+        capabilities.Add(new ConnectorCapability { Name = "Paging", Value = rootDse.SupportsPaging ? "Supported" : "Not Supported" });
+
+        if (!string.IsNullOrEmpty(rootDse.PinnedDirectoryServer))
+            capabilities.Add(new ConnectorCapability { Name = "Pinned Directory Server", Value = rootDse.PinnedDirectoryServer });
+
+        if (rootDse.InvocationId.HasValue)
+            capabilities.Add(new ConnectorCapability { Name = "Invocation Id", Value = rootDse.InvocationId.Value.ToString() });
+
+        return capabilities;
+    }
+
+    private static string DescribeDirectoryTypeForCapabilities(LdapDirectoryType directoryType) => directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory => "Active Directory",
+        LdapDirectoryType.SambaAD => "Samba AD",
+        LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        LdapDirectoryType.Generic => "Generic",
+        _ => "Generic"
+    };
     #endregion
 
     #region IConnectorImportUsingCalls members
