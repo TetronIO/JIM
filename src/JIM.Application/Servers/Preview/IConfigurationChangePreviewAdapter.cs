@@ -37,6 +37,19 @@ public interface IConfigurationChangePreviewAdapter
     bool ProducesDeltas { get; }
 
     /// <summary>
+    /// The type this adapter expects <see cref="PreviewContext.ProposedConfiguration"/> to be, which is also the
+    /// type the framework serialises a proposal as when a preview is handed to JIM.Worker.
+    ///
+    /// A proposal must therefore survive a JSON round trip. That is a real constraint on what an adapter may accept
+    /// (no entity graphs, no references to tracked objects), and it is stated here rather than discovered at
+    /// dispatch time, when the preview would already have an Activity and a waiting administrator.
+    ///
+    /// The type is declared by the adapter and never read from the payload, so a tampered queue row cannot make
+    /// the worker deserialise into anything the surface did not choose.
+    /// </summary>
+    Type ProposalType { get; }
+
+    /// <summary>
     /// Stage 1. Structural findings about the proposal itself: what is invalid, contradictory, or blocked. Runs
     /// synchronously in the request path, so it must stay near-instant and must not evaluate any population.
     /// </summary>

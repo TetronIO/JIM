@@ -96,6 +96,8 @@ public class ConfigurationChangePreviewAdapterRegistryTests
 
         public bool ProducesDeltas => false;
 
+        public Type ProposalType => typeof(object);
+
         public Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context) => Task.FromResult(new List<PreviewValidationFinding>());
 
         public Task<PreviewCostEstimate> EstimateCostAsync(PreviewContext context) => Task.FromResult(new PreviewCostEstimate(0));

@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Preview;
+using JIM.Models.Tasking;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -189,6 +190,43 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
                 "a drill-down that repeats rows between pages is also omitting others");
             Assert.That(firstPageAgain.Results.Select(d => d.Id), Is.EqualTo(firstPage.Results.Select(d => d.Id)),
                 "the same page must return the same rows every time it is asked for");
+        });
+    }
+
+    [Test]
+    public async Task CreateWorkerTaskAsync_PreviewTask_AttachesToTheExistingActivityAsync()
+    {
+        // The one worker task type that does not create its own Activity. Add() walks the graph, so without the
+        // repository tracking the Activity first this insert fails on the Activities primary key: a duplicate-key
+        // error naming a table the caller never touched.
+        var activityId = await SeedPreviewAsync();
+
+        await using (var context = NewContext())
+        {
+            var repository = new TaskingRepository(new PostgresDataRepository(context));
+            var activity = await context.Activities.SingleAsync(a => a.Id == activityId);
+            await repository.CreateWorkerTaskAsync(new ConfigurationChangePreviewWorkerTask
+            {
+                Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
+                TargetId = 11,
+                TargetName = "User",
+                ProposedConfigurationPayload = """{"deletionRule":"AllTriggersLost","gracePeriodDays":30}""",
+                InitiatedByType = ActivityInitiatorType.System,
+                InitiatedByName = "System",
+                Activity = activity
+            });
+        }
+
+        await using var verify = NewContext();
+        var queued = await verify.ConfigurationChangePreviewWorkerTasks.Include(t => t.Activity).SingleAsync();
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await verify.Activities.CountAsync(), Is.EqualTo(1),
+                "queuing a preview must attach to its Activity, not create a second one");
+            Assert.That(queued.Activity.Id, Is.EqualTo(activityId));
+            Assert.That(queued.Surface, Is.EqualTo(ConfigurationChangePreviewSurface.MetaverseObjectType));
+            Assert.That(queued.TargetId, Is.EqualTo(11));
+            Assert.That(queued.ProposedConfigurationPayload, Does.Contain("AllTriggersLost"));
         });
     }
 

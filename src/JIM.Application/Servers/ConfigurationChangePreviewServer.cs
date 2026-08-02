@@ -1,9 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Interfaces;
 using JIM.Application.Servers.Preview;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
+using JIM.Models.Tasking;
 using Serilog;
 using System.Text.Json;
 
@@ -51,10 +53,121 @@ public class ConfigurationChangePreviewServer
     }
 
     /// <summary>
+    /// Runs small previews in the host's own process. Set by JIM.Web at startup, following the same pattern as
+    /// <see cref="JimApplication.CredentialProtection"/>: the implementation lives in the presentation host and
+    /// cannot be constructed from here. Null in JIM.Worker and JIM.Scheduler, and in any host that has not
+    /// registered one, in which case every preview goes to the worker; slower for a small preview, never wrong.
+    /// </summary>
+    public IConfigurationChangePreviewBackgroundRunner? BackgroundRunner { get; set; }
+
+    /// <summary>
     /// Whether <paramref name="surface"/> can be previewed at all. Surfaces with no adapter keep the save-time
     /// acknowledgement and offer no preview; callers ask this rather than discovering it from an exception.
     /// </summary>
     public bool CanPreview(ConfigurationChangePreviewSurface surface) => _adapters.HasAdapterFor(surface);
+
+    /// <summary>
+    /// The type a proposal for <paramref name="surface"/> must be, as its adapter declares it. Exposed so
+    /// JIM.Worker can reconstruct a queued proposal without the payload having to name its own type.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No adapter serves the surface.</exception>
+    public Type GetProposalType(ConfigurationChangePreviewSurface surface) => _adapters.Get(surface).ProposalType;
+
+    /// <summary>
+    /// Starts a preview and sets its remaining stages running, wherever they belong. The single entry point a
+    /// surface calls: where a preview executes is a capacity decision the framework makes from the adapter's cost
+    /// estimate, and no caller should have to make it, or be able to get it wrong.
+    /// </summary>
+    public async Task<ConfigurationChangePreviewStartResult> StartAndDispatchPreviewAsync(ConfigurationChangePreviewRequest request)
+    {
+        var result = await StartPreviewAsync(request);
+
+        // A proposal that cannot be applied, or a validation stage that failed, has already settled the preview.
+        if (result.Failed || result.IsBlocked)
+            return result;
+
+        await DispatchAsync(result.ActivityId, request, result.Estimate!);
+        return result;
+    }
+
+    /// <summary>
+    /// Cancels a running preview. Previews running in this process stop directly; the rest are cancelled through
+    /// their worker task, which the worker acts on at its next pass.
+    /// </summary>
+    /// <returns>False when no running preview was found to cancel, in which case it has already finished.</returns>
+    public async Task<bool> CancelPreviewAsync(Guid activityId)
+    {
+        if (BackgroundRunner?.Cancel(activityId) == true)
+            return true;
+
+        var workerTask = await _application.Tasking.GetWorkerTaskByActivityIdAsync(activityId);
+        if (workerTask is null)
+            return false;
+
+        // Request rather than cancel outright: a task the worker is already processing has to be told to stop and
+        // given the chance to record that it did, which cancelling the record from underneath it would not allow.
+        await _application.Tasking.RequestWorkerTaskCancellationAsync(workerTask.Id);
+        return true;
+    }
+
+    private async Task DispatchAsync(Guid activityId, ConfigurationChangePreviewRequest request, PreviewCostEstimate estimate)
+    {
+        var threshold = await _application.ServiceSettings.GetConfigurationChangePreviewWorkerThresholdAsync();
+        var runHere = BackgroundRunner is not null && estimate.AffectedObjects <= threshold;
+
+        if (runHere)
+        {
+            BackgroundRunner!.Enqueue(activityId, request);
+            Log.Debug("DispatchAsync: Preview {ActivityId} runs in this process ({Estimate} objects estimated, threshold {Threshold})",
+                activityId, estimate.AffectedObjects, threshold);
+            return;
+        }
+
+        await QueueWorkerTaskAsync(activityId, request, estimate, threshold);
+    }
+
+    private async Task QueueWorkerTaskAsync(Guid activityId, ConfigurationChangePreviewRequest request,
+        PreviewCostEstimate estimate, int threshold)
+    {
+        var adapter = _adapters.Get(request.Surface);
+        if (!adapter.ProposalType.IsInstanceOfType(request.ProposedConfiguration))
+        {
+            throw new InvalidOperationException(
+                $"The proposed configuration for {request.Surface} is a {request.ProposedConfiguration.GetType().Name}, " +
+                $"but its adapter declares {adapter.ProposalType.Name}. A proposal that cannot be serialised as the " +
+                "declared type cannot be handed to JIM.Worker.");
+        }
+
+        var activity = await _application.Activities.GetActivityAsync(activityId)
+                       ?? throw new InvalidOperationException($"Configuration change preview {activityId} has no Activity.");
+
+        var workerTask = new ConfigurationChangePreviewWorkerTask
+        {
+            Surface = request.Surface,
+            TargetId = request.TargetId,
+            TargetGuidId = request.TargetGuidId,
+            TargetName = request.TargetName,
+            ProposedConfigurationPayload = JsonSerializer.Serialize(request.ProposedConfiguration, adapter.ProposalType),
+            InitiatedByType = request.InitiatedByType,
+            InitiatedById = request.InitiatedById,
+            InitiatedByName = request.InitiatedByName,
+
+            // The preview's Activity already exists; this task attaches to it rather than creating another, which
+            // is what makes validation and evaluation one Activity rather than two unrelated ones.
+            Activity = activity
+        };
+
+        var preview = await _application.Repository.ConfigurationChangePreviews.GetPreviewAsync(activityId);
+        if (preview is not null)
+        {
+            preview.DispatchedToWorker = true;
+            await _application.Repository.ConfigurationChangePreviews.UpdatePreviewAsync(preview);
+        }
+
+        await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+        Log.Debug("QueueWorkerTaskAsync: Preview {ActivityId} queued for JIM.Worker ({Estimate} objects estimated, threshold {Threshold})",
+            activityId, estimate.AffectedObjects, threshold);
+    }
 
     /// <summary>
     /// Creates the preview's Activity and runs stage 1 (validation) in the caller's thread, so a proposal that

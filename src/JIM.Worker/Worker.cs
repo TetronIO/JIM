@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using JIM.Worker.Processors;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -497,6 +498,30 @@ public class Worker : BackgroundService
                                     {
                                         Log.Information("ExecuteAsync: Completed deleting Connected System ({ConnectedSystemId}) in {ExecutionTime}",
                                             deleteConnectedSystemTask.ConnectedSystemId, newWorkerTask.Activity.ExecutionTime);
+                                    }
+
+                                    break;
+                                }
+                                case ConfigurationChangePreviewWorkerTask previewWorkerTask:
+                                {
+                                    Log.Information("ExecuteAsync: ConfigurationChangePreviewWorkerTask received for {Surface}, initiated by: {InitiatedBy}",
+                                        previewWorkerTask.Surface, LogSanitiser.Sanitise(previewWorkerTask.InitiatedByName) ?? "Unknown");
+
+                                    try
+                                    {
+                                        // The preview server owns every failure path here: it records the failure
+                                        // on the preview's stages and on the Activity, and never leaves a partial
+                                        // result looking complete. What reaches this catch is a failure to start
+                                        // at all, typically a proposal that cannot be reconstructed.
+                                        await ConfigurationChangePreviewTaskProcessor.ProcessAsync(taskJim, previewWorkerTask, cancellationTokenSource.Token);
+
+                                        Log.Information("ExecuteAsync: Configuration change preview for {Surface} finished in {ExecutionTime}",
+                                            previewWorkerTask.Surface, newWorkerTask.Activity.ExecutionTime);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst running a configuration change preview.");
                                     }
 
                                     break;
