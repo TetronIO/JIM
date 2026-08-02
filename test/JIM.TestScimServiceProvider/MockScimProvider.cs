@@ -413,9 +413,11 @@ public sealed class MockScimProvider
     }
 
     /// <summary>
-    /// Answers a request against one resource. PATCH is acknowledged rather than applied: what is under
-    /// test is the request the connector composed, and applying SCIM path semantics faithfully enough to
-    /// assert against would make the mock the thing being tested.
+    /// Answers a request against one resource. PATCH applies operations with simple attribute paths
+    /// (<c>displayName</c>, <c>name.givenName</c>) and acknowledges the rest: the integration scenario's
+    /// confirming import reads the provider back, so an unapplied change would make every export
+    /// unconfirmable, but implementing SCIM's filtered paths (<c>members[value eq "x"]</c>) faithfully
+    /// enough to assert against would make the mock the thing being tested.
     /// </summary>
     private HttpResponseMessage SingleResource(string resourceType, string id, HttpRequestMessage request)
     {
@@ -452,6 +454,9 @@ public sealed class MockScimProvider
                 resource.Attributes[member.Key] = member.Value?.DeepClone();
             }
         }
+
+        if (request.Method == HttpMethod.Patch)
+            ApplyPatchOperations(resource, request);
 
         if (request.Method != HttpMethod.Get)
             resource.LastModified = Options.ProviderClock;
@@ -550,6 +555,38 @@ public sealed class MockScimProvider
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Applies the PATCH operations whose paths are plain attribute names. A confirming import reads
+    /// what these wrote, which is what lets an exported change actually confirm; operations with
+    /// filtered paths are acknowledged without effect, and a test needing them asserts on the request
+    /// instead.
+    /// </summary>
+    private static void ApplyPatchOperations(MockScimResource resource, HttpRequestMessage request)
+    {
+        var body = ReadBody(request);
+        if (body == null || !body.TryGetValue("Operations", out var operationsNode) || operationsNode is not JsonArray operations)
+            return;
+
+        foreach (var operation in operations.OfType<JsonObject>())
+        {
+            var op = operation["op"]?.GetValue<string>()?.ToLowerInvariant();
+            var path = operation["path"]?.GetValue<string>();
+
+            // Filtered and multi-segment paths carry SCIM path grammar this mock does not implement.
+            if (string.IsNullOrWhiteSpace(path) || path.Contains('[', StringComparison.Ordinal))
+                continue;
+
+            if (op == "remove")
+            {
+                resource.Attributes.Remove(path);
+                continue;
+            }
+
+            if (op is "add" or "replace" && operation.TryGetPropertyValue("value", out var value))
+                resource.Attributes[path] = value?.DeepClone();
+        }
     }
 
     private static Dictionary<string, JsonNode?>? ReadBody(HttpRequestMessage request)

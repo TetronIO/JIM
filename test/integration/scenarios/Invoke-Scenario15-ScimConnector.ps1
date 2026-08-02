@@ -10,11 +10,17 @@
     with the provider's certificate trusted rather than validation skipped.
 
     Steps:
-    1. FullImport  - Walks Users and Groups a page at a time, staging membership as reference values
-    2. Sync        - Projects Users and Groups to the Metaverse
-    3. Export      - Sends the composed Display Name to the provider, through /Bulk where enabled
-    4. Confirm     - A second Full Import confirms what the export actually applied
-    5. DeltaImport - Asks the provider only for what changed since the last completed import
+    1. SourceImport - The HR CSV imports and projects, making the Metaverse authoritative
+    2. FullImport   - SCIM Users and Groups walk in a page at a time, membership staged as references
+    3. Sync         - SCIM Users join the HR-projected Metaverse Objects; Groups project
+    4. Flow         - Export evaluation produces one Pending Export per user (Display Name -> displayName)
+    5. Export       - The changes reach the provider, through /Bulk where enabled
+    6. Confirm      - A second Full Import confirms what the export actually applied
+    7. DeltaImport  - Asks the provider only for what changed since the last completed import
+
+    The scenario needs two Connected Systems because JIM deliberately never exports a value back to the
+    system it came from (Q3 circular-sync prevention). HR is authoritative for Display Name; SCIM is the
+    export target; the export exists only because of that separation.
 
     What this scenario is for, and what it deliberately leaves to the unit suite: the misbehaviour cases
     (expired cursors, misreported totals, truncated bulk responses, providers that advertise a capability
@@ -24,7 +30,7 @@
     pipeline, with the results landing in the database.
 
 .PARAMETER Step
-    Which test step to execute (FullImport, Sync, Export, Confirm, DeltaImport, All)
+    Which test step to execute (SourceImport, FullImport, Sync, Flow, Export, Confirm, DeltaImport, All)
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -39,7 +45,7 @@
     How many groups the provider was seeded with (SCIM_GROUP_COUNT on the container).
 
 .PARAMETER Template
-    Accepted for runner compatibility; this scenario's data comes from the provider.
+    Accepted for runner compatibility; this scenario's data comes from the provider and its own CSV.
 
 .PARAMETER DirectoryConfig
     Accepted for runner compatibility; this scenario has no directory target.
@@ -50,7 +56,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("FullImport", "Sync", "Export", "Confirm", "DeltaImport", "All")]
+    [ValidateSet("SourceImport", "FullImport", "Sync", "Flow", "Export", "Confirm", "DeltaImport", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -84,6 +90,7 @@ $null = $Template
 
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 
+$hrSystemName = "SCIM Scenario HR Source"
 $scimSystemName = "SCIM Test Service Provider"
 
 Write-TestSection "Scenario 15: SCIM 2.0 Client Connector"
@@ -103,7 +110,7 @@ function Add-StepResult {
 }
 
 try {
-    Write-TestStep "Step 0" "Connecting to JIM and resolving the Connected System"
+    Write-TestStep "Step 0" "Connecting to JIM and resolving the Connected Systems"
 
     if (-not $ApiKey) { throw "API key required for authentication" }
 
@@ -112,25 +119,39 @@ try {
     Import-Module $modulePath -Force -ErrorAction Stop
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 
-    $scimSystem = @(Get-JIMConnectedSystem) | Where-Object { $_.name -eq $scimSystemName }
+    $systems = @(Get-JIMConnectedSystem)
+    $hrSystem = $systems | Where-Object { $_.name -eq $hrSystemName }
+    $scimSystem = $systems | Where-Object { $_.name -eq $scimSystemName }
+    if (-not $hrSystem) { throw "Connected System '$hrSystemName' not found. Run Setup-Scenario15.ps1 first." }
     if (-not $scimSystem) { throw "Connected System '$scimSystemName' not found. Run Setup-Scenario15.ps1 first." }
-
-    $runProfiles = @(Get-JIMRunProfile -ConnectedSystemId $scimSystem.id)
-    foreach ($required in @("Full Import", "Delta Import", "Full Synchronisation", "Export")) {
-        if (-not ($runProfiles | Where-Object { $_.name -eq $required })) {
-            throw "Run Profile '$required' not found. Run Setup-Scenario15.ps1 first."
-        }
-    }
 
     $objectTypes = Get-JIMConnectedSystem -Id $scimSystem.id -ObjectTypes
     $userTypeId = ($objectTypes | Where-Object { $_.name -eq "User" }).id
     $groupTypeId = ($objectTypes | Where-Object { $_.name -eq "Group" }).id
 
-    Write-Host "  OK Connected System '$scimSystemName' (ID: $($scimSystem.id))" -ForegroundColor Green
+    Write-Host "  OK HR source (ID: $($hrSystem.id)), SCIM target (ID: $($scimSystem.id))" -ForegroundColor Green
 
-    # ─── Full Import ───
+    # --- HR source import and projection ---
+    if ($Step -in @("SourceImport", "All")) {
+        Write-TestStep "Step 1" "HR CSV import and projection (the authoritative source)"
+
+        $result = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Full Import" -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "HR Full Import"
+
+        $result = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Full Synchronisation" -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "HR Full Synchronisation"
+
+        $metaverseUsers = @(Get-JIMMetaverseObject -ObjectTypeName "User" -All)
+        Assert-Condition -Condition ($metaverseUsers.Count -ge $ExpectedUserCount) `
+            -Message "Users projected from HR to the Metaverse (found $($metaverseUsers.Count))"
+
+        Add-StepResult -Name "SourceImport" -Passed $true -Detail "$($metaverseUsers.Count) Metaverse Users from HR"
+        Write-Host "  OK HR source projected" -ForegroundColor Green
+    }
+
+    # --- SCIM Full Import ---
     if ($Step -in @("FullImport", "All")) {
-        Write-TestStep "Step 1" "Full Import from the SCIM service provider"
+        Write-TestStep "Step 2" "Full Import from the SCIM service provider"
 
         $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Full Import" -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $result.activityId -Name "SCIM Full Import"
@@ -155,80 +176,132 @@ try {
         Write-Host "  OK Full Import complete" -ForegroundColor Green
     }
 
-    # ─── Full Synchronisation ───
+    # --- SCIM Full Synchronisation ---
     if ($Step -in @("Sync", "All")) {
-        Write-TestStep "Step 2" "Full Synchronisation (project to the Metaverse)"
+        Write-TestStep "Step 3" "SCIM Full Synchronisation (join Users, project Groups)"
 
         $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Full Synchronisation" -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $result.activityId -Name "SCIM Full Synchronisation"
 
+        # Joins, not projections: the Metaverse Object count must not have grown. A count of 50 here
+        # means matching failed and every SCIM User projected a duplicate.
         $metaverseUsers = @(Get-JIMMetaverseObject -ObjectTypeName "User" -All)
-        Assert-Condition -Condition ($metaverseUsers.Count -ge $ExpectedUserCount) `
-            -Message "Users projected to the Metaverse (found $($metaverseUsers.Count))"
+        Assert-Equal -Actual $metaverseUsers.Count -Expected $ExpectedUserCount `
+            -Message "Metaverse Users after the SCIM sync (joined, not duplicated)"
 
-        Add-StepResult -Name "Sync" -Passed $true -Detail "$($metaverseUsers.Count) Metaverse Users"
-        Write-Host "  OK Projection complete" -ForegroundColor Green
+        $joinedUsers = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId -All |
+            Where-Object { $_.joinType -and $_.joinType -ne "NotJoined" })
+        Assert-Equal -Actual $joinedUsers.Count -Expected $ExpectedUserCount `
+            -Message "SCIM Users joined to the HR-projected Metaverse Objects"
+
+        Add-StepResult -Name "Sync" -Passed $true -Detail "$($joinedUsers.Count) users joined; groups projected"
+        Write-Host "  OK SCIM synchronisation complete" -ForegroundColor Green
     }
 
-    # ─── Export ───
+    # --- The mover: an HR change flows towards SCIM ---
+    if ($Step -in @("Flow", "All")) {
+        Write-TestStep "Step 4" "HR change flows towards SCIM (export evaluation)"
+
+        # Export evaluation is driven by Metaverse Object CHANGES, so an already-settled Metaverse and a
+        # freshly joined, unchanged target produce nothing: there is no change to flow. That is correct
+        # (a join is not an update), so the scenario does what a customer does: HR changes, and the
+        # change propagates. Every user's Display Name gains a suffix, the HR import picks it up, and
+        # the HR sync evaluates the export rules; HR is the source, so Q3 does not suppress them.
+        $csvLines = [System.Collections.Generic.List[string]]::new()
+        $csvLines.Add("accountName,firstName,lastName,displayName,email")
+        for ($i = 1; $i -le $ExpectedUserCount; $i++) {
+            $csvLines.Add("user$i,User,Number$i,User Number$i (Verified),user$i@example.com")
+        }
+        $localCsvPath = Join-Path ([System.IO.Path]::GetTempPath()) "scenario15-hr-users.csv"
+        Set-Content -Path $localCsvPath -Value ($csvLines -join "`n") -NoNewline
+        Write-FileToConnectorVolume -SourcePath $localCsvPath -DestinationPath "/connector-files/test-data/scenario15-hr-users.csv"
+        Write-Host "  OK HR CSV updated: every Display Name now carries a '(Verified)' suffix" -ForegroundColor Gray
+
+        $result = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Full Import" -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "HR Full Import (changed data)"
+
+        $result = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Full Synchronisation" -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $result.activityId -Name "HR Full Synchronisation (export evaluation)"
+
+        $pending = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All)
+        Assert-Equal -Actual $pending.Count -Expected $ExpectedUserCount `
+            -Message "Pending Exports produced, one per user (Display Name -> displayName)"
+
+        Add-StepResult -Name "Flow" -Passed $true -Detail "$($pending.Count) Pending Exports from the HR change"
+        Write-Host "  OK The HR change produced one Pending Export per user" -ForegroundColor Green
+    }
+
+    # --- Export ---
     if ($Step -in @("Export", "All")) {
-        Write-TestStep "Step 3" "Export to the SCIM service provider"
+        Write-TestStep "Step 5" "Export to the SCIM service provider"
 
         $pendingBefore = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All)
         Assert-Condition -Condition ($pendingBefore.Count -gt 0) `
-            -Message "The Full Synchronisation produced Pending Exports to send (found $($pendingBefore.Count))"
+            -Message "There are Pending Exports to send (found $($pendingBefore.Count))"
 
         $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Export" -Wait -PassThru
         Assert-ExportSuccess -ActivityId $result.activityId -Name "SCIM Export"
 
-        # Every Pending Export is deleted once applied, so anything left is a change JIM could not send.
-        # This is the assertion that matters most for bulk: an operation the provider never reported on
-        # must remain pending rather than be recorded as exported.
+        # A successfully applied Pending Export moves to Exported and is held until the confirming
+        # import proves the value landed; only then is it deleted. So the assertion here is that every
+        # change was applied and none was left Pending or Failed. This is the assertion that matters
+        # most for bulk: an operation the provider never reported on must not be recorded as applied.
         $pendingAfter = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All)
-        Assert-Equal -Actual $pendingAfter.Count -Expected 0 -Message "Pending Exports remaining after the export"
+        $notApplied = @($pendingAfter | Where-Object { $_.status -ne "Exported" })
+        Assert-Equal -Actual $notApplied.Count -Expected 0 `
+            -Message "Every Pending Export was applied (none left Pending or Failed)"
+        Assert-Equal -Actual $pendingAfter.Count -Expected $ExpectedUserCount `
+            -Message "Applied exports held for the confirming import"
 
-        Add-StepResult -Name "Export" -Passed $true -Detail "$($pendingBefore.Count) changes exported"
+        Add-StepResult -Name "Export" -Passed $true -Detail "$($pendingBefore.Count) changes applied, awaiting confirmation"
         Write-Host "  OK Exported $($pendingBefore.Count) change(s)" -ForegroundColor Green
     }
 
-    # ─── Confirming import ───
+    # --- Confirming import ---
     if ($Step -in @("Confirm", "All")) {
-        Write-TestStep "Step 4" "Confirming Full Import (what the export actually applied)"
+        Write-TestStep "Step 6" "Confirming Full Import (what the export actually applied)"
 
         # An export JIM recorded as applied and the provider never received is the failure this catches,
         # and the only thing that can catch it is reading the provider back.
         $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Full Import" -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $result.activityId -Name "SCIM Confirming Full Import"
 
-        $users = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId)
+        $users = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId -All)
         Assert-Equal -Actual $users.Count -Expected $ExpectedUserCount `
             -Message "Users after the confirming import (the export must not have created duplicates)"
 
         $withDisplayName = 0
         foreach ($user in $users) {
             $values = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $scimSystem.id -CsoId $user.id -AttributeName "displayName" -All |
-                Where-Object { -not [string]::IsNullOrWhiteSpace($_.stringValue) })
+                Where-Object { $_.stringValue -like "* (Verified)" })
             if ($values.Count -gt 0) { $withDisplayName++ }
         }
 
         Assert-Equal -Actual $withDisplayName -Expected $ExpectedUserCount `
-            -Message "Users carrying the displayName the export sent"
+            -Message "Users carrying the exact displayName the export sent"
 
-        Add-StepResult -Name "Confirm" -Passed $true -Detail "$withDisplayName users carry the exported displayName"
+        # Confirmation closes the loop: the import proved every value landed, so the Pending Exports
+        # that were held in Exported status are now deleted. One left behind means a change the
+        # provider reported as applied that the confirming import could not see.
+        $pendingAfterConfirm = @(Get-JIMPendingExport -ConnectedSystemId $scimSystem.id -All)
+        Assert-Equal -Actual $pendingAfterConfirm.Count -Expected 0 `
+            -Message "Pending Exports remaining after confirmation"
+
+        Add-StepResult -Name "Confirm" -Passed $true -Detail "$withDisplayName users carry the exported displayName; all exports confirmed"
         Write-Host "  OK The provider holds every value the export claimed to apply" -ForegroundColor Green
     }
 
-    # ─── Delta Import ───
+    # --- Delta Import ---
     if ($Step -in @("DeltaImport", "All")) {
-        Write-TestStep "Step 5" "Delta Import (only what changed since the last completed import)"
+        Write-TestStep "Step 7" "Delta Import (only what changed since the last completed import)"
 
         $result = Start-JIMRunProfile -ConnectedSystemId $scimSystem.id -RunProfileName "Delta Import" -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $result.activityId -Name "SCIM Delta Import"
 
         # The watermark is set deliberately behind the point the run started reading, so a delta
         # immediately after a full import re-reads a small overlap rather than nothing. What it must not
-        # do is read everything: that would mean the filter never reached the provider.
-        $users = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId)
+        # do is disturb the connector space: a delta that duplicates or drops objects is broken.
+        $users = @(Get-JIMConnectedSystemObject -ConnectedSystemId $scimSystem.id -ObjectTypeId $userTypeId -All)
         Assert-Equal -Actual $users.Count -Expected $ExpectedUserCount `
             -Message "Users after the Delta Import (a delta must not duplicate or drop objects)"
 

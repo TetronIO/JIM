@@ -153,6 +153,23 @@ public class ScimConnectorExportTests
     }
 
     [Test]
+    public async Task ExportAsync_Update_ThePatchedValueIsReadableBackFromTheProviderAsync()
+    {
+        // The integration scenario's confirming import reads the provider after an export, so the mock
+        // has to actually apply a simple PATCH; a provider that only acknowledged one would make every
+        // exported change unconfirmable, failing the confirming import rather than the export.
+        var provider = new MockScimProvider();
+        provider.AddUser("alice", "alice");
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        await ExportAsync(provider, handler,
+            Against("alice", user, PendingExportChangeType.Update, Change("title", user, "Engineer")));
+
+        Assert.That((provider.Resources.Single().Attributes["title"] as System.Text.Json.Nodes.JsonNode)?.GetValue<string>(), Is.EqualTo("Engineer"));
+    }
+
+    [Test]
     public async Task ExportAsync_UpdateAgainstAProviderWithoutPatch_ReadsModifiesAndWritesTheWholeResourceAsync()
     {
         // A PUT asserts the entire resource, so one built from JIM's changes alone would clear every
