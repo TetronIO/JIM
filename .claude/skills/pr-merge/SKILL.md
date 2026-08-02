@@ -42,23 +42,17 @@ If `$ARGUMENTS` is non-empty, treat it as the proposed PR title (still under 70 
    ```
    gh pr list --state open --json number,headRefName,baseRefName
    ```
-   - If this branch's PR has `baseRefName` other than `main`, it is the **upper PR of a stack**: its prerequisite PR must land first. Drive the prerequisite through this skill bottom-up, then return here.
-   - If another open PR has `baseRefName` equal to this branch, this branch is a **stack base**: land it normally, then run the post-land steps in "Stacked PRs" for the upper branch.
+   - If this branch's PR has `baseRefName` other than `main`, or another open PR has `baseRefName` equal to this branch, the branch is a **layer in a stack**. Follow "Stacked PRs" below instead of the ordinary flow: stacks rebase rather than merge to stay current, and auto-merge is unsupported.
 
 ## Stacked PRs
 
-Per CLAUDE.md ("Stacked PRs for discovered blockers"), a feature PR may be based on a prerequisite branch (`feature/<feature>-prereq-<desc>`) whose own PR targets `main`. Rules for landing:
+Per CLAUDE.md ("Stacked PRs for discovered work"), a branch may be a layer in a GitHub native stack: a sequential chain where each PR targets the branch of the PR below it and the bottom PR targets `main`. Landing a stack differs from the ordinary flow in four ways:
 
-- **Always land bottom-up.** Never try to merge an upper PR while its base PR is open; GitHub would merge the feature into the prerequisite branch, not into `main`.
-- **While the prerequisite PR is open**, the upper PR's "up to date" target is the prerequisite branch, not `origin/main`: `git merge <prereq-branch>` on the feature branch. Skip the "up to date with origin/main" section for the upper PR until its base has landed.
-- **After the prerequisite squash-merges** (with `--delete-branch`), GitHub auto-retargets the upper PR to `main`. Verify with `gh pr view <n> --json baseRefName`; if it still points at the deleted branch, `gh pr edit <n> --base main`. Then, on the feature branch:
-  ```
-  git fetch origin --prune
-  git merge origin/main
-  git push
-  ```
-  The squash commit supersedes the prerequisite's commits; conflicts, if any, are content-identical and trivial. Eyeball `CHANGELOG.md` `[Unreleased]` for a doubled bullet (union driver duplication) and tidy. The upper PR's diff returns to feature-only work; from here it is an ordinary PR and the rest of this skill applies unchanged.
-- **Cleanup:** the prerequisite's local branch also needs `git branch -D <prereq-branch>` in the final cleanup step.
+- **Rebase, not merge, to stay current.** Stacks require fully linear history. If the merge box shows the stack is non-linear (a lower layer changed, or `main` advanced), restack with the web "Rebase stack" button, or locally with `gh stack rebase` followed by `gh stack push` (cascading rebase + force-push of the layers). Skip this skill's "up to date with origin/main" merge section entirely for stack layers.
+- **No auto-merge.** `--auto` is unsupported for stacked PRs. Instead, wait for green with a background waiter on the checks, then merge. Every PR in the stack is evaluated against `main`'s branch protections (all seven required checks), regardless of its direct base.
+- **Land bottom-up, atomically from wherever you merge.** Merging any PR in the stack also merges all unmerged PRs below it in a single operation, ordered bottom-up, each recorded individually. A mid-stack PR cannot merge in isolation. The normal move when the objective is complete is to merge from the **top** of the stack; merge a lower layer earlier only when it is ready and independently valuable. After a partial merge, GitHub automatically rebases the next unmerged PR to target `main`.
+- **Merge mechanics:** try `gh pr merge <n> --squash --delete-branch` once everything below is green. If the CLI refuses because the PR is stacked, merge from the PR's merge box on the web (it shows the stack map) - the stack merge API is distinct from the ordinary merge endpoint.
+- **Cleanup:** delete every landed layer's local branch with `git branch -D` in the final cleanup step.
 
 ## Get the branch up to date with origin/main (CRITICAL)
 

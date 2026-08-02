@@ -1,101 +1,87 @@
 ---
 name: stack-pr
-description: Interrupt feature work to fix a discovered blocker in its own stacked PR; branch the prerequisite off origin/main, implement it to full standard, PR and auto-merge it, fold it back into the feature branch, and retarget the feature PR.
-argument-hint: "[one-line description of the discovered blocker]"
+description: Isolate work discovered mid-feature into the next layer of a GitHub stacked PR; branch off the current feature branch, implement to full standard, open the layer's PR against the branch below, link the stack, and carry on.
+argument-hint: "[one-line description of the discovered work]"
 ---
 
-# Stack a prerequisite PR under the current feature branch
+# Stack a new PR layer on the current feature branch
 
-This skill implements the policy in CLAUDE.md ("Stacked PRs for discovered blockers"): something has been found mid-feature that must be solved to deliver the feature but is not semantically part of it. It gets fixed now, in its own PR, stacked under the feature; never folded into the feature branch, never deferred to an issue.
+This skill implements the policy in CLAUDE.md ("Stacked PRs for discovered work"): something has been found mid-feature that must be solved to deliver the objective but is not semantically part of the current branch's work. It gets its own layer in a GitHub native stacked PR (public preview), never folded into the feature branch, never deferred to an issue.
 
-If `$ARGUMENTS` is non-empty, treat it as the blocker description; otherwise derive one from the conversation context. Announce the blocker to the user in one line and proceed; do not ask whether to stack (the policy pre-authorises it). If the prerequisite itself is architecturally significant with multiple sensible approaches, the CLAUDE.md "Ask before significant changes" rule applies to the approach, not to the decision to stack.
+A stack is a **sequential chain**: each layer branches off the branch below it, each PR targets the branch below it, and only the bottom PR targets `main`. Merging is bottom-up; merging an upper PR atomically merges everything below it, each PR recorded individually.
 
-## 1. Park the feature work
+If `$ARGUMENTS` is non-empty, treat it as the description of the discovered work; otherwise derive one from the conversation context. Announce it to the user in one line and proceed; do not ask whether to stack (the policy pre-authorises it). If the work itself is architecturally significant with multiple sensible approaches, the CLAUDE.md "Ask before significant changes" rule applies to the approach, not to the decision to stack.
+
+## 0. One-time setup
+
+The `gh stack` CLI is an extension (requires gh 2.90+):
+
+```
+gh extension list | grep -q gh-stack || gh extension install github/gh-stack
+```
+
+## 1. Park the current work
 
 ```
 git status
 git branch --show-current
 ```
 
-- You MUST be on a feature branch. If on `main`, stop; there is nothing to stack under.
-- Record the feature branch name; call it `<feature>` below.
-- If the tree is dirty, commit the WIP to the feature branch: `git add -A && git commit -m "wip: park feature work before stacked prerequisite"`. Prefer a `wip:` commit over stashing; squash-merge collapses it on landing, and a stash is invisible to other sessions.
+- You MUST be on a feature branch. If on `main`, stop; there is nothing to stack on.
+- If the tree is dirty, commit the WIP to the current branch: `git add -A && git commit -m "wip: park work before stacking next layer"`. Prefer a `wip:` commit over stashing; squash-merge collapses it on landing, and a stash is invisible to other sessions.
+- Push the current branch so the chain's lower layer exists on the remote: `git push` (or `git push -u origin <branch>` if never pushed).
 
-## 2. Create the prerequisite branch off origin/main
+## 2. Create the layer off the current branch
 
 ```
-git fetch origin --prune
-git checkout -b feature/<feature-suffix>-prereq-<desc> origin/main
+git checkout -b feature/<feature-suffix>-stack-<desc>
 ```
 
-- `<feature-suffix>` is the feature branch name without its `feature/` prefix; `<desc>` is a short kebab-case description of the blocker. Example: feature `feature/csv-connector` with an encoding bug prerequisite becomes `feature/csv-connector-prereq-fix-encoding`.
-- Branching off `origin/main` (not the feature branch) is what makes the stack work: the prerequisite PR must contain no feature commits.
+- Branch **from the current feature branch**, never from `main`; the layer must sit on top of the work below it.
+- `<feature-suffix>` is the feature branch name without its `feature/` prefix; `<desc>` is a short kebab-case description. Example: on `feature/csv-connector`, an encoding bug becomes `feature/csv-connector-stack-fix-encoding`.
+- Alternatively `gh stack add feature/<feature-suffix>-stack-<desc>` creates and tracks the branch in one step if the stack is already initialised.
 
-## 3. Implement the prerequisite to full standard
+## 3. Implement the layer to full standard
 
 Being unplanned lowers no bars. All CLAUDE.md rules apply:
 
 - TDD (failing test first; for a bug the test must reproduce it before the fix).
 - Build/test gates: targeted during the loop, `dotnet build JIM.sln` and `dotnet test JIM.sln` clean before the PR (or the documented non-code exceptions).
 - Changelog entry under `[Unreleased]` plus public docs if the change is user-facing.
-- Commit with a clear message and push: `git push -u origin feature/<feature-suffix>-prereq-<desc>`.
+- Commit with a clear message and push: `git push -u origin feature/<feature-suffix>-stack-<desc>`.
 
-## 4. Open the prerequisite PR and queue auto-merge
+## 4. Open the layer's PR and link the stack
 
-Follow `/pr-merge` conventions (title under 70 chars, JIM body template):
-
-```
-gh pr create --base main --title "fix: <desc>" --body "..."
-gh pr merge <n> --squash --delete-branch --auto
-```
-
-- The immediate `gh pr merge` failure right after create is expected; `--auto` queues it.
-- Resolve `github-code-quality` feedback per the `/pr-merge` loop. Do not wait for the merge to land before moving on; that is the point of stacking.
-
-## 5. Fold the prerequisite into the feature branch and resume
+Follow `/pr-merge` conventions (title under 70 chars, JIM body template), with the base set to the branch below, NOT `main`:
 
 ```
-git checkout feature/<feature>
-git merge feature/<feature-suffix>-prereq-<desc>
-git push
+gh pr create --base feature/<feature> --title "fix: <desc>" --body "..."
 ```
 
-The feature branch now contains the fix and work can continue immediately.
+- GitHub recognises aligned chains (each PR's base is the head of the PR below) and shows a banner offering to link them into a stack; accept it. With the `gh stack` CLI, `gh stack submit` pushes the layers and creates linked PRs in one step.
+- Reviewers see only this layer's diff. CI and all of `main`'s branch protections run for every PR in the stack.
+- Do NOT queue `--auto`: auto-merge is unsupported for stacked PRs. Landing is handled by `/pr-merge` when the objective is complete.
 
-## 6. Retarget the feature PR (if one exists)
+## 5. Continue work in the right layer
 
-```
-gh pr list --head feature/<feature> --state open --json number
-gh pr edit <feature-pr> --base feature/<feature-suffix>-prereq-<desc>
-```
+Code may only depend on its own layer or a lower one:
 
-- This keeps the feature PR's diff limited to feature work while the prerequisite is open.
-- If no feature PR exists yet, nothing to do now; if one is created while the prerequisite PR is still open, pass `--base feature/<feature-suffix>-prereq-<desc>` at creation.
+- **Remaining feature work needs this layer's code** → continue in a new layer on top: `gh stack add` (or branch off this layer), and repeat this pattern.
+- **Remaining feature work is independent of this layer** → `git checkout feature/<feature>` and continue below. Any change to a lower layer breaks the stack's linearity; restack before merging with the web "Rebase stack" button, or locally:
+  ```
+  gh stack rebase
+  gh stack push
+  ```
 
-## 7. Arm the landing notification, then resume the feature
+## 6. Landing
 
-Watch for the prerequisite landing with a background waiter (per CLAUDE.md "Closing the loop after `--auto`"):
+Use `/pr-merge`; its "Stacked PRs" section covers the differences (rebase to stay current, no auto-merge, bottom-up atomic merge, merging from the top when the objective is done, cleanup of layer branches).
 
-```
-until [ "$(gh pr view <n> --json state -q .state)" = "MERGED" ]; do sleep 30; done
-```
+## Notes and edge cases
 
-Run with `run_in_background: true` and carry on with feature work. When it fires:
+- Stacks require all branches in the same repository and fully linear history between layers; within a stack, rebase (cascading) replaces the usual merge-don't-rebase rule.
+- Keep layers shallow and single-concern; a discovery inside a layer gets its own layer the same way.
+- Layer branches belong to the same session and objective as the feature branch; the `-stack-` naming keeps the lineage visible across parallel sessions.
+- **The discovery is NOT needed to deliver the objective** → this skill does not apply. File an issue with native blocked-by/sub-issue links per CLAUDE.md and stay on the feature.
 
-1. GitHub auto-retargets the feature PR to `main` (the prerequisite branch was deleted). Verify with `gh pr view <feature-pr> --json baseRefName`; if needed, `gh pr edit <feature-pr> --base main`.
-2. On the feature branch:
-   ```
-   git fetch origin --prune
-   git merge origin/main
-   git push
-   ```
-   The squash commit supersedes the prerequisite commits; conflicts, if any, are content-identical and trivial. Eyeball `CHANGELOG.md` `[Unreleased]` for a doubled bullet (union driver duplication) and tidy.
-3. Delete the local prerequisite branch: `git branch -D feature/<feature-suffix>-prereq-<desc>`.
-
-## Nesting and edge cases
-
-- **A blocker inside the prerequisite:** apply this skill again with the prerequisite as the parent; stacks nest with the same pattern. Keep stacks shallow and always land the bottom first.
-- **Prerequisite CI goes red while you are back on feature work:** the drive-to-green duty from the PR-handling rules applies; fix the prerequisite before adding more feature work on top of it.
-- **The blocker is NOT needed to deliver the feature:** this skill does not apply. File an issue with native blocked-by/sub-issue links per CLAUDE.md and stay on the feature.
-
-End the skill (step 6) on a one-line status: prerequisite PR number, feature PR retarget state, and confirmation that feature work has resumed. Step 7's completion is reported when the waiter fires.
+End the skill on a one-line status: layer branch name, its PR number and base, and which layer work is continuing in.
