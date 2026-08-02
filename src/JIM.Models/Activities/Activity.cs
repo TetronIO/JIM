@@ -30,6 +30,18 @@ public class Activity
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
+    /// <summary>
+    /// When this Activity applied a configuration change that was previewed first, the preview's Activity. Null
+    /// means the change was applied without a preview, which is a legitimate choice and is recorded as such: an
+    /// auditor asking "did anyone look at what this would do before doing it?" gets an answer either way, and a
+    /// null that meant "unknown" would answer nothing.
+    ///
+    /// A plain column rather than a foreign key, matching <see cref="ParentActivityId"/>. A preview ages out under
+    /// retention long before the change it informed does, and a foreign key would either block that cleanup or null
+    /// this link; keeping the raw id preserves "this was previewed" even once the preview's own rows have gone.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>

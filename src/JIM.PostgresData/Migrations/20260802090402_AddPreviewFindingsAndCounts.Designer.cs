@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260802090402_AddPreviewFindingsAndCounts")]
+    partial class AddPreviewFindingsAndCounts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -312,51 +315,6 @@ namespace JIM.PostgresData.Migrations
                         .HasFilter("\"AggregationWindowStart\" IS NOT NULL");
 
                     b.ToTable("Activities");
-                });
-
-            modelBuilder.Entity("JIM.Models.Activities.ActivityPhase", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ActivityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("Ended")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("Order")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ParentKey")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("Started")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActivityId", "Key")
-                        .IsUnique();
-
-                    b.HasIndex("ActivityId", "Order");
-
-                    b.ToTable("ActivityPhases");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
@@ -3661,56 +3619,6 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("PendingExportAttributeValueChanges");
                 });
 
-            modelBuilder.Entity("JIM.Models.Transactional.PendingInitialPassword", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("ConnectedSystemObjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("FailureReason")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("LastAttemptedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SyncRuleId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TargetMessage")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConnectedSystemObjectId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemObjectId_Unique");
-
-                    b.HasIndex("SyncRuleId");
-
-                    b.HasIndex("ConnectedSystemId", "Status")
-                        .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
-
-                    b.ToTable("PendingInitialPasswords");
-                });
-
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
                 {
                     b.Property<int>("AttributesId")
@@ -3761,29 +3669,6 @@ namespace JIM.PostgresData.Migrations
                         });
 
                     b.HasDiscriminator().HasValue("ClearConnectedSystemObjectsWorkerTask");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.ConfigurationChangePreviewWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<string>("ProposedConfigurationPayload")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<int>("Surface")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("TargetGuidId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("TargetId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TargetName")
-                        .HasColumnType("text");
-
-                    b.HasDiscriminator().HasValue("ConfigurationChangePreviewWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.DeleteConnectedSystemWorkerTask", b =>
@@ -3881,15 +3766,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany("Activities")
                         .HasForeignKey("SyncRuleId");
-                });
-
-            modelBuilder.Entity("JIM.Models.Activities.ActivityPhase", b =>
-                {
-                    b.HasOne("JIM.Models.Activities.Activity", null)
-                        .WithMany()
-                        .HasForeignKey("ActivityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
@@ -4855,24 +4731,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("PendingExportId");
 
                     b.Navigation("Attribute");
-                });
-
-            modelBuilder.Entity("JIM.Models.Transactional.PendingInitialPassword", b =>
-                {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
-                        .WithMany()
-                        .HasForeignKey("ConnectedSystemObjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
-                        .WithMany()
-                        .HasForeignKey("SyncRuleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("ConnectedSystemObject");
-
-                    b.Navigation("SyncRule");
                 });
 
             modelBuilder.Entity("MetaverseAttributeMetaverseObjectType", b =>
