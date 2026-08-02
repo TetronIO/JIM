@@ -151,7 +151,8 @@ public class CausalityEventCardTests
         Assert.That(cut.Find(".evt-foot .attr-count").TextContent, Does.Contain("3 attributes"));
         var actionLinks = cut.FindAll(".evt-foot a").Select(a => a.TextContent.Trim()).ToList();
         Assert.That(actionLinks, Has.Count.LessThanOrEqualTo(2));
-        Assert.That(actionLinks, Does.Contain("Pending Exports"));
+        // Singular: this outcome carries the Pending Export's own id, so the link is to that one row
+        Assert.That(actionLinks, Does.Contain("Pending Export"));
     }
 
     [Test]

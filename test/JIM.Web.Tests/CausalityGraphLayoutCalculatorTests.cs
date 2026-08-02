@@ -160,16 +160,21 @@ public class CausalityGraphLayoutCalculatorTests
         Assert.That(layout.Nodes, Has.Count.EqualTo(6));
         Assert.That(layout.Edges, Has.Count.EqualTo(5));
 
-        // Four leaves stack at rows 0, 84, 168, 252 (y offset + 2)
+        // The chain is three deep now that the deprovisioning Pending Exports hang off MvoDeleted:
+        //   evt-0 Left scope > evt-1 Attributes flowed (leaf)
+        //                    > evt-2 Identity deleted > evt-3 Export queued (leaf)
+        //                                             > evt-4 Export queued (leaf)
+        // Three leaves stack at rows 0, 84, 168 (y offset + 2)
         Assert.That(NodeById(layout, "evt-1").Y, Is.EqualTo(2));
-        Assert.That(NodeById(layout, "evt-2").Y, Is.EqualTo(86));
-        Assert.That(NodeById(layout, "evt-3").Y, Is.EqualTo(170));
-        Assert.That(NodeById(layout, "evt-4").Y, Is.EqualTo(254));
+        Assert.That(NodeById(layout, "evt-3").Y, Is.EqualTo(86));
+        Assert.That(NodeById(layout, "evt-4").Y, Is.EqualTo(170));
 
-        // The parent sits at the midpoint of its first and last children: (0 + 252) / 2 + 2
-        Assert.That(NodeById(layout, "evt-0").Y, Is.EqualTo(128));
+        // Each parent sits at the midpoint of its first and last children: (84 + 168) / 2 + 2
+        Assert.That(NodeById(layout, "evt-2").Y, Is.EqualTo(128));
+        // ...and evt-0 over its own two children, one of which is that midpoint: (0 + 126) / 2 + 2
+        Assert.That(NodeById(layout, "evt-0").Y, Is.EqualTo(65));
         // The source root centres over the roots; one root, so it shares its y
-        Assert.That(NodeById(layout, "src").Y, Is.EqualTo(128));
+        Assert.That(NodeById(layout, "src").Y, Is.EqualTo(65));
     }
 
     [Test]
@@ -177,9 +182,9 @@ public class CausalityGraphLayoutCalculatorTests
     {
         var layout = ComputeLeaver();
 
-        // maxDepth 2: W = 3 * 280 - 70 + 4; four leaf rows: H = (4 * 84) - 26 + 4
-        Assert.That(layout.Width, Is.EqualTo(774));
-        Assert.That(layout.Height, Is.EqualTo(314));
+        // maxDepth 3: W = 4 * 280 - 70 + 4; three leaf rows: H = (3 * 84) - 26 + 4
+        Assert.That(layout.Width, Is.EqualTo(1054));
+        Assert.That(layout.Height, Is.EqualTo(230));
     }
 
     [Test]

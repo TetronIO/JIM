@@ -158,12 +158,31 @@ public class CausalityModelBuilderTests
         Assert.That(csLink, Is.Not.Null);
         Assert.That(csLink!.Href, Is.EqualTo("/admin/connected-systems/2"));
 
+        // TargetEntityId is the Pending Export's own id, so the link lands on that Pending Export
+        // rather than on the target system's whole queue for the reader to hunt through
         var peLink = pendingExport.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
         Assert.That(peLink, Is.Not.Null);
-        Assert.That(peLink!.Href, Is.EqualTo("/admin/connected-systems/2/pending-exports"));
+        Assert.That(peLink!.Href, Is.EqualTo($"/admin/connected-systems/2/pending-exports/{CausalityTestData.PendingExportId}"));
 
         // The PendingExportCreated target entity is a Pending Export id, never an Identity
         Assert.That(pendingExport.Links.Any(l => l.Kind == CausalityEntityKind.Identity), Is.False);
+    }
+
+    [Test]
+    public void Build_PendingExportCreatedOutcomeWithoutATargetId_LinksTheSystemQueue()
+    {
+        // Deprovisioning Pending Exports staged by the Metaverse Object Housekeeping batch can reach the
+        // view before their id is known; the link must still take the reader somewhere useful.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: null, ordinal: 0, targetEntityId: null,
+            targetEntityDescription: "Glitterband EMEA", detailCount: 1, detailMessage: "2");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var peLink = model.Roots[0].Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
+        Assert.That(peLink, Is.Not.Null);
+        Assert.That(peLink!.Href, Is.EqualTo("/admin/connected-systems/2/pending-exports"));
     }
 
     [Test]

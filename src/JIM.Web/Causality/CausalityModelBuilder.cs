@@ -207,8 +207,10 @@ public static class CausalityModelBuilder
                 break;
 
             case ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated:
-                // TargetEntityId is the Pending Export's id; the queued changes live on the target
-                // system's Pending Exports page
+                // TargetEntityId is the Pending Export's own id, so link straight to it rather than to the
+                // target system's whole queue: on a deprovisioning cascade that queue can hold thousands of
+                // rows, and "which of these did this event create?" is the one question the link should not
+                // leave the reader to answer. Falls back to the queue when the id was not captured.
                 if (parsedDetail.ConnectedSystemId.HasValue)
                 {
                     var targetSystemId = parsedDetail.ConnectedSystemId.Value;
@@ -216,9 +218,12 @@ public static class CausalityModelBuilder
                         outcome.TargetEntityDescription ?? "Connected System",
                         JimUtilities.GetConnectedSystemHref(targetSystemId),
                         CausalityEntityKind.ConnectedSystem));
+
+                    var queueHref = $"/admin/connected-systems/{targetSystemId}/pending-exports";
+                    var hasPendingExportId = outcome.TargetEntityId is { } id && id != Guid.Empty;
                     links.Add(new CausalityEntityLink(
-                        "Pending Exports",
-                        $"/admin/connected-systems/{targetSystemId}/pending-exports",
+                        hasPendingExportId ? "Pending Export" : "Pending Exports",
+                        hasPendingExportId ? $"{queueHref}/{outcome.TargetEntityId}" : queueHref,
                         CausalityEntityKind.PendingExport));
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))

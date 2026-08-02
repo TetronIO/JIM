@@ -128,16 +128,20 @@ public static class CausalityTestData
         AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
             parent: outOfScope, ordinal: 0, detailCount: 4);
 
-        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+        var mvoDeleted = AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
             parent: outOfScope, ordinal: 1, targetEntityId: MvoId, targetEntityDescription: "Erin Byrne",
             detailMessage: "Deleted immediately: last authoritative source disconnected");
 
+        // The deprovisioning Pending Exports hang off MvoDeleted, not off the disconnection: the deletion is what
+        // queues them, and #1044 made the worker emit them nested this way (both from the sync path and from the
+        // Metaverse Object Housekeeping batch). They were siblings here until that landed, which no longer models
+        // any shape production can produce.
         AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
-            parent: outOfScope, ordinal: 2, targetEntityId: Guid.NewGuid(),
+            parent: mvoDeleted, ordinal: 0, targetEntityId: Guid.NewGuid(),
             targetEntityDescription: "Glitterband EMEA", detailCount: 1, detailMessage: "2");
 
         AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
-            parent: outOfScope, ordinal: 3, targetEntityId: Guid.NewGuid(),
+            parent: mvoDeleted, ordinal: 1, targetEntityId: Guid.NewGuid(),
             targetEntityDescription: "Contoso AD", detailCount: 1, detailMessage: "3");
 
         return item;
