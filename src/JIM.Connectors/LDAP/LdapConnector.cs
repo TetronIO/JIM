@@ -342,6 +342,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
+        // Hoisted once for the log line and the identifier below; the guard above has already thrown when
+        // this setting has no value, and the null-forgiving operator says so to the analyser, which does
+        // not carry null-state out of a pattern guard (same rationale as connectionTimeout further down).
+        var directoryServerPortValue = directoryServerPort.IntValue!.Value;
+
         // Resolve which server this plan actually opens against (issue #230 Phase 2): the Preferred
         // Domain Controller setting when configured, else a domain controller pinned in the persisted
         // connector state most recently replayed to this connector instance, else the configured Host.
@@ -353,7 +358,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _lastResolutionSource = resolutionSource;
 
         logger.Debug("BuildConnectionPlan() Preparing to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
-            LogSanitiser.Sanitise(effectiveServer), directoryServerPort.IntValue,
+            LogSanitiser.Sanitise(effectiveServer), directoryServerPortValue,
             LogSanitiser.Sanitise(username.StringValue), LogSanitiser.Sanitise(authTypeSettingValue.StringValue), useSsl);
 
         // Supply the certificates from the JIM certificate store as additional trust anchors for LDAPS. The platform
@@ -362,7 +367,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (useSsl && _certificateProvider != null)
             PrepareTrustedCertificateDirectory(logger);
 
-        var identifier = new LdapDirectoryIdentifier(effectiveServer, directoryServerPort.IntValue.Value);
+        var identifier = new LdapDirectoryIdentifier(effectiveServer, directoryServerPortValue);
 
         // Decrypt the password if credential protection is available
         // If not available or password is plain text, it will be returned as-is
