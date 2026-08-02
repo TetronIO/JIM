@@ -1261,6 +1261,18 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Configuration change preview (#827) - where a preview runs
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold,
+            DisplayName = "Preview worker threshold",
+            Description = "The estimated number of affected objects above which a configuration change preview is evaluated by JIM.Worker rather than in the portal's own process. Smaller previews run in-process so they return without waiting for the worker to pick them up. Both paths produce identical results.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "2500",
+            IsReadOnly = false
+        });
+
         // Security Settings
         await SeedSettingAsync(new ServiceSetting
         {

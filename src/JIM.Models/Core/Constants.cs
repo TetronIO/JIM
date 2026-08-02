@@ -252,6 +252,13 @@ public static class Constants
         /// </summary>
         public const string SyncPageSize = "Sync.PageSize";
 
+        /// <summary>
+        /// The estimated affected-object count above which a configuration change preview (#827) is handed to
+        /// JIM.Worker instead of running in the requesting host's process. Below it, a preview runs in-process so
+        /// the common case (a handful of objects) does not wait for the worker's next poll. Default: 2,500.
+        /// </summary>
+        public const string ConfigurationChangePreviewWorkerThreshold = "Preview.WorkerThreshold";
+
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 

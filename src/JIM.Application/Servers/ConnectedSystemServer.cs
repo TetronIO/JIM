@@ -695,8 +695,14 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
+        // Keep the caller's instance in step with the database, then write ONLY the one column. This
+        // deliberately does not go through UpdateConnectedSystemAsync: that path marks the entire graph
+        // Modified, and the in-memory system handed in here can legitimately carry runtime-only
+        // setting-value instances (a Setting navigation with no FK scalar) that must never be written
+        // back; doing so failed export runs with a SettingId 0 foreign key violation the first time a
+        // connector returned close-time state (the #230 pin establishment path).
         connectedSystem.PersistedConnectorData = persistedConnectorData;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem.Id, persistedConnectorData);
     }
 
     /// <summary>
@@ -1405,6 +1411,12 @@ public class ConnectedSystemServer
         }
         catch (Exception ex)
         {
+            // Discard whatever the aborted merge left staged on the shared DbContext before recording the
+            // failure: FailActivityWithErrorAsync saves on that same context, and without this it flushed
+            // the half-merged schema alongside the Activity's failure row, so a failed import both
+            // reported an error AND partially applied (found via #1171). The Activity write survives the
+            // cleared tracker by design: UpdateActivityAsync attaches detach-safe.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
@@ -1453,6 +1465,8 @@ public class ConnectedSystemServer
         }
         catch (Exception ex)
         {
+            // Discard staged schema changes before recording the failure: see the user-initiated overload above.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }

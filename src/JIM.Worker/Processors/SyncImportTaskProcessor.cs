@@ -250,8 +250,15 @@ public class SyncImportTaskProcessor
                 await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
-                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
                 }
+
+                // Tracks whether the import phase below completed without throwing. Read from the
+                // finally block to decide whether a failure while persisting CloseImportConnection's
+                // return value may safely propagate on its own, or must be logged and swallowed so it
+                // does not replace/mask an import failure that is already unwinding through the same
+                // finally block (see the finally block below for the full rationale).
+                var importPhaseSucceeded = false;
 
                 try
                 {
@@ -371,15 +378,43 @@ public class SyncImportTaskProcessor
                         Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                     }
 
+                    // Reached only if nothing above threw; used by the finally block below to tell a
+                    // genuine import failure apart from a clean run.
+                    importPhaseSucceeded = true;
                 }
                 finally
                 {
+                    string? closeReturn;
                     using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
                     {
                         // In a finally so an import that fails part-way still releases the connection and the
                         // temporary trust directory prepared for it, rather than leaving both to the connector
                         // instance being garbage collected.
-                        callBasedImportConnector.CloseImportConnection();
+                        closeReturn = callBasedImportConnector.CloseImportConnection();
+                    }
+
+                    // Persist connector state the connector chose to override at close, e.g. because
+                    // opening/using the connection invalidated a previously persisted pin (issue #230).
+                    // This runs AFTER the newPersistedData persistence above, so a Close-returned value
+                    // always wins over whatever the import pages themselves reported. Null (the
+                    // overwhelmingly common case) means "nothing to override" and must not persist.
+                    if (closeReturn != null)
+                    {
+                        try
+                        {
+                            await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, closeReturn);
+                        }
+                        catch (Exception persistEx) when (!importPhaseSucceeded)
+                        {
+                            // The import itself already failed and that exception is propagating out of
+                            // this finally block. A .NET finally block that itself throws replaces the
+                            // in-flight exception rather than chaining it, which would silently hide the
+                            // import's own failure behind an unrelated persistence error. Log and let the
+                            // original import failure continue to unwind instead.
+                            Log.Error(persistEx,
+                                "PerformImportAsync: Failed to persist connector data returned by CloseImportConnection while the import itself is failing for Connected System {ConnectedSystemId}. The import's own failure takes precedence and will propagate.",
+                                _connectedSystem.Id);
+                        }
                     }
                 }
 

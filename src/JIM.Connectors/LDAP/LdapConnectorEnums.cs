@@ -36,3 +36,29 @@ internal enum LdapDirectoryType
     /// </summary>
     Generic
 }
+
+/// <summary>
+/// Where the domain controller/directory server used for a connection came from, per
+/// <see cref="LdapConnectorUtilities.ResolveEffectiveServer"/> (issue #230 Phase 2). Drives whether a
+/// failed connection invalidates a pin: only a connection resolved via <see cref="Pinned"/> can have its
+/// pin invalidated, since the other two sources are administrator-supplied or unpinned by definition.
+/// </summary>
+internal enum LdapServerResolutionSource
+{
+    /// <summary>
+    /// The administrator supplied a non-blank "Preferred Domain Controller" setting; that value always wins.
+    /// </summary>
+    PreferredSetting,
+
+    /// <summary>
+    /// No Preferred Domain Controller is configured; the domain controller pinned in persisted connector
+    /// data (from a previous connection) was used.
+    /// </summary>
+    Pinned,
+
+    /// <summary>
+    /// Neither a Preferred Domain Controller setting nor a usable pin was available; the configured Host
+    /// setting was used, as it always was before pinning existed.
+    /// </summary>
+    Host
+}

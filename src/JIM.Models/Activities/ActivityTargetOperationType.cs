@@ -37,5 +37,12 @@ public enum ActivityTargetOperationType
     /// An authentication event (interactive sign-in or API key authentication); used with
     /// <see cref="ActivityTargetType.Authentication"/> security audit event Activities.
     /// </summary>
-    Authenticate = 10
+    Authenticate = 10,
+    /// <summary>
+    /// A read-only evaluation of a configuration change that has not been made: what it *would* do (#827). Distinct
+    /// from <see cref="Read"/> and emphatically not <see cref="Update"/>, because the Activity list is where an
+    /// administrator establishes what was actually done to the system, and a preview must never be mistaken for the
+    /// change it was previewing.
+    /// </summary>
+    Preview = 11
 }

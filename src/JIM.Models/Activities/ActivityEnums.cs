@@ -74,7 +74,36 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// with no surviving contributor to re-elect) and nothing asserted the blank. Emitted during inbound attribute
     /// flow and attribute recall; an attribute that was already blank reports nothing.
     /// </summary>
-    NoContributor
+    NoContributor,
+
+    // Configuration change preview (#827). A preview describes what a proposed configuration *would* do, and its
+    // per-object deltas need a vocabulary for transitions that no synchronisation run ever performs. They live here
+    // rather than in a parallel enum so that a preview delta and the sync outcome it anticipates are the same value,
+    // and a reader of either does not have to learn two vocabularies. Nothing writes these during a run.
+
+    /// <summary>
+    /// Preview only: the object is out of scope today and the proposed configuration would bring it into scope.
+    /// </summary>
+    WouldFallInScope,
+
+    /// <summary>
+    /// Preview only: the object is in scope today and the proposed configuration would take it out of scope. What
+    /// then happens to it is governed by the rule's Inbound Out-of-Scope Action.
+    /// </summary>
+    WouldFallOutOfScope,
+
+    /// <summary>
+    /// Preview only: the Metaverse Object does not satisfy its type's deletion rule today, and would under the
+    /// proposed configuration. Deletion eligibility takes effect on save, so this is the transition a Metaverse
+    /// Object Type deletion-settings preview exists to surface.
+    /// </summary>
+    WouldBecomeDeletionEligible,
+
+    /// <summary>
+    /// Preview only: the inverse. The Metaverse Object is eligible for deletion today and would cease to be, which
+    /// is what a proposal that relaxes a deletion rule needs to state as plainly as one that tightens it.
+    /// </summary>
+    WouldCeaseToBeDeletionEligible
 }
 
 /// <summary>
