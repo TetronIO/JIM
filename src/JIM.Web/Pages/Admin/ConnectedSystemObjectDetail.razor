@@ -370,14 +370,19 @@
     // follow. Read once with the rest of the page rather than when the dialog opens, so the Set Password action
     // is either offered or not rather than appearing and then turning out to be unavailable.
     private IReadOnlyCollection<PasswordExpiryBehaviour> _supportedExpiryBehaviours = [];
-    private PasswordGenerationPolicy _passwordGenerationPolicy = new();
+    private ConnectedSystemPasswordPolicy? _discoveredPasswordPolicy;
 
     /// <summary>
-    /// Opens the set-password dialog for this account (issue #1121).
+    /// Opens the set-password dialog for this account (issues #1121, #1172).
+    /// <para>
+    /// The same dialog the Metaverse Object uses, handed exactly one account. With no choice to make there is
+    /// no picker and no progress rail, so it renders as the single-account dialog it was originally built as,
+    /// while there remains one component to maintain rather than two that drift.
+    /// </para>
     /// <para>
     /// Generation and the set itself are passed in as delegates rather than letting the dialog reach the
     /// application layer, so the dialog stays a piece of user interface with no knowledge of how JIM talks to a
-    /// Connected System, and so the password it holds never travels further than these two calls.
+    /// Connected System, and so the password it holds never travels further than those calls.
     /// </para>
     /// </summary>
     private async Task OpenSetPasswordDialogAsync()
@@ -385,47 +390,55 @@
         if (ConnectedSystemObject == null || ConnectedSystemHeader == null)
             return;
 
-        var connectedSystemObjectId = ConnectedSystemObject.Id;
+        var account = new MetaverseObjectAccount
+        {
+            ConnectedSystemObjectId = ConnectedSystemObject.Id,
+            ConnectedSystemId = CsId,
+            ConnectedSystemName = ConnectedSystemHeader.Name,
+            AccountIdentifier = GetDisplayIdentifier(),
+            ConnectorCanSetPasswords = _supportedExpiryBehaviours.Count > 0,
+            SupportedExpiryBehaviours = _supportedExpiryBehaviours,
+            DiscoveredPolicy = _discoveredPasswordPolicy
+        };
+
         var parameters = new DialogParameters<SetPasswordDialog>
         {
-            { x => x.ObjectName, GetDisplayIdentifier() },
-            { x => x.ConnectedSystemName, ConnectedSystemHeader.Name },
-            { x => x.SupportedExpiryBehaviours, _supportedExpiryBehaviours },
+            { x => x.Accounts, new List<MetaverseObjectAccount> { account } },
+            { x => x.AllowSelection, false },
+            { x => x.Reconcile, ReconcilePasswordPolicies },
             { x => x.GeneratePassword, GeneratePassword },
-            { x => x.SetPassword, (password, options) => SetPasswordAsync(connectedSystemObjectId, password, options) }
+            { x => x.SetPassword, SetPasswordOnAccountsAsync }
         };
 
         await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
             new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
     }
 
-    private string GeneratePassword()
+    private PasswordPolicyReconciliation ReconcilePasswordPolicies(IReadOnlyList<MetaverseObjectAccount> accounts)
     {
         using var jim = JimFactory.Create();
-        return jim.PasswordGenerator.Generate(_passwordGenerationPolicy);
+        return jim.PasswordGenerator.Reconcile(accounts
+            .Select(a => new PasswordPolicyForSystem { ConnectedSystemName = a.ConnectedSystemName, Policy = a.DiscoveredPolicy })
+            .ToList());
     }
 
-    private async Task<PasswordSetResult> SetPasswordAsync(Guid connectedSystemObjectId, string password, PasswordSetOptions options)
+    private string GeneratePassword(PasswordGenerationPolicy policy)
+    {
+        using var jim = JimFactory.Create();
+        return jim.PasswordGenerator.Generate(policy);
+    }
+
+    private async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
+        IReadOnlyList<MetaverseObjectAccount> accounts,
+        string password,
+        PasswordSetOptions options,
+        IProgress<AccountPasswordSetOutcome> progress)
     {
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
-        try
-        {
-            return await jim.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(
-                CsId, connectedSystemObjectId, password, options, user, CancellationToken.None);
-        }
-        catch (NotSupportedException ex)
-        {
-            // Only reachable if the Connector's capability changed between the page loading and the dialog being
-            // submitted, since the action is not offered otherwise. Reported rather than thrown so the dialog
-            // shows it in place, as it does every other reason a password did not land.
-            return PasswordSetResult.Failed(PasswordSetFailureReason.UnsupportedOperation, ex.Message);
-        }
-        catch (ArgumentException ex)
-        {
-            return PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound, ex.Message);
-        }
+        return await jim.ConnectedSystems.SetPasswordOnAccountsAsync(
+            ConnectedSystemObject?.MetaverseObjectId ?? Guid.Empty, accounts, password, options, user, progress, CancellationToken.None);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -491,12 +504,9 @@
 
         _supportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(CsId);
         if (_supportedExpiryBehaviours.Count > 0)
-        {
-            // Derived from what JIM last discovered on the target, so a generated password satisfies the
-            // directory's own rules without an administrator retyping them.
-            var discoveredPolicy = await jim.ConnectedSystems.GetPasswordPolicyAsync(CsId);
-            _passwordGenerationPolicy = jim.PasswordGenerator.DeriveFrom(discoveredPolicy);
-        }
+            // What JIM last discovered on the target, so a generated password satisfies the directory's own
+            // rules without an administrator retyping them. The dialog reconciles it into generator settings.
+            _discoveredPasswordPolicy = await jim.ConnectedSystems.GetPasswordPolicyAsync(CsId);
 
         // Fetch Pending Export header (without loading all attribute value changes) for this CSO
         var pendingExportResult = await jim.ConnectedSystems.GetPendingExportHeaderForObjectAsync(connectedSystemObjectId);

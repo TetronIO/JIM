@@ -1897,7 +1897,7 @@ public class ConnectedSystemServer
         CancellationToken cancellationToken)
     {
         return await SetConnectedSystemObjectPasswordCoreAsync(connectedSystemId, connectedSystemObjectId, password, options,
-            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy), cancellationToken);
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy), parentActivityId: null, cancellationToken);
     }
 
     /// <summary>
@@ -1915,7 +1915,191 @@ public class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(initiatedByApiKey);
 
         return await SetConnectedSystemObjectPasswordCoreAsync(connectedSystemId, connectedSystemObjectId, password, options,
-            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey), cancellationToken);
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey), parentActivityId: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// The accounts a Metaverse Object is joined to, with what each one's Connected System can do about
+    /// passwords (issue #1172).
+    /// <para>
+    /// Systems whose Connector cannot set a password are returned marked as such rather than left out, so an
+    /// administrator looking for an account that is not offered can see that JIM knows about it and why it is
+    /// not on the list.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<IReadOnlyList<MetaverseObjectAccount>> GetAccountsForPasswordSetAsync(Guid metaverseObjectId)
+    {
+        var connectedSystemObjects = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
+
+        // Each Connected System is resolved once and reused across its accounts. The retrieval above does not
+        // load the Connected System navigation, and an unloaded navigation is indistinguishable from an absent
+        // value, so the system is loaded here by id rather than read off the object.
+        var systems = new Dictionary<int, (string Name, IReadOnlyCollection<PasswordExpiryBehaviour> ExpiryBehaviours, ConnectedSystemPasswordPolicy? Policy)>();
+        foreach (var connectedSystemId in connectedSystemObjects.Select(cso => cso.ConnectedSystemId).Distinct())
+        {
+            var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+            if (connectedSystem == null)
+                continue;
+
+            var expiryBehaviours = CreateConnector(connectedSystem) is IConnectorPasswordManagement passwordConnector
+                ? passwordConnector.SupportedExpiryBehaviours
+                : [];
+
+            systems[connectedSystemId] = (
+                connectedSystem.Name,
+                expiryBehaviours,
+                expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null);
+        }
+
+        return connectedSystemObjects
+            .Where(cso => systems.ContainsKey(cso.ConnectedSystemId))
+            .Select(cso =>
+            {
+                var system = systems[cso.ConnectedSystemId];
+                return new MetaverseObjectAccount
+                {
+                    ConnectedSystemObjectId = cso.Id,
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemName = system.Name,
+                    AccountIdentifier = cso.DisplayNameOrId ?? cso.Id.ToString(),
+                    ConnectorCanSetPasswords = system.ExpiryBehaviours.Count > 0,
+                    SupportedExpiryBehaviours = system.ExpiryBehaviours,
+                    DiscoveredPolicy = system.Policy
+                };
+            })
+            .OrderBy(account => account.ConnectedSystemName)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Sets the same password on several of a person's accounts, one Connected System at a time (issue #1172).
+    /// <para>
+    /// <b>There is no transaction across systems.</b> Each write is independent, and a fan-out routinely ends
+    /// with some accounts changed and others not; that is reported per account rather than rolled into a count,
+    /// because which accounts took the password is what the administrator has to act on.
+    /// </para>
+    /// <para>
+    /// Sequential on purpose. A handful of accounts makes the wall-clock saving of running them at once
+    /// negligible, and sequence is what lets the caller narrate progress at all. It also means a target
+    /// refusing everything is discovered on the first account rather than the fourth.
+    /// </para>
+    /// <para>
+    /// Two or more accounts are grouped under a parent Activity, so the fan-out is findable afterwards as one
+    /// action; a single account gets none, because a group of one is a row in the Activity list that says
+    /// nothing and hides the row that does.
+    /// </para>
+    /// </summary>
+    /// <param name="metaverseObjectId">The person whose accounts these are, for the parent Activity.</param>
+    /// <param name="accounts">The accounts to set the password on, in the order to attempt them.</param>
+    /// <param name="password">The password to set. Never logged, never persisted, never returned.</param>
+    /// <param name="options">How to apply it, applied identically to every account.</param>
+    /// <param name="initiatedBy">The administrator making the request, for attribution.</param>
+    /// <param name="progress">
+    /// Reports each account's outcome as it lands, so a caller can show progress while the rest are still
+    /// being written. Optional; the full set is returned regardless.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Stops before the accounts not yet reached. It cannot undo the ones already written, and their outcomes
+    /// are still returned, because a password that landed has landed whatever the administrator did next.
+    /// </param>
+    public async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
+        Guid metaverseObjectId,
+        IReadOnlyList<MetaverseObjectAccount> accounts,
+        string password,
+        PasswordSetOptions options,
+        MetaverseObject? initiatedBy,
+        IProgress<AccountPasswordSetOutcome>? progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        if (accounts.Count == 0)
+            throw new ArgumentException("At least one account is required.", nameof(accounts));
+
+        Activity? parentActivity = null;
+        if (accounts.Count > 1)
+        {
+            parentActivity = new Activity
+            {
+                TargetName = $"{accounts.Count} accounts",
+                TargetType = ActivityTargetType.MetaverseObject,
+                TargetOperationType = ActivityTargetOperationType.SetPassword,
+                MetaverseObjectId = metaverseObjectId
+            };
+            await Application.Activities.CreateActivityAsync(parentActivity, initiatedBy);
+        }
+
+        var outcomes = new List<AccountPasswordSetOutcome>(accounts.Count);
+        try
+        {
+            foreach (var account in accounts)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                var startedAt = DateTime.UtcNow;
+                PasswordSetResult result;
+                try
+                {
+                    result = await SetConnectedSystemObjectPasswordCoreAsync(
+                        account.ConnectedSystemId, account.ConnectedSystemObjectId, password, options,
+                        activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+                        parentActivity?.Id, cancellationToken);
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+                {
+                    // A missing account or a Connector that cannot do this stops that account, not the fan-out.
+                    // The administrator picked several systems and the rest of them may work perfectly.
+                    result = PasswordSetResult.Failed(
+                        ex is NotSupportedException ? PasswordSetFailureReason.UnsupportedOperation : PasswordSetFailureReason.TargetObjectNotFound,
+                        ex.Message);
+                }
+
+                var outcome = new AccountPasswordSetOutcome
+                {
+                    ConnectedSystemObjectId = account.ConnectedSystemObjectId,
+                    ConnectedSystemId = account.ConnectedSystemId,
+                    ConnectedSystemName = account.ConnectedSystemName,
+                    Result = result,
+                    Duration = DateTime.UtcNow - startedAt
+                };
+                outcomes.Add(outcome);
+                progress?.Report(outcome);
+            }
+        }
+        finally
+        {
+            if (parentActivity != null)
+                await CompleteFanOutActivityAsync(parentActivity, outcomes);
+        }
+
+        // Synchronisation Integrity: summary statistics at the end of every batch operation. The Connected
+        // System Object ids are logged so an administrator can find the accounts that refused; the password is
+        // not, and no part of it ever is.
+        var failed = outcomes.Where(o => !o.Result.Success).ToList();
+        Log.Information("SetPasswordOnAccountsAsync: Password set on {Succeeded} of {Attempted} accounts for Metaverse Object {MetaverseObjectId}. Refused by: {Refused}",
+            outcomes.Count - failed.Count, outcomes.Count, metaverseObjectId,
+            failed.Count == 0 ? "none" : string.Join(", ", failed.Select(f => f.ConnectedSystemObjectId)));
+
+        return new MultiAccountPasswordSetResult { Outcomes = outcomes };
+    }
+
+    /// <summary>
+    /// Finishes the parent Activity with what the fan-out achieved. Failed rather than completed where any
+    /// account refused, because the administrator asked for a password on all of them and did not get one.
+    /// </summary>
+    private async Task CompleteFanOutActivityAsync(Activity parentActivity, IReadOnlyList<AccountPasswordSetOutcome> outcomes)
+    {
+        var failed = outcomes.Where(o => !o.Result.Success).ToList();
+        if (failed.Count == 0)
+        {
+            parentActivity.Message = $"Password set on {outcomes.Count} accounts.";
+            await Application.Activities.CompleteActivityAsync(parentActivity);
+            return;
+        }
+
+        await Application.Activities.FailActivityWithErrorAsync(parentActivity,
+            $"Password set on {outcomes.Count - failed.Count} of {outcomes.Count} accounts. Not set on: {string.Join(", ", failed.Select(f => f.ConnectedSystemName))}.");
     }
 
     private async Task<PasswordSetResult> SetConnectedSystemObjectPasswordCoreAsync(
@@ -1924,6 +2108,7 @@ public class ConnectedSystemServer
         string password,
         PasswordSetOptions options,
         Func<Activity, Task> createActivityAsync,
+        Guid? parentActivityId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -1952,7 +2137,8 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.SetPassword,
             ConnectedSystemId = connectedSystemId,
             ConnectedSystemObjectId = connectedSystemObjectId,
-            MetaverseObjectId = connectedSystemObject.MetaverseObjectId
+            MetaverseObjectId = connectedSystemObject.MetaverseObjectId,
+            ParentActivityId = parentActivityId
         };
         await createActivityAsync(activity);
 

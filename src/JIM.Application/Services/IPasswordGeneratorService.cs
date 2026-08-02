@@ -44,4 +44,20 @@ public interface IPasswordGeneratorService
     /// </para>
     /// </summary>
     PasswordGenerationPolicy DeriveFrom(ConnectedSystemPasswordPolicy? targetPolicy);
+
+    /// <summary>
+    /// Produces one configuration that satisfies several Connected Systems at once, for setting the same
+    /// password on a person's accounts across them (issue #1172).
+    /// <para>
+    /// Combining is not averaging. The length taken is the longest any system demands; the categories counted
+    /// are only those every system recognises, since a category one system does not count towards its
+    /// complexity rule cannot help satisfy it. Reconciling to anything looser would produce passwords the
+    /// strictest system refuses on every account.
+    /// </para>
+    /// </summary>
+    /// <param name="policies">
+    /// The selected systems and what JIM discovered on each. A system with no discovered policy contributes no
+    /// constraints and is reported, rather than being taken as a system that will accept anything.
+    /// </param>
+    PasswordPolicyReconciliation Reconcile(IReadOnlyList<PasswordPolicyForSystem> policies);
 }

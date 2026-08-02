@@ -134,6 +134,7 @@
 
         # Metaverse
         'Get-JIMMetaverseObject',
+        'Set-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',

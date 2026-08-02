@@ -166,6 +166,27 @@ A Connected System that refuses the password says why, and the dialog stays open
 
 The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, with one difference: you supply the password there rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one.
 
+### One password across several Connected Systems
+
+A person often has accounts in more than one place, and conveying a different password for each is both more work and worse for them: four different passwords on a first morning end up on a sticky note. Open a person from the portal and the same **Set Password** action appears there, listing every account they have whose Connector can set a password.
+
+Choose some or all of them and JIM sets one password across them, writing to each Connected System in turn. **Nothing is selected by default**, so resetting a forgotten password in one system never silently resets the others.
+
+The password is generated to satisfy the strictest of the selected systems' rules: the longest minimum length any of them demands, and the character categories all of them count. A category only one system recognises cannot help satisfy another system's complexity rule, so JIM counts only what they have in common. Where a selected system has never published a policy, JIM says so rather than assuming it will accept anything.
+
+Progress runs left to right along the same stepped rail a Run Profile execution uses, one step per Connected System.
+
+!!! warning "There is no transaction across Connected Systems"
+    Each write is independent. A run routinely ends with some accounts changed and others not, which leaves the person with a different password in the systems that refused it. JIM says which, in as many words, and offers to retry only the accounts that failed, reusing the password already in hand.
+
+    Where a system refused the **password itself**, retrying it unchanged will fail identically. The guidance on that result offers a fresh password for every account instead, including the ones that already succeeded, because replacing it only where it failed would leave the person with two.
+
+Each account's failure carries guidance you can open, specific to what went wrong: a refused password and an unreachable directory need opposite responses, and the guidance says which of the two you have and whether retrying is worth anything at all.
+
+Every account gets its own Activity, grouped under one parent so the whole action is findable afterwards. Setting a password on a single account records no parent, because a group of one says nothing.
+
+For automation, `Set-JIMMetaverseObjectPassword` does the same thing over the per-account REST endpoint. You must name the Connected Systems, or pass `-AllAccounts`; there is no default, for the same reason the portal preselects nothing.
+
 ## Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
