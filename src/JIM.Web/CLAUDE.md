@@ -109,6 +109,16 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 - This ensures a consistent outlined style across the entire UI
 - **A button placed inside an alert should carry `Color="Color.Inherit"`** unless it genuinely needs a colour of its own. `site.css` then paints it, and its icon, in the alert's severity colour, so the action reads as part of the message rather than as something dropped into it. This works for every severity and both themes; do not hand-pick a colour per call site. A button that names its own `Color` (the filled Primary/Warning/Info actions in the Schema, Partitions and Example Data alerts) is left exactly as specified.
 
+## Custom CSS in `site.css` (look at the rendered page)
+
+Three failure modes here are invisible to `dotnet build`, invisible to bUnit (which applies no stylesheet), and invisible in a screenshot unless you take one. All three shipped at once in the Set Password dialog's progress rail, which rendered as a row of bare floating icons because none of its four classes existed.
+
+- **A class named in markup must exist in `site.css`.** A `.razor` file referencing `jim-whatever` compiles, renders, and silently lays out as an unstyled `<div>`. After adding any `jim-`-prefixed class, grep `site.css` for it. There is no test for this: a source sweep would have to separate `Class=` from `data-testid=` and enumerate the suffixes of interpolated modifiers (`jim-x--@State(y)`), which is more parsing than the defect is worth for one incident. If it regresses again, that sweep is the escalation (pattern: `SearchFieldConventionTests`).
+- **A CSS custom property is scoped to whatever selector declares it.** `--jim-phase-marker-size` was declared on `.jim-phase-stepper-h`, so the second component to use those markers resolved it to nothing and every `width`/`height`/`calc()` depending on it collapsed. Tokens shared by more than one component belong on `:root`.
+- **MudBlazor's stylesheet is loaded after `site.css`, so it wins every tie on specificity.** `.mud-input-control` carries a blanket `margin: 0`; a bare `.jim-my-class { margin-top: ... }` on that element is silently discarded. Qualify the selector with the MudBlazor class you are overriding (`.jim-my-class.mud-input-control`), as `.jim-interval-number.mud-input-control` already does. Verify with `getComputedStyle`, not by looking: a rule that lost this way looks exactly like a rule you got wrong by a few pixels.
+
+**Alignment is measured, not eyeballed.** For "this control should line up with that text", read both bounding boxes off the rendered page and compare centres; a nudge that looks right in one screenshot is usually a few pixels out and will be sent back.
+
 ## Errors and stack traces
 - The **error message is the thing to read**; the stack trace is for the occasions it is not enough. Never render a stack trace unconditionally beside its message: it buries the sentence that actually answers the question, and stack traces routinely run to thousands of characters.
 - Use `<CollapsibleStackTrace StackTrace="@x" />` wherever a trace is available. It renders nothing when there is no trace, shows a "Show stack trace" toggle when there is, and only puts the trace in the DOM once it has been asked for. Do not hand-roll the toggle, and do not wrap it in an expansion panel of its own; that is what it already is.

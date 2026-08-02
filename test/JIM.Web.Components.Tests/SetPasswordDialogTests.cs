@@ -39,6 +39,8 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private const string SharedPermanentMarker = "jim-set-password-shared-permanent";
     private const string ConstraintsMarker = "jim-set-password-constraints";
     private const string IrreconcilableMarker = "jim-set-password-irreconcilable";
+    private const string ResultsMarker = "jim-set-password-results";
+    private const string ResultMarker = "jim-set-password-result";
 
     private const string GeneratedPassword = "Correct-Horse-42";
 
@@ -823,6 +825,132 @@ public class SetPasswordDialogTests : JimComponentTestContext
         {
             Assert.That(provider.FindAll("[data-testid='jim-set-password-unknown-policy']"), Is.Empty);
             Assert.That(provider.FindAll("[data-testid='jim-set-password-no-published-policy']"), Is.Empty);
+        });
+    }
+
+    #endregion
+
+    #region how the outcome is reported
+
+    /// <summary>
+    /// Choosing where to write and reading what happened are different questions, and the first shipped
+    /// answering both in one list: status was bolted onto the picker rows, so a finished fan-out left a column
+    /// of checkboxes beside three failures nobody could tick their way out of.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenTheFanOutFinishes_ReplacesThePickerWithItsOwnResultsList()
+    {
+        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(provider.FindAll($"[data-testid='{AccountMarker}']"), Is.Empty,
+                "the picker has nothing left to ask once the writing is done");
+            Assert.That(provider.FindAll($"[data-testid='{ResultMarker}']"), Has.Count.EqualTo(2),
+                "one row per account the password was written to");
+        });
+    }
+
+    /// <summary>
+    /// Every account gets its own row, including the ones that worked. A list of only the failures reads as a
+    /// list of everything that happened, and leaves the administrator to infer the rest.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenSomeAccountsSucceeded_StillReportsThemByName()
+    {
+        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        var rows = provider.FindAll($"[data-testid='{ResultMarker}']").Select(r => r.TextContent).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[0], Does.Contain("Contoso AD").And.Contain("Password set."));
+            Assert.That(rows[1], Does.Contain("Fabrikam HR").And.Contain("Refused."));
+        });
+    }
+
+    /// <summary>
+    /// One account needs no list: the summary above it is already that same sentence, and a one-row table
+    /// under a one-sentence summary says everything twice. Its guidance still has to appear somewhere, so it
+    /// hangs off the summary instead.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenOnlyOneAccountWasWrittenTo_DrawsNoResultsListButStillOffersGuidance()
+    {
+        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        TickAccount(provider, 0);
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(provider.FindAll($"[data-testid='{ResultsMarker}']"), Is.Empty);
+            Assert.That(provider.FindAll($"[data-testid='{SummaryMarker}']"), Is.Not.Empty);
+            Assert.That(provider.FindAll("[data-testid='jim-password-guidance-toggle']"), Is.Not.Empty,
+                "guidance must survive the collapse; it is the only thing telling them what to do next");
+        });
+    }
+
+    /// <summary>
+    /// A leg of the rail belongs to the step it leaves, so it carries that step's outcome. Filling every
+    /// traversed leg with the success colour drew a green rail straight through three red markers on a run
+    /// where nothing worked at all.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenAStepFailed_DoesNotDrawItsLegAsSucceeded()
+    {
+        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Unreachable.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        // One leg, between the failed first step and the second.
+        var leg = provider.Find($"[data-testid='{RailMarker}'] .jim-password-rail-connector-fill");
+        Assert.Multiple(() =>
+        {
+            Assert.That(leg.ClassName, Does.Contain("jim-password-rail-connector-fill--failed"));
+            Assert.That(leg.ClassName, Does.Not.Contain("jim-password-rail-connector-fill--completed"));
+        });
+    }
+
+    /// <summary>
+    /// The rail's markers are the same four states the Run Profile stepper reports, carried as modifiers so
+    /// one set of rules paints both. A marker with no state modifier renders as an unstyled ring.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenTheFanOutFinishes_MarksEachStepWithItsOwnOutcome()
+    {
+        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        var markers = provider.FindAll($"[data-testid='{RailMarker}'] .jim-password-rail-marker")
+            .Select(m => m.ClassName ?? string.Empty).ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(markers[0], Does.Contain("jim-password-rail-marker--completed"));
+            Assert.That(markers[1], Does.Contain("jim-password-rail-marker--failed"));
         });
     }
 
