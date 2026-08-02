@@ -2772,19 +2772,32 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
    stays, so the panel still reads as subordinate detail rather than as a peer of the row it sits in. A left
    accent rule was tried and rejected: the purple is reserved for interactive elements, and it made a third
    competing accent beside the error icon and its red text. */
-.jim-password-guidance {
+.jim-password-guidance.mud-alert {
+    margin-top: 0.5rem;
+}
+
+/* The icon belongs beside the headline, not halfway down the advice. JIM centres alert icons app-wide (see
+   "Centre-align alert icon and close button vertically" above), which is right for the one-line alerts that
+   rule was written for and leaves the icon adrift beside the third bullet of a panel this tall. Opting out
+   here rather than changing the global rule, and qualified with html[lang] to match that rule's specificity:
+   the alert root's own align-items does not reach the icon, and an equal-specificity selector loses to it. */
+html[lang] .jim-password-guidance .mud-alert-position {
+    align-items: flex-start;
+    padding-top: 0.125rem;
+}
+
+/* The alert supplies the tint, the rule and the icon; the layout of the advice inside it stays here. */
+.jim-password-guidance .mud-alert-message {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    margin-top: 0.5rem;
-    padding: 0.75rem 0.875rem;
-    border: 1px solid var(--jim-inner-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default)));
-    border-radius: var(--mud-default-borderradius);
-    background-color: var(--mud-palette-background-grey);
     /* Body colour for the whole panel, so every line in it is secondary by inheritance and only the headline
-       opts out. Setting it per line meant mixing this with MudBlazor's mud-text-secondary, which resolves to
-       the same colour but also applies opacity: 0.8, so a paragraph and the bullets beneath it rendered as
-       two different greys while reporting an identical computed colour. */
+       opts out. Two reasons this is set rather than inherited: MudBlazor's outlined alerts colour their
+       message in the severity colour, which would turn six lines of advice into six lines of blue prose, the
+       same readability problem the failed row's red prose had; and setting it per line meant mixing it with
+       MudBlazor's mud-text-secondary, which resolves to the same colour but also applies opacity: 0.8, so a
+       paragraph and the bullets beneath it rendered as two different greys while reporting an identical
+       computed colour. The house error alert already does exactly this, "for accessibility". */
     color: var(--mud-palette-text-secondary);
 }
 
