@@ -183,9 +183,9 @@ Write-TestStep "Step 5" "Seeding the HR CSV ($UserCount users)"
 # userName. Display Name is the value the scenario exports; the provider's seed deliberately has no
 # displayName, so the export has real work to do. Deterministic, no Get-Date (see test/CLAUDE.md).
 $csvLines = [System.Collections.Generic.List[string]]::new()
-$csvLines.Add("accountName,firstName,lastName,displayName,email")
+$csvLines.Add("accountName,firstName,lastName,displayName,email,department")
 for ($i = 1; $i -le $UserCount; $i++) {
-    $csvLines.Add("user$i,User,Number$i,User Number$i,user$i@example.com")
+    $csvLines.Add("user$i,User,Number$i,User Number$i,user$i@example.com,Engineering")
 }
 
 $localCsvPath = Join-Path ([System.IO.Path]::GetTempPath()) "scenario15-hr-users.csv"
@@ -375,7 +375,8 @@ $hrFlows = @(
     @{ Cs = "firstName";   Mv = "First Name" },
     @{ Cs = "lastName";    Mv = "Last Name" },
     @{ Cs = "displayName"; Mv = "Display Name" },
-    @{ Cs = "email";       Mv = "Email" }
+    @{ Cs = "email";       Mv = "Email" },
+    @{ Cs = "department";  Mv = "Department" }
 )
 foreach ($flow in $hrFlows) {
     New-JIMSyncRuleMapping -SyncRuleId $hrImportRule.id `
@@ -416,23 +417,46 @@ Write-Host "  OK Inbound rules created (HR projects and is authoritative; SCIM U
 # Step 14: Outbound Synchronisation Rule
 Write-TestStep "Step 14" "Creating the outbound Synchronisation Rule"
 
+# Created disabled, and enabled by the scenario only after the SCIM import and join have run. This is
+# the brownfield adoption order a real deployment follows: the provider already holds these users, and
+# a provisioning rule that goes live before they are joined would duplicate every one of them.
 $userExportRule = New-JIMSyncRule `
     -Name $userExportRuleName `
     -ConnectedSystemId $scimSystem.id `
     -ConnectedSystemObjectTypeId $userType.id `
     -MetaverseObjectTypeId $mvUserType.id `
     -Direction Export `
+    -ProvisionToConnectedSystem `
+    -Enabled $false `
     -PassThru
 
 New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
     -TargetConnectedSystemAttributeId (Get-CsAttribute $userType "displayName").id `
     -SourceMetaverseAttributeId (Get-MvAttribute "Display Name").id | Out-Null
 
-# EnforceState makes inbound SCIM changes (including the join itself) re-evaluate this rule, so drift
-# between the Metaverse and the provider is remediated rather than only shaping newly provisioned objects.
-Set-JIMSyncRule -Id $userExportRule.id -EnforceState $true | Out-Null
+# A provisioned resource must carry a userName, or the provider holds an anonymous shell; for already
+# joined users the value is identical to what the provider holds, so no-net-change detection keeps this
+# flow from generating exports of its own.
+New-JIMSyncRuleMapping -SyncRuleId $userExportRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttribute $userType "userName").id `
+    -SourceMetaverseAttributeId (Get-MvAttribute "Account Name").id | Out-Null
 
-Write-Host "  OK Outbound rule created (Display Name -> displayName, state enforced)" -ForegroundColor Green
+# The rule is scoped to Department = Engineering, which is what makes provisioning and deprovisioning
+# testable transitions: a user entering the department is provisioned into SCIM, and one leaving it is
+# deleted there (OutboundDeprovisionAction=Delete), both driven purely by HR data.
+$exportScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $userExportRule.id -Type All -PassThru
+New-JIMScopingCriterion `
+    -SyncRuleId $userExportRule.id `
+    -GroupId $exportScopeGroup.id `
+    -MetaverseAttributeId (Get-MvAttribute "Department").id `
+    -ComparisonType Equals `
+    -StringValue "Engineering" | Out-Null
+
+# EnforceState makes inbound SCIM changes re-evaluate this rule, so drift between the Metaverse and the
+# provider is remediated rather than only shaping newly provisioned objects.
+Set-JIMSyncRule -Id $userExportRule.id -OutboundDeprovisionAction Delete -EnforceState $true | Out-Null
+
+Write-Host "  OK Outbound rule created (provisions; Display Name and Account Name flow; scoped to Department=Engineering; deprovision deletes; state enforced)" -ForegroundColor Green
 
 # Step 15: Run Profiles
 Write-TestStep "Step 15" "Creating Run Profiles"
