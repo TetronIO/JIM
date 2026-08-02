@@ -762,12 +762,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
 
     /// <summary>
     /// Two situations wear the same face, and only one is the administrator's to fix. A Connector that could
-    /// read the rules but has not been asked to is a schema import away; saying so in the terms an
-    /// administrator configures the system in ("import the schema") is the difference between a notice they can
-    /// act on and one they can only shrug at.
+    /// read the rules but has not been asked to is a schema refresh away; naming the button they will actually
+    /// find ("Refresh Schema") is the difference between a notice they can act on and one they can only shrug
+    /// at.
     /// </summary>
     [Test]
-    public void SetPasswordDialog_WhenASystemsPolicyHasNotBeenImported_SaysToImportItsSchemaAndLinksThere()
+    public void SetPasswordDialog_WhenASystemsPolicyIsNotHeld_SaysToRefreshItsSchemaAndLinksThere()
     {
         var provider = ShowDialog(allowSelection: true, accounts:
         [
@@ -778,7 +778,8 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var notice = provider.Find("[data-testid='jim-set-password-unknown-policy']");
         Assert.Multiple(() =>
         {
-            Assert.That(notice.TextContent, Does.Contain("imports a Connected System's schema"));
+            // The exact label on the Schema tab's button, so the notice names what they will actually see.
+            Assert.That(notice.TextContent, Does.Contain("Refresh Schema"));
             Assert.That(notice.QuerySelector("a")?.GetAttribute("href"), Does.Contain("?t=schema"),
                 "the notice has to reach the place the repair happens");
             Assert.That(provider.FindAll("[data-testid='jim-set-password-no-published-policy']"), Is.Empty);

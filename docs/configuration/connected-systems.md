@@ -110,7 +110,7 @@ Where a Connected System can accept passwords, its Schema tab carries a Password
 
 ### Discovered password policy
 
-During schema discovery JIM reads the target's password policy and records it, so that configuring a generated password does not mean retyping rules the system already publishes. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
+JIM reads the target's password policy whenever it retrieves or refreshes the Connected System's schema, and records it, so that configuring a generated password does not mean retyping rules the system already publishes. If a policy is missing, **Refresh Schema** on the Schema tab reads it again. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
 
 **A discovered policy is a floor, not a guarantee.** Two things routinely make the real rule stricter than the published one:
 
