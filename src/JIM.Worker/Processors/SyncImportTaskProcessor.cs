@@ -222,7 +222,6 @@ public class SyncImportTaskProcessor
         // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
         // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var throughput = new ThroughputTracker();
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
         await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Performing import");
@@ -308,11 +307,12 @@ public class SyncImportTaskProcessor
 
                         // Update progress - for paginated imports we don't know the total, but we track objects imported so far
                         _activity.ObjectsProcessed = totalObjectsImported;
-                        var pageInfo = pageNumber > 1 || result.PaginationTokens.Count > 0
-                            ? $" (page {pageNumber})"
-                            : "";
-                        var progressMessage = $"Imported {totalObjectsImported:N0} objects{pageInfo}" +
-                            throughput.FormatThroughput(totalObjectsImported);
+                        // How many have arrived is rendered from the Activity's counters, so the
+                        // message says only what those cannot: which page is being read. A single
+                        // page adds nothing over the running step's own name.
+                        var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
+                            ? $"Reading page {pageNumber:N0}"
+                            : string.Empty;
                         await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
 
                         // add the external ids from this page worth of results to our external-id collection for later deletion calculation
@@ -507,7 +507,6 @@ public class SyncImportTaskProcessor
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
         await _phases.EnterAsync(RunPhaseKeys.ImportSave);
         var savePhaseSw = System.Diagnostics.Stopwatch.StartNew();
-        var saveThroughput = new ThroughputTracker();
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", createdCount);
@@ -625,9 +624,7 @@ public class SyncImportTaskProcessor
 
                 totalCreatedSoFar += batchSize;
                 _activity.ObjectsProcessed = totalCreatedSoFar;
-                await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Saving changes — creating ({totalCreatedSoFar:N0} / {totalToCreate:N0})" +
-                    saveThroughput.FormatThroughput(totalCreatedSoFar, totalChanges));
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
                 Log.Information("PerformImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -769,9 +766,7 @@ public class SyncImportTaskProcessor
                 _syncRepo.ClearChangeTracker();
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
-                await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
-                    saveThroughput.FormatThroughput(createdCount + batchStart + batchSize, totalChanges));
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
                 Log.Information("PerformImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     batchStart + batchSize, totalToUpdate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -1391,9 +1386,7 @@ public class SyncImportTaskProcessor
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
         _activity.ObjectsToProcess = totalObjectsInBatch;
         _activity.ObjectsProcessed = 0;
-        var throughput = new ThroughputTracker();
-        await _syncRepo.UpdateActivityMessageAsync(_activity,
-            $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
+        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
         const int progressUpdateInterval = 100;
 
         // CSO matching uses a pre-fetched external ID dictionary (O(1) lookup) + per-object hydration by ID.
@@ -1896,9 +1889,7 @@ public class SyncImportTaskProcessor
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await _syncRepo.UpdateActivityMessageAsync(_activity,
-                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})" +
-                        throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
 
                     // Periodic memory diagnostics (#917): the import processing phase accumulates
                     // hydrated CSOs until the save phase, so at scale this is where peak memory
@@ -1917,12 +1908,12 @@ public class SyncImportTaskProcessor
             }
         }
 
-        // Final progress update to ensure the UI reflects completion for this batch
+        // Final progress update so the counters land on the batch total rather than stopping at
+        // the last interval boundary. The run is still in flight, so this reports no timings; the
+        // Activity's counters carry what is left to say.
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})" +
-                throughput.FormatCompletion(totalObjectsInBatch));
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
         }
 
         // DEBUG: Summary statistics for duplicate detection

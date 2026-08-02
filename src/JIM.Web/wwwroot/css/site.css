@@ -2615,3 +2615,56 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
         animation: none;
     }
 }
+
+/* ─── Live progress metrics beneath a run's steps ───
+   The percentage rides beside the bar; the numbers behind it sit underneath as a labelled
+   readout. Fixed-width columns and tabular figures keep the row still while the digits change,
+   which they do on every poll. */
+.jim-run-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.jim-run-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+}
+
+.jim-run-bar-row .jim-run-bar {
+    flex: 1 1 auto;
+}
+
+.jim-run-percent {
+    flex: 0 0 auto;
+    min-width: 3.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-run-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2.5rem;
+}
+
+/* The minimum width is what keeps the columns still. Tabular figures hold each number's own
+   width, but the cells are sized by content, so without a floor the Rate and Remaining columns
+   slide sideways every time the processed count gains a digit; the run polls about once a
+   second, so that reads as the whole row twitching. */
+.jim-run-metric {
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+}
+
+.jim-run-metric-label {
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.jim-run-metric-value {
+    font-variant-numeric: tabular-nums;
+}

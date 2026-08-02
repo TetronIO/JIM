@@ -55,9 +55,9 @@
                     </div>
                 }
 
-                @if (!string.IsNullOrWhiteSpace(Message))
+                @if (MessageWorthShowing is { } message)
                 {
-                    <MudText Typo="Typo.body2" Class="jim-phase-step-message">@Message</MudText>
+                    <MudText Typo="Typo.body2" Class="jim-phase-step-message">@message</MudText>
                 }
             </div>
         }
@@ -98,6 +98,27 @@
         .FirstOrDefault();
 
     private ActivityPhase? CurrentTopLevelPhase => TopLevelPhases.FirstOrDefault(p => p.Status == ActivityPhaseStatus.Active);
+
+    /// <summary>
+    /// The message, or null when it says nothing the rail does not already say. A message that
+    /// only repeats the name of the step it sits under is a duplicate line rather than narration;
+    /// PowerShell's live progress has always applied this rule, and the portal now matches it.
+    /// </summary>
+    private string? MessageWorthShowing
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Message))
+                return null;
+
+            var message = Message.Trim();
+            var repeatsAStepName =
+                string.Equals(message, CurrentPhase?.Name, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(message, CurrentTopLevelPhase?.Name, StringComparison.OrdinalIgnoreCase);
+
+            return repeatsAStepName ? null : message;
+        }
+    }
 
     private List<ActivityPhase> ConnectorSteps => CurrentTopLevelPhase == null
         ? []

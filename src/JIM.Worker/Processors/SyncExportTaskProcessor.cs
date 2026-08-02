@@ -180,23 +180,20 @@ public class SyncExportTaskProcessor
                     _cancellationTokenSource.Token,
                     async progressInfo =>
                     {
+                        // The counters are what the portal renders the count, rate and time remaining
+                        // from, so the Connector's message travels on its own; repeating the counts
+                        // in it printed the same numbers twice on the Activity.
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
-                        var counts = $"{progressInfo.ProcessedExports:N0} of {progressInfo.TotalExports:N0}" +
-                            throughput.FormatThroughput(progressInfo.ProcessedExports, progressInfo.TotalExports);
 
                         // A report carrying a Connector phase key is the Connector saying it has moved
-                        // to one of the steps it declared, so it advances the stepper too (#454); the
-                        // counts still travel with it, because they are what say whether it is moving.
+                        // to one of the steps it declared, so it advances the stepper too (#454).
                         if (!string.IsNullOrEmpty(progressInfo.ConnectorPhaseKey))
                         {
-                            var phaseMessage = string.IsNullOrWhiteSpace(progressInfo.Message)
-                                ? counts
-                                : $"{progressInfo.Message} {counts}";
-                            await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, phaseMessage);
+                            await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, progressInfo.Message);
                             return;
                         }
 
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, $"{progressInfo.Message} {counts}");
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,

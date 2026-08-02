@@ -1,0 +1,128 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* ─── Live progress metrics for a run ───
+   The bar carries the proportion, the percentage rides beside it, and the numbers behind it sit
+   underneath as a labelled readout. Every fact appears exactly once: this replaced a panel that
+   printed the count, rate and time remaining two or three times each, because the Activity's
+   message narrated them as well as reporting them. Labels make the units explicit and keep the
+   columns in place as the digits change. *@
+
+<div class="jim-run-progress">
+    <div class="jim-run-bar-row">
+        @if (IsIndeterminate)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" Class="jim-run-bar" />
+        }
+        else
+        {
+            <MudProgressLinear Value="@PercentComplete" Color="Color.Primary" Rounded="true" Size="Size.Large" Class="jim-run-bar" />
+            <MudText Typo="Typo.body1" Class="jim-run-percent">@PercentComplete.ToString("F1")%</MudText>
+        }
+    </div>
+
+    <div class="jim-run-metrics">
+        <div class="jim-run-metric">
+            <MudText Typo="Typo.caption" Class="jim-run-metric-label">Processed</MudText>
+            <MudText Typo="Typo.body1" Class="jim-run-metric-value">@ProcessedText</MudText>
+        </div>
+
+        <div class="jim-run-metric">
+            <MudText Typo="Typo.caption" Class="jim-run-metric-label">Rate</MudText>
+            <MudText Typo="Typo.body1" Class="jim-run-metric-value">
+                @if (RateText is { } rate)
+                {
+                    @rate
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudText>
+        </div>
+
+        @* Nothing can be said about time remaining without a total to work towards. *@
+        @if (!IsIndeterminate)
+        {
+            <div class="jim-run-metric">
+                <MudText Typo="Typo.caption" Class="jim-run-metric-label">Remaining</MudText>
+                <MudText Typo="Typo.body1" Class="jim-run-metric-value">
+                    @if (RemainingText is { } remaining)
+                    {
+                        @remaining
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </MudText>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// Objects processed so far within the current counting window.
+    /// </summary>
+    [Parameter]
+    public int ObjectsProcessed { get; set; }
+
+    /// <summary>
+    /// Total objects expected within the current counting window; 0 means the total is not known,
+    /// which is the normal case for a paged import.
+    /// </summary>
+    [Parameter]
+    public int ObjectsToProcess { get; set; }
+
+    /// <summary>
+    /// Objects processed per second over the recent sample window, or null when no rate is
+    /// available yet. Zero means the counter has stopped advancing.
+    /// </summary>
+    [Parameter]
+    public double? ObjectsPerSecond { get; set; }
+
+    /// <summary>
+    /// Estimated seconds until the current counting window completes, or null when no estimate is
+    /// available.
+    /// </summary>
+    [Parameter]
+    public double? EstimatedSecondsRemaining { get; set; }
+
+    private bool IsIndeterminate => ObjectsToProcess <= 0;
+
+    private double PercentComplete => IsIndeterminate
+        ? 0d
+        : Math.Clamp((double)ObjectsProcessed / ObjectsToProcess * 100d, 0d, 100d);
+
+    /// <summary>
+    /// A rate of zero once the run is under way means samples exist but the counter has not moved,
+    /// which is the run tidying up rather than the run having stopped. Saying so beats an empty
+    /// cell or a fabricated estimate, and it is what the worker's own tracker used to report inside
+    /// the progress message. Before the first object is processed the rate is legitimately zero,
+    /// and that is a run yet to get going, not a stalled one.
+    /// </summary>
+    private bool IsStalled => ObjectsPerSecond is <= 0 && ObjectsProcessed > 0;
+
+    private string ProcessedText => IsIndeterminate
+        ? ObjectsProcessed.ToString("N0")
+        : $"{ObjectsProcessed:N0} / {ObjectsToProcess:N0}";
+
+    private string? RateText => ObjectsPerSecond is { } rate && !IsStalled
+        ? $"{(rate >= 10 ? rate.ToString("N0") : rate.ToString("N1"))} /sec"
+        : null;
+
+    private string? RemainingText
+    {
+        get
+        {
+            if (IsStalled)
+                return "Finishing up";
+
+            if (EstimatedSecondsRemaining is not { } seconds)
+                return null;
+
+            return $"~{TimeSpan.FromSeconds(Math.Round(seconds)).ToAbbreviatedString()}";
+        }
+    }
+}

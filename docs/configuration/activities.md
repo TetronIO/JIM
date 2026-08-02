@@ -90,11 +90,11 @@ When an object is **deleted**, its final captured state is shown on the delete A
 
 While a Run Profile executes, its progress is available in real time on every surface:
 
-- **JIM portal**<br /> The Activity detail page updates as the run progresses (pushed over the real-time notification channel, with polling as a fallback): the current phase, a progress bar, live operation counts (for example CSOs added, updated and deleted), throughput, and an estimated time remaining.
+- **JIM portal**<br /> The Activity detail page updates as the run progresses (pushed over the real-time notification channel, with polling as a fallback): the current phase, a progress bar with the percentage beside it, a labelled readout of objects processed, throughput and time remaining beneath it, and live operation counts (for example CSOs added, updated and deleted). Each figure is stated once; the message under the steps narrates what is happening rather than repeating the numbers.
 - **REST API**<br /> `GET /api/v1/activities/{id}/progress` returns a lightweight progress snapshot: status, phase message, object counts, percentage complete, throughput, estimated seconds remaining, and a live operation-type breakdown. It is designed for frequent polling and is much cheaper to serve than the full Activity detail endpoint; stop polling once the status reaches a terminal value.
 - **PowerShell**<br /> [`Get-JIMActivity -Follow`](../powershell/activities.md) follows an in-progress Activity's live progress until it completes, and [`Start-JIMRunProfile -Wait`](../powershell/run-profiles.md) displays the same live progress while blocking until completion.
 
-Throughput and the estimated time remaining are derived from recent progress samples, so they reflect the current phase of the run rather than a whole-run average; they appear once enough samples exist and adapt as the run moves between phases.
+Throughput and the estimated time remaining are derived from recent progress samples, so they reflect the current phase of the run rather than a whole-run average; they appear once enough samples exist and adapt as the run moves between phases. Where a step cannot know its total in advance (a paged import discovers how many objects there are as it reads them), the progress bar runs indeterminate and the readout reports how many objects have been processed so far, without a percentage or a time remaining. When the counter reaches its total but the step is still finishing its work, the time remaining reads "Finishing up" rather than counting down to a moment that has already passed.
 
 ### The steps of a run
 
