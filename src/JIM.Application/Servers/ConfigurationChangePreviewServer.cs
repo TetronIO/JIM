@@ -6,6 +6,7 @@ using JIM.Application.Servers.Preview;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
 using JIM.Models.Tasking;
+using JIM.Models.Utility;
 using Serilog;
 using System.Text.Json;
 
@@ -89,6 +90,25 @@ public class ConfigurationChangePreviewServer
         await DispatchAsync(result.ActivityId, request, result.Estimate!);
         return result;
     }
+
+    /// <summary>
+    /// A preview's own row: stage statuses and timings, the estimate, the cap decision. Null when no preview exists
+    /// for the Activity, which is also what a caller sees once retention has removed it.
+    /// </summary>
+    public async Task<ConfigurationChangePreview?> GetPreviewAsync(Guid activityId) =>
+        await _application.Repository.ConfigurationChangePreviews.GetPreviewAsync(activityId);
+
+    /// <summary>
+    /// A preview's summary groups, largest first: the landing view.
+    /// </summary>
+    public async Task<List<ConfigurationChangePreviewGroup>> GetPreviewGroupsAsync(Guid activityId) =>
+        await _application.Repository.ConfigurationChangePreviews.GetPreviewGroupsAsync(activityId);
+
+    /// <summary>
+    /// A page of drill-down rows, optionally restricted to one summary group.
+    /// </summary>
+    public async Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize) =>
+        await _application.Repository.ConfigurationChangePreviews.GetPreviewDeltasAsync(activityId, groupId, page, pageSize);
 
     /// <summary>
     /// Cancels a running preview. Previews running in this process stop directly; the rest are cancelled through

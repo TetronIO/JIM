@@ -1,6 +1,6 @@
 # Configuration Change Preview Framework - Implementation Plan
 
-- **Status:** Doing (Phases 0 and 2 complete; Phase 3 underway: persistence, the adapter contract, the orchestration server and dispatch have landed, the API and panel next. Phase 3 is not done until the #1114 pilot adapter ships on it)
+- **Status:** Doing (Phases 0 and 2 complete; Phase 3 underway: persistence, the adapter contract, the orchestration server, dispatch and the read/cancel API have landed, the panel next. Phase 3 is not done until the #1114 pilot adapter ships on it)
 - **Created:** 2026-07-20
 - **Issue:** [#827](https://github.com/TetronIO/JIM/issues/827)
 - **PRD:** [PRD_CONFIGURATION_CHANGE_PREVIEW.md](../../prd/doing/PRD_CONFIGURATION_CHANGE_PREVIEW.md)
@@ -222,7 +222,7 @@ Permanent end-state components, built once, rolled everywhere; adapters later la
   - **The in-process runner holds nothing worth surviving a restart.** A preview interrupted by a shutdown leaves an Activity to be recovered like any other, and the administrator asks again; anything valuable enough to need durability is large enough that the threshold sends it to JIM.Worker in the first place. It runs at most two previews at once, because JIM.Web's job is serving requests.
 - [ ] **Progress notification:** no new abstraction; the orchestrator drives stage progression through the Activity columns the `jim_activity_progress` trigger watches, and the panel subscribes to `IUiNotificationService.ActivityProgressChanged` with the `IsRealTimeAvailable` polling fallback.
 - [ ] **Retention:** RPEI retention housekeeping extended to the three preview tables; preview Activity linkage verified in the apply paths.
-- [ ] **API:** the four endpoints above, authorised per-surface; PowerShell cmdlet deferred to the first adapter.
+- [x] **API:** the four endpoints above, authorised per-surface; PowerShell cmdlet deferred to the first adapter. **Three of the four delivered** as `PreviewsController` (`GET /previews/{activityId}`, `GET /previews/{activityId}/deltas`, `DELETE /previews/{activityId}`), Administrator-authorised. The fourth, `POST {surface}/preview`, is **per-surface by construction and belongs to each adapter issue**, not here: its request body is the surface's own update type, and a single generic start endpoint would have to accept a body whose type it could only learn from the request itself, which is the exact shape the queued-payload design refuses. Two behaviours worth naming: a malformed stored findings or counts document yields an empty list rather than a failed request, because the rest of the preview is still worth showing and the stage status already says what happened; and cancelling a preview that has already finished returns 409, not 404, because the preview and its results are still there to read.
 - [ ] **UI shell:** `ConfigurationChangePreviewPanel.razor` with progress, staged arrival, summary landing view, drill-down grid, cancel, staleness and sampled labels, cap prompt.
 - [ ] **Tests (TDD throughout):** orchestrator stage sequencing and failure paths; grouping correctness incl. cap-vs-exact-count invariants; dispatch threshold decision; worker task lifecycle; API contract tests. A `FakePreviewAdapter` test double drives framework tests without any real surface.
 
