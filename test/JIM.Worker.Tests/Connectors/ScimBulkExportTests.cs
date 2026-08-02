@@ -5,7 +5,7 @@ using System.Net;
 using JIM.Connectors.SCIM;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
-using JIM.Worker.Tests.Connectors.MockScim;
+using JIM.TestScimServiceProvider;
 using static JIM.Worker.Tests.Connectors.ScimExportTestObjects;
 
 namespace JIM.Worker.Tests.Connectors;

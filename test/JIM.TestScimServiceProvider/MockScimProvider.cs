@@ -12,7 +12,7 @@ using JIM.Scim.Messages;
 using JIM.Scim.Schema;
 using JIM.Scim.Serialisation;
 
-namespace JIM.Worker.Tests.Connectors.MockScim;
+namespace JIM.TestScimServiceProvider;
 
 /// <summary>
 /// An in-memory SCIM 2.0 service provider, good enough to drive the connector against end to end
@@ -25,7 +25,7 @@ namespace JIM.Worker.Tests.Connectors.MockScim;
 /// describe a conformant provider so a test only says what it is deviating from.
 /// </para>
 /// </summary>
-internal sealed class MockScimProvider
+public sealed class MockScimProvider
 {
     private const string ListResponseSchema = "urn:ietf:params:scim:api:messages:2.0:ListResponse";
     private const string BulkResponseSchema = "urn:ietf:params:scim:api:messages:2.0:BulkResponse";
@@ -93,12 +93,16 @@ internal sealed class MockScimProvider
     /// Wraps the provider in a recording message handler, ready to hand to
     /// <see cref="StubbedTransportScimConnector"/>.
     /// </summary>
-    public StubHttpMessageHandler CreateHandler()
-    {
-        return new StubHttpMessageHandler(Respond);
-    }
-
-    private HttpResponseMessage Respond(HttpRequestMessage request)
+    /// <summary>
+    /// Answers one SCIM request.
+    /// <para>
+    /// Public so the same provider can be driven two ways: in-process behind a stubbed message handler
+    /// by the unit suite, and over real HTTPS by <see cref="ScimServiceProviderHost"/>, which is what the
+    /// integration scenario points JIM at. One implementation, so an integration run cannot pass against
+    /// a more forgiving provider than the unit tests use.
+    /// </para>
+    /// </summary>
+    public HttpResponseMessage Respond(HttpRequestMessage request)
     {
         var path = request.RequestUri!.AbsolutePath;
 

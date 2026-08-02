@@ -1,14 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-namespace JIM.Worker.Tests.Connectors.MockScim;
+namespace JIM.TestScimServiceProvider;
 
 /// <summary>
 /// One resource held by <see cref="MockScimProvider"/>. Attributes are kept loosely typed so a test can
 /// hand the provider whatever shape it needs to exercise, including the multi-valued and complex forms
 /// the schema flattening turns into JIM attributes.
 /// </summary>
-internal sealed class MockScimResource
+public sealed class MockScimResource
 {
     public required string Id { get; init; }
 

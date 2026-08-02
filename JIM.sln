@@ -45,6 +45,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JIM.Scim", "src\JIM.Scim\JI
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JIM.Web.Components.Tests", "test\JIM.Web.Components.Tests\JIM.Web.Components.Tests.csproj", "{9365F596-79D0-4F8E-927E-5923CA689291}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JIM.TestScimServiceProvider", "test\JIM.TestScimServiceProvider\JIM.TestScimServiceProvider.csproj", "{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -283,6 +285,18 @@ Global
 		{9365F596-79D0-4F8E-927E-5923CA689291}.Release|x64.Build.0 = Release|Any CPU
 		{9365F596-79D0-4F8E-927E-5923CA689291}.Release|x86.ActiveCfg = Release|Any CPU
 		{9365F596-79D0-4F8E-927E-5923CA689291}.Release|x86.Build.0 = Release|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Debug|x64.Build.0 = Debug|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Debug|x86.Build.0 = Debug|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Release|x64.ActiveCfg = Release|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Release|x64.Build.0 = Release|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Release|x86.ActiveCfg = Release|Any CPU
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -298,6 +312,7 @@ Global
 		{A4CEE7C2-CC15-4906-9E16-39D8A7B7D173} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 		{EA1FBD88-7E40-41FC-9055-1BE4E9335E12} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{9365F596-79D0-4F8E-927E-5923CA689291} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
+		{D9844C8D-0F63-4114-AC67-BE95F9AF03D7} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {505B1FD6-D26B-4537-B835-F2DFEE05DD9B}

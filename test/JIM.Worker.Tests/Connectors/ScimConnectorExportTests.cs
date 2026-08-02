@@ -5,7 +5,7 @@ using JIM.Connectors.SCIM;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
-using JIM.Worker.Tests.Connectors.MockScim;
+using JIM.TestScimServiceProvider;
 using Serilog;
 using ILogger = Serilog.ILogger;
 using static JIM.Worker.Tests.Connectors.ScimExportTestObjects;

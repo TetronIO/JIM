@@ -3,14 +3,14 @@
 
 using System.Net;
 
-namespace JIM.Worker.Tests.Connectors.MockScim;
+namespace JIM.TestScimServiceProvider;
 
 /// <summary>
 /// The ways <see cref="MockScimProvider"/> can behave. Every switch here corresponds to a deviation
 /// real service providers exhibit; the defaults describe a well-behaved, RFC-conformant provider, and a
 /// test turns on exactly the misbehaviour it is about.
 /// </summary>
-internal sealed class MockScimProviderOptions
+public sealed class MockScimProviderOptions
 {
     /// <summary>The provider's own clock, which its <c>Date</c> response header reports.</summary>
     public DateTimeOffset ProviderClock { get; set; } = new(2026, 7, 30, 12, 0, 0, TimeSpan.Zero);
