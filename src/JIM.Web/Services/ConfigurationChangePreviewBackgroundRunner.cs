@@ -90,6 +90,15 @@ public class ConfigurationChangePreviewBackgroundRunner : BackgroundService, ICo
         {
             await jim.ConfigurationChangePreviews.RunPreviewAsync(queued.ActivityId, queued.Request, cancellation.Token);
         }
+        catch (OperationCanceledException)
+        {
+            // A shutdown, or an administrator cancelling. The preview server records cancellation on the preview
+            // and its Activity wherever it can still reach the database; reaching here means it could not, which
+            // the stale-Activity recovery already covers. Logging it as an error would send somebody looking for
+            // a fault that never happened.
+            _logger.LogDebug("A configuration change preview for Activity {ActivityId} stopped because it was cancelled",
+                queued.ActivityId);
+        }
         catch (Exception ex)
         {
             // Sanctioned broad catch (see src/CLAUDE.md, Activity execution boundaries). The preview server records
