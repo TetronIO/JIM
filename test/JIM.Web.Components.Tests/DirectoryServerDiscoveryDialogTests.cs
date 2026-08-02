@@ -94,7 +94,7 @@ public class DirectoryServerDiscoveryDialogTests : JimComponentTestContext
         // The whole point of the dialog's own try/catch: a discovery failure must render as a message, not
         // propagate and take the page down with it. Reaching the assertion above without bUnit's renderer
         // reporting an unhandled exception is itself the proof; this test names that expectation explicitly.
-        Assert.DoesNotThrow(() => ShowDialog());
+        Assert.That(() => ShowDialog(), Throws.Nothing);
     }
 
     [Test]

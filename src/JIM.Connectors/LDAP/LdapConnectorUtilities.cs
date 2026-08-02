@@ -782,7 +782,10 @@ internal static class LdapConnectorUtilities
         // parsed is "CN=NTDS Settings,...". Three levels up: Parent = server, Parent.Parent = CN=Servers,
         // Parent.Parent.Parent = CN=<site>.
         var siteRdn = parsed.Parent?.Parent?.Parent?.LeafRdn;
-        return siteRdn?.Components.Count > 0 ? siteRdn.Components[0].Value : null;
+        if (siteRdn == null || siteRdn.Components.Count == 0)
+            return null;
+
+        return siteRdn.Components[0].Value;
     }
 
     /// <summary>
