@@ -902,6 +902,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
+    /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
+    /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
+    /// setting-value instances the in-memory system happened to carry (composed with a Setting navigation but no
+    /// FK scalar) were faithfully written back with SettingId 0, failing the export run on a foreign key
+    /// violation the moment a connector first returned close-time state. A watermark write must never be able
+    /// to touch configuration rows.
+    /// </summary>
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
+
+    /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.
     /// Unlike <see cref="UpdateConnectedSystemAsync"/>, which only persists the root plus partitions and
     /// setting values, this method also adds newly-discovered object types/attributes and applies updates to

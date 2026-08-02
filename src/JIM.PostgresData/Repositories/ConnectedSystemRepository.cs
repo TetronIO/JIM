@@ -423,6 +423,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Targeted single-column write of the persisted connector data (see the interface doc for why this must
+    /// not go through the graph-marking update path). On relational providers this is a single SQL UPDATE via
+    /// ExecuteUpdateAsync that touches no tracked state; the in-memory test provider does not support
+    /// ExecuteUpdateAsync (same pattern as the failed-authentication counter in ActivitiesRepository), so it
+    /// falls back to a narrow tracked load of the root entity only.
+    /// </summary>
+    public async Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData)
+    {
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.ConnectedSystems
+                .Where(cs => cs.Id == connectedSystemId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.PersistedConnectorData, persistedConnectorData));
+            return;
+        }
+
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.PersistedConnectorData = persistedConnectorData;
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
     {
         // Reconcile the object types/attributes against tracked current state first (adds + updates),
