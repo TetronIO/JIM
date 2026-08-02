@@ -669,6 +669,66 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Guards an AD/Samba AD import against silently running against a Partition the connected domain
+    /// controller does not host. AD's crossRef-based partition discovery (CN=Partitions,
+    /// CN=Configuration) lists every domain in the forest, including domains the connected domain
+    /// controller does not hold a naming context for; a domain controller does not chase referrals, so an
+    /// import against a foreign partition would otherwise silently return zero objects, a fast/hard
+    /// failure over silent corruption is required (see Synchronisation Integrity, root CLAUDE.md).
+    /// </summary>
+    /// <remarks>
+    /// Applies only to AD-family directories (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>); the
+    /// standard RFC 4512 namingContexts partition discovery used for other directory types has no
+    /// equivalent forest-wide-visibility problem. When <paramref name="currentRootDse"/>'s
+    /// <see cref="LdapConnectorRootDse.NamingContexts"/> is null or empty (the rootDSE query did not
+    /// return the attribute, for example due to insufficient permissions), hosting cannot be verified: a
+    /// warning is logged and the import proceeds, because missing data must never itself fail an import.
+    /// Otherwise, every selected Partition whose DN is not present in <c>NamingContexts</c> (case-
+    /// insensitive ordinal comparison) is reported by name in a single exception, alongside the connected
+    /// server and guidance to use one Connected System per domain.
+    /// </remarks>
+    /// <param name="currentRootDse">The RootDSE info just queried on the connection about to perform the import.</param>
+    /// <param name="selectedPartitions">The Partitions the import is about to run against.</param>
+    /// <param name="logger">Logger for diagnostics; identifiers sourced from the directory are sanitised before logging.</param>
+    /// <exception cref="PartitionNotHostedException">One or more selected Partitions are not hosted by the connected domain controller.</exception>
+    internal static void VerifyPartitionsAreHostedByConnectedServer(
+        LdapConnectorRootDse currentRootDse,
+        IEnumerable<ConnectedSystemPartition> selectedPartitions,
+        ILogger logger)
+    {
+        if (!currentRootDse.UseUsnDeltaImport)
+            return;
+
+        if (currentRootDse.NamingContexts == null || currentRootDse.NamingContexts.Count == 0)
+        {
+            logger.Warning("VerifyPartitionsAreHostedByConnectedServer: The connected server did not return its hosted naming contexts. " +
+                "Partition hosting could not be verified. Proceeding without this check.");
+            return;
+        }
+
+        var hostedNamingContexts = currentRootDse.NamingContexts;
+        var unhostedPartitions = selectedPartitions
+            .Where(p => !hostedNamingContexts.Contains(p.ExternalId, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        if (unhostedPartitions.Count == 0)
+            return;
+
+        var partitionNames = string.Join(", ", unhostedPartitions.Select(p => p.Name));
+
+        logger.Warning("VerifyPartitionsAreHostedByConnectedServer: Selected Partition(s) not hosted by the connected server {Server}: {Partitions}.",
+            LogSanitiser.Sanitise(currentRootDse.DnsHostName), LogSanitiser.Sanitise(partitionNames));
+
+        throw new PartitionNotHostedException(
+            $"Import aborted: the following selected Partition(s) are not hosted by the connected domain controller " +
+            $"'{currentRootDse.DnsHostName}': {partitionNames}. A domain controller only holds its own domain's naming " +
+            "context and does not chase referrals to other domains in the forest, so an import against a Partition it " +
+            "does not host would otherwise silently return zero objects. A domain's objects must be managed through a " +
+            "Connected System whose Host targets that domain's own domain controllers (one Connected System per domain " +
+            "today).");
+    }
+
+    /// <summary>
     /// Resolves which server a connection should be opened against, and why (issue #230 Phase 2). This
     /// is the single point where the domain controller/directory server for a connection is decided, so
     /// that the connection factory (and therefore every parallel connection in a run) resolves to the

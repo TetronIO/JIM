@@ -73,6 +73,20 @@ internal class LdapConnectorRootDse
     /// </summary>
     public string? PinnedDirectoryServer { get; set; }
 
+    /// <summary>
+    /// The naming contexts actually hosted by the connected directory server, from rootDSE (issue #230).
+    /// Used to fail fast when a selected Partition is not hosted by the server the connector is talking
+    /// to: AD's crossRef-based partition discovery (CN=Partitions,CN=Configuration) lists every domain in
+    /// the forest, including domains the connected domain controller does not hold a naming context for,
+    /// and a domain controller does not chase referrals to serve those objects.
+    /// Null when the rootDSE query did not return the attribute (for example, insufficient permissions);
+    /// a null or empty value means "hosting could not be verified", not "nothing is hosted", so it must
+    /// never itself fail an import. Persisted between synchronisation runs like the rest of this class;
+    /// also intended to support future capability surfacing (for example, showing which partitions are
+    /// actually reachable during discovery).
+    /// </summary>
+    public List<string>? NamingContexts { get; set; }
+
     // -----------------------------------------------------------------------
     // Computed properties — centralised directory-type-specific behaviour
     // -----------------------------------------------------------------------

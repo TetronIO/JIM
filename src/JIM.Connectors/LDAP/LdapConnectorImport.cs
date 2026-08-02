@@ -113,6 +113,10 @@ internal class LdapConnectorImport
             // Serialise the rootDSE info to JSON for persistence
             // This captures the current USN/changelog position for use in future delta imports
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
+
+            // Guard against silently importing zero objects from a Partition the connected domain
+            // controller does not host (see #230). AD-family only; a no-op for other directory types.
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, GetTargetPartitions(), _logger);
         }
 
         // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same
@@ -246,6 +250,10 @@ internal class LdapConnectorImport
             // rootDSE query above.
             if (_previousRootDse.UseUsnDeltaImport)
                 LdapConnectorUtilities.VerifyDomainControllerIdentity(_previousRootDse, _currentRootDse, _logger);
+
+            // Guard against silently importing zero objects from a Partition the connected domain
+            // controller does not host (see #230). AD-family only; a no-op for other directory types.
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, GetTargetPartitions(), _logger);
         }
 
         // Determine which delta strategy to use
@@ -769,7 +777,8 @@ internal class LdapConnectorImport
             "supportedCapabilities",
             "vendorName",
             "structuralObjectClass",
-            "dsServiceName"
+            "dsServiceName",
+            "namingContexts"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -796,7 +805,8 @@ internal class LdapConnectorImport
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
             DirectoryType = directoryType,
-            VendorName = vendorName
+            VendorName = vendorName,
+            NamingContexts = LdapConnectorUtilities.GetEntryAttributeStringValues(rootDseEntry, "namingContexts")
         };
 
         // For AD-family directories, capture the DC's invocationId so a later delta import can detect

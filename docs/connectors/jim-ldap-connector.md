@@ -79,6 +79,12 @@ For Active Directory and Samba AD, JIM connects to a single, consistent domain c
 
 Pinning only applies to Active Directory and Samba AD; OpenLDAP and other generic directories are unaffected.
 
+### Multi-domain forests
+
+A Connected System manages one domain today. During Partition discovery on Active Directory or Samba AD, JIM lists every domain in the forest, because that is what the directory's crossRef objects expose; it has no way to tell from that list alone which domains the connected domain controller actually holds. A domain controller only ever holds its own domain's naming context and does not chase referrals to serve objects from another domain in the forest.
+
+If you select a Partition for a domain the connected domain controller does not host, the import fails fast with an error naming the Partition and the domain controller, rather than silently returning zero objects. To manage more than one domain, create a separate Connected System per domain, each with its Host setting pointing at that domain's own domain controllers.
+
 ### Credentials
 
 | Setting | Description | Example |

@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Importing a schema through the REST API or PowerShell now leaves the same configuration behind as the same import through the portal. Where a Connected System offers exactly one object type and JIM is discovering it for the first time, that object type is selected automatically; only the portal did this, so the two surfaces produced different configuration from identical input.
 - 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
 - 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
+- 🐛 Selecting a Partition for a domain the connected Active Directory / Samba AD domain controller does not host now fails the import with clear guidance, instead of silently importing nothing. Partition discovery lists every domain in the forest, but a domain controller only holds its own domain's naming context and does not chase referrals to other domains. (#230)
 
 ### Changed
 
