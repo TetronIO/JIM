@@ -2739,9 +2739,20 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     flex: 1;
 }
 
-/* The target's own words, so they read as a quotation from the Connected System rather than as JIM's opinion. */
+/* A failed row carries its severity in the row, not in the sentence. The target's own words set in red made
+   three lines of washed-out prose that read as milder than the thing they were reporting; the house error
+   alert above already establishes the opposite convention, keeping its message in the ordinary text colour
+   "for accessibility" and signalling severity through the container. The rule is an inset shadow rather than
+   a border so it costs no layout and the row's text stays aligned with the rows above and below it. */
+.jim-password-result--failed {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--mud-palette-error);
+}
+
+/* Primary rather than secondary: on a failed row this sentence is the thing to read, where a successful
+   row's "Password set." is only confirmation. */
 .jim-password-result-reason {
-    color: var(--mud-palette-error);
+    color: var(--mud-palette-text-primary);
 }
 
 /* ─── Remediation guidance, folded away until asked for ───

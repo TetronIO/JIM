@@ -931,6 +931,75 @@ public class SetPasswordDialogTests : JimComponentTestContext
     }
 
     /// <summary>
+    /// Three outcomes, three severities. Reporting "nothing was set" in the same amber as "most of it was set"
+    /// understates it, and the colour is what an administrator reads before the sentence.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenNoAccountTookThePassword_ReportsItAsAnErrorRatherThanAWarning()
+    {
+        _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        Assert.That(provider.FindComponents<MudAlert>()
+                .Single(a => a.Instance.UserAttributes.TryGetValue("data-testid", out var id)
+                             && (string?)id == SummaryMarker)
+                .Instance.Severity,
+            Is.EqualTo(Severity.Error));
+    }
+
+    /// <summary>
+    /// Partly set stays a warning: some accounts did take the password, and the person now holds two different
+    /// ones, which is a caution about a half-finished job rather than a failure.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenSomeAccountsTookThePassword_ReportsItAsAWarning()
+    {
+        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        Assert.That(provider.FindComponents<MudAlert>()
+                .Single(a => a.Instance.UserAttributes.TryGetValue("data-testid", out var id)
+                             && (string?)id == SummaryMarker)
+                .Instance.Severity,
+            Is.EqualTo(Severity.Warning));
+    }
+
+    /// <summary>
+    /// A failed row carries its severity in the row rather than in the sentence, so the modifier has to reach
+    /// the markup: without it the row is painted like any other and the failure is left to red prose, which is
+    /// what read as milder than the thing it was reporting.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenAnAccountFailed_MarksItsWholeRowAsFailed()
+    {
+        _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
+
+        var provider = ShowDialog(allowSelection: true);
+        Button(provider, SelectAllMarker).Click();
+        Generate(provider);
+        Button(provider, SubmitMarker).Click();
+        provider.WaitForState(() => _runs.Count == 1);
+
+        var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[0].ClassName, Does.Not.Contain("jim-password-result--failed"));
+            Assert.That(rows[1].ClassName, Does.Contain("jim-password-result--failed"));
+        });
+    }
+
+    /// <summary>
     /// The rail's markers are the same four states the Run Profile stepper reports, carried as modifiers so
     /// one set of rules paints both. A marker with no state modifier renders as an unstyled ring.
     /// </summary>
