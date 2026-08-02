@@ -40,6 +40,16 @@ public class MetaverseObjectAccount
     public ConnectedSystemPasswordPolicy? DiscoveredPolicy { get; init; }
 
     /// <summary>
+    /// Whether this Connected System's Connector can read the system's password rules at all.
+    /// <para>
+    /// The difference between "JIM has not read the rules yet" and "there are no rules to read" decides whether
+    /// an administrator has anything to do about it. Only some systems publish a password policy a client can
+    /// read; where none is published, an absent policy is expected rather than a gap to close.
+    /// </para>
+    /// </summary>
+    public bool ConnectorCanDiscoverPasswordPolicy { get; init; }
+
+    /// <summary>
     /// The expiry behaviours this Connected System's Connector can apply. Empty when it cannot set passwords.
     /// Callers offering a choice across several accounts must offer only what all of them can honour.
     /// </summary>

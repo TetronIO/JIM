@@ -33,16 +33,6 @@
 <MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@* Setting a password is a reset primitive, and this page is visible to every signed-in user, so the action *@
-@* carries its own Administrator gate rather than inheriting the page's (issue #1172).                      *@
-<AuthorizeView Roles="Administrator">
-    @if (_passwordCapableAccountCount > 0)
-    {
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false" Class="mb-2"
-                   StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
-                   data-testid="jim-mvo-set-password">Set Password</MudButton>
-    }
-</AuthorizeView>
 
 @if (MetaverseObject != null)
 {
@@ -190,6 +180,38 @@
                 </MudGrid>
             </MudPaper>
         </MudTabPanel>
+
+        @* ─── Actions ─── *@
+        @* Things an administrator can do TO this person, as opposed to the tabs that report on them.        *@
+        @* Setting a password is a reset primitive and this page is visible to every signed-in user, so the  *@
+        @* whole tab carries an Administrator gate rather than inheriting the page's (issue #1172).          *@
+        <AuthorizeView Roles="Administrator" Context="actionsAuth">
+            <MudTabPanel Text="Actions" Icon="@Icons.Material.Filled.Bolt">
+                <MudPaper Class="pa-4 mt-6" Outlined="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-set-password">
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Color="Color.Primary" Class="mt-1" />
+                        <MudStack Spacing="1" Class="flex-grow-1">
+                            <MudText Typo="Typo.h6">Set Password</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Sets one password on some or all of this person's accounts, writing to each
+                                Connected System in turn. Nothing is staged and JIM stores nothing.
+                            </MudText>
+                            @if (_passwordCapableAccountCount == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-mvo-action-set-password-unavailable">
+                                    Unavailable: none of this person's accounts are in a Connected System whose
+                                    Connector can set passwords.
+                                </MudText>
+                            }
+                        </MudStack>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                   Disabled="@(_passwordCapableAccountCount == 0)"
+                                   OnClick="OpenSetPasswordDialogAsync"
+                                   data-testid="jim-mvo-set-password">Set Password</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudTabPanel>
+        </AuthorizeView>
         </ChildContent>
     </NavigableMudTabs>
 }
@@ -229,7 +251,10 @@
             { x => x.SetPassword, SetPasswordOnAccountsAsync }
         };
 
-        await DialogService.ShowAsync<SetPasswordDialog>($"Set Password: {_displayName}", parameters,
+        // The name only when there is one: an object with no display name would otherwise be titled with a
+        // dangling colon.
+        var title = string.IsNullOrWhiteSpace(_displayName) ? "Set Password" : $"Set Password: {_displayName}";
+        await DialogService.ShowAsync<SetPasswordDialog>(title, parameters,
             new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
     }
 

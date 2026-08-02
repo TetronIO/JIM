@@ -1935,7 +1935,7 @@ public class ConnectedSystemServer
         // Each Connected System is resolved once and reused across its accounts. The retrieval above does not
         // load the Connected System navigation, and an unloaded navigation is indistinguishable from an absent
         // value, so the system is loaded here by id rather than read off the object.
-        var systems = new Dictionary<int, (string Name, IReadOnlyCollection<PasswordExpiryBehaviour> ExpiryBehaviours, ConnectedSystemPasswordPolicy? Policy)>();
+        var systems = new Dictionary<int, (string Name, IReadOnlyCollection<PasswordExpiryBehaviour> ExpiryBehaviours, ConnectedSystemPasswordPolicy? Policy, bool CanDiscoverPolicy)>();
         foreach (var connectedSystemId in connectedSystemObjects.Select(cso => cso.ConnectedSystemId).Distinct())
         {
             var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
@@ -1949,7 +1949,8 @@ public class ConnectedSystemServer
             systems[connectedSystemId] = (
                 connectedSystem.Name,
                 expiryBehaviours,
-                expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null);
+                expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null,
+                connectedSystem.ConnectorDefinition.SupportsPasswordPolicyDiscovery);
         }
 
         return connectedSystemObjects
@@ -1965,7 +1966,8 @@ public class ConnectedSystemServer
                     AccountIdentifier = cso.DisplayNameOrId ?? cso.Id.ToString(),
                     ConnectorCanSetPasswords = system.ExpiryBehaviours.Count > 0,
                     SupportedExpiryBehaviours = system.ExpiryBehaviours,
-                    DiscoveredPolicy = system.Policy
+                    DiscoveredPolicy = system.Policy,
+                    ConnectorCanDiscoverPasswordPolicy = system.CanDiscoverPolicy
                 };
             })
             .OrderBy(account => account.ConnectedSystemName)

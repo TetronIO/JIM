@@ -2615,3 +2615,14 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
         animation: none;
     }
 }
+
+/* Set Password dialog: the account picker's control sits against the Connected System's name rather than
+   halfway down a two-line row. MudBlazor's dense checkbox carries its own padding, so it needs pulling up to
+   put its centre on the first line's centre; the icon in the results state matches it. */
+.jim-password-account-control {
+    margin-top: -2px;
+}
+
+.jim-password-account-control.mud-icon-root {
+    margin-top: 4px;
+}

@@ -78,9 +78,13 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private static MetaverseObjectAccount Account(
         string name,
         bool canSetPasswords,
-        IReadOnlyCollection<PasswordExpiryBehaviour>? expiryBehaviours = null) =>
+        IReadOnlyCollection<PasswordExpiryBehaviour>? expiryBehaviours = null,
+        bool canDiscoverPolicy = true,
+        ConnectedSystemPasswordPolicy? discoveredPolicy = null) =>
         new()
         {
+            ConnectorCanDiscoverPasswordPolicy = canDiscoverPolicy,
+            DiscoveredPolicy = discoveredPolicy,
             ConnectedSystemObjectId = Guid.NewGuid(),
             ConnectedSystemId = Math.Abs(name.GetHashCode() % 1000),
             ConnectedSystemName = name,
@@ -749,6 +753,75 @@ public class SetPasswordDialogTests : JimComponentTestContext
             Assert.That(_runs[1].Accounts.Select(a => a.ConnectedSystemName),
                 Is.EqualTo(new[] { "Contoso AD", "Fabrikam HR" }), "the accounts that succeeded are rewritten too, so this person keeps one password");
             Assert.That(_runs[1].Password, Is.Not.EqualTo(_runs[0].Password));
+        });
+    }
+
+    #endregion
+
+    #region what to do about a system whose rules JIM does not have
+
+    /// <summary>
+    /// Two situations wear the same face, and only one is the administrator's to fix. A Connector that could
+    /// read the rules but has not been asked to is a schema import away; saying so in the terms an
+    /// administrator configures the system in ("import the schema") is the difference between a notice they can
+    /// act on and one they can only shrug at.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemsPolicyHasNotBeenImported_SaysToImportItsSchemaAndLinksThere()
+    {
+        var provider = ShowDialog(allowSelection: true, accounts:
+        [
+            Account("Contoso AD", canSetPasswords: true, canDiscoverPolicy: true)
+        ]);
+        TickAccount(provider, 0);
+
+        var notice = provider.Find("[data-testid='jim-set-password-unknown-policy']");
+        Assert.Multiple(() =>
+        {
+            Assert.That(notice.TextContent, Does.Contain("imports a Connected System's schema"));
+            Assert.That(notice.QuerySelector("a")?.GetAttribute("href"), Does.Contain("?t=schema"),
+                "the notice has to reach the place the repair happens");
+            Assert.That(provider.FindAll("[data-testid='jim-set-password-no-published-policy']"), Is.Empty);
+        });
+    }
+
+    /// <summary>
+    /// A system that publishes no password rules for any client to read is not a gap somebody forgot to close.
+    /// Telling an administrator to go and import a schema there would send them after something that will never
+    /// arrive, so this says plainly that there is nothing to configure.
+    /// </summary>
+    [Test]
+    public void SetPasswordDialog_WhenASystemPublishesNoPolicy_SaysThereIsNothingToConfigure()
+    {
+        var provider = ShowDialog(allowSelection: true, accounts:
+        [
+            Account("Payroll", canSetPasswords: true, canDiscoverPolicy: false)
+        ]);
+        TickAccount(provider, 0);
+
+        var notice = provider.Find("[data-testid='jim-set-password-no-published-policy']");
+        Assert.Multiple(() =>
+        {
+            Assert.That(notice.TextContent, Does.Contain("nothing to configure"));
+            Assert.That(provider.FindAll("[data-testid='jim-set-password-unknown-policy']"), Is.Empty,
+                "there is no schema import that would help here");
+        });
+    }
+
+    [Test]
+    public void SetPasswordDialog_WhenASystemsPolicyIsKnown_SaysNothingAboutIt()
+    {
+        var provider = ShowDialog(allowSelection: true, accounts:
+        [
+            Account("Contoso AD", canSetPasswords: true, canDiscoverPolicy: true,
+                discoveredPolicy: new ConnectedSystemPasswordPolicy { MinimumLength = 15 })
+        ]);
+        TickAccount(provider, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(provider.FindAll("[data-testid='jim-set-password-unknown-policy']"), Is.Empty);
+            Assert.That(provider.FindAll("[data-testid='jim-set-password-no-published-policy']"), Is.Empty);
         });
     }
 
