@@ -54,7 +54,7 @@ public class ScimBulkExportTests
         params PendingExport[] pendingExports)
     {
         var connector = new StubbedTransportScimConnector(handler);
-        connector.OpenExportConnection(settings);
+        connector.OpenExportConnection(settings, persistedConnectorData: null);
 
         try
         {

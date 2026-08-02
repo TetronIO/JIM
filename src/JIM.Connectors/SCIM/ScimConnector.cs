@@ -245,7 +245,11 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// Opens the connection JIM will read every page of this run through. Discovery is deferred to the
     /// first page, so a run that imports nothing costs no requests.
     /// </summary>
-    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    /// <param name="persistedConnectorData">
+    /// Unused here: the watermark this connector persists travels on each import result rather than
+    /// being needed to open the connection, and <see cref="ImportAsync"/> receives it directly.
+    /// </param>
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
     {
         // Task.Run keeps the blocking wait off any caller's synchronisation context; the interface is
         // synchronous but building the client loads JIM's trusted certificates asynchronously.
@@ -350,13 +354,19 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return result;
     }
 
-    public void CloseImportConnection()
+    /// <returns>
+    /// Always null, meaning nothing to override: the delta watermark is carried on each import result as
+    /// the pages complete, and this connector holds no close-time state of its own (unlike the LDAP
+    /// Connector's domain controller pin, which is what this return channel exists for).
+    /// </returns>
+    public string? CloseImportConnection()
     {
         _importClient?.Dispose();
         _importClient = null;
         _importDiscovery = null;
         _importPlan = null;
         _importWatermark = null;
+        return null;
     }
 
     private static ScimPaginationMode ReadPaginationMode(ConnectedSystem connectedSystem)
@@ -407,7 +417,10 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// Opens the connection every Pending Export in this run is sent through. Discovery is deferred to
     /// the first batch, so a run with nothing to export costs no requests.
     /// </summary>
-    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings)
+    /// <param name="persistedConnectorData">
+    /// Unused here: exports need no cross-run connector state, and the import side owns the watermark.
+    /// </param>
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
         // Task.Run keeps the blocking wait off any caller's synchronisation context; the interface is
         // synchronous but building the client loads JIM's trusted certificates asynchronously.
@@ -440,13 +453,15 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return await new ScimConnectorExport(_exportClient, _exportDiscovery, Log.Logger, _bulkEndpointState).ExecuteAsync(pendingExports, cancellationToken);
     }
 
-    public void CloseExportConnection()
+    /// <returns>Always null: this connector has no close-time state to persist.</returns>
+    public string? CloseExportConnection()
     {
         _exportClient?.Dispose();
         _exportClient = null;
         _exportDiscovery = null;
         _exportSettings = null;
         _bulkEndpointState = null;
+        return null;
     }
     #endregion
 

@@ -474,7 +474,7 @@ public class ScimConnectorImportTests
         using var handler = UserProvider(_ => Json(UserPage(1, 1, "alice")));
         var connector = new StubbedTransportScimConnector(handler);
         var connectedSystem = ConnectedSystem(selectedObjectTypes: "User");
-        connector.OpenImportConnection(connectedSystem.SettingValues!, _logger);
+        connector.OpenImportConnection(connectedSystem.SettingValues!, persistedConnectorData: null, _logger);
 
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();

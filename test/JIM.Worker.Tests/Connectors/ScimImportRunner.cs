@@ -29,7 +29,7 @@ internal static class ScimImportRunner
         int maximumPages = 10,
         IConnectorProgress? progress = null)
     {
-        connector.OpenImportConnection(connectedSystem.SettingValues!, logger);
+        connector.OpenImportConnection(connectedSystem.SettingValues!, persistedConnectorData: null, logger);
 
         var results = new List<ConnectedSystemImportResult>();
         var tokens = new List<ConnectedSystemPaginationToken>();

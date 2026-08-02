@@ -38,7 +38,7 @@ public class ScimConnectorExportTests
     private async Task<List<ConnectedSystemExportResult>> ExportAsync(MockScimProvider provider, StubHttpMessageHandler handler, params PendingExport[] pendingExports)
     {
         var connector = new StubbedTransportScimConnector(handler);
-        connector.OpenExportConnection([]);
+        connector.OpenExportConnection([], persistedConnectorData: null);
 
         try
         {

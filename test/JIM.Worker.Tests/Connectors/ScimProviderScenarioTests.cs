@@ -432,7 +432,7 @@ public class ScimProviderScenarioTests
         var runProfile = RunProfile(ConnectedSystemRunType.FullImport, pageSize: 2);
         var connector = new StubbedTransportScimConnector(handler);
         var results = new List<ConnectedSystemImportResult>();
-        connector.OpenImportConnection(connectedSystem.SettingValues!, _logger);
+        connector.OpenImportConnection(connectedSystem.SettingValues!, persistedConnectorData: null, _logger);
 
         try
         {
@@ -486,7 +486,7 @@ public class ScimProviderScenarioTests
         using var handler = provider.CreateHandler();
         var connectedSystem = ConnectedSystem();
         var connector = new StubbedTransportScimConnector(handler);
-        connector.OpenImportConnection(connectedSystem.SettingValues!, _logger);
+        connector.OpenImportConnection(connectedSystem.SettingValues!, persistedConnectorData: null, _logger);
 
         var atTheCeiling = new ScimImportPosition { PagesRead = ScimConnectorImport.MaximumPagesPerResourceType - 1 };
 

@@ -220,7 +220,7 @@ public class ScimCertificateDiagnosisTests
     {
         var connector = new CertificateRefusingScimConnector(UntrustedIssuer());
         var connectedSystem = new ConnectedSystem { Id = 1, Name = "HR Cloud", SettingValues = Settings() };
-        connector.OpenImportConnection(Settings(), _logger);
+        connector.OpenImportConnection(Settings(), persistedConnectorData: null, _logger);
 
         var exception = Assert.ThrowsAsync<ServerCertificateRejectedException>(async () =>
             await connector.ImportAsync(connectedSystem, new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.FullImport },
@@ -237,7 +237,7 @@ public class ScimCertificateDiagnosisTests
     public void ExportAsync_ProviderCertificateRefused_ReportsTheCertificateRatherThanAnOpaqueTransportFailure()
     {
         var connector = new CertificateRefusingScimConnector(UntrustedIssuer());
-        connector.OpenExportConnection(Settings());
+        connector.OpenExportConnection(Settings(), persistedConnectorData: null);
 
         var exception = Assert.ThrowsAsync<ServerCertificateRejectedException>(async () =>
             await connector.ExportAsync([new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Create }], CancellationToken.None, new RecordingConnectorProgress()));
