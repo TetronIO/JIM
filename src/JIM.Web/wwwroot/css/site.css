@@ -2755,12 +2755,19 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     letter-spacing: normal;
 }
 
+/* This is a third surface level, and a third tint is not one: its step from the results row is about six
+   units of grey in either scheme, which is too little to read as a boundary. The definition comes from a
+   border instead, using the token every theme already defines for the edge of a nested surface. The tint
+   stays, so the panel still reads as subordinate detail rather than as a peer of the row it sits in. A left
+   accent rule was tried and rejected: the purple is reserved for interactive elements, and it made a third
+   competing accent beside the error icon and its red text. */
 .jim-password-guidance {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     margin-top: 0.5rem;
     padding: 0.75rem 0.875rem;
+    border: 1px solid var(--jim-inner-border-color, var(--jim-paper-border-color, var(--mud-palette-lines-default)));
     border-radius: var(--mud-default-borderradius);
     background-color: var(--mud-palette-background-grey);
 }
