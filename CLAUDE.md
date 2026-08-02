@@ -185,8 +185,8 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
 
 - Always work on a feature branch; never commit directly to `main`
 - Branch naming: `feature/description`
-- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, or when you have just merged/finished the previous branch and are starting fresh from a clean `main`.
-- Never automatically create a PR or merge to `main` - the user must explicitly instruct
+- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, when you have just merged/finished the previous branch and are starting fresh from a clean `main`, or when creating a new stack layer off the current feature branch (see "Stacked PRs for discovered work" below; that is the one sanctioned mid-task branch creation).
+- Never automatically create a PR or merge to `main` - the user must explicitly instruct. One standing exception: stack-layer PRs in the stacked-PR flow below are pre-authorised; opening them (base = the branch below) is part of delivering the feature.
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
 - **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
@@ -194,6 +194,22 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
   - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
   - Pick blocked-by for ordering and parent/sub-issue for hierarchy; they are not interchangeable. Issue bodies may state the *rationale* for a relationship, but the relationship itself must exist as the native link (it shows in the sidebar, rolls up, and is queryable; prose goes stale).
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
+
+### Stacked PRs for discovered work
+
+When feature work surfaces something that must be solved to deliver the feature but is not semantically part of it (a bug in existing code, a missing capability, a prerequisite refactor), do NOT fold it into the feature branch and do NOT defer it to an issue. Isolate it in the next layer of a GitHub stacked PR (native support, public preview) and fix it now. `/stack-pr` encodes the full flow; the shape is:
+
+1. **Announce, don't ask.** State the discovery in one line and proceed with the stack. "Ask before significant changes" still applies to *how* an architecturally significant piece is solved, never to *whether* it gets its own stack layer.
+2. **Commit feature WIP** (a `wip:` commit is fine; squash-merge collapses it), then create the new layer **off the current feature branch**: `git checkout -b feature/<feature-suffix>-stack-<desc>`. A stack is a sequential chain; each layer branches from the one below it, never from `main`.
+3. **Implement the layer to full standard**: TDD, build/test gates, changelog and docs if user-facing. Being unplanned lowers no bars.
+4. **Open the layer's PR with its base set to the branch below** (`gh pr create --base feature/<feature>`), then link the chain into a stack: GitHub shows a banner on aligned chains offering to convert, or use the `gh stack` CLI (`gh extension install github/gh-stack`). Reviewers and history get one clean diff per concern.
+5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack (the web "Rebase stack" button, or `gh stack rebase` + `gh stack push`).
+6. **Land bottom-up.** Any PR can merge once everything below it is green; merging an upper PR merges all unmerged PRs below it **atomically, in order, each recorded individually** - so the normal move is to merge from the top when the objective is complete. Every PR in the stack is evaluated against `main`'s protections (all seven required checks), regardless of its direct base.
+
+- **Auto-merge is not supported for stacked PRs.** Do not `gh pr merge --auto` a stack layer; wait for green, then merge (see `/pr-merge`).
+- **Stacks require fully linear history**, so within a stack the merge-don't-rebase rule is inverted: restack with cascading rebase (`gh stack rebase`, then `gh stack push` to force-push the layers), never by merging one layer into another.
+- Layers stay shallow and single-concern; nest further layers the same way. Layer branches belong to the same session and objective as their parent feature branch; the `-stack-` naming keeps the lineage visible across parallel sessions.
+- GitHub issues remain only for genuine observations that are NOT needed to deliver the current objective (link them with native blocked-by/sub-issue relationships per the rules above).
 
 ### Bringing a feature branch up to date with `main`
 
@@ -206,6 +222,7 @@ git merge origin/main      # then git push (no force needed)
 
 - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After merging, eyeball that section for duplicated `###` headers or bullets and tidy if needed.
 - Only rebase when the user explicitly wants linear pre-squash history. If you do, and the merge backend reports a misleading "local changes would be overwritten" on a clean tree, `git -c rebase.backend=apply rebase origin/main` gets past it.
+- **Stacked PRs are the exception:** a stack requires fully linear history between its layers, so a branch that is part of a stack is brought up to date by cascading rebase (`gh stack rebase` + `gh stack push`, or the web "Rebase stack" button), never by merging. This section's merge-don't-rebase rule applies only to ordinary, non-stacked feature branches.
 
 ### Merging via gh CLI
 
