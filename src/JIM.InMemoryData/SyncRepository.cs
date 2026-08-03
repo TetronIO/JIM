@@ -33,6 +33,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, ConnectedSystemObject> _csos = new();
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
+    private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
 
@@ -52,10 +53,18 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public string? FailActivityMessageUpdateFor { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="StageInitialPasswordsAsync"/> throws it. Lets tests prove that failing to record
+    /// that a newly provisioned account is owed a password leaves the export that created the account
+    /// successful, which is the whole reason the password is staged rather than delivered inline.
+    /// </summary>
+    public Exception? FailInitialPasswordStagingWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
     private readonly Dictionary<Guid, MetaverseObjectChange> _mvoChanges = new();
+    private readonly Dictionary<Guid, ActivityPhase> _activityPhases = new();
 
     // Secondary indexes
     private readonly Dictionary<int, HashSet<Guid>> _csosByConnectedSystem = new();
@@ -83,6 +92,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
+    public IReadOnlyDictionary<Guid, PendingInitialPassword> PendingInitialPasswords => _pendingInitialPasswords;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -1330,6 +1340,81 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(count);
     }
 
+    public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
+    {
+        if (FailInitialPasswordStagingWith != null)
+            throw FailInitialPasswordStagingWith;
+
+        // One outstanding record per account, matching the unique index in the real schema: two would mean two
+        // deliveries racing to set a password on the same object. The filter stays lazy on purpose, so that it
+        // is re-evaluated as the loop adds, and two records for the same account in one batch dedupe against
+        // each other exactly as ON CONFLICT does in the real one.
+        foreach (var pending in pendingInitialPasswords.Where(p =>
+                     !_pendingInitialPasswords.Values.Any(existing => existing.ConnectedSystemObjectId == p.ConnectedSystemObjectId)))
+        {
+            if (pending.Id == Guid.Empty)
+                pending.Id = Guid.NewGuid();
+
+            _pendingInitialPasswords[pending.Id] = pending;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
+    {
+        var outstanding = _pendingInitialPasswords.Values
+            .Where(p => p.ConnectedSystemId == connectedSystemId && p.Status == PendingInitialPasswordStatus.Pending)
+            .OrderBy(p => p.CreatedAt)
+            .Take(maximum)
+            .ToList();
+
+        // The real query brings the account with it; the fake has to be asked to as well, or a delivery test
+        // would have nothing to set a password on.
+        foreach (var pending in outstanding.Where(p => p.ConnectedSystemObject == null! && _csos.ContainsKey(p.ConnectedSystemObjectId)))
+            pending.ConnectedSystemObject = _csos[pending.ConnectedSystemObjectId];
+
+        return Task.FromResult(outstanding);
+    }
+
+    public Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var configurations = _syncRules.Values
+            .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword != null)
+            .ToDictionary(r => r.Id, r => r.InitialPassword!);
+        return Task.FromResult(configurations);
+    }
+
+    public Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        var system = _connectedSystems.TryGetValue(connectedSystemId, out var connectedSystem) ? connectedSystem : null;
+        return Task.FromResult(system?.PasswordPolicy);
+    }
+
+    public Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
+    {
+        foreach (var attempt in attempts.Where(a => _pendingInitialPasswords.ContainsKey(a.Id)))
+        {
+            var stored = _pendingInitialPasswords[attempt.Id];
+            stored.Status = attempt.Status;
+            stored.FailureReason = attempt.FailureReason;
+            stored.TargetMessage = attempt.TargetMessage;
+            stored.AttemptCount = attempt.AttemptCount;
+            stored.LastAttemptedAt = attempt.LastAttemptedAt;
+            stored.ExpiresAt = attempt.ExpiresAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+            _pendingInitialPasswords.Remove(id);
+
+        return Task.CompletedTask;
+    }
+
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)
@@ -1477,6 +1562,29 @@ public class SyncRepository : ISyncRepository
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// When set, <see cref="SaveActivityPhasesAsync"/> throws. Lets tests prove that a failure to
+    /// record a step (a database blip on a cosmetic write) does not fail the run itself.
+    /// </summary>
+    public bool FailActivityPhaseSaves { get; set; }
+
+    public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
+    {
+        if (FailActivityPhaseSaves)
+            throw new InvalidOperationException("Simulated failure recording Activity phases.");
+
+        foreach (var phase in phases)
+            _activityPhases[phase.Id] = phase;
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The Activity phases recorded so far, keyed by phase id, for tests asserting how a run
+    /// narrated its steps.
+    /// </summary>
+    public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
@@ -1653,6 +1761,15 @@ public class SyncRepository : ISyncRepository
             .Concat(_syncRules.Values.SelectMany(r => r.AttributeFlowRules).Select(m => m.LastUpdated ?? m.Created))
             .ToList();
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
+    }
+
+    public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var enabled = _syncRules.Values
+            .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword is { Enabled: true })
+            .Select(r => r.Id)
+            .ToHashSet();
+        return Task.FromResult(enabled);
     }
 
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)

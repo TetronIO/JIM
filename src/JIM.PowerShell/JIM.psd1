@@ -40,18 +40,22 @@
         'Remove-JIMConnectedSystem',
         'Import-JIMConnectedSystemSchema',
         'Import-JIMConnectedSystemHierarchy',
+        'Get-JIMConnectedSystemServerCertificate',
+        'Approve-JIMConnectedSystemServerCertificate',
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
         'Set-JIMConnectedSystemAttribute',
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
+        'Get-JIMConnectedSystemDirectoryServer',
         'Get-JIMConnectedSystemObject',
         'Get-JIMConnectedSystemObjectType',
         'Get-JIMConnectedSystemObjectAttributeValue',
         'Get-JIMConnectedSystemObjectChangeHistory',
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
+        'Get-JIMConnectedSystemCapability',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 
@@ -60,6 +64,8 @@
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
         'Remove-JIMSyncRule',
+        'Get-JIMSyncRuleInitialPassword',
+        'Set-JIMSyncRuleInitialPassword',
 
         # Configuration Change History
         'Get-JIMConfigurationChangeHistory',
@@ -218,7 +224,9 @@
     VariablesToExport = @()
 
     # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
+    AliasesToExport = @(
+        'Get-JIMConnectedSystemDomainController'
+    )
 
     # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
     PrivateData = @{

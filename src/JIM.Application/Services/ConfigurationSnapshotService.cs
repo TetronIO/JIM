@@ -66,6 +66,12 @@ public class ConfigurationSnapshotService
     /// <summary>The object-type discriminator stored on an Example Data Template snapshot.</summary>
     public const string ExampleDataTemplateObjectType = "ExampleDataTemplate";
 
+    /// <summary>
+    /// The node key every Connected System setting value is recorded under. Uniform by design; the setting's own name
+    /// is the node's label, and the setting id is its ItemId. See <see cref="BuildSettingValueNode"/>.
+    /// </summary>
+    public const string SettingValueNodeKey = "settingValue";
+
     private JimApplication Application { get; }
 
     private static readonly JsonSerializerOptions SerialiserOptions = new()
@@ -117,6 +123,7 @@ public class ConfigurationSnapshotService
         AddReference(children, "connectedSystemId", rule.ConnectedSystemId, rule.ConnectedSystem?.Name, "Connected System");
         AddReference(children, "connectedSystemObjectTypeId", rule.ConnectedSystemObjectTypeId, rule.ConnectedSystemObjectType?.Name, "Connected System Object Type");
         AddReference(children, "metaverseObjectTypeId", rule.MetaverseObjectTypeId, rule.MetaverseObjectType?.Name, "Metaverse Object Type");
+        children.Add(BuildInitialPassword(rule.InitialPassword));
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
@@ -128,6 +135,48 @@ public class ConfigurationSnapshotService
             ObjectName = rule.Name,
             Root = ConfigurationSnapshotNode.ObjectNode("synchronisationRule", children, "Synchronisation Rule")
         };
+    }
+
+    /// <summary>
+    /// Records the initial-password configuration in the change history.
+    /// <para>
+    /// Deciding that JIM will set a password on every account a rule provisions, and what those passwords look
+    /// like, is exactly the sort of change an auditor asks who made and when. Only the configuration is
+    /// recorded; no password value exists at this point and none ever reaches a snapshot.
+    /// </para>
+    /// </summary>
+    private ConfigurationSnapshotNode BuildInitialPassword(SyncRuleInitialPassword? initialPassword)
+    {
+        var children = new List<ConfigurationSnapshotNode>();
+        if (initialPassword == null)
+        {
+            // Rendered rather than omitted, so that configuring a rule for the first time shows as a change from
+            // "off" instead of appearing out of nowhere.
+            Add(children, "enabled", Render(false), "Enabled");
+            return ConfigurationSnapshotNode.ObjectNode("initialPassword", children, "Initial Password");
+        }
+
+        Add(children, "enabled", Render(initialPassword.Enabled), "Enabled");
+        AddEnum(children, "source", initialPassword.Source, "Password settings source");
+        AddEnum(children, "expiryBehaviour", initialPassword.ExpiryBehaviour, "Expiry behaviour");
+        Add(children, "enableAccount", Render(initialPassword.EnableAccount), "Enable the account");
+
+        var policy = initialPassword.CustomPolicy;
+        AddEnum(children, "style", policy.Style, "Style");
+        Add(children, "length", Render(policy.Length), "Length");
+        Add(children, "minimumUppercase", Render(policy.MinimumUppercase), "Minimum uppercase letters");
+        Add(children, "minimumLowercase", Render(policy.MinimumLowercase), "Minimum lowercase letters");
+        Add(children, "minimumDigits", Render(policy.MinimumDigits), "Minimum digits");
+        Add(children, "minimumSymbols", Render(policy.MinimumSymbols), "Minimum symbols");
+        Add(children, "permittedSymbols", policy.PermittedSymbols, "Permitted symbols");
+        Add(children, "wordCount", Render(policy.WordCount), "Word count");
+        AddEnum(children, "wordSeparator", policy.WordSeparator, "Word separator");
+        AddEnum(children, "wordCapitalisation", policy.WordCapitalisation, "Word capitalisation");
+        Add(children, "appendedDigitCount", Render(policy.AppendedDigitCount), "Appended digits");
+        Add(children, "appendSymbol", Render(policy.AppendSymbol), "Append a symbol");
+        Add(children, "excludeAmbiguousCharacters", Render(policy.ExcludeAmbiguousCharacters), "Exclude ambiguous characters");
+
+        return ConfigurationSnapshotNode.ObjectNode("initialPassword", children, "Initial Password", initialPassword.Id);
     }
 
     private ConfigurationSnapshotNode BuildAttributeFlowRules(List<SyncRuleMapping> mappings)
@@ -292,8 +341,14 @@ public class ConfigurationSnapshotService
     private ConfigurationSnapshotNode? BuildSettingValueNode(ConnectedSystemSettingValue settingValue, byte[] hashKey)
     {
         var label = settingValue.Setting?.Name ?? $"Setting {settingValue.Id}";
-        var nodeKey = !string.IsNullOrEmpty(settingValue.Setting?.Name) ? settingValue.Setting!.Name! : $"setting-{settingValue.Id}";
         var itemId = settingValue.Setting?.Id ?? settingValue.Id;
+
+        // The key is deliberately the same for every setting value, with the connector's setting name carried as the
+        // label. A node key is a *stable machine key*, and a connector author's display name is neither stable nor
+        // enumerable: keying by it put an open, third-party-controlled key space in front of
+        // ConfigurationChangeClassifier, which classifies by key and has no default class, so every Connected System
+        // settings change failed to classify and was recorded unclassified. Collection items are matched by ItemId,
+        // not by key, so this neither disturbs diffing nor invalidates snapshots already stored under the old keys.
 
         // Secret detection is robust: any populated encrypted value, or a setting declared as StringEncrypted, is
         // redacted. StringEncryptedValue is only ever populated for encrypted settings, so a secret is never leaked even
@@ -306,7 +361,7 @@ public class ConfigurationSnapshotService
             if (string.IsNullOrEmpty(settingValue.StringEncryptedValue))
                 return null;
 
-            var node = ConfigurationSnapshotNode.Secret(nodeKey, ComputeSecretHash(settingValue.StringEncryptedValue, hashKey), label);
+            var node = ConfigurationSnapshotNode.Secret(SettingValueNodeKey, ComputeSecretHash(settingValue.StringEncryptedValue, hashKey), label);
             node.ItemId = itemId;
             return node;
         }
@@ -321,7 +376,7 @@ public class ConfigurationSnapshotService
         if (string.IsNullOrEmpty(value))
             return null;
 
-        var scalar = ConfigurationSnapshotNode.Scalar(nodeKey, value, label);
+        var scalar = ConfigurationSnapshotNode.Scalar(SettingValueNodeKey, value, label);
         scalar.ItemId = itemId;
         return scalar;
     }
@@ -936,6 +991,8 @@ public class ConfigurationSnapshotService
         Add(children, "supportsParallelExport", Render(definition.SupportsParallelExport), "Parallel export");
         Add(children, "supportsPaging", Render(definition.SupportsPaging), "Paging");
         Add(children, "supportsFilePaths", Render(definition.SupportsFilePaths), "File paths");
+        Add(children, "supportsPasswordSet", Render(definition.SupportsPasswordSet), "Password set");
+        Add(children, "supportsPasswordPolicyDiscovery", Render(definition.SupportsPasswordPolicyDiscovery), "Password policy discovery");
         return ConfigurationSnapshotNode.ObjectNode("capabilities", children, "Capabilities");
     }
 

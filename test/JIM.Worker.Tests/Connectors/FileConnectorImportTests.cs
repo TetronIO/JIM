@@ -3,6 +3,8 @@
 
 using JIM.Connectors.File;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
+using JIM.Utilities;
 using JIM.Models.Staging;
 using Serilog;
 
@@ -167,7 +169,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -200,7 +202,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -229,7 +231,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -276,7 +278,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -309,7 +311,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -335,7 +337,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -371,7 +373,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - should only have 1 object (the first one with the error), not all 3
         Assert.That(result, Is.Not.Null);
@@ -392,7 +394,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - should have all 3 objects, each with errors
         Assert.That(result, Is.Not.Null);
@@ -413,7 +415,7 @@ public class FileConnectorImportTests
 
         // Act & Assert
         Assert.ThrowsAsync<FileNotFoundException>(async () =>
-            await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None));
+            await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None));
     }
 
     [Test]
@@ -429,7 +431,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -453,7 +455,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -493,7 +495,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -533,7 +535,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -582,7 +584,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -646,7 +648,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - the unselected ExternalId attribute should still be imported
         Assert.That(result, Is.Not.Null);
@@ -695,7 +697,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - the unselected SecondaryExternalId attribute should still be imported
         Assert.That(result, Is.Not.Null);
@@ -744,7 +746,7 @@ public class FileConnectorImportTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - "Id" should appear exactly once (not duplicated)
         Assert.That(result, Is.Not.Null);

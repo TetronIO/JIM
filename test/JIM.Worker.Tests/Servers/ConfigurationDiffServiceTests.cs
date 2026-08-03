@@ -111,7 +111,7 @@ public class ConfigurationDiffServiceTests
         var diff = _diff.Diff(old, @new);
         var json = System.Text.Json.JsonSerializer.Serialize(diff);
 
-        var secret = Find(diff.Root, "Bind password")!;
+        var secret = FindByLabel(diff.Root, "Bind password")!;
         Assert.That(secret.IsSecret, Is.True);
         Assert.That(secret.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Modified), "a changed secret is detected via its keyed hash");
         Assert.That(secret.OldValue, Is.Null, "a secret's value (or hash) is never placed in the diff");
@@ -125,7 +125,7 @@ public class ConfigurationDiffServiceTests
     {
         var diff = _diff.Diff(Snap(CsWithSecret("same")), Snap(CsWithSecret("same")));
 
-        Assert.That(Find(diff.Root, "Bind password")!.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Unchanged));
+        Assert.That(FindByLabel(diff.Root, "Bind password")!.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Unchanged));
     }
 
     [Test]
@@ -200,6 +200,17 @@ public class ConfigurationDiffServiceTests
         if (node.Children == null)
             return null;
         return node.Children.Select(c => Find(c, key)).FirstOrDefault(found => found != null);
+    }
+
+    // Connected System setting values all share one node key by design (the connector's setting name is an open,
+    // third-party key space and could never be classified), so they are located by their label instead.
+    private static ConfigurationDiffNode? FindByLabel(ConfigurationDiffNode node, string label)
+    {
+        if (node.Label == label)
+            return node;
+        if (node.Children == null)
+            return null;
+        return node.Children.Select(c => FindByLabel(c, label)).FirstOrDefault(found => found != null);
     }
 
     private static ConnectedSystem Cs(string? description = null, (int settingId, string name, string? value)[]? settings = null)

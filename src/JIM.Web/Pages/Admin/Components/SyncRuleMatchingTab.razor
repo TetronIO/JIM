@@ -159,8 +159,10 @@
                                 @bind-Value="_matchingRuleMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
                                 Placeholder="Please select the Connected System attribute" Required="true" Class="mt-5"
                                 Variant="Variant.Outlined">
+                                @* Credential attributes are excluded: JIM never imports them, so there would be no value to match on *@
                                 @foreach (var connectedSystemObjectTypeAttribute in SyncRule.ConnectedSystemObjectType.Attributes.Where(a
-                                            => a.AttributePlurality == AttributePlurality.SingleValued).OrderBy(a => a.Name))
+                                            => a.AttributePlurality == AttributePlurality.SingleValued &&
+                                               !CredentialAttributes.IsCredentialAttribute(a.Name)).OrderBy(a => a.Name))
                                 {
                                     <MudSelectItem Value="@connectedSystemObjectTypeAttribute"
                                         Disabled="@(connectedSystemObjectTypeAttribute.Type != _matchingRuleMapping.TargetMetaverseAttribute.Type)">

@@ -12,9 +12,10 @@ using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -24,6 +25,43 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private ICredentialProtection? _credentialProtection;
     private LdapTrustedCertificateDirectory? _trustDirectory;
     private LdapConnectorExport? _currentExport;
+
+    /// <summary>
+    /// The persisted connector state replayed by JIM at connection open (issue #230), including any
+    /// pinned domain controller. Read by <see cref="OpenImportConnection"/> to resolve the effective
+    /// server, and re-read by <see cref="CloseImportConnection"/>/<see cref="CloseExportConnection"/> as
+    /// the base to merge a pin update into, so any other persisted field (USN/changelog/accesslog
+    /// watermarks, invocationId) survives untouched.
+    /// </summary>
+    private string? _persistedConnectorData;
+
+    /// <summary>
+    /// Where the server used by the most recent <see cref="OpenImportConnection"/> call came from (issue
+    /// #230 Phase 2). Only a connection resolved via <see cref="LdapServerResolutionSource.Pinned"/> can
+    /// have its pin invalidated on failure; the other two sources are administrator-supplied or unpinned.
+    /// </summary>
+    private LdapServerResolutionSource? _lastResolutionSource;
+
+    /// <summary>
+    /// Set when a connection opened via a pinned domain controller fails after retries are exhausted.
+    /// Read (and cleared) by <see cref="CloseImportConnection"/>, which returns persisted connector data
+    /// with the pin removed so the next run re-discovers and re-pins via Host.
+    /// </summary>
+    private bool _pinInvalidatedByConnectionFailure;
+
+    /// <summary>
+    /// A newly discovered domain controller to pin, captured by <see cref="OpenExportConnection"/> when an
+    /// AD-family directory has no Preferred Domain Controller configured and no pin yet exists. Read (and
+    /// cleared) by <see cref="CloseExportConnection"/>. Import establishes/self-heals its own pin through
+    /// the ordinary import-result persistence channel, so this field is export-only.
+    /// </summary>
+    private string? _exportDiscoveredPinnedServer;
+
+    /// <summary>
+    /// The directory type detected alongside <see cref="_exportDiscoveredPinnedServer"/>, used as the
+    /// fallback directory type if no previous persisted connector data exists to merge the new pin into.
+    /// </summary>
+    private LdapDirectoryType? _exportDiscoveredDirectoryTypeForPin;
 
     #region IConnector members
     public string Name => ConnectorConstants.LdapConnectorName;
@@ -47,6 +85,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsPaging => true;
     public bool SupportsFilePaths => false;
 
+    public bool SupportsPasswordSet => true;
+
+    public bool SupportsPasswordPolicyDiscovery => true;
+
     // Attribute names in an LDAP directory come from the LDAP/AD vocabulary, so the Attribute Flow editor
     // can show the LDAP counterpart of each Metaverse Attribute. Advisory only; never read at sync time.
     public AttributeStandard SchemaStandard => AttributeStandard.Ldap;
@@ -55,6 +97,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
+    private readonly string _settingPreferredDomainController = ConnectorSettingNames.LdapPreferredDomainController;
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
@@ -89,9 +132,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = "Directory Server", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = "Directory Server Info", Description = "Enter Active Directory domain controller, or LDAP server details below.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Label },
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
+            new() { Name = _settingPreferredDomainController, Required = false, Description = "Applies to Active Directory and Samba AD. A specific domain controller FQDN to always connect to. When left blank, JIM automatically discovers and pins the domain controller it reaches via the Host value. For LDAPS, use a name present in the domain controller's certificate.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = LdapConnectorConstants.DEFAULT_CONNECTION_TIMEOUT_SECONDS, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the directory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
@@ -150,7 +194,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSchema members
     public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
-        OpenImportConnection(settingValues, logger);
+        // No persisted connector state applies to a schema-only connection.
+        OpenImportConnection(settingValues, null, logger);
 
         try
         {
@@ -221,7 +266,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorPartitions members
     public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
-        OpenImportConnection(settingValues, logger);
+        // No persisted connector state applies to a partition-discovery-only connection.
+        OpenImportConnection(settingValues, null, logger);
 
         try
         {
@@ -243,11 +289,134 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     }
     #endregion
 
-    #region IConnectorImportUsingCalls members
-    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    #region IConnectorDetectedCapabilities members
+    /// <summary>
+    /// Maps the rootDSE facts JIM already persists between synchronisation runs (issue #230's
+    /// <see cref="LdapConnectorRootDse"/>) to human-readable capability facts for display on the Connected
+    /// System details page. Tolerates null/empty/corrupt persisted data (returns an empty list) and old
+    /// baselines missing newer properties (those simply deserialise to their defaults and, where the
+    /// property is optional, are omitted below rather than shown blank).
+    /// </summary>
+    public List<ConnectorCapability> GetDetectedCapabilities(string? persistedConnectorData, ILogger logger)
     {
+        if (string.IsNullOrEmpty(persistedConnectorData))
+            return [];
+
+        LdapConnectorRootDse? rootDse;
+        try
+        {
+            rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+        }
+        catch (JsonException ex)
+        {
+            logger.Warning(ex, "GetDetectedCapabilities: Failed to deserialise persisted connector data. Returning no detected capabilities.");
+            return [];
+        }
+
+        if (rootDse == null)
+            return [];
+
+        var capabilities = new List<ConnectorCapability>
+        {
+            new() { Name = "Directory Type", Value = DescribeDirectoryTypeForCapabilities(rootDse.DirectoryType) }
+        };
+
+        if (!string.IsNullOrEmpty(rootDse.VendorName))
+            capabilities.Add(new ConnectorCapability { Name = "Vendor", Value = rootDse.VendorName });
+
+        if (!string.IsNullOrEmpty(rootDse.DnsHostName))
+            capabilities.Add(new ConnectorCapability { Name = "DNS Host Name", Value = rootDse.DnsHostName });
+
+        // Boolean fact: always shown, unlike the optional string facts above, because "Not Supported" is
+        // itself useful information and there is no "not yet known" state distinct from it here.
+        capabilities.Add(new ConnectorCapability { Name = "Paging", Value = rootDse.SupportsPaging ? "Supported" : "Not Supported" });
+
+        if (!string.IsNullOrEmpty(rootDse.PinnedDirectoryServer))
+            capabilities.Add(new ConnectorCapability { Name = "Pinned Directory Server", Value = rootDse.PinnedDirectoryServer });
+
+        if (rootDse.InvocationId.HasValue)
+            capabilities.Add(new ConnectorCapability { Name = "Invocation Id", Value = rootDse.InvocationId.Value.ToString() });
+
+        return capabilities;
+    }
+
+    private static string DescribeDirectoryTypeForCapabilities(LdapDirectoryType directoryType) => directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory => "Active Directory",
+        LdapDirectoryType.SambaAD => "Samba AD",
+        LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        LdapDirectoryType.Generic => "Generic",
+        _ => "Generic"
+    };
+    #endregion
+
+    #region IConnectorDirectoryServers members
+    /// <summary>
+    /// Lists the domain controllers in the connected AD-family directory's forest, with the Active Directory Site
+    /// each belongs to, so an administrator can choose one for the Preferred Domain Controller setting (issue
+    /// #1167) rather than having to already know a hostname. Purely informational: this never writes to any
+    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the
+    /// CN=Sites,CN=Configuration hierarchy that other LDAP directories do not have.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The connected directory is not AD-family.</exception>
+    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        // No persisted connector state applies to a discovery-only connection.
+        OpenImportConnection(settingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to discover directory servers with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            if (!rootDse.UseUsnDeltaImport)
+                throw new NotSupportedException(
+                    $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
+
+            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
+            return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorImportUsingCalls members
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
+    {
+        // Replayed by CloseImportConnection/CloseExportConnection as the base to merge a pin update into
+        // (issue #230), and consulted below to resolve the effective server for this connection.
+        _persistedConnectorData = persistedConnectorData;
+
         logger.Verbose("OpenImportConnection() called");
+        var plan = BuildConnectionPlan(settingValues, logger);
+        _connectionFactory = plan.Factory;
+        _connection = OpenConnection(plan, logger);
+    }
+
+    /// <summary>
+    /// How to open a bound connection to the directory, derived from the Connected System's settings.
+    /// <para>
+    /// Separated from opening one so that a caller needing its own connection (the password channel, which is
+    /// bound separately because it has stricter requirements than import and export do) can build one without
+    /// replacing the connection an import or export session is already using.
+    /// </para>
+    /// </summary>
+    private sealed record ConnectionPlan(
+        Func<LdapConnection> Factory,
+        int MaxRetries,
+        int RetryDelayMs,
+        List<ConnectedSystemSettingValue> SettingValues,
+        string EffectiveServer,
+        LdapServerResolutionSource ResolutionSource);
+
+    private ConnectionPlan BuildConnectionPlan(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
         var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
+        var preferredDomainControllerSetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPreferredDomainController);
         var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
         var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
         var username = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUsername);
@@ -269,8 +438,23 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
-        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
-            LogSanitiser.Sanitise(directoryServer.StringValue), directoryServerPort.IntValue,
+        // Hoisted once for the log line and the identifier below; the guard above has already thrown when
+        // this setting has no value, and the null-forgiving operator says so to the analyser, which does
+        // not carry null-state out of a pattern guard (same rationale as connectionTimeout further down).
+        var directoryServerPortValue = directoryServerPort.IntValue!.Value;
+
+        // Resolve which server this plan actually opens against (issue #230 Phase 2): the Preferred
+        // Domain Controller setting when configured, else a domain controller pinned in the persisted
+        // connector state most recently replayed to this connector instance, else the configured Host.
+        // Living here rather than in OpenImportConnection means every plan consumer (import, export, the
+        // password channel and the preflight) resolves to the same server, and the factory below hands
+        // that same server to every parallel connection built from this plan.
+        var (effectiveServer, resolutionSource) = LdapConnectorUtilities.ResolveEffectiveServer(
+            preferredDomainControllerSetting?.StringValue, _persistedConnectorData, directoryServer.StringValue, logger);
+        _lastResolutionSource = resolutionSource;
+
+        logger.Debug("BuildConnectionPlan() Preparing to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
+            LogSanitiser.Sanitise(effectiveServer), directoryServerPortValue,
             LogSanitiser.Sanitise(username.StringValue), LogSanitiser.Sanitise(authTypeSettingValue.StringValue), useSsl);
 
         // Supply the certificates from the JIM certificate store as additional trust anchors for LDAPS. The platform
@@ -279,7 +463,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (useSsl && _certificateProvider != null)
             PrepareTrustedCertificateDirectory(logger);
 
-        var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
+        var identifier = new LdapDirectoryIdentifier(effectiveServer, directoryServerPortValue);
 
         // Decrypt the password if credential protection is available
         // If not available or password is plain text, it will be returned as-is
@@ -303,29 +487,43 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
-        _connectionFactory = () => CreateConnection(identifier, credential, authTypeEnumValue,
-            connectionTimeout, useSsl, logger);
+        return new ConnectionPlan(
+            () => CreateConnection(identifier, credential, authTypeEnumValue, connectionTimeout, useSsl, logger),
+            maxRetries,
+            retryDelayMs,
+            settingValues,
+            effectiveServer,
+            resolutionSource);
+    }
 
-        // Execute connection with retry logic. A failure here leaves nothing behind: the trust directory is only of
-        // use to a connection that was established, and a rejected certificate reports as a failure to connect, so
-        // without this every refused LDAPS attempt would leave one on disk.
+    /// <summary>
+    /// Opens a bound connection from a plan, retrying transient failures.
+    /// <para>
+    /// Shared by every caller that needs a connection (import, the password channel, the preflight) so that all
+    /// of them clean up after a failure and all of them get the same account of why it failed. A failure leaves
+    /// nothing behind: the trust directory is only of use to a connection that was established, so without this
+    /// every refused LDAPS attempt would leave one on disk.
+    /// </para>
+    /// </summary>
+    private LdapConnection OpenConnection(ConnectionPlan plan, ILogger logger)
+    {
+        LdapConnection? connection = null;
         try
         {
-            ExecuteWithRetry(() =>
-            {
-                _connection = _connectionFactory();
-            }, maxRetries, retryDelayMs, logger);
+            ExecuteWithRetry(() => { connection = plan.Factory(); }, plan.MaxRetries, plan.RetryDelayMs, logger);
+            return connection!;
         }
         catch (LdapException ex)
         {
             _trustDirectory?.Dispose();
             _trustDirectory = null;
+            InvalidatePinOnConnectionFailure(plan.ResolutionSource, plan.EffectiveServer, logger);
 
             // "The LDAP server is unavailable" is what a refused certificate looks like, so before reporting a
-            // connectivity failure, go and look at what the server actually presented.
-            if (useSsl)
-                ThrowIfCertificateWasRejected(directoryServer.StringValue, directoryServerPort.IntValue.Value,
-                    connectionTimeout, logger, ex);
+            // connectivity failure, go and look at what the server actually presented. No LDAPS check is needed
+            // here: ResolveSecureEndpoint returns nothing unless the system is configured for it.
+            if (ServerCertificateDiagnosis.Describe(this, plan.SettingValues, _certificateProvider, ex, logger) is { } rejection)
+                throw rejection;
 
             throw;
         }
@@ -333,44 +531,59 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             _trustDirectory?.Dispose();
             _trustDirectory = null;
+            InvalidatePinOnConnectionFailure(plan.ResolutionSource, plan.EffectiveServer, logger);
             throw;
         }
     }
 
     /// <summary>
-    /// Examines the certificate the directory server presents and, when that is what refused the connection, replaces
-    /// the platform's opaque failure with one naming the certificate and what to do about it.
+    /// Records that the pin must be invalidated, when the connection just attempted (and about to fail
+    /// past retries) was resolved via a pinned domain controller (issue #230 Phase 2). The exception this
+    /// wraps is always rethrown unchanged by the caller: there is no mid-run failover, by design (the run
+    /// must fail), so this only leaves a note for <see cref="CloseImportConnection"/> to act on. The other
+    /// two resolution sources are administrator-supplied or unpinned, so their failures leave no pin state
+    /// to touch.
     /// </summary>
-    /// <remarks>
-    /// Only ever called after a connection has already failed. The examination cannot make a connection succeed, and
-    /// deliberately trusts nothing: it exists so an administrator is told "this certificate, this problem" instead of
-    /// "the server is unavailable".
-    /// </remarks>
-    private void ThrowIfCertificateWasRejected(string host, int port, TimeSpan timeout, ILogger logger, LdapException originalException)
+    private void InvalidatePinOnConnectionFailure(LdapServerResolutionSource resolutionSource, string effectiveServer, ILogger logger)
     {
-        var trustedCertificates = GetTrustedCertificates();
+        if (resolutionSource != LdapServerResolutionSource.Pinned)
+            return;
 
-        try
-        {
-            var diagnostic = ServerCertificateProbe.Probe(host, port, trustedCertificates, timeout, logger);
-            if (diagnostic == null || diagnostic.FailureReason == ServerCertificateFailureReason.None)
-                return;
-
-            logger.Error("LDAPS connection to {Host}:{Port} was refused because of the server's certificate. Reason: {Reason}. Subject: {Subject}, Issuer: {Issuer}, Thumbprint: {Thumbprint}, Valid to: {ValidTo}",
-                LogSanitiser.Sanitise(host), port, diagnostic.FailureReason, LogSanitiser.Sanitise(diagnostic.Subject),
-                LogSanitiser.Sanitise(diagnostic.Issuer), LogSanitiser.Sanitise(diagnostic.Thumbprint), diagnostic.ValidTo);
-
-            throw new ServerCertificateRejectedException(
-                $"The directory server's certificate was rejected: {diagnostic.Remediation}",
-                diagnostic,
-                originalException);
-        }
-        finally
-        {
-            foreach (var certificate in trustedCertificates)
-                certificate.Dispose();
-        }
+        logger.Warning("OpenConnection: The connection to the pinned domain controller {Server} failed after exhausting retries. Invalidating the pin; the next run will re-discover and re-pin a domain controller via Host.",
+            LogSanitiser.Sanitise(effectiveServer));
+        _pinInvalidatedByConnectionFailure = true;
     }
+
+    #region IConnectorSecureEndpoint members
+
+    /// <summary>
+    /// The directory server this system's settings connect to over LDAPS, so JIM can look at the certificate that
+    /// server presents without any caller naming a host of their own. Resolves the same effective server a
+    /// connection would use (Preferred Domain Controller setting, else a pinned domain controller from persisted
+    /// connector state replayed to this instance, else Host), so a certificate diagnosis probes the server that
+    /// actually refused the connection rather than whatever Host resolves to (issue #230 Phase 2).
+    /// </summary>
+    public SecureEndpoint? ResolveSecureEndpoint(List<ConnectedSystemSettingValue> settingValues)
+    {
+        // Nothing encrypted is being attempted, so there is no certificate to look at.
+        if (settingValues.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection)?.CheckboxValue != true)
+            return null;
+
+        var hostSetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer)?.StringValue;
+        var port = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort)?.IntValue;
+        if (string.IsNullOrWhiteSpace(hostSetting) || !port.HasValue)
+            return null;
+
+        var preferredDomainController = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPreferredDomainController)?.StringValue;
+        var (host, _) = LdapConnectorUtilities.ResolveEffectiveServer(preferredDomainController, _persistedConnectorData, hostSetting, Log.Logger);
+
+        var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout)?.IntValue
+            ?? LdapConnectorConstants.DEFAULT_CONNECTION_TIMEOUT_SECONDS;
+
+        return new SecureEndpoint(host, port.Value, TimeSpan.FromSeconds(timeoutSeconds), "directory server", "LDAPS");
+    }
+
+    #endregion
 
     /// <summary>
     /// Creates a new bound LdapConnection with the specified parameters.
@@ -455,7 +668,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         };
     }
 
-    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         logger.Verbose("ImportAsync() called");
 
@@ -471,7 +684,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .SingleOrDefault(s => s.Setting.Name == _settingImportConcurrency)?.IntValue
             ?? LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY;
 
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken, progressCallback);
+        // Needed so GetRootDseInformation can decide whether to (re-)pin the domain controller it just
+        // connected to, or clear a pin left over from a previous configuration (issue #230 Phase 2).
+        var preferredDomainController = connectedSystem.SettingValues
+            .SingleOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
+
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, preferredDomainController, logger, cancellationToken, progress);
 
         switch (runProfile.RunType)
         {
@@ -489,7 +707,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
     }
 
-    public void CloseImportConnection()
+    public string? CloseImportConnection()
     {
         _connection?.Dispose();
 
@@ -497,28 +715,61 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // as the connection is closed. A later Open call prepares a fresh one.
         _trustDirectory?.Dispose();
         _trustDirectory = null;
+
+        // Pin invalidation (issue #230 Phase 2): a connection through a pinned domain controller failed
+        // past retries in OpenImportConnection. Return the replayed persisted data with the pin removed so
+        // the next run resolves via Host, re-discovers a domain controller, and re-pins. Import sessions
+        // that reached ImportAsync already carried any pin change through the import result's own
+        // PersistedConnectorData, so this only returns non-null for the invalidation case.
+        if (!_pinInvalidatedByConnectionFailure)
+            return null;
+
+        _pinInvalidatedByConnectionFailure = false;
+        return LdapConnectorUtilities.MergePinnedDirectoryServerIntoPersistedData(
+            _persistedConnectorData, null, LdapDirectoryType.Generic, Log.Logger);
     }
     #endregion
 
     #region IConnectorExportUsingCalls members
     private IList<ConnectedSystemSettingValue>? _exportSettings;
 
-    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings)
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
         _exportSettings = settings;
 
         // Reuse the same connection logic as import
-        OpenImportConnection(settings.ToList(), Log.Logger);
+        OpenImportConnection(settings.ToList(), persistedConnectorData, Log.Logger);
 
         // Detect directory type for export operations (external ID fetching, etc.)
         if (_connection != null)
         {
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
             _directoryType = rootDse.DirectoryType;
+
+            // Pin creation (issue #230 Phase 2): export does not re-query rootDSE and re-pin on every run
+            // the way import self-heals via LdapConnectorImport.GetRootDseInformation; it only needs to
+            // establish a pin the first time an AD-family directory has none. _lastResolutionSource is
+            // Pinned only when a usable pin already existed, so this only fires when one genuinely does
+            // not: no Preferred Domain Controller configured, and either no persisted data, malformed
+            // persisted data, or persisted data whose pin is null (for example, a baseline recorded while
+            // a Preferred Domain Controller was configured, since cleared).
+            var preferredDomainController = settings
+                .FirstOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
+
+            if (rootDse.UseUsnDeltaImport &&
+                string.IsNullOrWhiteSpace(preferredDomainController) &&
+                _lastResolutionSource != LdapServerResolutionSource.Pinned &&
+                !string.IsNullOrEmpty(rootDse.DnsHostName))
+            {
+                Log.Logger.Information("OpenExportConnection: No pinned domain controller exists for this AD-family directory. Establishing one at {Server}.",
+                    LogSanitiser.Sanitise(rootDse.DnsHostName));
+                _exportDiscoveredPinnedServer = rootDse.DnsHostName;
+                _exportDiscoveredDirectoryTypeForPin = rootDse.DirectoryType;
+            }
         }
     }
 
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         if (_connection == null)
             throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
@@ -538,7 +789,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .FirstOrDefault(s => s.Setting.Name == _settingGroupPlaceholderMemberDn)?.StringValue
             ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
 
-        // progressCallback is deliberately not used: LDAP export iterates per item, and JIM already
+        // progress is deliberately not used for export: LDAP export iterates per item, and JIM already
         // reports accurate per-batch counts around this call. The connector's only internal phase
         // (parent container creation) happens per object rather than as a pre-flight step, so emitting
         // from it would replace a moving "N of M" with a message that says less. See
@@ -548,11 +799,302 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 
-    public void CloseExportConnection()
+    public string? CloseExportConnection()
     {
         _exportSettings = null;
         _currentExport = null;
-        CloseImportConnection();
+
+        // Pin invalidation takes priority: if the connection never succeeded, OpenExportConnection never
+        // reached the pin-creation check below either, so the two cases cannot both apply.
+        var closeImportResult = CloseImportConnection();
+        if (closeImportResult != null)
+            return closeImportResult;
+
+        if (_exportDiscoveredPinnedServer == null)
+            return null;
+
+        var updated = LdapConnectorUtilities.MergePinnedDirectoryServerIntoPersistedData(
+            _persistedConnectorData, _exportDiscoveredPinnedServer,
+            _exportDiscoveredDirectoryTypeForPin ?? LdapDirectoryType.Generic, Log.Logger);
+
+        _exportDiscoveredPinnedServer = null;
+        _exportDiscoveredDirectoryTypeForPin = null;
+        return updated;
+    }
+    #endregion
+
+    #region IConnectorPasswordPolicyDiscovery members
+    /// <summary>
+    /// Reads the directory's password policy. Called during schema import, so it opens and closes its own
+    /// connection the same way schema discovery does.
+    /// </summary>
+    public async Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+    {
+        // No persisted connector state applies to a policy-discovery-only connection.
+        OpenImportConnection(settings, null, logger);
+        if (_connection == null)
+            throw new InvalidOperationException("No connection available to read the password policy with.");
+
+        try
+        {
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var domainRootDn = GetDefaultNamingContext(_connection);
+
+            var policyReader = new LdapConnectorPasswordPolicy(new LdapOperationExecutor(_connection), logger, rootDse.DirectoryType);
+            return await policyReader.GetPasswordPolicyAsync(domainRootDn ?? string.Empty);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+
+    /// <summary>
+    /// Reads defaultNamingContext from the rootDSE, which is where Active Directory holds its domain-wide
+    /// password policy. Directories that are not Active Directory do not publish this, and do not need to: their
+    /// policy is not discoverable anyway.
+    /// </summary>
+    private static string? GetDefaultNamingContext(LdapConnection connection)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("defaultNamingContext");
+
+        var response = (SearchResponse)connection.SendRequest(request);
+        if (response.Entries.Count == 0)
+            return null;
+
+        var attribute = response.Entries[0].Attributes["defaultNamingContext"];
+        return attribute == null || attribute.Count == 0 ? null : attribute[0]?.ToString();
+    }
+    #endregion
+
+    #region IConnectorPasswordManagement members
+    private LdapConnectorPassword? _passwordChannel;
+
+    /// <summary>
+    /// The password channel binds its own connection rather than sharing the import and export one.
+    /// <para>
+    /// Delivering an initial password happens partway through an export session, so borrowing that session's
+    /// connection would leave the export using a connection it did not open.
+    /// </para>
+    /// </summary>
+    private LdapConnection? _passwordConnection;
+
+    /// <summary>
+    /// All three states are declared because the LDAP Connector serves Active Directory as well as directories
+    /// that have no per-entry expiry control. Which of them a given Connected System can actually honour is not
+    /// knowable without connecting to it, so a target that cannot honour the chosen state reports a downgrade on
+    /// the result rather than the state being withheld here.
+    /// </summary>
+    public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours { get; } =
+    [
+        PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+        PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+        PasswordExpiryBehaviour.NeverExpires
+    ];
+
+    /// <summary>
+    /// Opens the password channel.
+    /// <para>
+    /// LDAPS is strongly recommended and not required. A password set puts the password on the wire in the clear
+    /// at the LDAP layer, so an unencrypted connection exposes it to anyone on the network path, and JIM warns
+    /// prominently when the channel opens that way. It is not refused outright because some deployments genuinely
+    /// cannot offer TLS on the directory (an isolated or air-gapped network with a directory that does not serve
+    /// it), and locking those sites out of password management entirely helps nobody. The choice belongs to the
+    /// administrator, who is told plainly what it costs.
+    /// </para>
+    /// <para>
+    /// Active Directory makes its own decision regardless: it refuses a password write unless the connection is
+    /// encrypted or the bind is signed and sealed. That refusal surfaces as a classified failure naming
+    /// encryption as the fix, rather than being pre-empted here, because a signed and sealed bind is a legitimate
+    /// alternative that JIM cannot detect from the settings alone.
+    /// </para>
+    /// </summary>
+    public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
+    {
+        var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
+        var isConnectionEncrypted = useSecureConnection?.CheckboxValue == true;
+
+        if (!isConnectionEncrypted)
+            Log.Warning("OpenPasswordConnection: Passwords will be sent to this Connected System over an UNENCRYPTED connection, " +
+                        "where anyone on the network path can read them. Enable the '{Setting}' setting on the Connected System " +
+                        "(and set '{PortSetting}' to {LdapsPort} unless the directory listens elsewhere) to protect them.",
+                _settingUseSecureConnection, _settingDirectoryServerPort, LdapConnectorConstants.DEFAULT_LDAPS_PORT);
+
+        var plan = BuildConnectionPlan(settings.ToList(), Log.Logger);
+        var connection = OpenConnection(plan, Log.Logger);
+        _passwordConnection = connection;
+
+        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(connection, Log.Logger);
+        var directoryType = rootDse.DirectoryType;
+        var supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
+
+        _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(connection), Log.Logger, directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
+
+        Log.Debug("OpenPasswordConnection: Password channel open. DirectoryType={DirectoryType}, PasswordModifyExtensionSupported={Supported}, Encrypted={Encrypted}",
+            directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
+    }
+
+    public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
+    {
+        if (_passwordChannel == null)
+            throw new InvalidOperationException("Must call OpenPasswordConnection() before SetPasswordAsync()!");
+
+        ArgumentNullException.ThrowIfNull(target);
+
+        // LDAP addresses an entry by its Distinguished Name, which JIM holds as the secondary external id.
+        var distinguishedName = target.SecondaryExternalIdAttributeValue?.ToStringNoName();
+        if (string.IsNullOrEmpty(distinguishedName))
+            return Task.FromResult(PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound,
+                "The Connected System Object has no Distinguished Name, so JIM cannot locate it in the directory to set a password on it."));
+
+        return _passwordChannel.SetPasswordAsync(distinguishedName, password, options, cancellationToken);
+    }
+
+    public void ClosePasswordConnection()
+    {
+        _passwordChannel = null;
+        _passwordConnection?.Dispose();
+        _passwordConnection = null;
+    }
+
+    /// <summary>
+    /// Runs the non-destructive password channel checks, opening and closing its own connection.
+    /// <para>
+    /// Nothing here throws for a target that cannot be reached or refuses a read. An administrator running this is
+    /// asking what is wrong, so a failure to connect is the answer rather than an error to raise; the checks that
+    /// depend on a connection are reported as undetermined rather than quietly dropped, so it stays visible what
+    /// JIM would have looked at.
+    /// </para>
+    /// </summary>
+    public async Task<PasswordPreflightResult> RunPasswordPreflightAsync(List<ConnectedSystemSettingValue> settings, IReadOnlyList<string> containerExternalIds, ILogger logger, CancellationToken cancellationToken)
+    {
+        var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
+        var isConnectionEncrypted = useSecureConnection?.CheckboxValue == true;
+
+        LdapConnection connection;
+        try
+        {
+            connection = OpenConnection(BuildConnectionPlan(settings, logger), logger);
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            return CouldNotConnect("This Connected System is missing settings JIM needs in order to connect: " + ex.Message);
+        }
+        catch (LdapException ex)
+        {
+            logger.Warning("RunPasswordPreflightAsync: Could not connect to the Connected System: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return CouldNotConnect($"JIM could not connect to this Connected System: {ex.Message}");
+        }
+        catch (DirectoryOperationException ex)
+        {
+            logger.Warning("RunPasswordPreflightAsync: The directory refused the connection: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return CouldNotConnect($"The directory refused JIM's connection: {ex.Message}");
+        }
+
+        using (connection)
+        {
+            // A successful bind does not mean the directory will answer questions about itself. Reading the rootDSE
+            // can still be refused or fail, and when it does, every remaining check depends on what it would have
+            // said, so there is nothing left to establish. That is a finding to report, not an exception to raise:
+            // this method is called by an administrator asking what is wrong.
+            LdapConnectorRootDse rootDse;
+            bool supportsPasswordModifyExtension;
+            string? domainRootDn;
+            try
+            {
+                rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(connection, logger);
+                supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
+                domainRootDn = GetDefaultNamingContext(connection);
+            }
+            catch (DirectoryOperationException ex)
+            {
+                logger.Warning("RunPasswordPreflightAsync: The directory refused to describe itself: {Message}", LogSanitiser.Sanitise(ex.Message));
+                return CouldNotReadTheDirectory($"The directory refused to describe itself: {ex.Message}");
+            }
+            catch (LdapException ex)
+            {
+                logger.Warning("RunPasswordPreflightAsync: Could not read the directory's rootDSE: {Message}", LogSanitiser.Sanitise(ex.Message));
+                return CouldNotReadTheDirectory($"JIM connected, but could not read the directory's basic information: {ex.Message}");
+            }
+
+            var preflight = new LdapConnectorPreflight(new LdapOperationExecutor(connection), logger,
+                rootDse.DirectoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
+
+            var checks = new List<PasswordPreflightCheckResult>
+            {
+                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
+                    "JIM connected to this Connected System and authenticated successfully.")
+            };
+            checks.AddRange(await preflight.RunAsync(containerExternalIds, domainRootDn, cancellationToken));
+
+            return new PasswordPreflightResult
+            {
+                TargetDescription = DescribeDirectory(rootDse.DirectoryType),
+                Checks = checks
+            };
+        }
+    }
+
+    /// <summary>
+    /// Builds the result for a preflight that could not get far enough to check anything. The checks that were
+    /// never reached are reported as undetermined rather than omitted, so it stays visible what JIM would have
+    /// looked at, and so the outcome cannot read as a pass on the strength of an empty list.
+    /// </summary>
+    private static PasswordPreflightResult UnfinishedPreflight(PasswordPreflightCheckResult connectionCheck, string notCheckedReason) =>
+        new()
+        {
+            Checks =
+            [
+                connectionCheck,
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.Encryption, notCheckedReason),
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PasswordMechanism, notCheckedReason),
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights, notCheckedReason),
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery, notCheckedReason)
+            ]
+        };
+
+    private static PasswordPreflightResult CouldNotConnect(string message) =>
+        UnfinishedPreflight(PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.Connection, message),
+            "Not checked, because JIM could not connect to the Connected System.");
+
+    /// <summary>
+    /// The bind succeeded but the directory would not describe itself, so the connection check passes and
+    /// everything downstream of it is unknown.
+    /// </summary>
+    private static PasswordPreflightResult CouldNotReadTheDirectory(string message) =>
+        UnfinishedPreflight(PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
+                $"JIM connected and authenticated successfully. {message}"),
+            "Not checked, because JIM could not read the directory's basic information.");
+
+    private static string DescribeDirectory(LdapDirectoryType directoryType) => directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory => "Active Directory",
+        LdapDirectoryType.SambaAD => "Samba Active Directory",
+        LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        _ => "an LDAP directory"
+    };
+
+    /// <summary>
+    /// Whether the directory advertises the RFC 3062 Password Modify extended operation on its rootDSE.
+    /// Active Directory never does; it uses its own unicodePwd attribute instead.
+    /// </summary>
+    private static bool DirectorySupportsPasswordModifyExtension(LdapConnection connection)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("supportedExtension");
+
+        var response = (SearchResponse)connection.SendRequest(request);
+        if (response.Entries.Count == 0)
+            return false;
+
+        var supportedExtensions = response.Entries[0].Attributes["supportedExtension"];
+        if (supportedExtensions == null)
+            return false;
+
+        return supportedExtensions.GetValues(typeof(string))
+            .OfType<string>()
+            .Any(oid => oid == LdapConnectorPassword.PasswordModifyExtensionOid);
     }
     #endregion
 
@@ -599,6 +1141,38 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return exportConcurrency >= CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD
             ? RECOMMENDED_EXPORT_PARALLELISM
             : null;
+    }
+    #endregion
+
+    #region IConnectorPhases members
+    /// <summary>
+    /// The steps this Connector performs, so an administrator watching a directory import can see
+    /// where the time is going rather than one message at a time. A Delta Import asks the directory
+    /// what has changed before fetching anything, and against Active Directory asks separately for
+    /// deleted objects, so it has a longer journey than a Full Import.
+    /// </summary>
+    /// <remarks>
+    /// Export declares nothing: it iterates per object, and JIM already reports accurate per-batch
+    /// counts around the call, so a step would say less than the counts already do.
+    /// </remarks>
+    public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        return runProfile.RunType switch
+        {
+            ConnectedSystemRunType.FullImport =>
+            [
+                new ConnectorPhase(LdapConnectorPhases.RootDse, LdapConnectorPhases.RootDseName),
+                new ConnectorPhase(LdapConnectorPhases.Fetch, LdapConnectorPhases.FetchName)
+            ],
+            ConnectedSystemRunType.DeltaImport =>
+            [
+                new ConnectorPhase(LdapConnectorPhases.RootDse, LdapConnectorPhases.RootDseName),
+                new ConnectorPhase(LdapConnectorPhases.QueryChanges, LdapConnectorPhases.QueryChangesName),
+                new ConnectorPhase(LdapConnectorPhases.Fetch, LdapConnectorPhases.FetchName),
+                new ConnectorPhase(LdapConnectorPhases.QueryDeletions, LdapConnectorPhases.QueryDeletionsName)
+            ],
+            _ => []
+        };
     }
     #endregion
 
@@ -721,7 +1295,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             return;
         }
 
-        var trustedCertificates = GetTrustedCertificates();
+        var trustedCertificates = ServerCertificateDiagnosis.LoadTrustedCertificates(_certificateProvider);
 
         try
         {
@@ -747,31 +1321,14 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
     }
 
-    /// <summary>
-    /// Reads the certificates an administrator has added to the JIM certificate store.
-    /// </summary>
-    /// <remarks>
-    /// The connector API is synchronous, so this has to block; what matters is which thread it blocks. It blocks on a
-    /// thread-pool thread, because the portal validates Connected System settings on Blazor's renderer
-    /// synchronisation context, which runs one callback at a time: awaiting the store on that context would post the
-    /// continuation behind the very call that is waiting for it, and neither would ever finish.
-    /// </remarks>
-    private List<X509Certificate2> GetTrustedCertificates()
-    {
-        if (_certificateProvider == null)
-            return [];
-
-        var provider = _certificateProvider;
-        return Task.Run(provider.GetTrustedCertificatesAsync).GetAwaiter().GetResult();
-    }
-
     private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         try
         {
             try
             {
-                OpenImportConnection(settingValues, logger);
+                // This is a connectivity test only; no persisted connector state applies.
+                OpenImportConnection(settingValues, null, logger);
             }
             finally
             {
@@ -817,6 +1374,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             _connection?.Dispose();
             _connection = null;
+
+            _passwordConnection?.Dispose();
+            _passwordConnection = null;
+            _passwordChannel = null;
+
             _trustDirectory?.Dispose();
             _trustDirectory = null;
         }

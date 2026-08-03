@@ -258,9 +258,9 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
         public string? Description => null;
         public string? Url => null;
 
-        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger) { }
+        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) { }
 
-        public void CloseImportConnection() { }
+        public string? CloseImportConnection() => null;
 
         public Task<ConnectedSystemImportResult> ImportAsync(
             ConnectedSystem connectedSystem,
@@ -269,7 +269,7 @@ public class ImportConnectorReportedErrorTests : WorkflowTestBase
             string? persistedConnectorData,
             ILogger logger,
             CancellationToken cancellationToken,
-            Func<string, Task>? progressCallback = null)
+            IConnectorProgress progress)
         {
             return Task.FromResult(new ConnectedSystemImportResult { ImportObjects = importObjects });
         }

@@ -222,6 +222,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.PasswordPolicy)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -430,6 +431,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Targeted single-column write of the persisted connector data (see the interface doc for why this must
+    /// not go through the graph-marking update path). On relational providers this is a single SQL UPDATE via
+    /// ExecuteUpdateAsync that touches no tracked state; the in-memory test provider does not support
+    /// ExecuteUpdateAsync (same pattern as the failed-authentication counter in ActivitiesRepository), so it
+    /// falls back to a narrow tracked load of the root entity only.
+    /// </summary>
+    public async Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData)
+    {
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.ConnectedSystems
+                .Where(cs => cs.Id == connectedSystemId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.PersistedConnectorData, persistedConnectorData));
+            return;
+        }
+
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.PersistedConnectorData = persistedConnectorData;
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
     {
         // Reconcile the object types/attributes against tracked current state first (adds + updates),
@@ -499,6 +524,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.UpdateDetachedSafe(settingValue);
             }
         }
+
+        // Same again for a discovered password policy. UpdateDetachedSafe does not traverse the graph, so without
+        // this a policy read during schema import is silently discarded on save. Placed after the Connected System
+        // itself is tracked, above: Add walks the graph, and a new policy's navigation leads straight back here.
+        if (connectedSystem.PasswordPolicy != null)
+        {
+            if (connectedSystem.PasswordPolicy.Id == 0)
+                Repository.Database.ConnectedSystemPasswordPolicies.Add(connectedSystem.PasswordPolicy);
+            else
+                Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
+        }
     }
 
     /// <summary>
@@ -544,17 +580,35 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Reconciles the attributes of a tracked object type against the supplied (detached) object type:
-    /// existing attributes (matched by Id) have their scalar values updated; new attributes (Id == 0) are
-    /// inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
+    /// existing attributes (matched by Name) have their scalar values updated; new attributes (no matching Name)
+    /// are inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
     /// </summary>
+    /// <remarks>
+    /// Matches by Name rather than Id, mirroring <c>ConnectedSystemServer.MergeSchemaIntoConnectedSystem</c>, which
+    /// already treats Name as an attribute's stable identity during a schema refresh; new attributes only ever
+    /// carry Id == 0 until <see cref="Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(System.Threading.CancellationToken)"/>
+    /// assigns one. Matching on Id let two new attributes on the same tracked object type collide: EF Core's
+    /// navigation fixup adds each newly <c>Add()</c>-ed attribute into <c>trackedType.Attributes</c> immediately
+    /// (before the object type's own reconciliation loop has advanced), so if the same tracked object type is
+    /// reconciled more than once in a pass (see #1171: <c>ConnectedSystem.ObjectTypes</c> containing two entries
+    /// that resolve to the same existing object type), a later call's <c>ToDictionary(a => a.Id)</c> found two
+    /// attributes still sitting at Id == 0 and threw "An item with the same key has already been added. Key: 0".
+    /// Name has no such collision: it is unique per object type by construction of the incoming schema, and
+    /// re-reconciling an already-pending new attribute now updates it in place instead of colliding or duplicating.
+    /// </remarks>
     private void ReconcileAttributes(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
     {
-        var trackedById = trackedType.Attributes.ToDictionary(a => a.Id);
+        var trackedByName = trackedType.Attributes.ToDictionary(a => a.Name);
 
         foreach (var incomingAttribute in incomingType.Attributes)
         {
-            if (incomingAttribute.Id != 0 && trackedById.TryGetValue(incomingAttribute.Id, out var trackedAttribute))
+            if (trackedByName.TryGetValue(incomingAttribute.Name, out var trackedAttribute))
             {
+                // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
+                // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
+                // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
+                // Id == 0), so align the key first; when they already match this is a no-op.
+                incomingAttribute.Id = trackedAttribute.Id;
                 Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
             }
             else
@@ -565,6 +619,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 incomingAttribute.Id = 0;
                 incomingAttribute.ConnectedSystemObjectType = trackedType;
                 Repository.Database.ConnectedSystemAttributes.Add(incomingAttribute);
+
+                // Keep the lookup consistent with trackedType.Attributes for the rest of THIS call: EF's
+                // navigation fixup already added incomingAttribute into that collection (see remarks above), so
+                // mirroring it here means a later duplicate Name within the same incoming list updates the
+                // pending attribute instead of being added twice.
+                trackedByName[incomingAttribute.Name] = incomingAttribute;
             }
         }
     }
@@ -4631,6 +4691,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         // AsTracking() is essential here even though the DbContext default is NoTracking:
@@ -4656,6 +4723,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(afr => afr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ConnectedSystem)
+            // Required, not optional: the configuration snapshot reads this navigation, and an unloaded
+            // navigation is indistinguishable from an unconfigured one. Without the Include, every change
+            // history entry would record the initial password as switched off, however it was really set.
+            .Include(sr => sr.InitialPassword)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectScopingCriteriaGroups)
@@ -4700,11 +4771,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by creating a fresh context per handler), SaveChanges would silently persist nothing and report
         // success. Toggling Enabled on an existing rule was lost exactly this way. Synchronisation integrity
         // demands a fast, loud failure over silent data loss, so reject a detached entity outright.
-        if (Repository.Database.Entry(syncRule).State == EntityState.Detached)
-            throw new InvalidOperationException(
-                $"UpdateSyncRuleAsync requires a change-tracked SyncRule (Id {syncRule.Id}), but the supplied " +
-                "instance is detached from this DbContext, so no changes would be persisted. Load the rule via " +
-                "GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
+        Repository.Database.RequireTracked(syncRule, nameof(UpdateSyncRuleAsync),
+            "Load the rule via GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
 
         // Database.Update(syncRule) is deliberately NOT used: it traverses the full navigation graph and
         // re-attaches every reachable entity as Modified. The SyncRule graph reaches the same
@@ -5137,7 +5205,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 15. Finally, delete the Connected System itself
+        // 15. Delete the discovered Password Policy. The EF model cascades this, but deletion here is raw SQL
+        // against the parent row, which bypasses the cascade and would hit a foreign key violation instead.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPasswordPolicies"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 16. Finally, delete the Connected System itself
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",
             connectedSystemId);

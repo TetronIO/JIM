@@ -17,7 +17,7 @@ namespace JIM.Connectors.Mock;
 /// implements IConnectorImportUsingCalls and IConnectorExportUsingCalls for testing
 /// scenarios that require pagination, connection management, and export confirmation.
 /// </summary>
-public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorImportUsingCalls, IConnectorExportUsingCalls
+public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement
 {
     public string Name => "Mock Call Connector";
     public string? Description => "Enables workflow and integration testing with call-based import/export.";
@@ -36,12 +36,21 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsFilePaths => false;
     public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
 
+    public bool SupportsPasswordSet => true;
+
+    public bool SupportsPasswordPolicyDiscovery => true;
+
     private bool _supportsSecondaryExternalId = true;
     private readonly Queue<ConnectedSystemImportResult> _importResultQueue = new();
     private readonly List<PendingExport> _exportedItems = new();
     private readonly Dictionary<Guid, ConnectedSystemExportResult> _exportResultOverrides = new();
     private Func<PendingExport, ConnectedSystemExportResult>? _exportResultFactory;
     private Func<PendingExport, ConnectedSystemImportObject>? _confirmingImportFactory;
+
+    // Issue #230 slice 1 plumbing: configurable Close return values, defaulting to null (the
+    // overwhelmingly common case), and the persisted connector data most recently passed to Open.
+    private string? _closeImportConnectionReturnValue;
+    private string? _closeExportConnectionReturnValue;
 
     #region Configuration Methods
 
@@ -131,6 +140,28 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     /// </summary>
     public Exception? ExportExceptionToThrow { get; set; }
 
+    /// <summary>
+    /// Configures the value <see cref="CloseImportConnection"/> returns. Defaults to null (the
+    /// normal case: leave persisted connector state unchanged). Set to a non-null value to simulate
+    /// a connector that needs JIM to persist updated state when the connection closes.
+    /// </summary>
+    public MockCallConnector WithCloseImportConnectionReturnValue(string? value)
+    {
+        _closeImportConnectionReturnValue = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the value <see cref="CloseExportConnection"/> returns. Defaults to null (the
+    /// normal case: leave persisted connector state unchanged). Set to a non-null value to simulate
+    /// a connector that needs JIM to persist updated state when the connection closes.
+    /// </summary>
+    public MockCallConnector WithCloseExportConnectionReturnValue(string? value)
+    {
+        _closeExportConnectionReturnValue = value;
+        return this;
+    }
+
     #endregion
 
     #region State Accessors
@@ -140,6 +171,16 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     /// Useful for verifying that the correct watermark is passed during paginated imports.
     /// </summary>
     public List<string?> ImportPersistedDataHistory { get; } = new();
+
+    /// <summary>
+    /// Gets the persisted connector data value passed to the most recent OpenImportConnection call.
+    /// </summary>
+    public string? LastOpenImportPersistedConnectorData { get; private set; }
+
+    /// <summary>
+    /// Gets the persisted connector data value passed to the most recent OpenExportConnection call.
+    /// </summary>
+    public string? LastOpenExportPersistedConnectorData { get; private set; }
 
     /// <summary>
     /// Gets all Pending Exports that were processed during Export calls.
@@ -166,6 +207,10 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         TestExceptionToThrow = null;
         ExportExceptionToThrow = null;
         ImportPersistedDataHistory.Clear();
+        LastOpenImportPersistedConnectorData = null;
+        LastOpenExportPersistedConnectorData = null;
+        _closeImportConnectionReturnValue = null;
+        _closeExportConnectionReturnValue = null;
     }
 
     /// <summary>
@@ -205,9 +250,9 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
 
     #region IConnectorImportUsingCalls Implementation
 
-    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
     {
-        // No-op for mock
+        LastOpenImportPersistedConnectorData = persistedConnectorData;
     }
 
     public Task<ConnectedSystemImportResult> ImportAsync(
@@ -217,7 +262,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         string? persistedConnectorData,
         ILogger logger,
         CancellationToken cancellationToken,
-        Func<string, Task>? progressCallback = null)
+        IConnectorProgress progress)
     {
         // Record the persisted data passed on each call for test verification
         ImportPersistedDataHistory.Add(persistedConnectorData);
@@ -238,21 +283,21 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         return Task.FromResult(result);
     }
 
-    public void CloseImportConnection()
+    public string? CloseImportConnection()
     {
-        // No-op for mock
+        return _closeImportConnectionReturnValue;
     }
 
     #endregion
 
     #region IConnectorExportUsingCalls Implementation
 
-    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings)
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
     {
-        // No-op for mock
+        LastOpenExportPersistedConnectorData = persistedConnectorData;
     }
 
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         if (ExportExceptionToThrow != null)
             throw ExportExceptionToThrow;
@@ -291,9 +336,107 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         return Task.FromResult(results);
     }
 
-    public void CloseExportConnection()
+    public string? CloseExportConnection()
     {
-        // No-op for mock
+        return _closeExportConnectionReturnValue;
+    }
+
+    #endregion
+
+    #region IConnectorPasswordManagement Implementation
+
+    /// <summary>
+    /// Records one password set attempt. The password value is deliberately NOT captured: nothing in JIM keeps a
+    /// password after it has been delivered, and a test double that hoards them would make it easy to write a
+    /// test that passes only because the production code leaked one.
+    /// </summary>
+    public record PasswordSetAttempt(Guid ConnectedSystemObjectId, PasswordSetOptions Options, int PasswordLength);
+
+    private readonly List<PasswordSetAttempt> _passwordSetAttempts = new();
+    private Func<ConnectedSystemObject, PasswordSetResult>? _passwordSetResultFactory;
+
+    /// <summary>
+    /// Every password set attempted through this connector, in order.
+    /// </summary>
+    public IReadOnlyList<PasswordSetAttempt> PasswordSetAttempts => _passwordSetAttempts;
+
+    /// <summary>
+    /// Whether OpenPasswordConnection has been called and ClosePasswordConnection has not.
+    /// Lets tests assert the channel is opened before use and closed afterwards.
+    /// </summary>
+    public bool PasswordConnectionOpen { get; private set; }
+
+    /// <summary>
+    /// The expiry behaviours this mock reports as supported. Settable so tests can simulate a target that cannot
+    /// honour every state.
+    /// </summary>
+    public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours { get; set; } =
+    [
+        PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+        PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+        PasswordExpiryBehaviour.NeverExpires
+    ];
+
+    /// <summary>
+    /// Controls what each password set returns, so tests can simulate policy rejections and transient faults.
+    /// Defaults to success.
+    /// </summary>
+    public MockCallConnector WithPasswordSetResult(Func<ConnectedSystemObject, PasswordSetResult> resultFactory)
+    {
+        _passwordSetResultFactory = resultFactory;
+        return this;
+    }
+
+    public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
+    {
+        PasswordConnectionOpen = true;
+    }
+
+    public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
+    {
+        if (!PasswordConnectionOpen)
+            throw new InvalidOperationException("Must call OpenPasswordConnection() before SetPasswordAsync()!");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        _passwordSetAttempts.Add(new PasswordSetAttempt(target.Id, options, password.Length));
+
+        var result = _passwordSetResultFactory?.Invoke(target)
+            ?? PasswordSetResult.Succeeded(options.ExpiryBehaviour);
+
+        return Task.FromResult(result);
+    }
+
+    public void ClosePasswordConnection()
+    {
+        PasswordConnectionOpen = false;
+    }
+
+    /// <summary>
+    /// The preflight result this mock returns. Settable so tests can simulate a target that is not ready.
+    /// Defaults to a target where everything JIM can check is in order.
+    /// </summary>
+    public PasswordPreflightResult PreflightResult { get; set; } = new()
+    {
+        TargetDescription = "a mock system",
+        Checks =
+        [
+            PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection, "Connected."),
+            PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, "Encrypted."),
+            PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism, "Supported.")
+        ]
+    };
+
+    /// <summary>
+    /// The container external ids the last preflight was asked about, so tests can assert that rights are checked
+    /// where JIM would actually be provisioning.
+    /// </summary>
+    public IReadOnlyList<string> LastPreflightContainerExternalIds { get; private set; } = [];
+
+    public Task<PasswordPreflightResult> RunPasswordPreflightAsync(List<ConnectedSystemSettingValue> settings, IReadOnlyList<string> containerExternalIds, ILogger logger, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LastPreflightContainerExternalIds = containerExternalIds;
+        return Task.FromResult(PreflightResult);
     }
 
     #endregion

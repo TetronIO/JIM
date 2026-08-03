@@ -38,6 +38,12 @@ public class SyncImportTaskProcessor
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly IDbContextFactory<JIM.PostgresData.JimDbContext>? _dbContextFactory;
+
+    /// <summary>
+    /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
+    /// not track phases get a reporter that records nothing.
+    /// </summary>
+    private readonly ActivityPhaseReporter _phases;
     // Lightweight RPEI lookup for reconciliation. Populated during the update-phase flush
     // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
     // Only contains RPEIs for updated CSOs (not created CSOs, which can't have Pending Exports).
@@ -110,7 +116,8 @@ public class SyncImportTaskProcessor
         ConnectedSystemRunProfile connectedSystemRunProfile,
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
-        IDbContextFactory<JIM.PostgresData.JimDbContext>? dbContextFactory = null)
+        IDbContextFactory<JIM.PostgresData.JimDbContext>? dbContextFactory = null,
+        ActivityPhaseReporter? phaseReporter = null)
     {
         _jim = jimApplication;
         _syncRepo = syncRepository;
@@ -125,6 +132,7 @@ public class SyncImportTaskProcessor
         _initiatedByName = workerTask.InitiatedByName;
         _activity = workerTask.Activity;
         _dbContextFactory = dbContextFactory;
+        _phases = phaseReporter ?? ActivityPhaseReporter.None;
 
         // RPEIs are maintained separately during processing and flushed incrementally via raw SQL bulk insert
         // at natural boundaries (after CSO creates, updates, and reconciliation). This avoids accumulating
@@ -217,7 +225,7 @@ public class SyncImportTaskProcessor
         var throughput = new ThroughputTracker();
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Performing import");
+        await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Performing import");
         switch (_connector)
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
@@ -239,11 +247,18 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Connecting to Connected System");
+                await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
-                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
                 }
+
+                // Tracks whether the import phase below completed without throwing. Read from the
+                // finally block to decide whether a failure while persisting CloseImportConnection's
+                // return value may safely propagate on its own, or must be logged and swallowed so it
+                // does not replace/mask an import failure that is already unwinding through the same
+                // finally block (see the finally block below for the full rationale).
+                var importPhaseSucceeded = false;
 
                 try
                 {
@@ -256,8 +271,8 @@ public class SyncImportTaskProcessor
                     // connector a way to narrate what it is doing, straight onto the Activity message
                     // (issue #637). Emits are serialised because a connector may fan out internally, and
                     // a failure to narrate must never fail the import.
-                    using var connectorProgress = new ConnectorSubPhaseProgress(
-                        async subPhase => await _syncRepo.UpdateActivityMessageAsync(_activity, subPhase));
+                    var connectorProgress = _phases.CreateConnectorProgress(
+                        async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message));
 
                     // Keep track of the original persisted data at the START of the import.
                     // This is critical for delta imports where subsequent pages must use the SAME
@@ -290,7 +305,7 @@ public class SyncImportTaskProcessor
                             .SetTag("cumulativeObjectCount", totalObjectsImported)
                             .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
                         {
-                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress.Callback);
+                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                         }
                         pageNumber++;
                         totalObjectsImported += result.ImportObjects.Count;
@@ -363,15 +378,43 @@ public class SyncImportTaskProcessor
                         Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                     }
 
+                    // Reached only if nothing above threw; used by the finally block below to tell a
+                    // genuine import failure apart from a clean run.
+                    importPhaseSucceeded = true;
                 }
                 finally
                 {
+                    string? closeReturn;
                     using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
                     {
                         // In a finally so an import that fails part-way still releases the connection and the
                         // temporary trust directory prepared for it, rather than leaving both to the connector
                         // instance being garbage collected.
-                        callBasedImportConnector.CloseImportConnection();
+                        closeReturn = callBasedImportConnector.CloseImportConnection();
+                    }
+
+                    // Persist connector state the connector chose to override at close, e.g. because
+                    // opening/using the connection invalidated a previously persisted pin (issue #230).
+                    // This runs AFTER the newPersistedData persistence above, so a Close-returned value
+                    // always wins over whatever the import pages themselves reported. Null (the
+                    // overwhelmingly common case) means "nothing to override" and must not persist.
+                    if (closeReturn != null)
+                    {
+                        try
+                        {
+                            await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, closeReturn);
+                        }
+                        catch (Exception persistEx) when (!importPhaseSucceeded)
+                        {
+                            // The import itself already failed and that exception is propagating out of
+                            // this finally block. A .NET finally block that itself throws replaces the
+                            // in-flight exception rather than chaining it, which would silently hide the
+                            // import's own failure behind an unrelated persistence error. Log and let the
+                            // original import failure continue to unwind instead.
+                            Log.Error(persistEx,
+                                "PerformImportAsync: Failed to persist connector data returned by CloseImportConnection while the import itself is failing for Connected System {ConnectedSystemId}. The import's own failure takes precedence and will propagate.",
+                                _connectedSystem.Id);
+                        }
                     }
                 }
 
@@ -382,17 +425,17 @@ public class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the Connected System in one go. no paging.
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Importing objects from file");
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Importing objects from file");
                 ConnectedSystemImportResult result;
 
                 // The whole file is read inside this one call, so the connector's own narration is the
                 // only progress an operator sees until it returns (issue #637).
-                using var connectorProgress = new ConnectorSubPhaseProgress(
-                    async subPhase => await _syncRepo.UpdateActivityMessageAsync(_activity, subPhase));
+                var connectorProgress = _phases.CreateConnectorProgress(
+                    async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message));
 
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
-                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress.Callback);
+                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                 }
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
@@ -441,7 +484,7 @@ public class SyncImportTaskProcessor
             var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id, deletionPartitionId);
             _activity.ObjectsToProcess = existingCsoCount;
             _activity.ObjectsProcessed = 0;
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing deletions");
+            await _phases.EnterAsync(RunPhaseKeys.ImportDeletions);
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
@@ -473,7 +516,7 @@ public class SyncImportTaskProcessor
                                     connectedSystemObjectsToBeUpdated.Count(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)));
         _activity.ObjectsToProcess = objectsWithReferences;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving references");
+        await _phases.EnterAsync(RunPhaseKeys.ImportResolveReferences);
         var resolveRefsSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
@@ -497,7 +540,7 @@ public class SyncImportTaskProcessor
             createdCount, connectedSystemObjectsToBeUpdated.Count, _activityRunProfileExecutionItems.Count,
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+        await _phases.EnterAsync(RunPhaseKeys.ImportSave);
         var savePhaseSw = System.Diagnostics.Stopwatch.StartNew();
         var saveThroughput = new ThroughputTracker();
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
@@ -800,7 +843,7 @@ public class SyncImportTaskProcessor
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports");
+        await _phases.EnterAsync(RunPhaseKeys.ImportReconcile);
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
@@ -835,7 +878,7 @@ public class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating activity Run Profile execution items");
+        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
         await FlushImportRpeisAsync();
         _activity.ObjectsProcessed = remainingRpeiCount;
 

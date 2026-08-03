@@ -9,6 +9,7 @@ public interface IRepository : IDisposable
     public IActivityRepository Activity { get; }
     public IApiKeyRepository ApiKeys { get; }
     public IChangeHistoryRepository ChangeHistory { get; }
+    public IConfigurationChangePreviewRepository ConfigurationChangePreviews { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IExampleDataRepository ExampleData { get; }
     public IMetaverseRepository Metaverse { get; }

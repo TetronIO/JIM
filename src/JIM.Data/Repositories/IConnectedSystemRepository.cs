@@ -783,6 +783,17 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// <para>
+    /// Read on its own rather than through a Connected System navigation, because the caller that needs it (the
+    /// Synchronisation Rule editor) reaches the system through a rule, whose include chain does not carry it. An
+    /// unloaded navigation is indistinguishable from a target that published no policy, and that difference
+    /// decides whether JIM validates a generator configuration against anything at all.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();
@@ -889,6 +900,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
+    /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
+    /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
+    /// setting-value instances the in-memory system happened to carry (composed with a Setting navigation but no
+    /// FK scalar) were faithfully written back with SettingId 0, failing the export run on a foreign key
+    /// violation the moment a connector first returned close-time state. A watermark write must never be able
+    /// to touch configuration rows.
+    /// </summary>
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
 
     /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.

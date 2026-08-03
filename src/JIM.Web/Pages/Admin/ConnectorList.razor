@@ -27,7 +27,7 @@
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudText Typo="Typo.h6">Connectors</MudText>
         <MudSpacer />
-        <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        <SearchField @bind-Value="_searchString" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>

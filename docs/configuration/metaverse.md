@@ -102,6 +102,10 @@ When no values exist, the action is allowed even if configuration still referenc
 
 **Objects** are the identity records: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
 
+## Confirming a configuration change
+
+Changing an object type's deletion behaviour, or an attribute's data type or plurality, is confirmed before it saves. Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects eligible for deletion, with no synchronisation run in between; the confirmation says so. See [Configuration changes](configuration-changes.md).
+
 ## Change history
 
 Schema changes are recorded in [configuration change history](activities.md#configuration-change-history): creating, renaming or re-iconing an Object Type, changing an Object Type's deletion rules, deleting an Object Type, creating an Attribute, updating an Attribute's definition or its Object Type associations, and deleting an Attribute all capture a versioned snapshot alongside who made the change, when, and an optional reason.

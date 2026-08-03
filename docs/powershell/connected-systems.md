@@ -343,6 +343,113 @@ Get-JIMConnectedSystem -Id 3 |
 
 ---
 
+## Get-JIMConnectedSystemServerCertificate
+
+Reads the certificate the Connected System's server is presenting, without storing anything.
+
+JIM connects to the endpoint the Connected System is configured for, purely to look at the certificate the server offers, and refuses the connection. The endpoint is always worked out by the Connected System's own connector from that system's settings; it is never named directly, so this cannot be used to make JIM connect to an address of your choosing.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> [-SettingValues <hashtable>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
+| `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
+
+### Output
+
+An object with a `certificate` property and a `readAt` timestamp. The certificate carries `host`, `port`, `subject`, `issuer`, `subjectAlternativeNames`, `validFrom`, `validTo`, `thumbprint`, `signatureAlgorithm`, `isSelfSigned`, `issuerThumbprint`, `isIssuerCertificateAvailable`, `failureReason` and `remediation`.
+
+`failureReason` is one of `None`, `UntrustedIssuer`, `NameMismatch`, `Expired`, `NotYetValid` or `NoCertificatePresented`. Only `UntrustedIssuer` is fixed by trusting the certificate.
+
+### Examples
+
+```powershell title="Read the certificate the configured server presents"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+```
+
+```powershell title="Show the identifying details and which check it fails"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 |
+    Select-Object -ExpandProperty certificate |
+    Select-Object host, subject, thumbprint, failureReason
+```
+
+```powershell title="Read an endpoint that has been entered but not saved"
+Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' }
+```
+
+### Notes
+
+- **Why `-SettingValues` exists.** JIM does not save settings that fail validation, and a certificate JIM does not trust is a validation failure. A Connected System being configured for the first time therefore has the address you typed and nothing in the database, so without these JIM would look at the endpoint last saved, or report that the system is not configured for an encrypted connection. Setting identifiers come from `Get-JIMConnectorDefinition`. The values are never persisted, and values for encrypted settings are ignored.
+- Reading stores nothing. Trusting the certificate is a separate call to `Approve-JIMConnectedSystemServerCertificate`.
+
+---
+
+## Approve-JIMConnectedSystemServerCertificate
+
+Trusts the certificate the Connected System's server is presenting, adding it to the Trusted Certificates store.
+
+JIM reads the certificate from the server again, checks it against the thumbprint you supply, and adds it through the audited path, so the addition carries an Activity naming who trusted it and why.
+
+### Syntax
+
+```powershell
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId <int> -Thumbprint <string>
+    [-ChangeReason <string>] [-SettingValues <hashtable>] [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System from the pipeline. |
+| `Thumbprint` | `string` | Yes | | The thumbprint being trusted, as read from the server. Spaces and colons between the pairs are ignored. |
+| `ChangeReason` | `string` | No | | Reason recorded on the audit Activity. JIM records a sentence naming the Connected System when none is given. |
+| `SettingValues` | `hashtable` | No | | Connectivity settings entered but not yet saved, keyed by Connector Definition Setting identifier. |
+| `PassThru` | `switch` | No | `$false` | Returns the outcome, including the certificate as it now sits in the store. |
+
+### Output
+
+When `-PassThru` is specified, returns an object with `outcome` (`Trusted`, `AlreadyTrusted` or `ThumbprintMismatch`), `message`, `certificate`, `expectedThumbprint` and `presentedThumbprint`. Otherwise, no output.
+
+### Examples
+
+```powershell title="Trust the certificate you have checked"
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01'
+```
+
+```powershell title="Trust the authority that issued it, rather than the server's own certificate"
+$reading = Get-JIMConnectedSystemServerCertificate -ConnectedSystemId 42
+$reading.certificate | Select-Object subject, issuer, thumbprint, issuerThumbprint
+
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint $reading.certificate.issuerThumbprint `
+    -ChangeReason 'Unblocking the HR Cloud connection test.'
+```
+
+```powershell title="Trust an endpoint that has been entered but not saved"
+Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
+    -Thumbprint '7B44E1902CF6A83D5518BE7719A0C4D62F8E3B01' `
+    -SettingValues @{ 40 = 'https://hr.corp.local/scim/v2' } -PassThru
+```
+
+### Notes
+
+- **Check the thumbprint against the server's administrator before running this.** It is the only thing standing between an unattended script and trusting whatever is presented.
+- **Trust the issuer where there is one.** `issuerThumbprint` is populated when the server sent the authority that issued its certificate. Trusting the authority survives the server's certificate being renewed; trusting the server's own certificate has to be repeated at every renewal. A self-signed certificate has no separate authority, and `isIssuerCertificateAvailable` is then `$false`.
+- **A changed certificate stops the action.** If the server is presenting anything other than the thumbprint you named, nothing is trusted and the outcome is `ThumbprintMismatch`, with both values returned so you can compare them. Expected after a renewal; worth investigating otherwise.
+- Only an untrusted issuer is fixed by trusting a certificate. An expired certificate has to be renewed on the server, and a name mismatch means connecting by a name the certificate carries.
+- Supports `ShouldProcess`.
+- Remove a certificate later with `Remove-JIMCertificate`.
+
+---
+
 ## Get-JIMConnectorDefinition
 
 Retrieves available connector definitions, including their settings and capabilities.
@@ -565,6 +672,46 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPartition
 
 ---
 
+## Get-JIMConnectedSystemDirectoryServer
+
+Discovers the domain controllers in a Connected System's directory, with the Active Directory Site each belongs to. Only Connected Systems using the LDAP connector against an Active Directory or Samba AD directory support this; other connectors, and non-AD-family LDAP directories (OpenLDAP, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+One object per discovered domain controller: `hostName` (its FQDN) and `site` (the Active Directory Site it belongs to, or `$null` for directories without Sites).
+
+### Examples
+
+```powershell title="Discover domain controllers for a Connected System"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3
+```
+
+```powershell title="Filter to a specific Active Directory Site"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3 | Where-Object { $_.site -eq 'London' }
+```
+
+```powershell title="Pipeline from Get-JIMConnectedSystem"
+Get-JIMConnectedSystem -Name "Corp AD" | Get-JIMConnectedSystemDirectoryServer
+```
+
+### Notes
+
+- This is a discovery aid, not a configuration write: use `Set-JIMConnectedSystem` to set the Preferred Domain Controller setting once you have chosen one.
+
+---
+
 ## Set-JIMConnectedSystemPartition
 
 Updates the selection state of a partition on a Connected System.
@@ -715,7 +862,8 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All
 ```
 
 ```powershell title="Get every object in a very large connector space, overriding the -All safety cap"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# API's maximum retrieval depth of 1,000,000 rows.
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All -Force
 ```
 
@@ -758,7 +906,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
 | `Id` | `guid` | Yes | | Connector space object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
@@ -809,7 +957,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 | `Search` | `string` | No | | Filter values by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of values per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all values, auto-paginating. Fetches at most 1000 pages (~50,000 values at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Returns all values, auto-paginating. Fetches at most 1000 pages (~50,000 values at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
@@ -874,6 +1022,42 @@ Get-JIMConnectedSystem | ForEach-Object {
 ### Notes
 
 - A non-zero count indicates data integrity issues in the connector space. This commonly occurs after a partial import. Running a full import typically resolves outstanding references.
+
+---
+
+## Get-JIMConnectedSystemCapability
+
+Retrieves the Connector-detected capabilities for a Connected System, e.g. an LDAP directory's type, vendor, DNS host name, and paging support. These are facts read from the target system during a previous connection and persisted by JIM; calling this cmdlet does not open a new connection.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemCapability -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+Zero or more `PSCustomObject` instances, one per detected capability, each with `Name` and `Value` properties. Empty when the Connector does not detect any capabilities, or when nothing has been detected yet (for example, before the first successful connection).
+
+### Examples
+
+```powershell title="Get the detected capabilities for a Connected System"
+Get-JIMConnectedSystemCapability -ConnectedSystemId 1
+```
+
+```powershell title="Get capabilities for a named Connected System via pipeline"
+Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapability
+```
+
+### Notes
+
+- These facts mirror the **Directory Capabilities** card on the Connected System's Details page in the portal; see the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) documentation for what each fact means.
 
 ---
 
@@ -962,7 +1146,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All 
 | `Search` | `string` | No | | Filter results by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all results, auto-paginating. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Returns all results, auto-paginating. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output

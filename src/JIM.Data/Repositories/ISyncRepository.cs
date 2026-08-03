@@ -482,6 +482,69 @@ public interface ISyncRepository
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Records that newly provisioned accounts are owed an initial password.
+    /// <para>
+    /// Staged rather than delivered inline, for the same reason a Pending Export is staged rather than written
+    /// during synchronisation: it keeps a network round trip to the target out of the loop that is persisting
+    /// the results of one that already succeeded. A password JIM could not set must never be able to delay, or
+    /// fail, the record of the account it was for.
+    /// </para>
+    /// <para>
+    /// Ignores accounts already carrying an outstanding record, so re-running an export cannot stage the same
+    /// work twice.
+    /// </para>
+    /// </summary>
+    Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords);
+
+    /// <summary>
+    /// Gets the accounts on a Connected System still waiting for an initial password JIM can act on, oldest
+    /// first, with the Connected System Object each one is owed to.
+    /// <para>
+    /// Parked and expired records are excluded: both mean a person has to do something, and re-attempting them
+    /// on every export would produce the same answer for ever while crowding out work that can succeed.
+    /// </para>
+    /// </summary>
+    /// <param name="maximum">
+    /// An upper bound on one pass, so that a target rejecting everything cannot turn an export run into an
+    /// unbounded sequence of failing password attempts. What is left over is attempted on the next run.
+    /// </param>
+    Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum);
+
+    /// <summary>
+    /// Gets the initial-password configuration of the given Synchronisation Rules, keyed by rule.
+    /// <para>
+    /// Read on its own rather than through a Synchronisation Rule, which materialises Attribute Flows, Object
+    /// Matching Rules and both object types; none of that has anything to say about a password.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// </summary>
+    Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Records the outcome of a delivery attempt against each record: its status, the target's reason, the
+    /// attempt count and when it was tried.
+    /// <para>
+    /// Only those columns are written. Which account the password is owed to, which Connected System it lives
+    /// in, which rule asked for it and when the work was staged are facts about how the record came to exist,
+    /// and an attempt does not change any of them.
+    /// </para>
+    /// </summary>
+    Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts);
+
+    /// <summary>
+    /// Deletes outstanding initial-password records by ID, which is what a delivered password looks like.
+    /// <para>
+    /// The table is a work list, not a history: keeping a row per account JIM has ever given a password to
+    /// would grow it without bound for no benefit, and the Activity already records that the delivery happened.
+    /// </para>
+    /// </summary>
+    Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
@@ -582,6 +645,17 @@ public interface ISyncRepository
     Task UpdateActivityProgressOutOfBandAsync(Activity activity);
 
     /// <summary>
+    /// Records the given phases of a Run Profile execution (#454), inserting phases the Activity
+    /// has not seen before and updating the state of ones it has. Called with the phases declared
+    /// when the run starts, and thereafter with just the phases each transition changed.
+    /// </summary>
+    /// <remarks>
+    /// Narrating a run must never fail it: callers treat a failure here as cosmetic. Writes are
+    /// idempotent, so a retried call is harmless.
+    /// </remarks>
+    Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases);
+
+    /// <summary>
     /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
     /// Returns true if raw SQL was used (RPEIs are outside EF tracking),
     /// false if the EF fallback was used (RPEIs remain tracked).
@@ -657,6 +731,22 @@ public interface ISyncRepository
     /// the unchanged-object optimisation must be disabled for the run so new configuration reaches every object.
     /// </summary>
     Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
+
+    /// <summary>
+    /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
+    /// they provision.
+    /// <para>
+    /// Asked at the moment a batch of Creates has succeeded, rather than stamped onto the export when it was
+    /// staged, so that switching initial passwords on takes effect for work already queued. The alternative
+    /// would silently skip every account provisioned between the export being staged and the administrator
+    /// enabling the feature.
+    /// </para>
+    /// <para>
+    /// Also what keeps the work list proportional to the deployments that use it: a system that provisions a
+    /// hundred thousand accounts and asks for no passwords stages nothing at all.
+    /// </para>
+    /// </summary>
+    Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
 
     /// <summary>
     /// Gets the object types (schema) for a Connected System.

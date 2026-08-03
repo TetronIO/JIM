@@ -28,11 +28,16 @@ $script:JIMConnection = $null
 
 # Pagination safety limits for -All auto-pagination (see issue #487).
 # JIMMaxAllPages caps how many pages -All will fetch before stopping (unless -Force is supplied),
-# bounding a runaway sequential fetch. At the maximum page size of 100 this is ~100,000 objects,
-# consistent with the API page-depth cap (PaginationRequest.MaxPage).
+# bounding a runaway sequential fetch. At the maximum page size of 100 this is ~100,000 objects. This is a
+# client-side courtesy limit against a surprise long-running command, and -Force overrides it.
+# JIMMaxRetrievalDepth mirrors the server's hard ceiling (PaginationLimits.MaxSkip): the API rejects any
+# request that would skip more than this many rows, with a 400. -Force cannot override this one, so the
+# fetch loop stops cleanly on reaching it rather than failing mid-fetch on an HTTP error. Keep in step with
+# PaginationLimits.MaxSkip in src/JIM.Web/Models/Api/PaginationLimits.cs.
 # JIMAllWarningThreshold is the total-object count above which -All emits an up-front warning that a
 # large sequential fetch is under way, so a caller is not surprised by a long-running command.
 $script:JIMMaxAllPages = 1000
+$script:JIMMaxRetrievalDepth = 1000000
 $script:JIMAllWarningThreshold = 10000
 
 # Get public and private function definition files
@@ -50,5 +55,9 @@ foreach ($import in @($Public + $Private)) {
     }
 }
 
+# Cmdlet-level aliases (distinct from parameter aliases; see src/JIM.PowerShell/CLAUDE.md for those). Declared
+# centrally so every alias is visible in one place, alongside the AliasesToExport list in JIM.psd1.
+Set-Alias -Name Get-JIMConnectedSystemDomainController -Value Get-JIMConnectedSystemDirectoryServer
+
 # Export public functions
-Export-ModuleMember -Function $Public.BaseName
+Export-ModuleMember -Function $Public.BaseName -Alias Get-JIMConnectedSystemDomainController

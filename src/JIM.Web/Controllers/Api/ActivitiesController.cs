@@ -109,14 +109,16 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             return NotFound(ApiErrorResponse.NotFound($"Activity with ID {id} not found."));
         }
 
-        // Get execution stats if this is a Run Profile activity
+        // Get execution stats and the run's steps if this is a Run Profile activity
         ActivityRunProfileExecutionStats? stats = null;
+        List<ActivityPhase>? phases = null;
         if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
         {
             stats = await _application.Activities.GetActivityRunProfileExecutionStatsAsync(id);
+            phases = await _application.Activities.GetActivityPhasesAsync(id);
         }
 
-        return Ok(ActivityDetailDto.FromEntity(activity, stats));
+        return Ok(ActivityDetailDto.FromEntity(activity, stats, phases));
     }
 
     /// <summary>

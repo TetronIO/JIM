@@ -65,6 +65,26 @@ public static class ConfigurationChangeClassifier
         ["connectedSystemObjectTypeId"] = B,
         ["metaverseObjectTypeId"] = B,
 
+        // Initial Password: changes whether JIM sets a password on the accounts this rule provisions, and what
+        // that password looks like. Sync-affecting rather than destructive: it alters what JIM writes to newly
+        // created accounts, and destroys nothing that existed before.
+        ["initialPassword"] = B,
+        ["expiryBehaviour"] = B,
+        ["enableAccount"] = B,
+        ["style"] = B,
+        ["length"] = B,
+        ["minimumUppercase"] = B,
+        ["minimumLowercase"] = B,
+        ["minimumDigits"] = B,
+        ["minimumSymbols"] = B,
+        ["permittedSymbols"] = B,
+        ["wordCount"] = B,
+        ["wordSeparator"] = B,
+        ["wordCapitalisation"] = B,
+        ["appendedDigitCount"] = B,
+        ["appendSymbol"] = B,
+        ["excludeAmbiguousCharacters"] = B,
+
         // Attribute Flow: changes what values flow.
         ["attributeFlowRules"] = B,
         ["attributeFlowRule"] = B,
@@ -119,6 +139,11 @@ public static class ConfigurationChangeClassifier
         ["unresolvedReferenceHandling"] = B,
         ["maxExportParallelism"] = C,
         ["settingValues"] = B,
+        // Every individual setting value, whatever the connector calls it. Connector settings are the connector's
+        // instructions: where it reads from, what it filters, how it writes. One key covers them all because the
+        // snapshot records them under one key (see ConfigurationSnapshotService.SettingValueNodeKey); a connector's
+        // own setting names are an open key space and could never be enumerated here.
+        ["settingValue"] = B,
 
         // Run Profiles.
         ["runProfiles"] = C,
@@ -141,16 +166,48 @@ public static class ConfigurationChangeClassifier
         ["isSecondaryExternalId"] = B,
         ["writability"] = B,
 
-        // Partitions and containers. Deselecting a partition removes the objects imported from it;
-        // `selected` above covers both, since both carry Class A.
+        // Simple Mode Object Matching Rules, which attach to a Connected System Object Type rather than to a
+        // Synchronisation Rule. Same keys, same classes as the Advanced Mode table above: they change which objects
+        // join to which.
         ["objectMatchingRules"] = B,
         ["objectMatchingRule"] = B,
+        ["order"] = B,
+        ["caseSensitive"] = B,
+        ["metaverseObjectTypeId"] = B,
+        ["targetMetaverseAttributeId"] = B,
+        ["sources"] = B,
+        ["source"] = B,
+        ["connectedSystemAttributeId"] = B,
+        ["expression"] = B,
+
+        // Partitions and containers. Deselecting a partition removes the objects imported from it, which `selected`
+        // above classifies Class A. A *container's* selection is not a scalar at all: the snapshot records only the
+        // containers the administrator selected, so selecting or deselecting one shows up as an item appearing in or
+        // disappearing from `containers`. Every scalar inside a container (its name, external id and hidden flag) is
+        // genuinely cosmetic; it is the container's *removal* that is destructive, which ConnectedSystemRemovalKeys
+        // below classifies. See engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md for why the discovered tree is not
+        // captured whole.
         ["partitions"] = B,
         ["partition"] = B,
         ["externalId"] = C,
         ["containers"] = C,
         ["container"] = C,
         ["hidden"] = C
+    };
+
+    /// <summary>
+    /// Keys whose *removal* is more consequential than any other change to them, classified for that case alone.
+    /// Everything else about the key keeps the class in <see cref="ConnectedSystemKeys"/>.
+    ///
+    /// Only containers need this so far, and they need it because their selection is expressed by presence rather
+    /// than by a flag. Deselecting a container takes every object imported through it out of scope, which is exactly
+    /// what deselecting a partition or a Connected System Object Type does, and both of those are Class A via their
+    /// `selected` scalar. Classifying the container key Class A outright would instead make a directory-side OU
+    /// rename destructive, which would train administrators to dismiss the warning that matters.
+    /// </summary>
+    private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemRemovalKeys = new(StringComparer.Ordinal)
+    {
+        ["container"] = A
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> MetaverseObjectTypeKeys = new(StringComparer.Ordinal)
@@ -164,6 +221,9 @@ public static class ConfigurationChangeClassifier
         ["deletionTriggerMode"] = A,
         ["deletionGracePeriod"] = A,
         ["deletionTriggerConnectedSystemIds"] = A,
+        // One Connected System within that list. Adding a trigger makes objects already disconnected from it eligible
+        // for deletion, so an individual entry carries the collection's class rather than a lesser one.
+        ["connectedSystemId"] = A,
         ["attributes"] = B,
         ["attribute"] = B,
         ["attributeId"] = B
@@ -214,6 +274,10 @@ public static class ConfigurationChangeClassifier
     {
         [Constants.SettingKeys.PartitionValidationMode] = B,
         [Constants.SettingKeys.SyncPageSize] = C,
+
+        // Where a configuration change preview is evaluated, not what it evaluates. Moving the threshold changes
+        // how quickly a preview comes back, never what it says; both dispatch paths run the same orchestration.
+        [Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold] = C,
         [Constants.SettingKeys.VerboseNoChangeRecording] = C,
         [Constants.SettingKeys.MaintenanceMode] = C,
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,
@@ -266,7 +330,8 @@ public static class ConfigurationChangeClassifier
         // Projected rather than mapped inside the loop, and lazily, so the break below still stops the
         // enumeration at the first Destructive key.
         var highest = ConfigurationChangeClass.NotClassified;
-        foreach (var nodeClass in CollectChangedKeys(diff.Root).Select(key => ClassifyKey(diff.ObjectType, key, objectKey)))
+        foreach (var nodeClass in CollectChangedKeys(diff.Root)
+                     .Select(node => ClassifyKey(diff.ObjectType, node.Key, objectKey, node.ChangeType)))
         {
             if (nodeClass > highest)
                 highest = nodeClass;
@@ -284,7 +349,16 @@ public static class ConfigurationChangeClassifier
     /// classification, which is what turns an unclassified new property into a test failure rather than
     /// a silent wrong answer.
     /// </summary>
-    public static ConfigurationChangeClass ClassifyKey(string objectType, string nodeKey, string? objectKey = null)
+    /// <param name="objectType">The snapshot's object type.</param>
+    /// <param name="nodeKey">The snapshot node key, e.g. "outboundDeprovisionAction".</param>
+    /// <param name="objectKey">The Service Setting's key; required only for Service Settings, ignored otherwise.</param>
+    /// <param name="changeType">
+    /// How the node changed. Only <see cref="ConfigurationDiffChangeType.Removed"/> alters the answer, and only for
+    /// the handful of keys whose removal means more than any other change to them (see
+    /// <see cref="ConnectedSystemRemovalKeys"/>). Defaults to Modified, which is the class of the key itself.
+    /// </param>
+    public static ConfigurationChangeClass ClassifyKey(string objectType, string nodeKey, string? objectKey = null,
+        ConfigurationDiffChangeType changeType = ConfigurationDiffChangeType.Modified)
     {
         ArgumentException.ThrowIfNullOrEmpty(objectType);
         ArgumentException.ThrowIfNullOrEmpty(nodeKey);
@@ -294,6 +368,13 @@ public static class ConfigurationChangeClassifier
 
         if (objectType == ConfigurationSnapshotService.ServiceSettingObjectType)
             return ClassifyServiceSettingNode(nodeKey, objectKey);
+
+        if (changeType == ConfigurationDiffChangeType.Removed &&
+            RemovalTableFor(objectType) is { } removalTable &&
+            removalTable.TryGetValue(nodeKey, out var removalClass))
+        {
+            return removalClass;
+        }
 
         var table = TableFor(objectType);
         if (table.TryGetValue(nodeKey, out var result))
@@ -352,19 +433,26 @@ public static class ConfigurationChangeClassifier
     };
 
     /// <summary>
-    /// Walks the diff tree yielding the key of every node that actually changed. Unchanged branches are
-    /// skipped entirely, so a save that touched one field does not drag its siblings into the
-    /// classification.
+    /// The removal-specific table for an object type, or null where the object type has no key whose removal is
+    /// classified differently from any other change to it (which is every object type but the Connected System).
     /// </summary>
-    private static IEnumerable<string> CollectChangedKeys(ConfigurationDiffNode node)
+    private static Dictionary<string, ConfigurationChangeClass>? RemovalTableFor(string objectType) =>
+        objectType == ConfigurationSnapshotService.ConnectedSystemObjectType ? ConnectedSystemRemovalKeys : null;
+
+    /// <summary>
+    /// Walks the diff tree yielding every node that actually changed, with how it changed: a removal can carry a
+    /// different class from a modification of the same key. Unchanged branches are skipped entirely, so a save that
+    /// touched one field does not drag its siblings into the classification.
+    /// </summary>
+    private static IEnumerable<(string Key, ConfigurationDiffChangeType ChangeType)> CollectChangedKeys(ConfigurationDiffNode node)
     {
         if (node.ChangeType != ConfigurationDiffChangeType.Unchanged)
-            yield return node.Key;
+            yield return (node.Key, node.ChangeType);
 
         if (node.Children == null)
             yield break;
 
-        foreach (var key in node.Children.SelectMany(CollectChangedKeys))
-            yield return key;
+        foreach (var changed in node.Children.SelectMany(CollectChangedKeys))
+            yield return changed;
     }
 }

@@ -97,6 +97,44 @@ public class ConfigurationChangeClassificationCompletenessTests
 
     #endregion
 
+    #region Destructive consequence copy
+
+    [Test]
+    public void Consequences_EveryDestructiveKey_HasCuratedCopy()
+    {
+        // A destructive property that reaches an administrator with no stated consequence gives them a dialog
+        // demanding consent to something unnamed, which is worse than not asking: they cannot weigh it, so they
+        // click through. Every Class A key must say what it will do.
+        var snapshots = new[]
+        {
+            _service.CreateSnapshot(BuildFullSyncRule(), HashKey),
+            _service.CreateSnapshot(BuildFullConnectedSystem(), HashKey),
+            _service.CreateSnapshot(BuildFullMetaverseObjectType(), HashKey),
+            _service.CreateSnapshot(BuildFullMetaverseAttribute(), HashKey)
+        };
+
+        // Both change types, because a key can be destructive on removal alone (a container's selection is its
+        // presence in the snapshot, so deselecting one is a removal rather than a property edit). A key classified
+        // that way reaches the same dialog and owes the same explanation.
+        var changeTypes = new[] { ConfigurationDiffChangeType.Modified, ConfigurationDiffChangeType.Removed };
+
+        var missing = snapshots
+            .SelectMany(s => CollectKeys(s.Root).Distinct()
+                .SelectMany(key => changeTypes.Select(changeType => (Snapshot: s, Key: key, ChangeType: changeType))))
+            .Where(x => ConfigurationChangeClassifier.ClassifyKey(x.Snapshot.ObjectType, x.Key, x.Snapshot.ObjectKey, x.ChangeType)
+                        == ConfigurationChangeClass.Destructive)
+            .Where(x => !ConfigurationChangeConsequences.HasCopyFor(x.Snapshot.ObjectType, x.Key))
+            .Select(x => $"{x.Snapshot.ObjectType}.{x.Key}")
+            .Distinct()
+            .ToList();
+
+        Assert.That(missing, Is.Empty,
+            "Destructive propert(ies) with no stated consequence: " + string.Join(", ", missing) +
+            ". Add copy to ConfigurationChangeConsequences saying what the change will do.");
+    }
+
+    #endregion
+
     #region Object type coverage
 
     [Test]
@@ -261,11 +299,24 @@ public class ConfigurationChangeClassificationCompletenessTests
         {
             Id = 20, Name = "sAMAccountName", IsExternalId = true, IsSecondaryExternalId = false
         });
+        // Simple Mode Object Matching Rules hang off the object type, and are the only place several matching keys
+        // appear; without one the snapshot never emits them and the guard silently covers less than it claims.
+        var simpleModeMatchingRule = new ObjectMatchingRule
+        {
+            Id = 25, Order = 0, CaseSensitive = true, MetaverseObjectTypeId = 1, TargetMetaverseAttributeId = 13
+        };
+        simpleModeMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 26, Order = 0, ConnectedSystemAttributeId = 14, Expression = "x"
+        });
+        objectType.ObjectMatchingRules.Add(simpleModeMatchingRule);
 
         var partition = new ConnectedSystemPartition
         {
             Id = 30, Name = "DC=example", ExternalId = "abc", Selected = true,
-            Containers = [new ConnectedSystemContainer { Id = 40, Name = "OU=Users", ExternalId = "def", Hidden = false }]
+            // Selected matters: BuildContainers captures only selected containers, so an unselected one emits no
+            // keys at all and this guard silently covers nothing beneath the partition.
+            Containers = [new ConnectedSystemContainer { Id = 40, Name = "OU=Users", ExternalId = "def", Hidden = false, Selected = true }]
         };
 
         var system = new ConnectedSystem
@@ -276,6 +327,20 @@ public class ConfigurationChangeClassificationCompletenessTests
             ConnectorDefinitionId = 1,
             MaxExportParallelism = 4
         };
+        // Setting values, plain and encrypted. Their absence here is what let the connector-named-key gap through:
+        // every Connected System settings save failed to classify and was recorded unclassified.
+        system.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Id = 60,
+            Setting = new ConnectorDefinitionSetting { Id = 60, Name = "File Path", Type = ConnectedSystemSettingType.String },
+            StringValue = "/mnt/import/hr.csv"
+        });
+        system.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Id = 61,
+            Setting = new ConnectorDefinitionSetting { Id = 61, Name = "Password", Type = ConnectedSystemSettingType.StringEncrypted },
+            StringEncryptedValue = "ciphertext"
+        });
         system.ObjectTypes!.Add(objectType);
         system.Partitions = [partition];
         system.RunProfiles!.Add(new ConnectedSystemRunProfile
@@ -293,7 +358,9 @@ public class ConfigurationChangeClassificationCompletenessTests
             Name = "User",
             PluralName = "Users",
             BuiltIn = false,
-            DeletionGracePeriod = TimeSpan.FromDays(7)
+            DeletionGracePeriod = TimeSpan.FromDays(7),
+            // An empty trigger list emits no items, so the per-entry key never appeared and went unclassified.
+            DeletionTriggerConnectedSystemIds = [3]
         };
         type.Attributes.Add(new MetaverseAttribute { Id = 2, Name = "displayName" });
         return type;

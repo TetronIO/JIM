@@ -6,6 +6,9 @@
   arrive when a component is written or changed; the existing component set is not
   retrofitted wholesale.
 
+  Also home to convention sweeps over JIM.Web's Razor sources (SearchFieldConventionTests),
+  which catch a shared component being bypassed on a page a per-component test cannot see.
+
   This project uses Microsoft.NET.Sdk.Razor (not the plain SDK) because bUnit renders
   Razor components and requires the Razor SDK's compilation support.
 -->
@@ -28,6 +31,7 @@
     -->
     <PackageReference Include="AngleSharp" Version="1.6.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="NUnit" Version="4.6.1" />
     <PackageReference Include="NUnit3TestAdapter" Version="6.2.0" />
     <PackageReference Include="coverlet.collector" Version="8.0.1">
@@ -37,7 +41,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      JIM.Application/JIM.Data/JIM.Connectors and Moq are needed only by DirectoryServerDiscoveryDialogTests,
+      which drives the Discover Domain Controllers dialog through a real (mocked-repository) JimApplication to
+      exercise its error/Retry/Close lifecycle without a live directory (issue #1167). Moq is already used
+      elsewhere in the solution (JIM.Worker.Tests, JIM.Web.Api.Tests); this is the same dependency reused in a
+      third test project, not a new one.
+    -->
     <ProjectReference Include="..\..\src\JIM.Web\JIM.Web.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Application\JIM.Application.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Data\JIM.Data.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Connectors\JIM.Connectors.csproj" />
     <ProjectReference Include="..\JIM.TestSupport\JIM.TestSupport.csproj" />
   </ItemGroup>
 
