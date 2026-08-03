@@ -579,7 +579,12 @@
 
 /* ─── Downstream Connected System groups ─── */
 
-.causality-panel .sys-group {
+/* One bordered container holding a header and the cards that belong under it. Used by the Downstream
+   column per Connected System (where .sys-group-head is the header) and by the Source column, where
+   the source record card is itself the header and the Source-lane events sit beneath it. Containment
+   rather than a connector: the source record is the subject being processed, not a cause, so an
+   arrow from it would claim the record caused its own deletion detection when the import did. */
+.causality-panel .evt-group {
     background: var(--cz-inner);
     border: 1px solid var(--cz-line-soft);
     border-radius: 12px;
@@ -596,7 +601,7 @@
     font-size: 1rem;
 }
 
-.causality-panel .sys-group .evt-card {
+.causality-panel .evt-group .evt-card {
     border-radius: 0;
     border: none;
     border-left: 3px solid var(--tone, var(--cz-secondary));
@@ -604,7 +609,7 @@
     background: transparent;
 }
 
-.causality-panel .sys-group .evt-card:first-of-type {
+.causality-panel .evt-group .evt-card:first-of-type {
     border-top: none;
 }
 

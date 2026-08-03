@@ -148,6 +148,45 @@ public static class CausalityTestData
     }
 
     /// <summary>
+    /// A Full Import that finds a record gone from the source system: a single Source-lane event and
+    /// nothing else, so the Flow view's Identity and Downstream columns are both empty. This is the
+    /// shape that exposed the Source column having no relationship between its record card and the
+    /// event beneath it (#1087).
+    /// </summary>
+    public static ActivityRunProfileExecutionItem DeletionDetectedItem()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+
+        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected,
+            parent: null, ordinal: 0);
+
+        return item;
+    }
+
+    /// <summary>
+    /// A Delta Synchronisation processing a record already marked as deleted on import: a Source-lane
+    /// event with the Identity-lane consequence hanging off it, then a deprovisioning Pending Export.
+    /// The lanes deliberately all populate, because a Source-lane event sitting between the source
+    /// record and the Identity lane is what the connector chain has to route through rather than past.
+    /// </summary>
+    public static ActivityRunProfileExecutionItem DeletedRecordSyncItem()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+
+        var csoDeleted = AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+            parent: null, ordinal: 0, targetEntityId: CsoId, targetEntityDescription: "Erin Byrne");
+
+        var mvoDeleted = AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+            parent: csoDeleted, ordinal: 0, targetEntityId: MvoId, targetEntityDescription: "Erin Byrne");
+
+        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            parent: mvoDeleted, ordinal: 0, targetEntityId: PendingExportId,
+            targetEntityDescription: "Glitterband EMEA", detailCount: 1, detailMessage: "2");
+
+        return item;
+    }
+
+    /// <summary>
     /// Scenario 3 (PRD): an Export run's write is rejected by the Connected System; the attempted
     /// export carries a failed child event with the connector error verbatim.
     /// </summary>
