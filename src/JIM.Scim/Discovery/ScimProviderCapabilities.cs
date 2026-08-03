@@ -101,7 +101,7 @@ public class ScimProviderCapabilities
             BulkMaxOperations = config.Bulk?.Supported == true ? config.Bulk.MaxOperations : null,
             BulkMaxPayloadSize = config.Bulk?.Supported == true ? config.Bulk.MaxPayloadSize : null,
             SupportsFilter = supportsFilter,
-            FilterMaxResults = supportsFilter ? config.Filter?.MaxResults : null,
+            FilterMaxResults = supportsFilter ? config.Filter!.MaxResults : null,
             SupportsETag = config.ETag?.Supported == true,
             SupportsSort = config.Sort?.Supported == true,
             SupportsChangePassword = config.ChangePassword?.Supported == true,

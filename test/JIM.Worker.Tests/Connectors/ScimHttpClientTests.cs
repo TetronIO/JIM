@@ -174,7 +174,7 @@ public class ScimHttpClientTests
     public async Task GetAsync_TransientFailureThenSuccess_RetriesAndReturnsTheResourceAsync()
     {
         var handler = new StubHttpMessageHandler((_, call) => Task.FromResult(call == 1
-            ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            ? Json(HttpStatusCode.ServiceUnavailable, "{}")
             : Json(HttpStatusCode.OK, "{\"id\":\"abc\"}")));
         using var client = CreateClient(handler);
 
@@ -194,7 +194,7 @@ public class ScimHttpClientTests
         // An HttpRequestMessage cannot be resent, so each attempt must build a new one; if the client
         // reused the message the retry would arrive without an Authorization header.
         var handler = new StubHttpMessageHandler((_, call) => Task.FromResult(call == 1
-            ? new HttpResponseMessage(HttpStatusCode.BadGateway)
+            ? Json(HttpStatusCode.BadGateway, "{}")
             : Json(HttpStatusCode.OK, "{}")));
         using var client = CreateClient(handler);
 
@@ -258,7 +258,7 @@ public class ScimHttpClientTests
         // from genuinely wrong credentials.
         var authentication = new CountingAuthenticationStrategy();
         var handler = new StubHttpMessageHandler((_, call) => Task.FromResult(call == 1
-            ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            ? Json(HttpStatusCode.Unauthorized, "{}")
             : Json(HttpStatusCode.OK, "{\"id\":\"abc\"}")));
         using var client = CreateClient(handler, authentication);
 

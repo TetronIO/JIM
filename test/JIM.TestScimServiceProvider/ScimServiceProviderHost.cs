@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Net;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 
@@ -35,7 +36,9 @@ public static class ScimServiceProviderHost
             await WriteAsync(context.Response, response);
 
             app.Logger.LogInformation("{Method} {Path} -> {StatusCode}",
-                context.Request.Method, context.Request.Path + context.Request.QueryString, (int)response.StatusCode);
+                LogSanitiser.Sanitise(context.Request.Method),
+                LogSanitiser.Sanitise(context.Request.Path + context.Request.QueryString),
+                (int)response.StatusCode);
         });
     }
 
