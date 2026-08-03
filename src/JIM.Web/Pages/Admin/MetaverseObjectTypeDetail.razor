@@ -97,13 +97,35 @@
 
                 @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
                 {
+                    @* Deletion Trigger mode (#119): whether every selected source must disconnect, or any one *@
+                    <div class="mt-4">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Deletion Trigger</MudText>
+                        <MudRadioGroup T="AuthoritativeSourceTriggerMode" @bind-Value="_deletionTriggerMode">
+                            <MudStack Spacing="1">
+                                <MudRadio Value="AuthoritativeSourceTriggerMode.AllSourcesDisconnect" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">All sources disconnect</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Delete only once every selected source has disconnected. Resilient to a single
+                                        system failing or being rebuilt. This is the default.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Specific source(s) disconnect</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Delete when any one of the selected sources disconnects, even if others remain connected.
+                                    </MudText>
+                                </MudRadio>
+                            </MudStack>
+                        </MudRadioGroup>
+                    </div>
+
                     <div class="mt-4">
                         <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
                         @if (_contributingSystems.Any())
                         {
                             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                                 Select the Connected Systems that are authoritative sources for this object type.
-                                When ANY of these systems disconnects, the Metaverse Object will be scheduled for deletion.
+                                At least one contributing system must be selected; nothing is selected by default.
                             </MudText>
                             @foreach (var system in _contributingSystems)
                             {
@@ -119,6 +141,17 @@
                             </MudAlert>
                         }
                     </div>
+
+                    @if (_contributingSystems.Any())
+                    {
+                        @* Live summary (#119): restates trigger mode, sources by name and grace period before Save *@
+                        <div class="mt-4">
+                            <DeletionTriggerSummary ObjectTypeName="@_metaverseObjectType.Name"
+                                TriggerMode="_deletionTriggerMode"
+                                SourceNames="@GetSelectedSourceNames()"
+                                GracePeriod="@GetEditedGracePeriod()" />
+                        </div>
+                    }
                 }
 
                 <MudStack Row="true" Class="mt-5" Spacing="2">
@@ -400,6 +433,7 @@
 
     // Deletion rules state
     private MetaverseObjectDeletionRule _deletionRule;
+    private AuthoritativeSourceTriggerMode _deletionTriggerMode;
     private int _gracePeriodDays;
     private int _gracePeriodHours;
     private int _gracePeriodMinutes;
@@ -408,6 +442,7 @@
 
     // Original values for change detection
     private MetaverseObjectDeletionRule _originalDeletionRule;
+    private AuthoritativeSourceTriggerMode _originalDeletionTriggerMode;
     private int _originalGracePeriodDays;
     private int _originalGracePeriodHours;
     private int _originalGracePeriodMinutes;
@@ -522,6 +557,15 @@
         if (_metaverseObjectType == null) return;
 
         _deletionRule = _metaverseObjectType.DeletionRule;
+
+        // Trigger mode (#119): honour the stored mode for an existing WhenAuthoritativeSourceDisconnected
+        // configuration; for any other rule the stored value is meaningless (existing rows read the
+        // behaviour-preserving column default), so pre-select the safe default (All) ready for the
+        // administrator configuring the rule anew.
+        _deletionTriggerMode = _metaverseObjectType.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+            ? _metaverseObjectType.DeletionTriggerMode
+            : AuthoritativeSourceTriggerMode.AllSourcesDisconnect;
+
         var gp = _metaverseObjectType.DeletionGracePeriod ?? TimeSpan.Zero;
         _gracePeriodDays = gp.Days;
         _gracePeriodHours = gp.Hours;
@@ -530,6 +574,7 @@
 
         // Store original values
         _originalDeletionRule = _deletionRule;
+        _originalDeletionTriggerMode = _deletionTriggerMode;
         _originalGracePeriodDays = _gracePeriodDays;
         _originalGracePeriodHours = _gracePeriodHours;
         _originalGracePeriodMinutes = _gracePeriodMinutes;
@@ -539,6 +584,7 @@
     private void ResetDeletionRules()
     {
         _deletionRule = _originalDeletionRule;
+        _deletionTriggerMode = _originalDeletionTriggerMode;
         _gracePeriodDays = _originalGracePeriodDays;
         _gracePeriodHours = _originalGracePeriodHours;
         _gracePeriodMinutes = _originalGracePeriodMinutes;
@@ -559,9 +605,30 @@
         {
             MetaverseObjectDeletionRule.Manual => "Objects must be manually deleted by an administrator.",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => "Delete when all Connected System Objects are disconnected.",
-            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "Delete when any selected authoritative source disconnects.",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "Delete according to the authoritative source trigger below.",
             _ => string.Empty
         };
+    }
+
+    /// <summary>
+    /// The display names of the currently selected authoritative sources, in contributing-system order,
+    /// for the live summary (#119).
+    /// </summary>
+    private List<string> GetSelectedSourceNames()
+    {
+        return _contributingSystems
+            .Where(s => _selectedAuthoritativeSources.Contains(s.Id))
+            .Select(s => s.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The grace period currently entered in the editor fields, or null when zero, for the live summary (#119).
+    /// </summary>
+    private TimeSpan? GetEditedGracePeriod()
+    {
+        var gracePeriod = new TimeSpan(_gracePeriodDays, _gracePeriodHours, _gracePeriodMinutes, 0);
+        return gracePeriod == TimeSpan.Zero ? null : gracePeriod;
     }
 
     private bool CanSave()
@@ -580,6 +647,7 @@
     private bool HasChanges()
     {
         if (_deletionRule != _originalDeletionRule) return true;
+        if (_deletionTriggerMode != _originalDeletionTriggerMode) return true;
         if (_gracePeriodDays != _originalGracePeriodDays) return true;
         if (_gracePeriodHours != _originalGracePeriodHours) return true;
         if (_gracePeriodMinutes != _originalGracePeriodMinutes) return true;
@@ -615,6 +683,11 @@
                 ? _selectedAuthoritativeSources.ToList()
                 : new List<int>();
 
+            // Trigger mode (#119): only meaningful for WhenAuthoritativeSourceDisconnected; leave the
+            // stored value untouched for other rules so switching rule does not churn change history.
+            if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
+                _metaverseObjectType.DeletionTriggerMode = _deletionTriggerMode;
+
             using var jim = JimFactory.Create();
 
             // Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects
@@ -640,6 +713,7 @@
 
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;
+            _originalDeletionTriggerMode = _deletionTriggerMode;
             _originalGracePeriodDays = _gracePeriodDays;
             _originalGracePeriodHours = _gracePeriodHours;
             _originalGracePeriodMinutes = _gracePeriodMinutes;

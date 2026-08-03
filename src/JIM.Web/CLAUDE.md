@@ -143,6 +143,16 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
 
+## `@key` on loops whose contents can change
+
+Any `@for`/`@foreach` rendering **components** whose set can change between renders MUST carry `@key` bound to something identifying the item (`@key="settingValue.Setting.Id"`), not the loop index. Without one, Blazor's diff matches children by position, so removing an item does not destroy its component: the instance is re-parameterised as its successor and keeps the internal state it built up. For a `MudTextField` inside a `MudForm` that state includes its validation result, and a stale "required" error on a field that no longer exists keeps `IsValid` false, disabling the form's submit button permanently.
+
+That is exactly what `ConnectedSystemSettingsTab` did (found by driving the portal, not by any test): a connector whose settings are conditionally relevant via `RequiredWhenSetting`/`RequiredWhenValue` renders a different set of fields per drop-down value, so choosing any authentication method other than the default left the previous method's required-field error attached to whichever field took its place, and **Save Settings could never be enabled again**. Every field rendered correctly in isolation; the label said one setting and the error underneath named another.
+
+- Applies to lists that are filtered, reordered, or conditionally rendered. A fixed list rendered in a fixed order does not need it, but adding it costs nothing.
+- Key on a stable identity (a database id or a name), never the loop variable `i`; an index is the very thing positional matching already uses.
+- Cover with a bUnit test that renders the parent, changes what the loop yields, re-renders, and asserts the vanished item's state is gone (`ConnectedSystemSettingsTabTests`). A per-component test cannot see this: the defect is in the parent's diffing, and the child is innocent.
+
 ## Razor comments
 - **Section headers**: Use box-drawing delimiters: `@* ─── Section Title ─── *@` (U+2500 horizontal box-drawing character). One line, standing alone between markup blocks, to visually separate major page sections.
 - **Inline comments**: Use plain comments: `@* Explanation of what follows *@`. Brief, contextual, placed immediately above or beside the relevant markup.

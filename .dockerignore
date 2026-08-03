@@ -29,4 +29,8 @@ README.md
 .github/
 docs/
 scripts/
+# The test tree is excluded from production image contexts, with one exception: the SCIM test
+# service provider (test infrastructure, never shipped) is built as a container for the integration
+# suite and needs its own sources plus lock file in the context.
 test/
+!test/JIM.TestScimServiceProvider/

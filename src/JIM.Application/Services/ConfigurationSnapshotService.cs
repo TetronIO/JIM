@@ -620,6 +620,7 @@ public class ConfigurationSnapshotService
         Add(children, "builtIn", Render(objectType.BuiltIn), "Built-in");
         Add(children, "icon", objectType.Icon, "Icon");
         AddEnum(children, "deletionRule", objectType.DeletionRule, "Deletion rule");
+        AddEnum(children, "deletionTriggerMode", objectType.DeletionTriggerMode, "Deletion trigger mode");
         Add(children, "deletionGracePeriod", Render(objectType.DeletionGracePeriod), "Deletion grace period");
         children.Add(BuildDeletionTriggerSystems(objectType.DeletionTriggerConnectedSystemIds));
         children.Add(BuildAttributeAssociations(objectType.Attributes));
