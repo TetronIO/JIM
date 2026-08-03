@@ -1271,6 +1271,18 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Configuration change preview (#827) - when to ask before capping the drill-down rows
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ConfigurationChangePreviewFullDataSetPromptThreshold,
+            DisplayName = "Preview full data set prompt threshold",
+            Description = "The estimated number of object-level rows above which a configuration change preview asks whether to keep the full data set or only a sample of each summary group. Below this, previews keep a sample without asking. Summary counts are exact either way; the choice only affects how much can be drilled into, and how much storage the preview uses.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "100000",
+            IsReadOnly = false
+        });
+
         // Security Settings
         await SeedSettingAsync(new ServiceSetting
         {

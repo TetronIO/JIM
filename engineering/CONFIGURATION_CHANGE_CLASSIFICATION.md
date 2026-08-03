@@ -277,6 +277,7 @@ The Service Setting snapshot's structural nodes are Class C (see the object-type
 | `PartitionValidationMode` | B | Switching Error to Warning lets a Run Profile whose partition is missing proceed and import zero objects, which a full import then treats as everything having disappeared. |
 | `SyncPageSize` | C | Throughput only. |
 | `ConfigurationChangePreviewWorkerThreshold` | C | Decides where a preview is evaluated (in-process or JIM.Worker), never what it reports. |
+| `ConfigurationChangePreviewFullDataSetPromptThreshold` | C | Decides when a preview asks before capping its drill-down rows. Summary counts are exact whatever the answer. |
 | `VerboseNoChangeRecording` | C | Recording verbosity; no outcome change. |
 | `MaintenanceMode` | C | Blocks operations from starting; does not change their outcome. |
 | `HistoryRetentionPeriod` | C | Retention of records, not synchronisation behaviour. |

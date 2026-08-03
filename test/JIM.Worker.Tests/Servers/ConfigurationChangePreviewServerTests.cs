@@ -118,8 +118,10 @@ public class ConfigurationChangePreviewServerTests
                 DefaultValue = threshold.ToString()
             });
 
-    private static ConfigurationChangePreviewRequest NewRequest() => new()
+    private static ConfigurationChangePreviewRequest NewRequest(
+        ConfigurationChangePreviewDeltaPersistence deltaPersistence = ConfigurationChangePreviewDeltaPersistence.Capped) => new()
     {
+        DeltaPersistence = deltaPersistence,
         Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
         TargetId = ObjectTypeId,
         TargetName = "User",
@@ -320,6 +322,65 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(group.Deltas, Has.Count.EqualTo(ConfigurationChangePreviewServer.MaximumDeltasPerGroup));
             Assert.That(group.DeltasSampled, Is.True);
             Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
+        });
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_FullDataSetRequested_KeepsEveryDeltaAsync()
+    {
+        // The informed choice an administrator makes before a large preview runs has to actually change what is
+        // kept. A "keep the full data set" option that still capped would be worse than not offering the choice:
+        // they would go looking through a drill-down for objects it had silently dropped.
+        var overCap = ConfigurationChangePreviewServer.MaximumDeltasPerGroup + 5;
+        for (var i = 0; i < overCap; i++)
+            _adapter.Deltas.Add(OutOfScope($"User {i}"));
+
+        var server = NewServer();
+        var request = NewRequest(ConfigurationChangePreviewDeltaPersistence.Full);
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
+
+        var group = _persistedGroups.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(group.ObjectCount, Is.EqualTo(overCap));
+            Assert.That(group.Deltas, Has.Count.EqualTo(overCap), "nothing was capped, so nothing may be missing");
+            Assert.That(group.DeltasSampled, Is.False);
+            Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
+        });
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_FullDataSetRequestedInAnotherProcess_IsHonouredFromThePreviewRowAsync()
+    {
+        // A preview dispatched to JIM.Worker is run from the persisted preview, so the choice has to survive on it
+        // rather than in the request object the portal happened to be holding. Re-running with a default request
+        // proves the row is what decides.
+        var overCap = ConfigurationChangePreviewServer.MaximumDeltasPerGroup + 5;
+        for (var i = 0; i < overCap; i++)
+            _adapter.Deltas.Add(OutOfScope($"User {i}"));
+
+        var server = NewServer();
+        var start = await server.StartPreviewAsync(NewRequest(ConfigurationChangePreviewDeltaPersistence.Full));
+        await server.RunPreviewAsync(start.ActivityId, NewRequest(), CancellationToken.None);
+
+        Assert.That(_persistedGroups.Single().Deltas, Has.Count.EqualTo(overCap));
+    }
+
+    [Test]
+    public async Task EstimatePreviewCostAsync_BeforeAnythingIsStarted_AnswersWithoutCreatingAnActivityAsync()
+    {
+        // The cap prompt has to know how big the answer would be *before* asking whether to keep all of it. An
+        // estimate that created an Activity would leave one behind every time an administrator declined.
+        _adapter.Estimate = new PreviewCostEstimate(120_000, 2);
+
+        var estimate = await NewServer().EstimatePreviewCostAsync(NewRequest());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(estimate.EstimatedDeltaRows, Is.EqualTo(240_000L));
+            Assert.That(_activity, Is.Null, "asking what a preview would cost is not asking for a preview");
+            Assert.That(_preview, Is.Null);
         });
     }
 

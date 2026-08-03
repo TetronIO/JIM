@@ -277,6 +277,10 @@ public static class ConfigurationChangeClassifier
         // Where a configuration change preview is evaluated, not what it evaluates. Moving the threshold changes
         // how quickly a preview comes back, never what it says; both dispatch paths run the same orchestration.
         [Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold] = C,
+
+        // When a preview asks before capping its drill-down rows. Summary counts are exact whatever the answer, so
+        // this moves how much of a preview can be inspected and how much storage it uses, never what it reports.
+        [Constants.SettingKeys.ConfigurationChangePreviewFullDataSetPromptThreshold] = C,
         [Constants.SettingKeys.VerboseNoChangeRecording] = C,
         [Constants.SettingKeys.MaintenanceMode] = C,
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,

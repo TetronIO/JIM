@@ -92,6 +92,25 @@ public class ConfigurationChangePreviewServer
     }
 
     /// <summary>
+    /// What a preview would cost, without starting one. Exists for the informed choice a surface offers before a
+    /// large preview runs: the administrator has to be told the row count and storage before being asked whether to
+    /// keep all of it, and an estimate that created an Activity would leave one behind every time they declined.
+    ///
+    /// The adapter's own contract requires this to be cheap (set-based SQL, never a scan), which is what makes it
+    /// reasonable to ask twice: once here, and once inside <see cref="StartPreviewAsync"/> where the dispatch
+    /// decision needs it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No adapter serves the requested surface.</exception>
+    public async Task<PreviewCostEstimate> EstimatePreviewCostAsync(ConfigurationChangePreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Guid.Empty rather than an invented id: nothing here persists a row, and an adapter that used the id would
+        // be reaching for an Activity that does not exist.
+        return await _adapters.Get(request.Surface).EstimateCostAsync(BuildContext(request, Guid.Empty));
+    }
+
+    /// <summary>
     /// A preview's own row: stage statuses and timings, the estimate, the cap decision. Null when no preview exists
     /// for the Activity, which is also what a caller sees once retention has removed it.
     /// </summary>
@@ -216,6 +235,7 @@ public class ConfigurationChangePreviewServer
             ActivityId = activity.Id,
             Surface = request.Surface,
             ProposedConfigurationSnapshot = request.ProposedConfigurationSnapshot,
+            RequestedDeltaPersistence = request.DeltaPersistence,
             ValidationStatus = ConfigurationChangePreviewStageStatus.InProgress,
             ValidationStarted = DateTime.UtcNow
         };
@@ -391,7 +411,10 @@ public class ConfigurationChangePreviewServer
         activity.Message = "Evaluating what the change would do";
         await _application.Activities.UpdateActivityAsync(activity);
 
-        var summariser = new PreviewSummariser(MaximumDeltasPerGroup);
+        // Read from the preview row, not from the request: a preview handed to JIM.Worker is run from the row, and
+        // a choice that lived only in the requesting process would be silently downgraded on the way.
+        var summariser = new PreviewSummariser(
+            preview.RequestedDeltaPersistence == ConfigurationChangePreviewDeltaPersistence.Full ? null : MaximumDeltasPerGroup);
         try
         {
             await foreach (var delta in adapter.EvaluateDeltasAsync(context, cancellationToken).WithCancellation(cancellationToken))

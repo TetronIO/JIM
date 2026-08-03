@@ -90,7 +90,14 @@ public class JimApplication : IDisposable
     public SystemServer System { get; }
     public TaskingServer Tasking { get; }
 
-    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null)
+    /// <param name="previewAdapters">
+    /// Overrides the configuration change preview adapter list below. Null in every host: the list is deliberately
+    /// one readable, compile-time set rather than something that varies by process. It exists so a test can drive
+    /// the preview framework through this facade with a test double, which is otherwise impossible without either
+    /// reflection-based discovery or a real adapter.
+    /// </param>
+    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null,
+        ConfigurationChangePreviewAdapterRegistry? previewAdapters = null)
     {
         Activities = new ActivityServer(this);
         Auth = new AuthServer(this);
@@ -104,7 +111,7 @@ public class JimApplication : IDisposable
         // (#1114); until then every surface keeps its save-time acknowledgement, which is the intended behaviour
         // for a surface with no adapter and not a gap.
         ConfigurationChangePreviews = new ConfigurationChangePreviewServer(this,
-            new ConfigurationChangePreviewAdapterRegistry([]));
+            previewAdapters ?? new ConfigurationChangePreviewAdapterRegistry([]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);

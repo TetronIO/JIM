@@ -24,12 +24,18 @@ namespace JIM.Application.Servers.Preview;
 /// </summary>
 public class PreviewSummariser
 {
-    private readonly int _maximumDeltasPerGroup;
+    private readonly int? _maximumDeltasPerGroup;
     private readonly Dictionary<GroupKey, GroupAccumulator> _groups = [];
 
-    public PreviewSummariser(int maximumDeltasPerGroup)
+    /// <param name="maximumDeltasPerGroup">
+    /// How many delta rows to keep per group, or null to keep every one. Null is the administrator's informed
+    /// choice on a large preview, made against a stated row count and storage cost; it is honoured literally,
+    /// because a "full data set" that quietly still capped would send them hunting through a drill-down for objects
+    /// it had dropped.
+    /// </param>
+    public PreviewSummariser(int? maximumDeltasPerGroup)
     {
-        if (maximumDeltasPerGroup < 1)
+        if (maximumDeltasPerGroup is < 1)
             throw new ArgumentOutOfRangeException(nameof(maximumDeltasPerGroup), maximumDeltasPerGroup,
                 "A preview must keep at least one delta per group, or its summary can never be drilled into.");
 
@@ -59,7 +65,7 @@ public class PreviewSummariser
 
         // The count moves for every delta; the kept rows stop at the cap. That asymmetry is the point.
         accumulator.ObjectCount++;
-        if (accumulator.Kept.Count < _maximumDeltasPerGroup)
+        if (_maximumDeltasPerGroup is null || accumulator.Kept.Count < _maximumDeltasPerGroup)
             accumulator.Kept.Add(delta);
         else
             AnyGroupCapped = true;
