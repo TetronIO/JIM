@@ -153,6 +153,7 @@ nav:
       - Service Settings: powershell/service-settings.md
       - Security: powershell/security.md
       - History: powershell/history.md
+      - Configuration Change Previews: powershell/previews.md
       - Example Data: powershell/example-data.md
       - Expressions: powershell/expressions.md
       - Worker Tasks: powershell/worker-tasks.md

@@ -66,19 +66,19 @@ Modifies an existing Metaverse Object Type: its identity (name, plural name, ico
 Set-JIMMetaverseObjectType -Id <int> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PassThru]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # ByName
 Set-JIMMetaverseObjectType -Name <string> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PassThru]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PassThru]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 #### Parameters
@@ -96,6 +96,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected. How they trigger deletion is governed by `DeletionTriggerMode`. |
 | `DeletionTriggerMode` | `string` | No | | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to leave the stored mode unchanged. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
+| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) read before making this change. The change's Activity records the link, so the audit answers not only what changed but what the caller was told it would do. |
 | `PassThru` | `switch` | No | `false` | Return the updated object type |
 
 !!! info "ShouldProcess"
@@ -136,6 +137,11 @@ Set-JIMMetaverseObjectType -Id 5 -NewName "Gadget" -PluralName "Gadgets" -Icon "
 
 ```powershell title="Clear a custom type's icon"
 Set-JIMMetaverseObjectType -Id 5 -Icon $null
+```
+
+```powershell title="Apply a previewed change, recording which preview informed it"
+$preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
+Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
 ```
 
 ---
