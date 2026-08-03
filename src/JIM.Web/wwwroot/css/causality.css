@@ -76,7 +76,7 @@
     color: var(--cz-text-dim);
     cursor: pointer;
     padding: 6px 13px;
-    font-size: 13px;
+    font-size: 0.875rem;
     font-weight: 550;
     font-family: inherit;
     border-radius: 7px;
@@ -121,7 +121,7 @@
     border: none;
     background: none;
     color: var(--cz-text-dim);
-    font-size: 13px;
+    font-size: 0.875rem;
     font-family: inherit;
     padding: 4px 2px;
     border-radius: 6px;
@@ -180,7 +180,7 @@
     padding: 4px 12px 4px 8px;
     background: var(--cz-chip-bg);
     border-radius: 999px;
-    font-size: 12.5px;
+    font-size: 0.875rem;
     font-weight: 600;
 }
 
@@ -193,12 +193,12 @@
 }
 
 .causality-panel .summary-time {
-    font-size: 12.5px;
+    font-size: 0.875rem;
     color: var(--cz-text-faint);
 }
 
 .causality-panel .summary-sentence {
-    font-size: 16.5px;
+    font-size: 1rem;
     font-weight: 480;
     max-width: 78ch;
     text-wrap: balance;
@@ -239,7 +239,7 @@
     gap: 6px;
     height: auto;
     margin: 0;
-    font-size: 12px;
+    font-size: 0.875rem;
     font-weight: 600;
     padding: 3px 10px;
     border-radius: 999px;
@@ -294,7 +294,7 @@
     background: var(--cz-chip-bg);
     border-radius: 999px;
     padding: 2px 10px 2px 3px;
-    font-size: 12.5px;
+    font-size: 0.875rem;
     font-weight: 550;
     color: var(--cz-text);
     white-space: nowrap;
@@ -321,7 +321,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 9.5px;
+    font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     background: var(--cz-secondary);
@@ -362,7 +362,7 @@
 /* ─── Event badges and entity rows (shared by views) ─── */
 
 .causality-panel .evt-badge {
-    font-size: 10.5px;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -428,7 +428,7 @@
 }
 
 .causality-panel .flow-col-head {
-    font-size: 11px;
+    font-size: 0.875rem;
     letter-spacing: 0.13em;
     text-transform: uppercase;
     font-weight: 650;
@@ -446,13 +446,13 @@
     letter-spacing: 0;
     text-transform: none;
     font-weight: 450;
-    font-size: 11.5px;
+    font-size: 0.875rem;
     color: var(--cz-text-faint);
 }
 
 .causality-panel .flow-empty {
     padding: 6px 2px;
-    font-size: 12.8px;
+    font-size: 0.875rem;
     color: var(--cz-text-dim);
 }
 
@@ -509,19 +509,19 @@
 
 .causality-panel .evt-title {
     font-weight: 650;
-    font-size: 13.5px;
+    font-size: 1rem;
     letter-spacing: -0.005em;
 }
 
 .causality-panel .evt-title .tech {
     color: var(--cz-text-faint);
     font-weight: 500;
-    font-size: 12px;
+    font-size: 0.875rem;
 }
 
 .causality-panel .evt-sub {
     margin-top: 6px;
-    font-size: 12.8px;
+    font-size: 0.875rem;
     color: var(--cz-text-dim);
 }
 
@@ -547,7 +547,7 @@
     margin-top: 10px;
     padding-top: 9px;
     border-top: 1px dashed var(--cz-line-soft);
-    font-size: 12px;
+    font-size: 0.875rem;
     color: var(--cz-text-faint);
 }
 
@@ -560,9 +560,9 @@
 }
 
 .causality-panel .evt-foot .attr-count .mud-icon-root {
-    width: 13px;
-    height: 13px;
-    font-size: 13px;
+    width: 1rem;
+    height: 1rem;
+    font-size: 1rem;
 }
 
 .causality-panel .evt-foot .spacer {
@@ -595,7 +595,7 @@
     padding: 9px 13px;
     background: color-mix(in srgb, var(--mud-palette-text-primary) 7%, var(--cz-inner));
     font-weight: 650;
-    font-size: 13px;
+    font-size: 0.875rem;
 }
 
 .causality-panel .sys-group .evt-card {
@@ -681,7 +681,7 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 6px 8px;
-    font-size: 14.5px;
+    font-size: 1rem;
 }
 
 .causality-panel .tl-line .verb {
@@ -690,13 +690,13 @@
 
 .causality-panel .tl-line .tech {
     color: var(--cz-text-faint);
-    font-size: 12px;
+    font-size: 0.875rem;
     font-weight: 500;
 }
 
 .causality-panel .tl-detail-line {
     margin-top: 4px;
-    font-size: 13px;
+    font-size: 0.875rem;
     color: var(--cz-text-dim);
     max-width: 72ch;
 }
@@ -721,7 +721,7 @@
     flex-wrap: wrap;
     gap: 14px;
     margin-top: 6px;
-    font-size: 12.5px;
+    font-size: 0.875rem;
 }
 
 .causality-panel .tl-links a {
@@ -742,7 +742,7 @@
     border: 1px solid var(--cz-line);
     background: transparent;
     color: var(--cz-text-dim);
-    font-size: 12.5px;
+    font-size: 0.875rem;
     font-weight: 550;
     font-family: inherit;
     padding: 4px 11px;
@@ -762,9 +762,9 @@
 }
 
 .causality-panel .tl-expander .chev .mud-icon-root {
-    width: 12px;
-    height: 12px;
-    font-size: 12px;
+    width: 0.875rem;
+    height: 0.875rem;
+    font-size: 0.875rem;
 }
 
 .causality-panel .tl-expander.open .chev {
@@ -827,7 +827,7 @@
 
 .causality-panel .g-node text {
     fill: var(--cz-text);
-    font-size: 12.5px;
+    font-size: 0.875rem;
     font-weight: 600;
     font-family: inherit;
 }
@@ -835,7 +835,7 @@
 .causality-panel .g-node text.sub {
     fill: var(--cz-text-dim);
     font-weight: 450;
-    font-size: 11px;
+    font-size: 0.75rem;
 }
 
 .causality-panel .g-legend {
@@ -843,7 +843,7 @@
     flex-wrap: wrap;
     gap: 14px;
     margin-top: 14px;
-    font-size: 12px;
+    font-size: 0.875rem;
     color: var(--cz-text-dim);
 }
 
@@ -885,7 +885,7 @@
     border: none;
     background: transparent;
     color: var(--cz-text);
-    font-size: 13px;
+    font-size: 0.875rem;
     outline: none;
     width: 100%;
     font-family: inherit;
@@ -908,7 +908,7 @@
     border: 1px solid var(--cz-line-soft);
     background: transparent;
     color: var(--cz-text-dim);
-    font-size: 12px;
+    font-size: 0.875rem;
     font-weight: 600;
     font-family: inherit;
     padding: 3px 11px;
@@ -924,7 +924,7 @@
 
 .causality-panel .attr-meta-count {
     margin-left: auto;
-    font-size: 12px;
+    font-size: 0.875rem;
     color: var(--cz-text-faint);
 }
 
@@ -966,11 +966,11 @@
 
 .causality-panel .drawer-title {
     font-weight: 650;
-    font-size: 14.5px;
+    font-size: 1rem;
 }
 
 .causality-panel .drawer-sub {
-    font-size: 12.5px;
+    font-size: 0.875rem;
     color: var(--cz-text-faint);
 }
 

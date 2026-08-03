@@ -11,7 +11,13 @@
    reopening). No <TableDensityToggle> here deliberately: this component can render several
    instances at once in the Timeline view, and a per-instance toggle (each triggering its own
    preference load) would repeat visually and functionally; Dense="true" mirrors the "Attribute
-   Changes" table on ActivityRunProfileExecutionItemDetail without the toggle. *@
+   Changes" table on ActivityRunProfileExecutionItemDetail without the toggle.
+
+   The filter box is a plain input rather than the shared <SearchField />, deliberately: it is a
+   knowingly-kept point of contrast against MudBlazor's much taller field, pending a wider review of
+   those. SearchFieldConventionTests does not flag it (it sweeps MudTextField), so this note is the
+   only record of the choice; migrate it when that review happens rather than treating it as an
+   oversight. *@
 
 <div class="attr-toolbar">
     <label class="attr-search">

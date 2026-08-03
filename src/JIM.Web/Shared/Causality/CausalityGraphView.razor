@@ -29,7 +29,7 @@
                    transform="@transform" role="button" tabindex="0" aria-label="@GetAriaLabel(node)"
                    @onclick="() => ToggleSelectionAsync(nodeEvent)"
                    @onkeydown="args => HandleKeyDownAsync(args, nodeEvent)">
-                    <rect class="body" width="210" height="58" rx="10"></rect>
+                    <rect class="body" width="250" height="58" rx="10"></rect>
                     <rect class="accent" x="0" y="10" width="3" height="38" rx="1.5"
                           fill="@CausalityToneCss.CssVar(node.Tone)"></rect>
                     <text x="14" y="24">@node.Title</text>
@@ -39,7 +39,7 @@
             else
             {
                 <g class="g-node static" transform="@transform">
-                    <rect class="body" width="210" height="58" rx="10"></rect>
+                    <rect class="body" width="250" height="58" rx="10"></rect>
                     <rect class="accent" x="0" y="10" width="3" height="38" rx="1.5"
                           fill="@CausalityToneCss.CssVar(node.Tone)"></rect>
                     <text x="14" y="24">@node.Title</text>
