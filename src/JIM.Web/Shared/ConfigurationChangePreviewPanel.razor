@@ -1,0 +1,665 @@
+@using JIM.Application.Interfaces
+@using JIM.Application.Servers
+@using JIM.Models.Activities
+@using JIM.Models.Preview
+@using JIM.Models.Utility
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject IUiNotificationService UiNotifications
+@inject IUserPreferenceService PreferenceService
+@implements IDisposable
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders a Configuration Change Preview (#827): what a proposed change would do, filling in as each stage of the
+   evaluation completes. Shared by every surface that can be previewed; the surface starts the preview and passes
+   the Activity id it was given.
+
+   Two rules govern everything below, and both are about not saying more than the preview knows:
+
+   A preview that failed has evaluated an arbitrary subset of the population, so its groups and counts are withheld
+   rather than rendered with a warning beside them. A number on screen is read as an answer whatever sits next to it.
+
+   An empty summary means "nothing would change" only when the summary stage actually completed. While it is running
+   there is no answer yet, and where the adapter produces no deltas at all there never will be one from this stage. *@
+
+<MudPaper Outlined="true" Class="@($"pa-4 {Class}")">
+
+    @* ─── Header ─── *@
+    <div class="d-flex align-center flex-wrap gap-2">
+        <MudText Typo="Typo.h6">@Title</MudText>
+        @if (_activity != null)
+        {
+            <MudChip T="string" Color="@StatusColour" Variant="Variant.Outlined">@StatusLabel</MudChip>
+        }
+        <MudSpacer />
+        @if (IsRunning)
+        {
+            <MudButton data-testid="jim-preview-cancel" Variant="Variant.Text" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Cancel" Disabled="@_cancelling" OnClick="CancelAsync">
+                Cancel
+            </MudButton>
+        }
+    </div>
+
+    <LoadingGate IsLoading="@_loading">
+        <Loading>
+            <div class="jim-preview-loading">
+                <MudSkeleton Class="mt-4" Height="12px" />
+                <MudSkeleton Height="12px" />
+                <MudSkeleton Height="180px" />
+            </div>
+        </Loading>
+        <Loaded>
+            @if (_preview == null || _activity == null)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+                    This preview is no longer available. Previews are removed with their Activity under the retention
+                    period configured for this system; run the preview again to see what the change would do now.
+                </MudAlert>
+            }
+            else
+            {
+                var preview = _preview;
+                var activity = _activity;
+
+                @* ─── Progress ─── *@
+                @if (IsRunning)
+                {
+                    @if (activity.ObjectsToProcess > 0)
+                    {
+                        <MudProgressLinear Value="@ProgressPercentage" Color="Color.Info" Rounded="true" Class="mt-4" />
+                        <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">
+                            @activity.ObjectsProcessed.ToString("N0") / @activity.ObjectsToProcess.ToString("N0")@(string.IsNullOrEmpty(activity.Message) ? "" : $" - {activity.Message}")
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" Class="mt-4" />
+                        @if (!string.IsNullOrEmpty(activity.Message))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">@activity.Message</MudText>
+                        }
+                    }
+                }
+
+                @* ─── Stages ─── *@
+                <div class="d-flex flex-wrap gap-4 mt-4">
+                    @foreach (var stage in Stages(preview))
+                    {
+                        <div class="d-flex align-center gap-1">
+                            <MudIcon Icon="@StageIcon(stage.Status)" Color="@StageColour(stage.Status)" Size="Size.Small" />
+                            <MudText Typo="Typo.body2" Class="@(stage.Status == ConfigurationChangePreviewStageStatus.NotStarted ? "mud-text-disabled" : "")">
+                                @stage.Name
+                            </MudText>
+                        </div>
+                    }
+                </div>
+
+                @* ─── Failure ─── *@
+                @if (preview.HasFailed)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4">
+                        <MudText Typo="Typo.body1">
+                            The preview did not finish, so it has seen only part of the objects the change would
+                            affect. Nothing it recorded is shown, because a partial count read as a whole one is how a
+                            change gets approved as safe.
+                        </MudText>
+                        @if (!string.IsNullOrEmpty(activity.ErrorMessage))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2">@activity.ErrorMessage</MudText>
+                        }
+                    </MudAlert>
+                }
+                else if (activity.Status == ActivityStatus.Cancelled)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+                        The preview was cancelled, so it covers only the objects it had reached. Run it again for a
+                        complete answer.
+                    </MudAlert>
+                }
+
+                @* ─── Staleness ─── *@
+                @if (preview.StalenessBaseline.HasValue)
+                {
+                    var baseline = preview.StalenessBaseline.Value;
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-4" Dense="true">
+                        <MudTooltip Arrow="true" Placement="Placement.Top" Text="@baseline.ToLocalTime().ToFriendlyDate()">
+                            Evaluated against data as it stood @baseline.ToLocalTime().ToRelativeTime(). An import
+                            since then may have moved the answer.
+                        </MudTooltip>
+                    </MudAlert>
+                }
+
+                @* ─── Validation findings ─── *@
+                @if (_findings.Count > 0)
+                {
+                    @if (_findings.Any(f => f.Severity == PreviewValidationSeverity.Blocking))
+                    {
+                        <MudText Typo="Typo.body1" Class="mt-4">
+                            The proposed configuration cannot be applied.
+                        </MudText>
+                    }
+                    @foreach (var finding in _findings.OrderByDescending(f => f.Severity))
+                    {
+                        <MudAlert Severity="@FindingSeverity(finding.Severity)" Variant="Variant.Outlined" Class="mt-2" Dense="true">
+                            @finding.Message
+                            @if (!string.IsNullOrEmpty(finding.PropertyName))
+                            {
+                                <span class="mud-text-secondary"> (@finding.PropertyName)</span>
+                            }
+                        </MudAlert>
+                    }
+                }
+
+                @if (!preview.HasFailed)
+                {
+                    @* ─── Impact counts ─── *@
+                    @if (_impactCounts.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle1" Class="mt-6">Objects affected</MudText>
+                        @* A short list, not a table: these are a handful of transition/count pairs, and a full-width
+                           table strands each count on the far side of the panel from the label it belongs to. *@
+                        <div class="d-flex flex-column gap-2 mt-2">
+                            @foreach (var count in _impactCounts.OrderByDescending(c => c.ObjectCount))
+                            {
+                                <div class="d-flex align-center gap-3">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0"
+                                             Color="@Helpers.GetOutcomeTypeMudBlazorColor(count.TransitionType)">
+                                        @Helpers.GetOutcomeTypeDisplayName(count.TransitionType)
+                                    </MudChip>
+                                    <MudText Typo="Typo.body1">@count.ObjectCount.ToString("N0")</MudText>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* ─── Summary groups: the landing view ─── *@
+                    @if (_groups.Count > 0)
+                    {
+                        <div class="d-flex align-center mt-6">
+                            <MudText Typo="Typo.subtitle1">What would change</MudText>
+                            <MudSpacer />
+                            <TableDensityToggle @bind-Dense="_dense" />
+                        </div>
+                        <MudTable T="ConfigurationChangePreviewGroup" Items="@_groups" Dense="@_dense" Hover="true"
+                                  Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm" OnRowClick="OnGroupClicked"
+                                  RowClass="cursor-pointer" Class="@(_dense ? "mt-2 dense-body-only" : "mt-2")">
+                            <HeaderContent>
+                                <MudTh><MudText Typo="Typo.button">Change</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Population</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Objects</MudText></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Change">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)">
+                                        @Helpers.GetOutcomeTypeDisplayName(context.TransitionType)
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Population">
+                                    @if (string.IsNullOrEmpty(DescribePopulation(context)))
+                                    {
+                                        <EmptyValue />
+                                    }
+                                    else
+                                    {
+                                        @DescribePopulation(context)
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Attribute">
+                                    @if (string.IsNullOrEmpty(context.AttributeName))
+                                    {
+                                        <EmptyValue />
+                                    }
+                                    else
+                                    {
+                                        @context.AttributeName
+                                        @if (!string.IsNullOrEmpty(context.OldValue) || !string.IsNullOrEmpty(context.NewValue))
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                                <TextValueDisplay Value="@context.OldValue" /> &rarr; <TextValueDisplay Value="@context.NewValue" />
+                                            </MudText>
+                                        }
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Objects">
+                                    @context.ObjectCount.ToString("N0")
+                                    @if (context.DeltasSampled)
+                                    {
+                                        <MudTooltip Arrow="true" Placement="Placement.Top"
+                                                    Text="@($"This count is exact. Its object list below is a sample of {ConfigurationChangePreviewServer.MaximumDeltasPerGroup:N0} of them, not all of them.")">
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="ml-2">
+                                                List sampled
+                                            </MudChip>
+                                        </MudTooltip>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                    else if (NothingWouldChange)
+                    {
+                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-6">
+                            This change would not change anything: no object moves through any transition as a result
+                            of it.
+                        </MudAlert>
+                    }
+
+                    @* ─── Drill-down ─── *@
+                    @if (_selectedGroup != null)
+                    {
+                        var selected = _selectedGroup;
+                        <div class="d-flex align-center mt-6">
+                            <MudText Typo="Typo.subtitle1">
+                                @Helpers.GetOutcomeTypeDisplayName(selected.TransitionType)@(string.IsNullOrEmpty(DescribePopulation(selected)) ? "" : $": {DescribePopulation(selected)}")
+                            </MudText>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseDrillDown">
+                                Close
+                            </MudButton>
+                        </div>
+
+                        @if (selected.DeltasSampled)
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2" Dense="true">
+                                @selected.ObjectCount.ToString("N0") objects are in this group. The list below is a
+                                sample of the first @ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0")
+                                of them, so an object being absent from it does not mean it is unaffected.
+                            </MudAlert>
+                        }
+
+                        <MudTable @ref="_deltasTable" T="ConfigurationChangePreviewDelta" ServerData="LoadDeltasAsync"
+                                  Dense="@_dense" Hover="true" Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm"
+                                  RowsPerPage="25" Loading="@_deltasLoading" LoadingProgressColor="Color.Primary"
+                                  Class="@(_dense ? "mt-2 dense-body-only" : "mt-2")">
+                            <ToolBarContent>
+                                <MudSpacer />
+                                <SearchField Value="@_search" ValueChanged="OnSearchChanged" DebounceInterval="500"
+                                             Placeholder="Search object, attribute or value" Class="mt-0" />
+                            </ToolBarContent>
+                            <HeaderContent>
+                                <MudTh><MudText Typo="Typo.button">Object</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Current value</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Proposed value</MudText></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Object"><TextValueDisplay Value="@context.ObjectDisplayName" /></MudTd>
+                                <MudTd DataLabel="Type"><TextValueDisplay Value="@context.ObjectTypeName" /></MudTd>
+                                <MudTd DataLabel="Attribute"><TextValueDisplay Value="@context.AttributeName" /></MudTd>
+                                <MudTd DataLabel="Current value"><TextValueDisplay Value="@context.OldValue" /></MudTd>
+                                <MudTd DataLabel="Proposed value"><TextValueDisplay Value="@context.NewValue" /></MudTd>
+                            </RowTemplate>
+                            <NoRecordsContent>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    @(string.IsNullOrWhiteSpace(_search) ? "No object-level detail was kept for this group." : "No objects in this group match that search.")
+                                </MudText>
+                            </NoRecordsContent>
+                            <PagerContent>
+                                <MudTablePager />
+                            </PagerContent>
+                        </MudTable>
+                    }
+                }
+            }
+        </Loaded>
+    </LoadingGate>
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// The preview to render, identified by its Activity. The surface being changed starts the preview (only it
+    /// knows the proposal) and passes the id it was handed back; everything after that point belongs here.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Guid ActivityId { get; set; }
+
+    /// <summary>Heading for the panel. Surfaces override it where a more specific noun reads better.</summary>
+    [Parameter]
+    public string Title { get; set; } = "Preview";
+
+    /// <summary>
+    /// Raised whenever the panel has re-read the preview, so a host can react to it reaching a terminal state (for
+    /// example, enabling its Apply button once the preview completes without blocking findings).
+    /// </summary>
+    [Parameter]
+    public EventCallback<ConfigurationChangePreview?> OnPreviewChanged { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private ConfigurationChangePreview? _preview;
+    private Activity? _activity;
+    private List<ConfigurationChangePreviewGroup> _groups = [];
+    private List<PreviewValidationFinding> _findings = [];
+    private List<PreviewImpactCount> _impactCounts = [];
+    private ConfigurationChangePreviewGroup? _selectedGroup;
+    private MudTable<ConfigurationChangePreviewDelta>? _deltasTable;
+
+    private bool _loading = true;
+    private bool _deltasLoading;
+    private bool _cancelling;
+    private bool _dense;
+    private string _search = string.Empty;
+
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private CancellationTokenSource? _pollCts;
+
+    private bool IsRunning => _activity?.Status == ActivityStatus.InProgress;
+
+    private double ProgressPercentage => _activity is { ObjectsToProcess: > 0 }
+        ? (double)_activity.ObjectsProcessed / _activity.ObjectsToProcess * 100
+        : 0;
+
+    /// <summary>
+    /// True only where the summary stage ran to completion and found nothing. A stage still running has no answer
+    /// yet, and one recorded not-applicable never will have: neither is evidence that nothing would change.
+    /// </summary>
+    private bool NothingWouldChange =>
+        _preview is { HasFailed: false, SummaryStatus: ConfigurationChangePreviewStageStatus.Complete }
+        && _groups.Count == 0
+        && _impactCounts.All(c => c.ObjectCount == 0);
+
+    private Color StatusColour => _activity?.Status switch
+    {
+        ActivityStatus.InProgress => Color.Info,
+        ActivityStatus.Complete => Color.Success,
+        ActivityStatus.CompleteWithWarning => Color.Warning,
+        ActivityStatus.FailedWithError => Color.Error,
+        ActivityStatus.Cancelled => Color.Default,
+        _ => Color.Default
+    };
+
+    private string StatusLabel => _activity?.Status switch
+    {
+        ActivityStatus.InProgress => "Running",
+        ActivityStatus.Complete => "Complete",
+        ActivityStatus.CompleteWithWarning => "Complete with warnings",
+        ActivityStatus.FailedWithError => "Failed",
+        ActivityStatus.Cancelled => "Cancelled",
+        _ => "Queued"
+    };
+
+    protected override void OnInitialized()
+    {
+        UiNotifications.ActivityProgressChanged += OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _selectedGroup = null;
+        _search = string.Empty;
+        await RefreshAsync();
+        _loading = false;
+        StartPollingIfRunning();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _dense = await PreferenceService.GetTableDenseAsync() == true;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Re-reads the preview, its Activity and its summary groups. Guarded so a notification and the reconciliation
+    /// poll arriving together skip rather than queue.
+    /// </summary>
+    private async Task RefreshAsync()
+    {
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var preview = await jim.ConfigurationChangePreviews.GetPreviewAsync(ActivityId);
+            if (preview == null)
+            {
+                _preview = null;
+                _activity = null;
+                await NotifyPreviewChangedAsync();
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            _preview = preview;
+            _activity = await jim.Activities.GetActivityAsync(ActivityId);
+            _findings = Deserialise<PreviewValidationFinding>(preview.ValidationFindings);
+            _impactCounts = Deserialise<PreviewImpactCount>(preview.ImpactCounts);
+
+            // Groups are read but deliberately not rendered for a failed preview; keeping the read unconditional
+            // means the failure branch is the only thing deciding what is shown.
+            _groups = await jim.ConfigurationChangePreviews.GetPreviewGroupsAsync(ActivityId);
+
+            // A group the administrator had open can disappear between refreshes only if the preview was re-run;
+            // dropping the selection is better than paging a group that is no longer in the summary.
+            if (_selectedGroup != null && _groups.TrueForAll(g => g.Id != _selectedGroup.Id))
+                _selectedGroup = null;
+
+            await NotifyPreviewChangedAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
+        {
+            // A transient read failure, or the application scope disposed mid-refresh during navigation. The
+            // reconciliation poll covers it; what must not happen is the panel tearing down over one bad read.
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    private async Task NotifyPreviewChangedAsync()
+    {
+        if (OnPreviewChanged.HasDelegate)
+            await OnPreviewChanged.InvokeAsync(_preview);
+    }
+
+    private async Task<TableData<ConfigurationChangePreviewDelta>> LoadDeltasAsync(TableState state, CancellationToken token)
+    {
+        if (_selectedGroup == null)
+            return new TableData<ConfigurationChangePreviewDelta> { Items = [], TotalItems = 0 };
+
+        _deltasLoading = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var page = await jim.ConfigurationChangePreviews.GetPreviewDeltasAsync(
+                ActivityId, _selectedGroup.Id, state.Page + 1, state.PageSize,
+                string.IsNullOrWhiteSpace(_search) ? null : _search);
+
+            return new TableData<ConfigurationChangePreviewDelta> { Items = page.Results, TotalItems = page.TotalResults };
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
+        {
+            return new TableData<ConfigurationChangePreviewDelta> { Items = [], TotalItems = 0 };
+        }
+        finally
+        {
+            _deltasLoading = false;
+        }
+    }
+
+    private async Task OnGroupClicked(TableRowClickEventArgs<ConfigurationChangePreviewGroup> args)
+    {
+        _selectedGroup = args.Item;
+        _search = string.Empty;
+        StateHasChanged();
+
+        if (_deltasTable != null)
+            await _deltasTable.ReloadServerData();
+    }
+
+    private void CloseDrillDown()
+    {
+        _selectedGroup = null;
+        _search = string.Empty;
+    }
+
+    private async Task OnSearchChanged(string search)
+    {
+        _search = search;
+        if (_deltasTable != null)
+            await _deltasTable.ReloadServerData();
+    }
+
+    private async Task CancelAsync()
+    {
+        _cancelling = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            await jim.ConfigurationChangePreviews.CancelPreviewAsync(ActivityId);
+            await RefreshAsync();
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
+        {
+            // Cancelling is best-effort from here: the preview either stopped or had already finished, and the next
+            // refresh reports whichever it was.
+        }
+        finally
+        {
+            _cancelling = false;
+        }
+    }
+
+    /// <summary>
+    /// The reconciliation poll (#202/#307). Real-time notifications drive refreshes while they are flowing, so this
+    /// runs slowly; when they are unavailable it takes over at the pre-notification cadence.
+    /// </summary>
+    private void StartPollingIfRunning()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _pollCts = null;
+
+        if (!IsRunning)
+            return;
+
+        _pollCts = new CancellationTokenSource();
+        var token = _pollCts.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(UiNotifications.IsRealTimeAvailable ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(3), token);
+                    await RefreshAsync();
+                    if (!IsRunning)
+                        break;
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }, token);
+    }
+
+    private void OnActivityProgressChanged(Guid activityId)
+    {
+        // Filtered to this preview's own Activity: a busy system raises these constantly, and a panel that re-read
+        // on every one would spend a run profile execution hammering the database on another Activity's behalf.
+        if (activityId != ActivityId)
+            return;
+
+        TriggerRefresh();
+    }
+
+    private void OnRealTimeAvailabilityChanged(bool available) => TriggerRefresh();
+
+    private void TriggerRefresh() => _ = Task.Run(async () =>
+    {
+        try
+        {
+            await RefreshAsync();
+            await InvokeAsync(StartPollingIfRunning);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Notification-triggered refreshes are best-effort; the reconciliation poll covers what they miss.
+        }
+    });
+
+    /// <summary>
+    /// Reads one of the preview's stored jsonb documents. An unreadable document yields an empty list rather than an
+    /// empty panel: the stage status already says what happened, and the rest of the preview is still worth reading.
+    /// </summary>
+    private static List<T> Deserialise<T>(string? document)
+    {
+        if (string.IsNullOrWhiteSpace(document))
+            return [];
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<T>>(document) ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string DescribePopulation(ConfigurationChangePreviewGroup group)
+    {
+        var parts = new List<string>(2);
+        if (!string.IsNullOrEmpty(group.MetaverseObjectTypeName))
+            parts.Add(group.MetaverseObjectTypeName);
+        if (!string.IsNullOrEmpty(group.ConnectedSystemName))
+            parts.Add(group.ConnectedSystemName);
+        return string.Join(" in ", parts);
+    }
+
+    private static IEnumerable<(string Name, ConfigurationChangePreviewStageStatus Status)> Stages(ConfigurationChangePreview preview) =>
+    [
+        ("Validation", preview.ValidationStatus),
+        ("Objects affected", preview.ImpactCountsStatus),
+        ("Summary", preview.SummaryStatus),
+        ("Object detail", preview.DeltasStatus)
+    ];
+
+    private static string StageIcon(ConfigurationChangePreviewStageStatus status) => status switch
+    {
+        ConfigurationChangePreviewStageStatus.Complete => Icons.Material.Filled.CheckCircle,
+        ConfigurationChangePreviewStageStatus.InProgress => Icons.Material.Filled.Autorenew,
+        ConfigurationChangePreviewStageStatus.Failed => Icons.Material.Filled.Error,
+        ConfigurationChangePreviewStageStatus.Cancelled => Icons.Material.Filled.Cancel,
+        ConfigurationChangePreviewStageStatus.NotApplicable => Icons.Material.Filled.RemoveCircleOutline,
+        _ => Icons.Material.Filled.RadioButtonUnchecked
+    };
+
+    private static Color StageColour(ConfigurationChangePreviewStageStatus status) => status switch
+    {
+        ConfigurationChangePreviewStageStatus.Complete => Color.Success,
+        ConfigurationChangePreviewStageStatus.InProgress => Color.Info,
+        ConfigurationChangePreviewStageStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Severity FindingSeverity(PreviewValidationSeverity severity) => severity switch
+    {
+        PreviewValidationSeverity.Blocking => Severity.Error,
+        PreviewValidationSeverity.Warning => Severity.Warning,
+        _ => Severity.Info
+    };
+
+    public void Dispose()
+    {
+        UiNotifications.ActivityProgressChanged -= OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _refreshLock.Dispose();
+    }
+}

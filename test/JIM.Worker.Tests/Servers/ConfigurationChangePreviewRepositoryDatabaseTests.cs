@@ -194,6 +194,80 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
     }
 
     [Test]
+    public async Task GetPreviewDeltasAsync_WithASearchTerm_MatchesCaseInsensitivelyAcrossTheReadableColumnsAsync()
+    {
+        // The drill-down's search box is the only way through a group of any size, and the administrator typing into
+        // it is looking for an object by whatever they happen to know about it: its name, the attribute, or the
+        // value it would move to. Case-sensitivity here would read as "no such object", which is the one answer a
+        // preview must never give wrongly. `ILIKE` is a PostgreSQL behaviour; the in-memory provider cannot show it.
+        var activityId = await SeedPreviewAsync();
+
+        await using (var context = NewContext())
+        {
+            var group = NewGroup(activityId, ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 3);
+            group.Deltas =
+            [
+                NewDelta(activityId, "Ada Lovelace", attributeName: "Email", newValue: "ada@contoso.com"),
+                NewDelta(activityId, "Grace Hopper", attributeName: "Email", newValue: "grace@fabrikam.com"),
+                NewDelta(activityId, "Alan Turing", attributeName: "Department", newValue: "Research")
+            ];
+            await new ConfigurationChangePreviewRepository(context).CreatePreviewResultsAsync([group]);
+        }
+
+        await using var read = NewContext();
+        var repository = new ConfigurationChangePreviewRepository(read);
+        var byName = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "LOVELACE");
+        var byValue = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "fabrikam");
+        var byAttribute = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "department");
+        var noMatch = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "zzz");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(byName.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Ada Lovelace" }));
+            Assert.That(byValue.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Grace Hopper" }));
+            Assert.That(byAttribute.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Alan Turing" }));
+            Assert.That(noMatch.Results, Is.Empty);
+            Assert.That(noMatch.TotalResults, Is.EqualTo(0),
+                "the total has to count the matches; a total that ignored the filter would page over rows that are not there");
+        });
+    }
+
+    [Test]
+    public async Task GetPreviewDeltasAsync_WithASearchTermContainingWildcards_TreatsThemAsTextAsync()
+    {
+        // `%` and `_` are LIKE wildcards, and both are ordinary characters in the values a preview renders (a
+        // percentage in a job title, an underscore in a sAMAccountName). Searched raw, either one matches every row
+        // in the group, which reads as "your search found everything" rather than as a broken search.
+        //
+        // The terms below are the bare wildcards deliberately: a term like "100%" would match its row whether or not
+        // the escaping is there, so it proves nothing.
+        var activityId = await SeedPreviewAsync();
+
+        await using (var context = NewContext())
+        {
+            var group = NewGroup(activityId, ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 3);
+            group.Deltas =
+            [
+                NewDelta(activityId, "Ada Lovelace", attributeName: "Notes", newValue: "100% remote"),
+                NewDelta(activityId, "Grace Hopper", attributeName: "Notes", newValue: "svc_account"),
+                NewDelta(activityId, "Alan Turing", attributeName: "Notes", newValue: "office based")
+            ];
+            await new ConfigurationChangePreviewRepository(context).CreatePreviewResultsAsync([group]);
+        }
+
+        await using var read = NewContext();
+        var repository = new ConfigurationChangePreviewRepository(read);
+        var percent = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "%");
+        var underscore = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "_");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(percent.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Ada Lovelace" }));
+            Assert.That(underscore.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Grace Hopper" }));
+        });
+    }
+
+    [Test]
     public async Task CreateWorkerTaskAsync_PreviewTask_AttachesToTheExistingActivityAsync()
     {
         // The one worker task type that does not create its own Activity. Add() walks the graph, so without the
@@ -247,6 +321,18 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
                 ObjectDisplayName = n,
                 ObjectTypeName = "User"
             })]
+        };
+
+    private static ConfigurationChangePreviewDelta NewDelta(Guid activityId, string displayName,
+        string? attributeName = null, string? newValue = null) => new()
+        {
+            ActivityId = activityId,
+            TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope,
+            MetaverseObjectId = Guid.CreateVersion7(),
+            ObjectDisplayName = displayName,
+            ObjectTypeName = "User",
+            AttributeName = attributeName,
+            NewValue = newValue
         };
 
     private async Task<Guid> SeedActivityAsync()

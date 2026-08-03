@@ -105,10 +105,12 @@ public class ConfigurationChangePreviewServer
         await _application.Repository.ConfigurationChangePreviews.GetPreviewGroupsAsync(activityId);
 
     /// <summary>
-    /// A page of drill-down rows, optionally restricted to one summary group.
+    /// A page of drill-down rows, optionally restricted to one summary group and to a text search over the columns
+    /// the drill-down renders.
     /// </summary>
-    public async Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize) =>
-        await _application.Repository.ConfigurationChangePreviews.GetPreviewDeltasAsync(activityId, groupId, page, pageSize);
+    public async Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize,
+        string? search = null) =>
+        await _application.Repository.ConfigurationChangePreviews.GetPreviewDeltasAsync(activityId, groupId, page, pageSize, search);
 
     /// <summary>
     /// Cancels a running preview. Previews running in this process stop directly; the rest are cancelled through
