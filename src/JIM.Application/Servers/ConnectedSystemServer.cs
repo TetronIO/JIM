@@ -1016,6 +1016,11 @@ public class ConnectedSystemServer
         // Get MVO impact counts
         preview.JoinedMvoCount = await Application.Repository.ConnectedSystems.GetJoinedMvoCountAsync(connectedSystemId);
 
+        // Count the MVOs deletion rule evaluation will mark for deletion, via the same mode-aware
+        // predicate ExecuteDeletionAsync's marking uses, so the preview always agrees with what
+        // execution does (#119).
+        preview.MvosWithDeletionRuleCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
+
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
         preview.HasRunningSyncOperation = runningSyncTask != null;
@@ -1036,6 +1041,9 @@ public class ConnectedSystemServer
 
         if (preview.JoinedMvoCount > 0)
             preview.Warnings.Add($"{preview.JoinedMvoCount} Metaverse Object(s) are joined to CSOs in this system. They will be disconnected.");
+
+        if (preview.MvosWithDeletionRuleCount > 0)
+            preview.Warnings.Add($"{preview.MvosWithDeletionRuleCount} Metaverse Object(s) will be marked for deletion by their type's Deletion Rule.");
 
         if (preview.PendingExportCount > 0)
             preview.Warnings.Add($"{preview.PendingExportCount} Pending Export(s) will be deleted.");
@@ -3727,16 +3735,6 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, objectTypeId, partitionId);
-    }
-
-    /// <summary>
-    /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
-    /// Used to determine if an MVO has any remaining connectors before deletion.
-    /// </summary>
-    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
-    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-    {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
     }
 
     /// <summary>

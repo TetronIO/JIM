@@ -59,4 +59,45 @@ public class PendingDeletionDtoTests
         Assert.That(dto.Type!.Id, Is.EqualTo(0));
         Assert.That(dto.Type.Name, Is.EqualTo("Unknown"));
     }
+
+    [Test]
+    public void FromEntity_MapsDeletionTriggeringSystemFields()
+    {
+        // The portal's Pending Deletions page shows what triggered each scheduled deletion (#119);
+        // the REST surface must expose the same read (surface parity).
+        var entity = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            CachedDisplayName = "Alice",
+            Type = new MetaverseObjectType { Id = 7, Name = "User" },
+            LastConnectorDisconnectedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ConnectedSystemObjects = new List<JIM.Models.Staging.ConnectedSystemObject>(),
+            DeletionTriggeredBySystemId = 3,
+            DeletionTriggeredBySystemName = "HR (Workday)"
+        };
+
+        var dto = PendingDeletionDto.FromEntity(entity);
+
+        Assert.That(dto.DeletionTriggeredBySystemId, Is.EqualTo(3));
+        Assert.That(dto.DeletionTriggeredBySystemName, Is.EqualTo("HR (Workday)"));
+    }
+
+    [Test]
+    public void FromEntity_NoTriggeringSystemRecorded_MapsNulls()
+    {
+        // Rows marked before trigger recording existed carry no triggering system.
+        var entity = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            CachedDisplayName = "Bob",
+            Type = new MetaverseObjectType { Id = 7, Name = "User" },
+            LastConnectorDisconnectedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            ConnectedSystemObjects = new List<JIM.Models.Staging.ConnectedSystemObject>()
+        };
+
+        var dto = PendingDeletionDto.FromEntity(entity);
+
+        Assert.That(dto.DeletionTriggeredBySystemId, Is.Null);
+        Assert.That(dto.DeletionTriggeredBySystemName, Is.Null);
+    }
 }

@@ -646,7 +646,8 @@ public partial class SyncRepository
                         "ErrorType" int,
                         "ErrorMessage" text,
                         "ErrorStackTrace" text,
-                        "AttributeFlowCount" int
+                        "AttributeFlowCount" int,
+                        "DeletionPolicySnapshotJson" text
                     ) ON COMMIT DROP
                     """;
                 await createCmd.ExecuteNonQueryAsync();
@@ -690,6 +691,10 @@ public partial class SyncRepository
                         await writer.WriteAsync(rpei.AttributeFlowCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
                     else
                         await writer.WriteNullAsync();
+                    if (rpei.DeletionPolicySnapshotJson is not null)
+                        await writer.WriteAsync(rpei.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
                 }
                 await writer.CompleteAsync();
             }
@@ -714,7 +719,7 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        const int columnsPerRow = 14;
+        const int columnsPerRow = 15;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(rpeis, chunkSize))
@@ -728,7 +733,7 @@ public partial class SyncRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14})");
 
                 var rpei = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
@@ -745,6 +750,7 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.PendingExportId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DeletionPolicySnapshotJson ?? DBNull.Value });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -855,6 +861,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (rpei.PendingExportId.HasValue)
                 await writer.WriteAsync(rpei.PendingExportId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.DeletionPolicySnapshotJson is not null)
+                await writer.WriteAsync(rpei.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
         }

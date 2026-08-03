@@ -7,22 +7,6 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
-    <MudStack Row Spacing="2" Class="mb-4">
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Default"
-                   Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Storage"
-                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/connector-space")">
-            Connector Space
-        </MudButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="@(PendingExportCount > 0 ? Color.Warning : Color.Default)"
-                   Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Outbox"
-                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/pending-exports")">
-            Pending Exports @(PendingExportCount > 0 ? $"({PendingExportCount.ToString("N0")})" : "")
-        </MudButton>
-    </MudStack>
     <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
         <PrefilledFormValidator />
         <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
@@ -73,9 +57,6 @@
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
-
-    [Parameter, EditorRequired]
-    public int PendingExportCount { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }

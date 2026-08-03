@@ -27,7 +27,9 @@ internal static class MvoBulkInsertColumns
     [
         "Id", "Created", "LastUpdated", "TypeId", "Status", "Origin",
         "LastConnectorDisconnectedDate", "DeletionInitiatedByType",
-        "DeletionInitiatedById", "DeletionInitiatedByName", "CachedDisplayName",
+        "DeletionInitiatedById", "DeletionInitiatedByName",
+        "DeletionTriggeredBySystemId", "DeletionTriggeredBySystemName",
+        "DeletionPolicySnapshotJson", "CachedDisplayName",
         "ScopeReviewPending", "LastScopeEvaluatedAt"
     ];
 
@@ -44,7 +46,9 @@ internal static class MvoBulkInsertColumns
     [
         "LastUpdated", "TypeId", "Status", "Origin",
         "LastConnectorDisconnectedDate", "DeletionInitiatedByType",
-        "DeletionInitiatedById", "DeletionInitiatedByName", "CachedDisplayName",
+        "DeletionInitiatedById", "DeletionInitiatedByName",
+        "DeletionTriggeredBySystemId", "DeletionTriggeredBySystemName",
+        "DeletionPolicySnapshotJson", "CachedDisplayName",
         "ScopeReviewPending", "LastScopeEvaluatedAt"
     ];
 
