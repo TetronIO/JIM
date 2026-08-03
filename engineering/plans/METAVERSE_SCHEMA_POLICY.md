@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Issue:** [#1104](https://github.com/TetronIO/JIM/issues/1104)
 - **Related Issues:** [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector), [#124](https://github.com/TetronIO/JIM/issues/124) (SCIM 2.0 Server Support), [#60](https://github.com/TetronIO/JIM/issues/60) (Attribute Set Templates; the complementary "packs" idea), [#1046](https://github.com/TetronIO/JIM/issues/1046) (Decimal attribute data type)
-- **Related Plans:** [`doing/SCIM_CLIENT_CONNECTOR_DESIGN.md`](doing/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`SCIM_SERVER_DESIGN.md`](SCIM_SERVER_DESIGN.md)
+- **Related Plans:** [`done/SCIM_CLIENT_CONNECTOR_DESIGN.md`](done/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`SCIM_SERVER_DESIGN.md`](SCIM_SERVER_DESIGN.md)
 - **Last Updated:** 2026-07-25
 
 ## Overview
