@@ -166,16 +166,17 @@
             {
                 if (context.DaysUntilDeletion.HasValue)
                 {
-                    if (context.DaysUntilDeletion.Value <= 0)
+                    var daysUntilDeletion = context.DaysUntilDeletion.Value;
+                    if (daysUntilDeletion <= 0)
                     {
                         <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")" Arrow="true" Placement="Placement.Top">
-                            <MudText Color="Color.Error">Overdue by @Math.Abs(context.DaysUntilDeletion.Value) days</MudText>
+                            <MudText Color="Color.Error">Overdue by @FormatDayCount(Math.Abs(daysUntilDeletion))</MudText>
                         </MudTooltip>
                     }
                     else
                     {
                         <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")" Arrow="true" Placement="Placement.Top">
-                            <span>@context.DaysUntilDeletion days</span>
+                            <span>@FormatDayCount(daysUntilDeletion)</span>
                         </MudTooltip>
                     }
                 }
@@ -348,6 +349,14 @@
     private string GetMvoDetailHref(PendingDeletionItem item)
     {
         return Utilities.GetMetaverseObjectHref(item.Id, item.TypePluralName);
+    }
+
+    /// <summary>
+    /// Formats a day count with the correct singular or plural unit ("1 day", "3 days").
+    /// </summary>
+    private static string FormatDayCount(int days)
+    {
+        return days == 1 ? "1 day" : $"{days:N0} days";
     }
 
     // Local display model
