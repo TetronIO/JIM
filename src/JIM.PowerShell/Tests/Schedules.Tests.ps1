@@ -51,6 +51,86 @@ Describe 'Get-JIMSchedule' {
         }
     }
 
+    Context 'Last-run outcome (#1196)' {
+
+        It 'Passes the last execution fields through from the list endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                $executionId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        Items = @(
+                            [PSCustomObject]@{
+                                Id                            = [guid]::NewGuid()
+                                Name                          = 'Nightly Sync'
+                                LastExecutionId               = $executionId
+                                LastExecutionStatus           = 'Failed'
+                                LastExecutionCurrentStepIndex = 2
+                                LastExecutionTotalSteps       = 6
+                                LastExecutionErrorMessage     = 'Step 3 timed out'
+                            }
+                        )
+                    }
+                }
+
+                $result = @(Get-JIMSchedule)
+
+                $result.Count | Should -Be 1
+                $result[0].LastExecutionId | Should -Be $executionId
+                $result[0].LastExecutionStatus | Should -Be 'Failed'
+                $result[0].LastExecutionCurrentStepIndex | Should -Be 2
+                $result[0].LastExecutionTotalSteps | Should -Be 6
+                $result[0].LastExecutionErrorMessage | Should -Be 'Step 3 timed out'
+            }
+        }
+
+        It 'Preserves the last execution fields when -IncludeSteps re-fetches each Schedule' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                $scheduleId = [guid]::NewGuid()
+                $executionId = [guid]::NewGuid()
+
+                # The single-Schedule endpoint returns a ScheduleDetailDto built from the Schedule entity, which
+                # carries no last-execution projection; only the list endpoint can supply those fields.
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        Id    = $scheduleId
+                        Name  = 'Nightly Sync'
+                        Steps = @([PSCustomObject]@{ Id = [guid]::NewGuid(); StepIndex = 0 })
+                    }
+                } -ParameterFilter { $Endpoint -eq "/api/v1/schedules/$scheduleId" }
+
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        Items = @(
+                            [PSCustomObject]@{
+                                Id                            = $scheduleId
+                                Name                          = 'Nightly Sync'
+                                LastExecutionId               = $executionId
+                                LastExecutionStatus           = 'Failed'
+                                LastExecutionCurrentStepIndex = 2
+                                LastExecutionTotalSteps       = 6
+                                LastExecutionErrorMessage     = 'Step 3 timed out'
+                            }
+                        )
+                    }
+                } -ParameterFilter { $Endpoint -like '/api/v1/schedules?page=*' }
+
+                $result = @(Get-JIMSchedule -IncludeSteps)
+
+                $result.Count | Should -Be 1
+                $result[0].Steps.Count | Should -Be 1
+                $result[0].LastExecutionId | Should -Be $executionId
+                $result[0].LastExecutionStatus | Should -Be 'Failed'
+                $result[0].LastExecutionCurrentStepIndex | Should -Be 2
+                $result[0].LastExecutionTotalSteps | Should -Be 6
+                $result[0].LastExecutionErrorMessage | Should -Be 'Step 3 timed out'
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

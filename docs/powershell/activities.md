@@ -45,6 +45,17 @@ Get-JIMActivity -Id <guid> -Follow [-IntervalSeconds <int>] [-MaxPolls <int>]
 
 When using the **List** or **ById** parameter sets, returns one or more `PSCustomObject` instances representing activities, each containing properties such as `Id`, `Created`, `Executed`, `Status`, `TargetType`, `TargetOperationType`, `TargetName`, `InitiatedByName`, and per-run totals such as `TotalErrors`.
 
+An Activity that a [Schedule](../configuration/schedules.md) produced also carries its attribution:
+
+| Property | Type | Description |
+|---|---|---|
+| `ScheduledByScheduleName` | `String` | The producing Schedule's name, snapshotted when the Activity was created, so it still reads correctly after the Schedule is renamed or deleted. |
+| `ScheduledByScheduleId` | `Guid` | The producing Schedule. |
+| `ScheduleExecutionId` | `Guid` | The Schedule Execution this Activity belonged to. Pass it to `Get-JIMScheduleExecution -Id` for the whole run. |
+| `ScheduleStepIndex` | `Int32` | Which step of that execution this was, 0-based. |
+
+All four are empty for work nobody scheduled.
+
 When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
 
 When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).

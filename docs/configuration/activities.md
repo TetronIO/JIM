@@ -62,6 +62,8 @@ An Activity that a [Schedule](schedules.md) produced says so, naming the Schedul
 
 The attribution is recorded on the Activity itself rather than looked up through the execution, so it survives the Schedule later being renamed or deleted. Activities are a permanent audit record; deleting a Schedule does not rewrite the history of what it did.
 
+The same attribution reaches automation: `Get-JIMActivity` and the Activities REST endpoints carry `ScheduledByScheduleName`, `ScheduledByScheduleId`, `ScheduleExecutionId` and `ScheduleStepIndex` on each Activity, and leave them empty for work nobody scheduled. See the [Activity cmdlets](../powershell/activities.md#get-jimactivity).
+
 ## Target links
 
 On an activity's detail page, the Target links to where that object is managed: a Synchronisation Rule change opens the rule's detail page, a schema import opens the Connected System's Schema tab, and so on. Service Settings have no page of their own, so their Target link opens the Service Settings page with a matching search already applied, taking you straight to that setting instead of the full list.

@@ -59,6 +59,8 @@ The Schedules list shows each schedule's last run and, beside it, how that run *
 
 Expanding a schedule's row lists its recent executions with their outcomes, how long each took, and how many of its steps ran. This is the quickest way to tell a one-off failure from a step that has been failing all week.
 
+The same last-run outcome is available to automation. `Get-JIMSchedule` and the Schedules list REST endpoint carry it on each Schedule as `LastExecutionId`, `LastExecutionStatus`, `LastExecutionCurrentStepIndex`, `LastExecutionTotalSteps`, `LastExecutionCompletedAt` and `LastExecutionErrorMessage`, so a monitoring script can ask whether last night's run succeeded without walking the execution history. See the [Schedules cmdlets](../powershell/schedules.md#get-jimschedule) for the field-by-field description.
+
 ### The Schedule Execution view
 
 Selecting an execution opens a view of that single run:

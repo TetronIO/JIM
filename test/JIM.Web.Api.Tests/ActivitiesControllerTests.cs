@@ -103,6 +103,90 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivitiesAsync_ActivityProducedByASchedule_MapsScheduleAttributionOntoTheHeader()
+    {
+        // Read parity (#1196): the portal shows which Schedule produced an Activity and which step it was, so the
+        // REST list has to say the same.
+        var executionId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete,
+            ScheduleExecutionId = executionId,
+            ScheduleStepIndex = 2,
+            ScheduledByScheduleId = scheduleId,
+            ScheduledByScheduleName = "Nightly Sync"
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity> { activity },
+            TotalResults = 1,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetActivitiesAsync(pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+        var header = response!.Items.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(header.ScheduleExecutionId, Is.EqualTo(executionId));
+            Assert.That(header.ScheduleStepIndex, Is.EqualTo(2));
+            Assert.That(header.ScheduledByScheduleId, Is.EqualTo(scheduleId));
+            Assert.That(header.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"));
+        });
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_ActivityNotProducedByASchedule_LeavesScheduleAttributionNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity> { activity },
+            TotalResults = 1,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetActivitiesAsync(pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+        var header = response!.Items.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(header.ScheduleExecutionId, Is.Null);
+            Assert.That(header.ScheduleStepIndex, Is.Null);
+            Assert.That(header.ScheduledByScheduleId, Is.Null);
+            Assert.That(header.ScheduledByScheduleName, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task GetActivitiesAsync_WithSearch_PassesSearchToRepository()
     {
         var pagedResult = new PagedResultSet<Activity>
@@ -254,6 +338,68 @@ public class ActivitiesControllerTests
         Assert.That(detail, Is.Not.Null);
         Assert.That(detail!.Id, Is.EqualTo(activityId));
         Assert.That(detail.TargetName, Is.EqualTo("Test Activity"));
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ActivityProducedByASchedule_MapsScheduleAttributionOntoTheDetail()
+    {
+        var activityId = Guid.NewGuid();
+        var executionId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+        var activity = new Activity
+        {
+            Id = activityId,
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.TrustedCertificate,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete,
+            ScheduleExecutionId = executionId,
+            ScheduleStepIndex = 0,
+            ScheduledByScheduleId = scheduleId,
+            ScheduledByScheduleName = "Nightly Sync"
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))
+            .ReturnsAsync(activity);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(detail!.ScheduleExecutionId, Is.EqualTo(executionId));
+            Assert.That(detail.ScheduleStepIndex, Is.EqualTo(0));
+            Assert.That(detail.ScheduledByScheduleId, Is.EqualTo(scheduleId));
+            Assert.That(detail.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"));
+        });
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ActivityNotProducedByASchedule_LeavesScheduleAttributionNull()
+    {
+        var activityId = Guid.NewGuid();
+        var activity = new Activity
+        {
+            Id = activityId,
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.TrustedCertificate,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))
+            .ReturnsAsync(activity);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(detail!.ScheduleExecutionId, Is.Null);
+            Assert.That(detail.ScheduleStepIndex, Is.Null);
+            Assert.That(detail.ScheduledByScheduleId, Is.Null);
+            Assert.That(detail.ScheduledByScheduleName, Is.Null);
+        });
     }
 
     [Test]

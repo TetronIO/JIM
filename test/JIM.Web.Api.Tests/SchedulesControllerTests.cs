@@ -189,6 +189,82 @@ public class SchedulesControllerTests
     }
 
     [Test]
+    public async Task GetAllAsync_MapsLastExecutionFieldsOntoTheDtoAsync()
+    {
+        // Read parity (#1196): the portal's Schedules list shows the last run's outcome, so the REST list (and
+        // therefore Get-JIMSchedule) has to answer "did last night's run succeed?" too.
+        var executionId = Guid.NewGuid();
+        var completedAt = new DateTime(2026, 2, 1, 3, 12, 0, DateTimeKind.Utc);
+        var headers = new List<ScheduleHeader>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Name = "Nightly Sync",
+                LastExecutionId = executionId,
+                LastExecutionStatus = ScheduleExecutionStatus.Failed,
+                LastExecutionCurrentStepIndex = 2,
+                LastExecutionTotalSteps = 6,
+                LastExecutionCompletedAt = completedAt,
+                LastExecutionErrorMessage = "Step 3 timed out"
+            }
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
+            .ReturnsAsync(new PagedResultSet<ScheduleHeader>
+            {
+                Results = headers,
+                TotalResults = 1,
+                CurrentPage = 1,
+                PageSize = 20
+            });
+
+        var result = await _controller.GetAllAsync() as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ScheduleDto>;
+        var dto = response!.Items.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dto.LastExecutionId, Is.EqualTo(executionId));
+            Assert.That(dto.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Failed));
+            Assert.That(dto.LastExecutionCurrentStepIndex, Is.EqualTo(2));
+            Assert.That(dto.LastExecutionTotalSteps, Is.EqualTo(6));
+            Assert.That(dto.LastExecutionCompletedAt, Is.EqualTo(completedAt));
+            Assert.That(dto.LastExecutionErrorMessage, Is.EqualTo("Step 3 timed out"));
+        });
+    }
+
+    [Test]
+    public async Task GetAllAsync_ScheduleThatHasNeverRun_LeavesLastExecutionFieldsNullAsync()
+    {
+        var headers = new List<ScheduleHeader>
+        {
+            new() { Id = Guid.NewGuid(), Name = "Never Run" }
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
+            .ReturnsAsync(new PagedResultSet<ScheduleHeader>
+            {
+                Results = headers,
+                TotalResults = 1,
+                CurrentPage = 1,
+                PageSize = 20
+            });
+
+        var result = await _controller.GetAllAsync() as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ScheduleDto>;
+        var dto = response!.Items.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dto.LastExecutionId, Is.Null);
+            Assert.That(dto.LastExecutionStatus, Is.Null);
+            Assert.That(dto.LastExecutionCurrentStepIndex, Is.Null);
+            Assert.That(dto.LastExecutionTotalSteps, Is.Null);
+            Assert.That(dto.LastExecutionCompletedAt, Is.Null);
+            Assert.That(dto.LastExecutionErrorMessage, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task GetAllAsync_WithPaginationParameters_PassesParametersToRepositoryAsync()
     {
         var pagedResult = new PagedResultSet<ScheduleHeader>
