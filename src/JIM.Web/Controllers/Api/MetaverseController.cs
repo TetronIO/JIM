@@ -298,14 +298,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // authoritative-source rule with no sources, a negative grace period) is stage 1's job to report as a
         // finding: refusing the request would withhold the very answer the caller asked for. A Connected System id
         // that names nothing is different in kind; there is no coherent proposal to evaluate at all.
-        if (request.DeletionTriggerConnectedSystemIds != null)
-        {
-            foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
-            {
-                if (await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId) == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
-            }
-        }
+        var missingReference = await ValidateTriggerConnectedSystemsExistAsync(request.DeletionTriggerConnectedSystemIds);
+        if (missingReference != null)
+            return BadRequest(missingReference);
 
         // Omitted means "keep the stored value", exactly as the update endpoint reads it, so the two describe the
         // same change. Zero is stored as no grace period, so it is previewed as one.
@@ -365,16 +360,27 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds.");
         }
 
-        // Validate that requested trigger system IDs exist, regardless of rule type, to surface bad
-        // input early rather than silently storing dead IDs (Core retrieval; we only need existence).
-        if (requestedTriggerSystemIds != null)
+        return await ValidateTriggerConnectedSystemsExistAsync(requestedTriggerSystemIds);
+    }
+
+    /// <summary>
+    /// Checks that every requested trigger Connected System exists, regardless of rule type, so bad input is
+    /// surfaced rather than silently stored as dead ids. Core retrieval: only existence is needed.
+    ///
+    /// Shared by the create, update and preview paths. The preview path validates only this, because everything
+    /// else a proposal can be wrong about is something the preview exists to tell the caller about.
+    /// </summary>
+    /// <returns>The error to return as a 400 Bad Request, or null when every reference resolves.</returns>
+    private async Task<ApiErrorResponse?> ValidateTriggerConnectedSystemsExistAsync(IReadOnlyCollection<int>? requestedTriggerSystemIds)
+    {
+        if (requestedTriggerSystemIds == null)
+            return null;
+
+        foreach (var connectedSystemId in requestedTriggerSystemIds)
         {
-            foreach (var connectedSystemId in requestedTriggerSystemIds)
-            {
-                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
-                if (connectedSystem == null)
-                    return ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found.");
-            }
+            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (connectedSystem == null)
+                return ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found.");
         }
 
         return null;

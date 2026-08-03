@@ -613,11 +613,12 @@
                 {
                     break;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // Sanctioned broad catch: this loop is the panel's only guarantee of eventual consistency, and
                     // an exception escaping it kills the task silently, leaving the panel frozen on whatever stage
-                    // it last read. Log and keep polling.
+                    // it last read. Log and keep polling. Cancellation is excluded because an abandoned poll must
+                    // stop rather than grind on, and it is handled above.
                     Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: reconciliation poll for preview {ActivityId} failed", ActivityId);
                 }
             }
