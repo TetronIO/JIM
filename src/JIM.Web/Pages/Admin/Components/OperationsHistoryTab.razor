@@ -51,6 +51,21 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
+                <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filterSchedules"
+                           SelectedValuesChanged="OnScheduleFilterChanged"
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
+                    @if (_filterOptions != null)
+                    {
+                        @foreach (var schedule in _filterOptions.Schedules)
+                        {
+                            <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
                 <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterStatuses"
@@ -75,6 +90,10 @@
             <MudItem Class="d-flex align-end">
                 <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
                              Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+            </MudItem>
+            <MudItem Class="d-flex align-end">
+                <MudCheckBox T="bool" Value="_filterScheduledOnly" ValueChanged="OnScheduledOnlyFilterChanged"
+                             Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
             </MudItem>
             <MudItem Class="d-flex align-end mb-2">
                 <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
@@ -135,6 +154,9 @@
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
+                <MudText Typo="Typo.button">Schedule</MudText>
+            </MudTh>
+            <MudTh>
                 <MudText Typo="Typo.button">Outcomes</MudText>
             </MudTh>
             <MudTh>
@@ -182,6 +204,23 @@
                 @if (!string.IsNullOrEmpty(context.TargetName))
                 {
                     @context.TargetName
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudTd>
+            <MudTd DataLabel="Schedule">
+                @if (!string.IsNullOrEmpty(context.ScheduledByScheduleName))
+                {
+                    <MudStack Spacing="0">
+                        <span>@context.ScheduledByScheduleName</span>
+                        @if (context.ScheduleStepIndex.HasValue)
+                        {
+                            var stepNumber = context.ScheduleStepIndex.Value + 1;
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Step @stepNumber</MudText>
+                        }
+                    </MudStack>
                 }
                 else
                 {
@@ -818,8 +857,10 @@
     private IReadOnlyCollection<string> _filterConnectedSystems = [];
     private IReadOnlyCollection<string> _filterRunProfiles = [];
     private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<Guid> _filterSchedules = [];
     private string? _filterInitiatedBy;
     private bool _filterHasChildren;
+    private bool _filterScheduledOnly;
 
     private int TotalPages => _totalItems == 0 ? 1 : (int)Math.Ceiling((double)_totalItems / _rowsPerPage);
 
@@ -894,12 +935,15 @@
             var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
             var statuses = _filterStatuses.Any() ? _filterStatuses : null;
             var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+            var schedules = _filterSchedules.Any() ? _filterSchedules : null;
 
             using var refreshJim = JimFactory.Create();
             var result = await refreshJim.Activities.GetWorkerTaskActivitiesAsync(
                 1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy,
                 _currentSortLabel, _currentSortDescending,
-                _filterHasChildren ? true : null);
+                _filterHasChildren ? true : null,
+                _filterScheduledOnly ? true : null,
+                schedules);
 
             var fingerprint = BuildFingerprint(result.Results);
             if (fingerprint != _lastDataFingerprint)
@@ -975,6 +1019,7 @@
         var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
         var statuses = _filterStatuses.Any() ? _filterStatuses : null;
         var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+        var schedules = _filterSchedules.Any() ? _filterSchedules : null;
 
         using var jim = JimFactory.Create();
         var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
@@ -986,7 +1031,9 @@
             initiatedBy,
             _currentSortLabel,
             _currentSortDescending,
-            _filterHasChildren ? true : null);
+            _filterHasChildren ? true : null,
+            _filterScheduledOnly ? true : null,
+            schedules);
 
         _items = result.Results;
         _totalItems = result.TotalResults;
@@ -1054,6 +1101,13 @@
         await LoadDataAsync();
     }
 
+    private async Task OnScheduleFilterChanged(IReadOnlyCollection<Guid> values)
+    {
+        _filterSchedules = values;
+        _currentPage = 0;
+        await LoadDataAsync();
+    }
+
     private async Task OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
@@ -1075,6 +1129,13 @@
         await LoadDataAsync();
     }
 
+    private async Task OnScheduledOnlyFilterChanged(bool value)
+    {
+        _filterScheduledOnly = value;
+        _currentPage = 0;
+        await LoadDataAsync();
+    }
+
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
     {
         return selectedValues.Count switch
@@ -1083,6 +1144,23 @@
             1 => selectedValues[0],
             _ => $"{selectedValues.Count} selected"
         };
+    }
+
+    /// <summary>
+    /// MultiSelectionTextFunc is typed against the string form of the selected values regardless of the select's T,
+    /// so the Schedule select would otherwise render a raw GUID for a single selection. Map the id back to the
+    /// Schedule's name via the loaded filter options.
+    /// </summary>
+    private string GetScheduleMultiSelectText(IReadOnlyList<string> selectedValues)
+    {
+        if (selectedValues.Count == 0)
+            return string.Empty;
+
+        if (selectedValues.Count > 1)
+            return $"{selectedValues.Count} selected";
+
+        var schedule = _filterOptions?.Schedules.FirstOrDefault(s => s.Id.ToString() == selectedValues[0]);
+        return schedule?.Name ?? selectedValues[0];
     }
 
     private void HandleRowClick(TableRowClickEventArgs<Activity> args)

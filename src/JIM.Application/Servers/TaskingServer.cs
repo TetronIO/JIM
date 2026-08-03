@@ -60,6 +60,17 @@ namespace JIM.Application.Servers
             {
                 activity.ScheduleExecutionId = workerTask.ScheduleExecutionId;
                 activity.ScheduleStepIndex = workerTask.ScheduleStepIndex;
+
+                // Denormalise the producing Schedule's identity for the same durability reason (issue #1196):
+                // Schedule -> ScheduleExecution cascades on delete, so an Activity that resolved its Schedule through
+                // the execution would lose its attribution the moment the Schedule was deleted. The execution already
+                // carries the Schedule's name denormalised, so one lookup supplies both values.
+                var scheduleExecution = await Application.Scheduler.GetScheduleExecutionAsync(workerTask.ScheduleExecutionId.Value);
+                if (scheduleExecution != null)
+                {
+                    activity.ScheduledByScheduleId = scheduleExecution.ScheduleId;
+                    activity.ScheduledByScheduleName = scheduleExecution.ScheduleName;
+                }
             }
 
             await Application.Activities.CreateActivityWithTriadAsync(
