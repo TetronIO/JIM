@@ -315,6 +315,8 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
             await foreach (var _ in NewAdapter().EvaluateDeltasAsync(
                 Context(Proposal(MetaverseObjectDeletionRule.Manual, _objectType.DeletionGracePeriod)), cancellation.Token))
             {
+                // Drained deliberately without inspecting anything: the assertion is that the stream throws rather
+                // than what it yields, and an administrator who cancels must not leave an evaluation running.
             }
         });
     }
