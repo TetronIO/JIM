@@ -417,9 +417,16 @@ public class ExportExecutionServer
             // Open connection for the primary connector
             using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
             {
-                connector.OpenExportConnection(connectedSystem.SettingValues);
+                connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
             }
             Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);
+
+            // Tracks whether the export phase below completed without throwing. Read from the
+            // finally block to decide whether a failure while persisting CloseExportConnection's
+            // return value may safely propagate on its own, or must be logged and swallowed so it
+            // does not replace/mask an export failure that is already unwinding through the same
+            // finally block (see the finally block below for the full rationale).
+            var exportPhaseSucceeded = false;
 
             try
             {
@@ -680,15 +687,45 @@ public class ExportExecutionServer
                     Log.Information("ExecuteUsingCallsWithBatchingAsync: Captured {Count} created container(s) for auto-selection",
                         containerCreator.CreatedContainerExternalIds.Count);
                 }
+
+                // Reached only if nothing above threw; used by the finally block below to tell a
+                // genuine export failure apart from a clean run.
+                exportPhaseSucceeded = true;
             }
             finally
             {
-                // Always close connection
+                string? closeReturn;
                 using (Diagnostics.Diagnostics.Connector.StartSpan("CloseExportConnection"))
                 {
-                    connector.CloseExportConnection();
+                    // Always close connection
+                    closeReturn = connector.CloseExportConnection();
                 }
                 Log.Debug("ExecuteUsingCallsWithBatchingAsync: Closed export connection for {SystemName}", connectedSystem.Name);
+
+                // Persist connector state the connector chose to override at close, e.g. because
+                // opening/using the connection invalidated a previously persisted pin (issue #230).
+                // Null (the overwhelmingly common case) means "nothing to override" and must not persist.
+                // Application.ConnectedSystems mirrors the accessor SyncServer itself uses
+                // (_jim.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync); no new
+                // dependency or layer widening is needed here.
+                if (closeReturn != null)
+                {
+                    try
+                    {
+                        await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                    }
+                    catch (Exception persistEx) when (!exportPhaseSucceeded)
+                    {
+                        // The export itself already failed and that exception is propagating out of
+                        // this finally block. A .NET finally block that itself throws replaces the
+                        // in-flight exception rather than chaining it, which would silently hide the
+                        // export's own failure behind an unrelated persistence error. Log and let the
+                        // original export failure continue to unwind instead.
+                        Log.Error(persistEx,
+                            "ExecuteUsingCallsWithBatchingAsync: Failed to persist connector data returned by CloseExportConnection while the export itself is failing for Connected System {ConnectedSystemId}. The export's own failure takes precedence and will propagate.",
+                            connectedSystem.Id);
+                    }
+                }
             }
         }
         catch (OperationCanceledException)
@@ -1008,8 +1045,15 @@ public class ExportExecutionServer
                     }
                     batchConnector = callsConnector;
                     PrepareConnectorForExport(batchConnector);
-                    batchConnector.OpenExportConnection(connectedSystem.SettingValues);
+                    batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
                 }
+
+                // Tracks whether this batch completed without throwing, mirroring the primary
+                // connector's exportPhaseSucceeded flag above: used by the finally block below to
+                // decide whether a persistence failure while handling CloseExportConnection's return
+                // value may propagate on its own, or must be logged and swallowed so it does not
+                // replace/mask a batch failure that is already unwinding through the same finally.
+                var batchExportSucceeded = false;
 
                 try
                 {
@@ -1079,14 +1123,46 @@ public class ExportExecutionServer
                             progressSemaphore.Release();
                         }
                     }
+
+                    // Reached only if nothing above threw; used by the finally block below to tell a
+                    // genuine batch failure apart from a clean run.
+                    batchExportSucceeded = true;
                 }
                 finally
                 {
                     // Close the batch connector (but not the primary - that's managed by the caller)
                     if (batchIndex != 0)
                     {
-                        batchConnector.CloseExportConnection();
-                        (batchConnector as IDisposable)?.Dispose();
+                        string? closeReturn;
+                        try
+                        {
+                            closeReturn = batchConnector.CloseExportConnection();
+                        }
+                        finally
+                        {
+                            (batchConnector as IDisposable)?.Dispose();
+                        }
+
+                        // Persist connector state the connector chose to override at close (issue
+                        // #230). Null (the overwhelmingly common case) means "nothing to override".
+                        if (closeReturn != null)
+                        {
+                            try
+                            {
+                                await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                            }
+                            catch (Exception persistEx) when (!batchExportSucceeded)
+                            {
+                                // The batch itself already failed and that exception is propagating out
+                                // of this finally block. A .NET finally block that itself throws
+                                // replaces the in-flight exception rather than chaining it, which would
+                                // silently hide the batch's own failure behind an unrelated persistence
+                                // error. Log and let the original batch failure continue to unwind.
+                                Log.Error(persistEx,
+                                    "ProcessBatchesInParallelAsync: Failed to persist connector data returned by CloseExportConnection while batch {BatchIndex} is failing for Connected System {ConnectedSystemId}. The batch's own failure takes precedence and will propagate.",
+                                    batchIndex, connectedSystem.Id);
+                            }
+                        }
                     }
                 }
             }

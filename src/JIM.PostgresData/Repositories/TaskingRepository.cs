@@ -33,6 +33,14 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.SynchronisationWorkerTasks.Add(synchronisationWorkerTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case ConfigurationChangePreviewWorkerTask configurationChangePreviewWorkerTask:
+                // Unlike every other task type, this one attaches to an Activity that already exists. Add() walks
+                // the graph and marks every untracked entity it reaches for insertion, so without tracking the
+                // Activity first the insert would try to create it a second time and fail on its primary key.
+                Repository.Database.Entry(configurationChangePreviewWorkerTask.Activity).State = EntityState.Unchanged;
+                Repository.Database.ConfigurationChangePreviewWorkerTasks.Add(configurationChangePreviewWorkerTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             case TemporalScopeReconciliationWorkerTask temporalScopeReconciliationTask:
                 Repository.Database.TemporalScopeReconciliationWorkerTasks.Add(temporalScopeReconciliationTask);
                 await Repository.Database.SaveChangesAsync();
@@ -55,6 +63,13 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.WorkerTasks
             .Include(st => st.Activity)
             .SingleOrDefaultAsync(st => st.Id == id);
+    }
+
+    public async Task<WorkerTask?> GetWorkerTaskByActivityIdAsync(Guid activityId)
+    {
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .SingleOrDefaultAsync(st => st.Activity.Id == activityId);
     }
 
     public async Task<List<WorkerTask>> GetWorkerTasksAsync()

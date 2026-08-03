@@ -218,6 +218,7 @@ public static class ConfigurationChangeClassifier
         ["builtIn"] = C,
         ["icon"] = C,
         ["deletionRule"] = A,
+        ["deletionTriggerMode"] = A,
         ["deletionGracePeriod"] = A,
         ["deletionTriggerConnectedSystemIds"] = A,
         // One Connected System within that list. Adding a trigger makes objects already disconnected from it eligible
@@ -273,6 +274,10 @@ public static class ConfigurationChangeClassifier
     {
         [Constants.SettingKeys.PartitionValidationMode] = B,
         [Constants.SettingKeys.SyncPageSize] = C,
+
+        // Where a configuration change preview is evaluated, not what it evaluates. Moving the threshold changes
+        // how quickly a preview comes back, never what it says; both dispatch paths run the same orchestration.
+        [Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold] = C,
         [Constants.SettingKeys.VerboseNoChangeRecording] = C,
         [Constants.SettingKeys.MaintenanceMode] = C,
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,

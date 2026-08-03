@@ -65,17 +65,20 @@ Modifies an existing Metaverse Object Type: its identity (name, plural name, ico
 # ById (default)
 Set-JIMMetaverseObjectType -Id <int> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>] [-PassThru]
 
 # ByName
 Set-JIMMetaverseObjectType -Name <string> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>] [-PassThru]
 ```
 
 #### Parameters
@@ -90,7 +93,8 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
 | `Icon` | `string` | No | | The MudBlazor icon name shown in the UI. Pass `$null` or `''` to clear it. Rejected for built-in types. |
 | `DeletionRule` | `string` | No | | The deletion rule to apply. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before a pending deletion is executed |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected. How they trigger deletion is governed by `DeletionTriggerMode`. |
+| `DeletionTriggerMode` | `string` | No | | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to leave the stored mode unchanged. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated object type |
 
@@ -102,7 +106,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
 
     - **Manual**<br /> Objects are never automatically deleted; an administrator must delete them explicitly
     - **WhenLastConnectorDisconnected**<br /> The object is marked for deletion when all connectors are removed
-    - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when the authoritative source connector is removed
+    - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when its authoritative sources disconnect. `DeletionTriggerMode` controls whether every selected source must disconnect first (`AllSourcesDisconnect`) or any one selected source disconnecting is enough (`SpecificSourcesDisconnect`)
 
 #### Output
 
@@ -120,6 +124,10 @@ Get-JIMMetaverseObjectType -Name "Group" | Set-JIMMetaverseObjectType -DeletionR
 
 ```powershell title="Set deletion triggers for specific Connected Systems"
 Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7)
+```
+
+```powershell title="Require both HR systems to disconnect before deletion"
+Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7) -DeletionTriggerMode AllSourcesDisconnect
 ```
 
 ```powershell title="Rename a custom type and set its icon"
@@ -142,7 +150,8 @@ Creates a new Metaverse Object Type. Use this when the built-in `User`, `Group`,
 New-JIMMetaverseObjectType -Name <string> -PluralName <string>
     [-Icon <string>] [-AttributeIds <int[]>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>]
 ```
 
 #### Parameters
@@ -155,7 +164,8 @@ New-JIMMetaverseObjectType -Name <string> -PluralName <string>
 | `AttributeIds` | `int[]` | No | | Optional array of existing Metaverse attribute IDs to associate with this type at creation time. Attributes can also be associated later. |
 | `DeletionRule` | `string` | No | `Manual` | Controls when objects of this type are automatically deleted. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before deletion is executed. Use `[TimeSpan]::Zero` for immediate deletion. Ignored when `DeletionRule` is `Manual`. |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. How they trigger deletion is governed by `DeletionTriggerMode`. |
+| `DeletionTriggerMode` | `string` | No | `AllSourcesDisconnect` | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to accept the server default. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 
 !!! info "ShouldProcess"
@@ -179,6 +189,14 @@ New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" -Attribu
 New-JIMMetaverseObjectType -Name "ServiceAccount" -PluralName "ServiceAccounts" `
     -DeletionRule WhenAuthoritativeSourceDisconnected `
     -DeletionTriggerConnectedSystemIds 5 `
+    -DeletionGracePeriod ([TimeSpan]::FromDays(7))
+```
+
+```powershell title="Create a type deleted as soon as either HR system disconnects"
+New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" `
+    -DeletionRule WhenAuthoritativeSourceDisconnected `
+    -DeletionTriggerConnectedSystemIds 3, 7 `
+    -DeletionTriggerMode SpecificSourcesDisconnect `
     -DeletionGracePeriod ([TimeSpan]::FromDays(7))
 ```
 

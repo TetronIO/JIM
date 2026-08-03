@@ -457,13 +457,6 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Gets the count of Connected System Objects joined to a specific Metaverse Object.
-    /// Used to determine if an MVO has any remaining connectors before deletion.
-    /// </summary>
-    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
-
-    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>
@@ -698,6 +691,13 @@ public interface IConnectedSystemRepository
 
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
+
+    /// <summary>
+    /// Returns the display name of every Connected System keyed by id. A lightweight lookup for
+    /// event-time name snapshots (for example deletion policy snapshots, #119); the table is tiny, so a
+    /// single map read replaces per-system queries.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
@@ -900,6 +900,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
+    /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
+    /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
+    /// setting-value instances the in-memory system happened to carry (composed with a Setting navigation but no
+    /// FK scalar) were faithfully written back with SettingId 0, failing the export run on a foreign key
+    /// violation the moment a connector first returned close-time state. A watermark write must never be able
+    /// to touch configuration rows.
+    /// </summary>
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
 
     /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.

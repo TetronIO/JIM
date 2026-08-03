@@ -55,5 +55,9 @@ foreach ($import in @($Public + $Private)) {
     }
 }
 
+# Cmdlet-level aliases (distinct from parameter aliases; see src/JIM.PowerShell/CLAUDE.md for those). Declared
+# centrally so every alias is visible in one place, alongside the AliasesToExport list in JIM.psd1.
+Set-Alias -Name Get-JIMConnectedSystemDomainController -Value Get-JIMConnectedSystemDirectoryServer
+
 # Export public functions
-Export-ModuleMember -Function $Public.BaseName
+Export-ModuleMember -Function $Public.BaseName -Alias Get-JIMConnectedSystemDomainController

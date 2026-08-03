@@ -1,7 +1,7 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (Phases 1 and 2 complete: schema/model/API, engine resolution, auto-assign/densify, recall fallback incl. references, priority-aware drift, AssertedNull/NoContributor observability. Phase 3 Surface 2 (the management home) UI landed: drag-reorder + "Null is a value" on the Metaverse Object Type detail page, with `AttributePriorityService` unit tests and the "Null is a value" concept doc complete. Open: Phase 3 Surface 1 (mapping-editor precedence context + NullIsValue toggle), Surface 1c (Synchronisation Rule list priority indicator) and Surface 3 (Data Flow discovery page); Phase 4 fine-grained-authority and grace-period test matrices; Phase 5 Data Flow page docs)
-- **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
+- **Status:** Doing (Phases 1, 2 and Phase 3's Surface 2 complete; the remaining surfaces, test matrices and docs are tracked in [#1199](https://github.com/TetronIO/JIM/issues/1199))
+- **Issue:** [#1199](https://github.com/TetronIO/JIM/issues/1199) for the outstanding work; [#91](https://github.com/TetronIO/JIM/issues/91) was the original tracker (closed 2026-07-06 with Phases 3-5 still open, which is why #1199 exists)
 - **Last Updated**: 2026-07-07
 
 ## Overview

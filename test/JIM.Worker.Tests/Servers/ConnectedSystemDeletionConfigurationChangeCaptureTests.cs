@@ -71,7 +71,7 @@ public class ConnectedSystemDeletionConfigurationChangeCaptureTests
 
         _mvRepo.Setup(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<MetaverseObject>());
-        _mvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>())).ReturnsAsync(0);
+        _mvRepo.Setup(r => r.MarkMvosAsDisconnectedAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string?>())).ReturnsAsync(0);
 
         _taskingRepo.Setup(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>())).Returns(Task.CompletedTask);
 

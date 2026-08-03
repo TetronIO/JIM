@@ -30,12 +30,21 @@ public class ConnectedSystemServer
 {
     private JimApplication Application { get; }
 
-    private readonly IConnectorFactory _connectorFactory;
+    /// <summary>
+    /// Internal and settable so tests can substitute a stub Connector for the server's own schema handling;
+    /// production code never assigns it.
+    /// </summary>
+    internal IConnectorFactory ConnectorFactory { private get; set; } = new ConnectorFactory();
 
     internal ConnectedSystemServer(JimApplication application, IConnectorFactory? connectorFactory = null)
     {
         Application = application;
-        _connectorFactory = connectorFactory ?? new ConnectorFactory();
+
+        // The constructor parameter is a convenience over the property above, not a second seam: tests that
+        // build a whole JimApplication (the password fan-out ones) can hand the factory in at construction
+        // rather than reaching into the server afterwards. Both routes end at the same field.
+        if (connectorFactory != null)
+            ConnectorFactory = connectorFactory;
     }
 
     /// <summary>
@@ -45,7 +54,7 @@ public class ConnectedSystemServer
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
     private IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
-        return _connectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
+        return ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -696,8 +705,14 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
+        // Keep the caller's instance in step with the database, then write ONLY the one column. This
+        // deliberately does not go through UpdateConnectedSystemAsync: that path marks the entire graph
+        // Modified, and the in-memory system handed in here can legitimately carry runtime-only
+        // setting-value instances (a Setting navigation with no FK scalar) that must never be written
+        // back; doing so failed export runs with a SettingId 0 foreign key violation the first time a
+        // connector returned close-time state (the #230 pin establishment path).
         connectedSystem.PersistedConnectorData = persistedConnectorData;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem.Id, persistedConnectorData);
     }
 
     /// <summary>
@@ -1007,6 +1022,11 @@ public class ConnectedSystemServer
         // Get MVO impact counts
         preview.JoinedMvoCount = await Application.Repository.ConnectedSystems.GetJoinedMvoCountAsync(connectedSystemId);
 
+        // Count the MVOs deletion rule evaluation will mark for deletion, via the same mode-aware
+        // predicate ExecuteDeletionAsync's marking uses, so the preview always agrees with what
+        // execution does (#119).
+        preview.MvosWithDeletionRuleCount = await Application.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
+
         // Check for running sync operations
         var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
         preview.HasRunningSyncOperation = runningSyncTask != null;
@@ -1027,6 +1047,9 @@ public class ConnectedSystemServer
 
         if (preview.JoinedMvoCount > 0)
             preview.Warnings.Add($"{preview.JoinedMvoCount} Metaverse Object(s) are joined to CSOs in this system. They will be disconnected.");
+
+        if (preview.MvosWithDeletionRuleCount > 0)
+            preview.Warnings.Add($"{preview.MvosWithDeletionRuleCount} Metaverse Object(s) will be marked for deletion by their type's Deletion Rule.");
 
         if (preview.PendingExportCount > 0)
             preview.Warnings.Add($"{preview.PendingExportCount} Pending Export(s) will be deleted.");
@@ -1400,12 +1423,18 @@ public class ConnectedSystemServer
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
             // finish the activity
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteSchemaImportActivityAsync(activity, result);
 
             return result;
         }
         catch (Exception ex)
         {
+            // Discard whatever the aborted merge left staged on the shared DbContext before recording the
+            // failure: FailActivityWithErrorAsync saves on that same context, and without this it flushed
+            // the half-merged schema alongside the Activity's failure row, so a failed import both
+            // reported an error AND partially applied (found via #1171). The Activity write survives the
+            // cleared tracker by design: UpdateActivityAsync attaches detach-safe.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
@@ -1448,14 +1477,33 @@ public class ConnectedSystemServer
             // Capture the configuration change onto the ImportSchema activity: see the user-initiated overload above.
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteSchemaImportActivityAsync(activity, result);
 
             return result;
         }
         catch (Exception ex)
         {
+            // Discard staged schema changes before recording the failure: see the user-initiated overload above.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
+    /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
+    /// </summary>
+    private async Task CompleteSchemaImportActivityAsync(Activity activity, SchemaRefreshResult result)
+    {
+        if (result.DiscoveryWarnings.Count > 0)
+        {
+            activity.WarningMessage = string.Join(Environment.NewLine, result.DiscoveryWarnings);
+            await Application.Activities.CompleteActivityWithWarningAsync(activity);
+        }
+        else
+        {
+            await Application.Activities.CompleteActivityAsync(activity);
         }
     }
 
@@ -1475,7 +1523,9 @@ public class ConnectedSystemServer
     /// </remarks>
     private static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
     {
-        var result = new SchemaRefreshResult { Success = true };
+        // Discovery warnings travel on the result so the portal can show them beside what changed; the import's
+        // Activity carries the same warnings for the other surfaces.
+        var result = new SchemaRefreshResult { Success = true, DiscoveryWarnings = schema.Warnings.ToList() };
 
         // Credential attributes must never enter JIM's schema as new, manageable attributes.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
@@ -2210,6 +2260,31 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The Connector-detected capabilities for a Connected System (issue #231), e.g. an LDAP directory's type,
+    /// vendor, DNS host name, and paging support: facts detected from the target during a previous connection
+    /// and persisted onto <see cref="ConnectedSystem.PersistedConnectorData"/>. Purely a display concern for the
+    /// "Directory Capabilities" card on the Connected System details page; JIM never interprets the persisted
+    /// data itself, it is only ever replayed to the owning Connector to interpret.
+    /// <para>
+    /// Null when the Connected System does not exist or its Connector does not implement
+    /// <see cref="IConnectorDetectedCapabilities"/> (the UI hides the card entirely); an empty list when the
+    /// Connector supports detection but nothing has been detected yet (for example, before the first
+    /// successful connection), which the UI renders as a hint.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<ConnectorCapability>?> GetConnectedSystemDetectedCapabilitiesAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return null;
+
+        return CreateConnector(connectedSystem) is IConnectorDetectedCapabilities capabilitiesConnector
+            ? capabilitiesConnector.GetDetectedCapabilities(connectedSystem.PersistedConnectorData, Log.Logger)
+            : null;
+    }
+
+    /// <summary>
     /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy.
     /// <para>
     /// These are where JIM would be provisioning, and so where rights actually need to hold. Permissions are
@@ -2238,6 +2313,60 @@ public class ConnectedSystemServer
 
         foreach (var child in container.ChildContainers)
             CollectSelectedContainers(child, selected);
+    }
+    #endregion
+
+    #region Connected System Directory Servers
+    /// <summary>
+    /// Discovers the domain controllers in this Connected System's forest, with the Active Directory Site each
+    /// belongs to, so an administrator can be shown a choice for the Preferred Domain Controller setting rather
+    /// than having to already know a hostname (issue #1167).
+    /// <para>
+    /// Deliberately not recorded as an Activity, for the same reason as <see cref="RunPasswordPreflightAsync"/>:
+    /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the
+    /// Preferred Domain Controller setting itself; the setting is intent, and only the administrator's own
+    /// selection in the portal, REST API caller, or PowerShell caller updates it.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
+    /// <param name="draftSettingValues">Connectivity settings entered on screen but not yet saved, applied over the saved ones (encrypted settings always come from the saved values). Supplied by the portal so an administrator configuring a system can discover before saving, mirroring <see cref="CertificateServer.ReadServerCertificateAsync"/>.</param>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
+    /// <exception cref="NotSupportedException">The Connector does not support directory server discovery, or (thrown by the Connector) the connected directory is not AD-family.</exception>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    {
+        // Loaded without change tracking, so applying the drafts below cannot reach the database.
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
+
+        if (draftSettingValues is { Count: > 0 })
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorDirectoryServers directoryServersConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery.");
+
+        Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering directory servers for Connected System {ConnectedSystemId}.", connectedSystemId);
+        return await directoryServersConnector.GetDirectoryServersAsync(connectedSystem.SettingValues, Log.Logger);
+    }
+
+    /// <summary>
+    /// Whether this Connected System's Connector supports discovering directory servers at all, so the portal can
+    /// show the Discover action beside the Preferred Domain Controller field only where it means something.
+    /// <para>
+    /// A property of the Connector, not of the current settings: stable for the life of a Connected System, so it
+    /// can be asked once, mirroring <see cref="JIM.Application.Servers.CertificateServer.SupportsServerCertificateReadAsync"/>.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<bool> SupportsDirectoryServerDiscoveryAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return false;
+
+        return CreateConnector(connectedSystem) is IConnectorDirectoryServers;
     }
     #endregion
 
@@ -3966,16 +4095,6 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, objectTypeId, partitionId);
-    }
-
-    /// <summary>
-    /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
-    /// Used to determine if an MVO has any remaining connectors before deletion.
-    /// </summary>
-    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
-    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-    {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
     }
 
     /// <summary>

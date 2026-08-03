@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using JIM.Worker.Processors;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -516,6 +517,30 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case ConfigurationChangePreviewWorkerTask previewWorkerTask:
+                                {
+                                    Log.Information("ExecuteAsync: ConfigurationChangePreviewWorkerTask received for {Surface}, initiated by: {InitiatedBy}",
+                                        previewWorkerTask.Surface, LogSanitiser.Sanitise(previewWorkerTask.InitiatedByName) ?? "Unknown");
+
+                                    try
+                                    {
+                                        // The preview server owns every failure path here: it records the failure
+                                        // on the preview's stages and on the Activity, and never leaves a partial
+                                        // result looking complete. What reaches this catch is a failure to start
+                                        // at all, typically a proposal that cannot be reconstructed.
+                                        await ConfigurationChangePreviewTaskProcessor.ProcessAsync(taskJim, previewWorkerTask, cancellationTokenSource.Token);
+
+                                        Log.Information("ExecuteAsync: Configuration change preview for {Surface} finished in {ExecutionTime}",
+                                            previewWorkerTask.Surface, newWorkerTask.Activity.ExecutionTime);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst running a configuration change preview.");
+                                    }
+
+                                    break;
+                                }
                                 case TemporalScopeReconciliationWorkerTask:
                                 {
                                     Log.Information("ExecuteAsync: TemporalScopeReconciliationWorkerTask received, initiated by: {InitiatedBy}",
@@ -769,7 +794,12 @@ public class Worker : BackgroundService
                         Id = Guid.NewGuid(),
                         ObjectChangeType = ObjectChangeType.Deleted,
                         DisplayNameSnapshot = mvo.DisplayName,
-                        ObjectTypeSnapshot = mvo.Type?.Name
+                        ObjectTypeSnapshot = mvo.Type?.Name,
+                        // Decision-time policy snapshot carry-through (#119): the snapshot captured when
+                        // the deletion was scheduled rides on the MVO; copying it onto the final deletion
+                        // record keeps the record reflecting the policy that scheduled the deletion (and
+                        // its triggering system), not the configuration at execution time.
+                        DeletionPolicySnapshotJson = mvo.DeletionPolicySnapshotJson
                     };
                     var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)

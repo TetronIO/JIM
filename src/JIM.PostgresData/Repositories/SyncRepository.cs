@@ -139,8 +139,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
         => _repo.ConnectedSystems.GetReferenceExternalIdsForCsosAsync(csoIds);
 
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
+    // GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync is an owned raw SQL implementation in
+    // SyncRepository.CsOperations.cs (worker hot path, #119).
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
@@ -388,6 +388,14 @@ public partial class SyncRepository : ISyncRepository
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
         => _repo.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        // EF projection is fine here: a tiny table read at most once per run profile execution (the
+        // worker caches the map), not a per-object hot-path query.
+        => _context.ConnectedSystems
+            .AsNoTracking()
+            .Select(cs => new { cs.Id, cs.Name })
+            .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
 
     #endregion
 

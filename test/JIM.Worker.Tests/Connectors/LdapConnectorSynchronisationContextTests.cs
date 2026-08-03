@@ -51,7 +51,7 @@ public class LdapConnectorSynchronisationContextTests
             try
             {
                 // Expected to fail: nothing is listening. The assertion is about returning, not about succeeding.
-                connector.OpenImportConnection(BuildSettingValues(), _logger);
+                connector.OpenImportConnection(BuildSettingValues(), null, _logger);
             }
             catch (Exception)
             {

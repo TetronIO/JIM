@@ -11,6 +11,12 @@ public interface ITaskingRepository
 
     public Task<WorkerTask?> GetWorkerTaskAsync(Guid id);
 
+    /// <summary>
+    /// The worker task tracking a given Activity, or null when none is queued or processing for it. A worker task
+    /// is deleted on completion, so a null answer means "no longer running", not "never ran".
+    /// </summary>
+    public Task<WorkerTask?> GetWorkerTaskByActivityIdAsync(Guid activityId);
+
     public Task<List<WorkerTask>> GetWorkerTasksAsync();
 
     public Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync();

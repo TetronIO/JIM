@@ -340,6 +340,31 @@ else
 "
 fi
 
+# 11b. Install the gh-stack extension (stacked PRs)
+# The stacked-PR workflow (root CLAUDE.md "Stacked PRs for discovered work",
+# /stack-pr, /pr-merge) uses GitHub's native stacked pull requests (public
+# preview), driven locally by the github/gh-stack CLI extension. Requires
+# gh 2.90+; the github-cli Feature tracks latest, so any recent rebuild
+# qualifies. Extensions install into the user's home, not the image, so a
+# rebuild loses them - reinstall here. gh commands need auth, so on a local
+# devcontainer where login is still pending this records a follow-up action
+# instead of failing the setup.
+print_step "Installing gh-stack extension (stacked PRs)..."
+if ! command -v gh >/dev/null 2>&1; then
+    print_warning "gh CLI not found - skipping gh-stack extension install"
+elif gh extension list 2>/dev/null | grep -q 'github/gh-stack'; then
+    print_success "gh-stack extension already installed"
+elif gh extension install github/gh-stack >/dev/null 2>&1; then
+    print_success "gh-stack extension installed (run: gh stack)"
+else
+    print_warning "gh-stack extension install failed (usually: gh not yet authenticated)"
+    PENDING_ACTIONS+="  ▶ gh-stack extension not installed. After gh auth login, run:
+      gh extension install github/gh-stack
+      (Needed for the stacked-PR workflow: gh stack add/rebase/push - see /stack-pr.)
+
+"
+fi
+
 # 12. Mirror host SSH directory into the container's writable ~/.ssh
 # The host's ~/.ssh is bind-mounted read-only at /host-ssh (see devcontainer.json
 # "mounts"). We can't ssh straight from there because:

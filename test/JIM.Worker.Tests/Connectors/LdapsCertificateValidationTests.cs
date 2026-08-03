@@ -77,7 +77,7 @@ public class LdapsCertificateValidationTests
 
         try
         {
-            connector.OpenImportConnection(BuildSettingValues(host, port), _logger);
+            connector.OpenImportConnection(BuildSettingValues(host, port), null, _logger);
         }
         finally
         {
@@ -201,7 +201,7 @@ public class LdapsCertificateValidationTests
         connector.SetCertificateProvider(new FakeCertificateProvider([_caCertificatePath]));
 
         Assert.That(
-            () => connector.OpenImportConnection(BuildSettingValues(_mismatchedHostOrHost, _port), _logger),
+            () => connector.OpenImportConnection(BuildSettingValues(_mismatchedHostOrHost, _port), null, _logger),
             Throws.TypeOf<ServerCertificateRejectedException>());
 
         Assert.That(CountTrustDirectories(), Is.EqualTo(trustDirectoriesBefore));

@@ -1,0 +1,170 @@
+@using JIM.Models.Staging
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Lists the domain controllers JIM discovers in a Connected System's directory, so an administrator can pick
+    one instead of having to already know a hostname. Selecting a row fills the Preferred Domain Controller field
+    on the settings page; nothing here writes anything on its own. Failures (an unreachable directory, refused
+    credentials) render inside the dialog with a Retry action rather than crashing the page.
+*@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Discover Domain Controllers</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudStack AlignItems="AlignItems.Center" Class="pa-8" Spacing="4">
+                <MudProgressCircular Indeterminate="true" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Discovering domain controllers...</MudText>
+            </MudStack>
+        }
+        else if (_errorMessage != null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_errorMessage</MudAlert>
+        }
+        else if (_directoryServers is { Count: 0 })
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                JIM did not find any domain controllers in this directory's CN=Sites configuration.
+            </MudAlert>
+        }
+        else if (_directoryServers != null)
+        {
+            <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
+                <thead>
+                    <tr>
+                        <th>FQDN</th>
+                        <th>Site</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var directoryServer in _directoryServers)
+                    {
+                        <tr class="jim-directory-server-row" @onclick="@(() => Select(directoryServer))">
+                            <td>@directoryServer.HostName</td>
+                            <td>
+                                @if (string.IsNullOrEmpty(directoryServer.Site))
+                                {
+                                    <EmptyValue />
+                                }
+                                else
+                                {
+                                    @directoryServer.Site
+                                }
+                            </td>
+                            <td class="text-right">
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="@(() => Select(directoryServer))">
+                                    Select
+                                </MudButton>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_errorMessage != null)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="LoadAsync" data-testid="jim-directory-server-discovery-retry">Retry</MudButton>
+        }
+        <MudButton OnClick="Cancel" DropShadow="false" data-testid="jim-directory-server-discovery-close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .jim-directory-server-row {
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System whose directory to discover domain controllers in.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// Connectivity settings entered on screen but not yet saved, applied over the saved ones so an
+    /// administrator configuring a system can discover before saving (encrypted settings always come from the
+    /// saved values), mirroring the server certificate read action.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<ConnectedSystemSettingValueDraft>? DraftSettingValues { get; set; }
+
+    private bool _loading = true;
+    private string? _errorMessage;
+    private List<ConnectorDirectoryServer>? _directoryServers;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _errorMessage = null;
+        _directoryServers = null;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            _directoryServers = await jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, DraftSettingValues);
+        }
+        // Dialog boundary: any discovery failure (an unreachable directory, refused credentials, a directory
+        // that is not AD-family) must render inside the dialog rather than crash the page, so every failure
+        // reason is shown the same way, with the same Retry action, regardless of its cause. Cancellation is
+        // excluded so a tearing-down circuit propagates rather than rendering as a discovery failure.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Select(ConnectorDirectoryServer directoryServer) => MudDialog.Close(DialogResult.Ok(directoryServer.HostName));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the dialog and returns the selected domain controller's FQDN, or null when the administrator closed
+    /// the dialog without selecting one.
+    /// </summary>
+    public static async Task<string?> ShowAsync(IDialogService dialogService, int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    {
+        var parameters = new DialogParameters<DirectoryServerDiscoveryDialog>
+        {
+            { x => x.ConnectedSystemId, connectedSystemId },
+            { x => x.DraftSettingValues, draftSettingValues }
+        };
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await dialogService.ShowAsync<DirectoryServerDiscoveryDialog>("Discover Domain Controllers", parameters, options);
+        var result = await dialog.Result;
+
+        return result is null or { Canceled: true } ? null : result.Data as string;
+    }
+}

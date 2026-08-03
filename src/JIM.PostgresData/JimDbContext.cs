@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Logic;
+using JIM.Models.Preview;
 using JIM.Models.Scheduling;
 using JIM.Models.Search;
 using JIM.Models.Security;
@@ -41,6 +42,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
     public virtual DbSet<ConnectorDefinitionSetting> ConnectorDefinitionSettings { get; set; } = null!;
     public virtual DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreview> ConfigurationChangePreviews { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewGroup> ConfigurationChangePreviewGroups { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewDelta> ConfigurationChangePreviewDeltas { get; set; } = null!;
     public virtual DbSet<ExampleDataObjectType> ExampleDataObjectTypes { get; set; } = null!;
     public virtual DbSet<ExampleDataTemplate> ExampleDataTemplates { get; set; } = null!;
     public virtual DbSet<ExampleDataTemplateAttribute> ExampleDataTemplateAttributes { get; set; } = null!;
@@ -85,6 +89,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
     // Connection pooling constants
@@ -359,6 +364,14 @@ public class JimDbContext : DbContext
 
         modelBuilder.Entity<MetaverseObjectType>()
             .HasMany(mot => mot.Attributes);
+
+        // Authoritative source trigger mode (#119). The store-level default backfills existing rows with
+        // SpecificSourcesDisconnect (0), the behaviour they were configured with before trigger modes
+        // existed (#115), so the migration is behaviour-preserving with no backfill. New entities read the
+        // property initialiser instead and start at the safe default (AllSourcesDisconnect).
+        modelBuilder.Entity<MetaverseObjectType>()
+            .Property(mot => mot.DeletionTriggerMode)
+            .HasDefaultValue(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
 
         // advisory Standard Mapping metadata (#1104). Mappings are owned by their attribute (cascade delete),
         // and each (attribute, standard, counterpart name) combination exists at most once so the built-in
@@ -713,6 +726,55 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => new { o.ActivityRunProfileExecutionItemId, o.OutcomeType })
             .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
+
+        // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
+        // so the existing history-retention housekeeping removes preview results with the Activity that owns them;
+        // no separate cleanup, and no way for preview data (which holds attribute values) to outlive its retention.
+        modelBuilder.Entity<ConfigurationChangePreview>(preview =>
+        {
+            // The Activity id IS the preview's key: a preview and its Activity are one thing, and sharing the key
+            // makes the 1:1 unenforceable-by-accident rather than merely conventional.
+            preview.HasKey(p => p.ActivityId);
+
+            preview.HasOne(p => p.Activity)
+                .WithOne()
+                .HasForeignKey<ConfigurationChangePreview>(p => p.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ConfigurationChangePreviewGroup>(group =>
+        {
+            group.HasOne(g => g.Preview)
+                .WithMany(p => p.Groups)
+                .HasForeignKey(g => g.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The summary landing view reads every group for one preview, ordered by size.
+            group.HasIndex(g => g.ActivityId)
+                .HasDatabaseName("IX_ConfigurationChangePreviewGroups_ActivityId");
+        });
+
+        modelBuilder.Entity<ConfigurationChangePreviewDelta>(delta =>
+        {
+            delta.HasOne(d => d.Preview)
+                .WithMany(p => p.Deltas)
+                .HasForeignKey(d => d.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            delta.HasOne(d => d.Group)
+                .WithMany(g => g.Deltas)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Drill-down is always "the rows of one group of one preview", server-side paginated.
+            delta.HasIndex(d => new { d.ActivityId, d.GroupId })
+                .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_GroupId");
+
+            // Filtering a preview by transition type without picking a group ("show me everything that would be
+            // disconnected") is the other access path, and it must not degrade into a scan of every delta row.
+            delta.HasIndex(d => new { d.ActivityId, d.TransitionType })
+                .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_TransitionType");
+        });
 
         // Performance index for Metaverse Object deletion automation
         // Optimises GetMetaverseObjectsEligibleForDeletionAsync queries
