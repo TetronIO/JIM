@@ -2801,6 +2801,20 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
+    public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
+    {
+        // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
+        // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
+        // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        return await Repository.Database.MetaverseObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedMetaverseObjectId == deletedMetaverseObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.DeletedObjectType)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         // First, get the Delete change record

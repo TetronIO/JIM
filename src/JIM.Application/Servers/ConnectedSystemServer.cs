@@ -3091,6 +3091,9 @@ public class ConnectedSystemServer
             // Use string fields to preserve the values for UI display:
             DeletedObjectExternalId = externalIdDisplayValue,
             DeletedObjectDisplayName = displayName,
+            // The id survives here as a plain column; ConnectedSystemObjectId is a foreign key and is nulled
+            // with the object, so this is the only way back to this record from a reference to what was deleted.
+            DeletedConnectedSystemObjectId = connectedSystemObject.Id,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             // Copy initiator info from the Activity for audit trail (if Activity is loaded)
             InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -3169,6 +3172,7 @@ public class ConnectedSystemServer
                     // Use string fields to preserve the values for UI display:
                     DeletedObjectExternalId = externalId,
                     DeletedObjectDisplayName = displayName,
+                    DeletedConnectedSystemObjectId = cso.Id,
                     ActivityRunProfileExecutionItem = executionItem,
                     // Copy initiator info from the Activity for audit trail (if Activity is loaded)
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -3856,6 +3860,7 @@ public class ConnectedSystemServer
                     DeletedObjectType = cso.Type,
                     DeletedObjectExternalId = externalId,
                     DeletedObjectDisplayName = displayName,
+                    DeletedConnectedSystemObjectId = cso.Id,
                     ActivityRunProfileExecutionItem = executionItem,
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
                     InitiatedById = executionItem.Activity?.InitiatedById,
@@ -5656,6 +5661,18 @@ public class ConnectedSystemServer
     public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
+    }
+
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. Backs the Deleted Objects page's deep link, reached from a causality view that holds the
+    /// deleted record's id rather than its change record's.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    public async Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeAsync(deletedConnectedSystemObjectId);
     }
     #endregion
 

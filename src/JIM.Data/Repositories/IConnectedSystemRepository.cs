@@ -634,6 +634,17 @@ public interface IConnectedSystemRepository
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
     Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
 
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. The inverse of the browsing lookups: a caller holding a reference to a deleted record (a
+    /// causality view naming the record a run deleted) knows that id and nothing about the change record.
+    /// The foreign key to the Connected System Object is nulled when the object goes, which is why
+    /// <see cref="ConnectedSystemObjectChange.DeletedConnectedSystemObjectId"/> exists and is matched here.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId);
+
     #region Synchronisation Rule Mappings
     /// <summary>
     /// Gets all mappings for a Synchronisation Rule.

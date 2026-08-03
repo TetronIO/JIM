@@ -232,12 +232,26 @@ public static class CausalityModelBuilder
                 }
                 break;
 
+            case ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted:
+                // The record no longer exists, so name it and link its durable deletion record rather than
+                // a detail page that would 404. Mirrors MvoDeleted directly below.
+                if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
+                    links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Record));
+                links.Add(new CausalityEntityLink(
+                    "View deletion record",
+                    GetDeletedCsoHref(outcome.TargetEntityId),
+                    CausalityEntityKind.DeletionRecord));
+                break;
+
             case ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted:
                 // The Metaverse Object no longer exists: name it, but link the durable deletion
                 // record browser instead of the (deleted) Identity's detail page
                 if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                     links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Identity));
-                links.Add(new CausalityEntityLink("View deletion record", "/admin/deleted-objects", CausalityEntityKind.DeletionRecord));
+                links.Add(new CausalityEntityLink(
+                    "View deletion record",
+                    GetDeletedMvoHref(outcome.TargetEntityId),
+                    CausalityEntityKind.DeletionRecord));
                 break;
 
             case ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed:
@@ -285,6 +299,31 @@ public static class CausalityModelBuilder
         }
 
         return links;
+    }
+
+    /// <summary>
+    /// The deletion record browser, deep-linked to the deleted Metaverse Object where its id was captured.
+    /// The tab slug travels with the link because the browser opens on Deleted CSOs by default; without it
+    /// the dialog would open over the wrong tab. Falls back to the unfiltered browser for outcomes written
+    /// before the id was recorded, which is still where the record lives.
+    /// </summary>
+    internal static string GetDeletedMvoHref(Guid? deletedMvoId)
+    {
+        return deletedMvoId is { } id && id != Guid.Empty
+            ? $"/admin/deleted-objects?t=deleted-mvos&mvo={id}"
+            : "/admin/deleted-objects";
+    }
+
+    /// <summary>
+    /// The Connected System Object counterpart of <see cref="GetDeletedMvoHref"/>. No tab slug: Deleted CSOs
+    /// is the browser's first tab, and NavigableMudTabs keeps the first tab's URL clean by omitting the
+    /// parameter, so naming it here would produce a link that does not match the one the page settles on.
+    /// </summary>
+    internal static string GetDeletedCsoHref(Guid? deletedCsoId)
+    {
+        return deletedCsoId is { } id && id != Guid.Empty
+            ? $"/admin/deleted-objects?cso={id}"
+            : "/admin/deleted-objects";
     }
 
     private static string GetMetaverseObjectHref(Guid mvoId, CausalityPageContext context)

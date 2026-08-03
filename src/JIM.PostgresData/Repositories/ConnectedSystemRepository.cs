@@ -4715,6 +4715,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId)
+    {
+        // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
+        // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
+        // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedConnectedSystemObjectId == deletedConnectedSystemObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.DeletedObjectType)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         // First, get the deletion change to find the ConnectedSystemId and External ID

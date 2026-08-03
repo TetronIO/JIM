@@ -90,7 +90,7 @@ public class CausalityTimelineViewTests
 
         var cut = RenderTimeline(context, model);
 
-        var deletionLinks = cut.FindAll("a[href='/admin/deleted-objects']");
+        var deletionLinks = cut.FindAll("a[href='/admin/deleted-objects?t=deleted-mvos&mvo=11111111-1111-1111-1111-111111111111']");
         Assert.That(deletionLinks, Is.Not.Empty);
     }
 

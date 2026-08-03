@@ -252,10 +252,17 @@ public static class CausalitySummaryBuilder
             var identityName = mvoDeleted.Links.FirstOrDefault(l => l.Kind == CausalityEntityKind.Identity)?.Label;
             if (identityName != null)
             {
-                // The Identity no longer exists, so its mention links the durable deletion record browser
+                // The Identity no longer exists, so its mention links the durable deletion record instead.
+                // Reuse the event's own deletion-record href rather than rebuilding one: the two mentions
+                // are the same object, and a summary that landed somewhere else than the event beneath it
+                // would be its own small lie.
+                var deletionRecordHref = mvoDeleted.Links
+                    .FirstOrDefault(l => l.Kind == CausalityEntityKind.DeletionRecord)?.Href
+                    ?? CausalityModelBuilder.GetDeletedMvoHref(null);
+
                 clauses.Add([
                     new SummarySegment.Text("the Identity "),
-                    new SummarySegment.Entity(identityName, "/admin/deleted-objects", CausalityEntityKind.Identity),
+                    new SummarySegment.Entity(identityName, deletionRecordHref, CausalityEntityKind.Identity),
                     new SummarySegment.Text(" was deleted")
                 ]);
             }

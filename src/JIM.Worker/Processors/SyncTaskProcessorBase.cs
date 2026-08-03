@@ -803,7 +803,8 @@ public abstract class SyncTaskProcessorBase
 
             // Not joined but has a different JoinType (e.g., Explicit) - this is a regular orphan deletion
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
@@ -822,7 +823,8 @@ public abstract class SyncTaskProcessorBase
             // Note: We still delete the CSO as it's obsolete in the source system,
             // but we don't disconnect from MVO or trigger deletion rules
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
@@ -997,8 +999,13 @@ public abstract class SyncTaskProcessorBase
                     detailCount: recallClearedAttributeCount);
             }
 
+            // The id is captured here, before the record is deleted: ActivityRunProfileExecutionItems'
+            // ConnectedSystemObjectId is a foreign key and is nulled with the object, so this outcome is
+            // the only durable statement of which record the run deleted, and the only way to reach its
+            // deletion record afterwards.
             SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
-                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             // Add MVO deletion fate outcome when the deletion rule was triggered. The outcome carries
             // the deleted Metaverse Object's id and display name snapshot (captured before deletion)

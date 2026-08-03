@@ -66,7 +66,7 @@ public class CausalityPanelTests
         var cut = RenderPanel(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".evt-card").Count, Is.GreaterThan(1));
-        Assert.That(cut.FindAll("a[href='/admin/deleted-objects']"), Is.Not.Empty);
+        Assert.That(cut.FindAll("a[href='/admin/deleted-objects?t=deleted-mvos&mvo=11111111-1111-1111-1111-111111111111']"), Is.Not.Empty);
     }
 
     [Test]

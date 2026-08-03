@@ -115,7 +115,7 @@ public class CausalitySummaryBuilderTests
         var deletedIdentity = entities.SingleOrDefault(e => e.Kind == CausalityEntityKind.Identity);
         Assert.That(deletedIdentity, Is.Not.Null);
         Assert.That(deletedIdentity!.Label, Is.EqualTo("Erin Byrne"));
-        Assert.That(deletedIdentity.Href, Is.EqualTo("/admin/deleted-objects"),
+        Assert.That(deletedIdentity.Href, Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=11111111-1111-1111-1111-111111111111"),
             "A deleted Identity links to the durable deletion record browser, not its (gone) detail page");
     }
 

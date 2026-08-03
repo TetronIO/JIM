@@ -1653,5 +1653,17 @@ public class MetaverseServer
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
     }
+
+    /// <summary>
+    /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.
+    /// Backs the Deleted Objects page's deep link, which is reached from a causality view holding the
+    /// deleted Identity's id rather than its change record's.
+    /// </summary>
+    /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangeAsync(deletedMetaverseObjectId);
+    }
     #endregion
 }

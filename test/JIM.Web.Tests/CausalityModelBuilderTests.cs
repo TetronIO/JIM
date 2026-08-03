@@ -169,6 +169,41 @@ public class CausalityModelBuilderTests
     }
 
     [Test]
+    public void Build_CsoDeletedOutcome_LinksItsDeletionRecordByTheDeletedRecordsId()
+    {
+        var deletedCsoId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+            parent: null, ordinal: 0, targetEntityId: deletedCsoId, targetEntityDescription: "Project-Catalyst");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var deletionLink = model.Roots[0].Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.DeletionRecord);
+        Assert.That(deletionLink, Is.Not.Null);
+        Assert.That(deletionLink!.Href, Is.EqualTo($"/admin/deleted-objects?cso={deletedCsoId}"));
+
+        // The record is named but not linked: its detail page went with it
+        var recordLink = model.Roots[0].Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Record);
+        Assert.That(recordLink, Is.Not.Null);
+        Assert.That(recordLink!.Label, Is.EqualTo("Project-Catalyst"));
+        Assert.That(recordLink.Href, Is.Null);
+    }
+
+    [Test]
+    public void Build_CsoDeletedOutcomeWithoutATargetId_LinksTheUnfilteredBrowser()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+            parent: null, ordinal: 0);
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        var deletionLink = model.Roots[0].Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.DeletionRecord);
+        Assert.That(deletionLink, Is.Not.Null);
+        Assert.That(deletionLink!.Href, Is.EqualTo("/admin/deleted-objects"));
+    }
+
+    [Test]
     public void Build_PendingExportCreatedOutcomeWithoutATargetId_LinksTheSystemQueue()
     {
         // Deprovisioning Pending Exports staged by the Metaverse Object Housekeeping batch can reach the
@@ -211,7 +246,8 @@ public class CausalityModelBuilderTests
 
         var deletionLink = mvoDeleted.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.DeletionRecord);
         Assert.That(deletionLink, Is.Not.Null);
-        Assert.That(deletionLink!.Href, Is.EqualTo("/admin/deleted-objects"));
+        Assert.That(deletionLink!.Href, Is.EqualTo("/admin/deleted-objects?t=deleted-mvos&mvo=11111111-1111-1111-1111-111111111111"),
+            "The deletion record is deep-linked by the deleted Identity's own id, on the Deleted MVOs tab");
 
         // The deleted Identity is named, but not linked: the Metaverse Object no longer exists
         var identityMention = mvoDeleted.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.Identity);

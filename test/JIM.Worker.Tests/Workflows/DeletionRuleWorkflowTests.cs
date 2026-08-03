@@ -98,6 +98,12 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         Assert.That(rootOutcome.Children[0].OutcomeType,
             Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted),
             "Child of Disconnected should be CsoDeleted");
+
+        // The outcome must name what it deleted. The RPEI's own ConnectedSystemObjectId is a foreign key and
+        // is nulled the moment the record goes, so without this the deletion is the one event in the tree
+        // that cannot say which object it was about, and nothing can link to its deletion record.
+        Assert.That(rootOutcome.Children[0].TargetEntityId, Is.Not.Null,
+            "CsoDeleted should carry the deleted Connected System Object's id");
     }
 
     #endregion

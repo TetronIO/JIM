@@ -518,6 +518,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(c.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (c.DeletedConnectedSystemObjectId is { } deletedCsoId)
+                await writer.WriteAsync(deletedCsoId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
