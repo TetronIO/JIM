@@ -230,6 +230,18 @@ public partial class SyncRepository
                 await writer.WriteAsync(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (mvo.DeletionTriggeredBySystemId.HasValue)
+                await writer.WriteAsync(mvo.DeletionTriggeredBySystemId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (mvo.DeletionTriggeredBySystemName is not null)
+                await writer.WriteAsync(mvo.DeletionTriggeredBySystemName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (mvo.DeletionPolicySnapshotJson is not null)
+                await writer.WriteAsync(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
             if (mvo.CachedDisplayName is not null)
                 await writer.WriteAsync(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
             else
@@ -349,6 +361,9 @@ public partial class SyncRepository
                 parameters.Add((int)mvo.DeletionInitiatedByType);
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(mvo.ScopeReviewPending);
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
@@ -511,8 +526,8 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkUpdateMvoRowsViaEfAsync(List<MetaverseObject> objects)
     {
-        // Id plus the eleven mutable columns.
-        const int columnsPerRow = 12;
+        // Id plus the fourteen mutable columns.
+        const int columnsPerRow = 15;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         // Reuse one StringBuilder across chunks (Clear() each iteration) rather than allocating per chunk.
@@ -530,6 +545,9 @@ public partial class SyncRepository
                     "DeletionInitiatedByType" = v."DeletionInitiatedByType",
                     "DeletionInitiatedById" = v."DeletionInitiatedById",
                     "DeletionInitiatedByName" = v."DeletionInitiatedByName",
+                    "DeletionTriggeredBySystemId" = v."DeletionTriggeredBySystemId",
+                    "DeletionTriggeredBySystemName" = v."DeletionTriggeredBySystemName",
+                    "DeletionPolicySnapshotJson" = v."DeletionPolicySnapshotJson",
                     "CachedDisplayName" = v."CachedDisplayName",
                     "ScopeReviewPending" = v."ScopeReviewPending",
                     "LastScopeEvaluatedAt" = v."LastScopeEvaluatedAt"
@@ -542,7 +560,7 @@ public partial class SyncRepository
                 if (i > 0) sql.Append(',');
                 var o = i * columnsPerRow;
                 // Explicit casts give the VALUES columns a definite type even when a whole chunk is null for a column.
-                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::timestamptz,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::int,{{{o + 5}}}::timestamptz,{{{o + 6}}}::int,{{{o + 7}}}::uuid,{{{o + 8}}}::text,{{{o + 9}}}::text,{{{o + 10}}}::boolean,{{{o + 11}}}::timestamptz)");
+                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::timestamptz,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::int,{{{o + 5}}}::timestamptz,{{{o + 6}}}::int,{{{o + 7}}}::uuid,{{{o + 8}}}::text,{{{o + 9}}}::int,{{{o + 10}}}::text,{{{o + 11}}}::text,{{{o + 12}}}::text,{{{o + 13}}}::boolean,{{{o + 14}}}::timestamptz)");
 
                 var mvo = chunk[i];
                 parameters.Add(mvo.Id);
@@ -554,13 +572,16 @@ public partial class SyncRepository
                 parameters.Add((int)mvo.DeletionInitiatedByType);
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionTriggeredBySystemName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(mvo.ScopeReviewPending);
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             sql.Append("""
-                ) AS v("Id","LastUpdated","TypeId","Status","Origin","LastConnectorDisconnectedDate","DeletionInitiatedByType","DeletionInitiatedById","DeletionInitiatedByName","CachedDisplayName","ScopeReviewPending","LastScopeEvaluatedAt")
+                ) AS v("Id","LastUpdated","TypeId","Status","Origin","LastConnectorDisconnectedDate","DeletionInitiatedByType","DeletionInitiatedById","DeletionInitiatedByName","DeletionTriggeredBySystemId","DeletionTriggeredBySystemName","DeletionPolicySnapshotJson","CachedDisplayName","ScopeReviewPending","LastScopeEvaluatedAt")
                 WHERE m."Id" = v."Id"
                 """);
 

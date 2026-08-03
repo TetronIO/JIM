@@ -94,6 +94,34 @@
 
     The DeprovisionActions step runs Tests 8-11 together.
 
+    Tests 12-13: Authoritative Source Trigger Modes (issue #119)
+        WhenAuthoritativeSourceDisconnected has a configurable trigger mode: AllSourcesDisconnect
+        (delete only once no selected source retains a joined CSO) or SpecificSourcesDisconnect
+        (any selected source disconnecting triggers deletion; the pre-#119 behaviour). Grace period
+        rejoin cancellation is mode-aware: a rejoin only cancels a scheduled deletion when the
+        mode's trigger condition no longer holds. Both tests select TWO sources (HR CSV + Training
+        CSV) and use a long grace period so housekeeping never deletes mid-test.
+
+    Test 12: All sources trigger mode
+        - Configure AllSourcesDisconnect with HR CSV + Training CSV as sources, 1-hour grace period
+        - Remove the training record (first source disconnects)
+        - Assert: MVO NOT marked for deletion (the HR source still holds a joined CSO)
+        - Remove the HR user (last remaining source disconnects; the LDAP target CSO remains)
+        - Assert: MVO marked for deletion with DeletionTriggeredBySystemId/Name recorded (HR CSV)
+          and the decision-time policy snapshot persisted on the MVO
+        - Re-add the HR user (any listed source rejoining falsifies "all sources gone")
+        - Assert: rejoin lands on the SAME MVO and the scheduled deletion is cancelled
+          (all deletion markers cleared)
+
+    Test 13: Mode-aware grace period rejoin cancellation (Specific mode)
+        - Configure SpecificSourcesDisconnect with HR CSV + Training CSV as sources, 1-hour grace period
+        - Remove the HR user (marks the MVO), then the training record (re-marks; the recorded
+          trigger is now the Training system)
+        - Re-add the HR user: a listed source, but NOT the recorded triggering system
+        - Assert: deletion NOT cancelled (MVO still marked, trigger fields unchanged)
+        - Re-add the training record: the recorded triggering system rejoins
+        - Assert: deletion cancelled (all deletion markers cleared, isPendingDeletion=false)
+
 .PARAMETER Step
     Which test step to execute
 
@@ -131,6 +159,8 @@ param(
         "DeprovisionJoinedDelete",
         "DeprovisionJoinedDisconnect",
         "DeprovisionActions",
+        "AuthoritativeAllSources",
+        "AuthoritativeRejoinCancellation",
         "All"
     )]
     [string]$Step = "All",
@@ -546,7 +576,13 @@ function Set-DeletionRuleConfig {
         [TimeSpan]$GracePeriod = [TimeSpan]::Zero,
 
         [Parameter(Mandatory=$false)]
-        [string]$DeletionTriggerConnectedSystemIds,
+        [int[]]$DeletionTriggerConnectedSystemIds,
+
+        # Authoritative Source Trigger Mode (issue #119). When omitted, the stored mode is left
+        # unchanged (matching the Set-JIMMetaverseObjectType semantics).
+        [Parameter(Mandatory=$false)]
+        [ValidateSet('AllSourcesDisconnect', 'SpecificSourcesDisconnect')]
+        [string]$DeletionTriggerMode,
 
         [Parameter(Mandatory=$false)]
         [Nullable[bool]]$RemoveContributedAttributesOnObsoletion,
@@ -564,9 +600,13 @@ function Set-DeletionRuleConfig {
     if ($DeletionTriggerConnectedSystemIds) {
         $setParams.DeletionTriggerConnectedSystemIds = $DeletionTriggerConnectedSystemIds
     }
+    if ($DeletionTriggerMode) {
+        $setParams.DeletionTriggerMode = $DeletionTriggerMode
+    }
     Set-JIMMetaverseObjectType @setParams
 
-    Write-Host "  Configured MVO type: DeletionRule=$DeletionRule, GracePeriod=$GracePeriod" -ForegroundColor Green
+    $modeLabel = if ($DeletionTriggerMode) { ", TriggerMode=$DeletionTriggerMode" } else { "" }
+    Write-Host "  Configured MVO type: DeletionRule=$DeletionRule, GracePeriod=$GracePeriod$modeLabel" -ForegroundColor Green
 
     # Set RemoveContributedAttributesOnObsoletion on the specified connected system's object type
     if ($null -ne $RemoveContributedAttributesOnObsoletion) {
@@ -649,6 +689,58 @@ function Get-DeletePendingExportCount {
     )
 
     return [int](Get-JIMPendingExport -ConnectedSystemId $Config.LDAPSystemId -Count -ChangeType Delete)
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Read an MVO's deletion markers directly from the database (issue #119)
+# The REST MVO detail DTO does not expose the trigger recording fields, so the trigger mode tests
+# assert against the MetaverseObjects table via psql in the jim.database container (same pattern
+# as Assert-ExportRpeisHaveCsoLink in Test-Helpers.ps1).
+# -----------------------------------------------------------------------------------------------------------------
+function Get-MvoDeletionMarkers {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$MvoId
+    )
+
+    # Validate the id is a well-formed GUID before substituting into SQL. The query interpolates the
+    # id directly because psql -c does not support bind parameters over docker compose exec;
+    # restricting to a GUID closes the only realistic injection vector.
+    $parsedId = [Guid]::Empty
+    if (-not [Guid]::TryParse($MvoId, [ref]$parsedId)) {
+        throw "Get-MvoDeletionMarkers: MvoId '$MvoId' is not a valid GUID."
+    }
+    $safeMvoId = $parsedId.ToString()
+
+    $query = @"
+SELECT COALESCE("DeletionTriggeredBySystemId"::text, ''),
+       COALESCE("DeletionTriggeredBySystemName", ''),
+       CASE WHEN "DeletionPolicySnapshotJson" IS NULL THEN 'f' ELSE 't' END,
+       CASE WHEN "LastConnectorDisconnectedDate" IS NULL THEN 'f' ELSE 't' END
+FROM "MetaverseObjects"
+WHERE "Id" = '$safeMvoId';
+"@
+
+    $row = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $query 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Get-MvoDeletionMarkers: psql query failed for MVO $MvoId. Output: $row"
+    }
+
+    $rowText = ($row | Out-String).Trim()
+    if (-not $rowText) {
+        throw "Get-MvoDeletionMarkers: no MetaverseObjects row found for MVO $MvoId."
+    }
+
+    $parts = $rowText.Split('|')
+    if ($parts.Count -lt 4) {
+        throw "Get-MvoDeletionMarkers: unexpected psql output for MVO ${MvoId}: '$rowText'"
+    }
+    return @{
+        TriggeredBySystemId   = if ($parts[0]) { [int]$parts[0] } else { $null }
+        TriggeredBySystemName = if ($parts[1]) { $parts[1] } else { $null }
+        HasPolicySnapshot     = ($parts[2] -eq 't')
+        IsMarkedForDeletion   = ($parts[3] -eq 't')
+    }
 }
 
 # -----------------------------------------------------------------------------------------------------------------
@@ -907,6 +999,7 @@ try {
         "test.manual.recall", "test.manual.norecall",
         "test.deprov.provdelete", "test.deprov.provdisc",
         "test.deprov.joindelete", "test.deprov.joindisc",
+        "test.trigger.allsrc", "test.trigger.rejoin",
         "baseline.user1"
     )
     $deletedCount = 0
@@ -1763,6 +1856,265 @@ try {
             -EmployeeId "DEPROV004" -SamAccountName "test.deprov.joindisc" `
             -DisplayName "Test Deprov JoinDisc" -TestName "Test11" `
             -StepName "DeprovisionJoinedDisconnect"
+    }
+
+    # =============================================================================================================
+    # Test 12: WhenAuthoritativeSourceDisconnected + All Sources Trigger Mode (issue #119)
+    # =============================================================================================================
+    # Two authoritative sources are selected (HR CSV + Training CSV) with AllSourcesDisconnect: the
+    # MVO must only be marked for deletion once NO selected source retains a joined CSO. The LDAP
+    # target CSO never blocks or triggers deletion (it is not a listed source). A 1-hour grace
+    # period keeps housekeeping from deleting the MVO mid-test, and the deletion markers
+    # (DeletionTriggeredBySystemId/Name, decision-time policy snapshot) are asserted directly
+    # against the database.
+    # =============================================================================================================
+    if ($Step -in @("AuthoritativeAllSources", "All")) {
+        Write-TestSection "Test 12: WhenAuthoritativeSourceDisconnected + All Sources Trigger Mode"
+        Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, TriggerMode: AllSourcesDisconnect" -ForegroundColor Gray
+        Write-Host "Authoritative sources: CSV (HR System) + Training, GracePeriod: 1 hour" -ForegroundColor Gray
+        Write-Host "Expected: first source disconnecting does NOT mark the MVO; the last one does," -ForegroundColor Gray
+        Write-Host "          recording the triggering system; a listed source rejoining cancels" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
+
+        # Configure deletion rules - both sources authoritative, All mode, recall disabled on CSV
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+            -GracePeriod ([TimeSpan]::FromHours(1)) `
+            -DeletionTriggerConnectedSystemIds @($config.CSVSystemId, $config.TrainingSystemId) `
+            -DeletionTriggerMode "AllSourcesDisconnect" `
+            -RemoveContributedAttributesOnObsoletion $false
+
+        # Disable recall on the Training object type too (a prior test may have enabled it);
+        # recall is irrelevant to deletion tests and would recall the display name used for lookups
+        $trainingObjectTypes = Get-JIMConnectedSystem -Id $config.TrainingSystemId -ObjectTypes
+        $trainingRecordType = $trainingObjectTypes | Where-Object { $_.name -match "^(trainingRecord|record)$" } | Select-Object -First 1
+        if ($trainingRecordType) {
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $config.TrainingSystemId -ObjectTypeId $trainingRecordType.id `
+                -RemoveContributedAttributesOnObsoletion $false
+        }
+
+        # Provision a test user via HR CSV (creates MVO + CSV CSO + LDAP CSO), then join Training
+        $test12Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "TRIG001" `
+            -SamAccountName "test.trigger.allsrc" `
+            -DisplayName "Test Trigger AllSrc" `
+            -TestName "Test12"
+
+        $test12MvoId = $test12Mvo.id
+        Write-Host "  MVO ID: $test12MvoId" -ForegroundColor Gray
+
+        Invoke-ProvisionTrainingData -Config $config `
+            -EmployeeId "TRIG001" `
+            -SamAccountName "test.trigger.allsrc" `
+            -TestName "Test12"
+
+        # Act 1: remove the training record - the FIRST listed source disconnects
+        Invoke-RemoveTrainingData -Config $config -EmployeeId "TRIG001" -TestName "Test12"
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO NOT marked for deletion (the HR CSV source still holds a joined CSO)
+        $markers = Get-MvoDeletionMarkers -MvoId $test12MvoId
+        if ($markers.IsMarkedForDeletion) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "MVO marked for deletion after first source disconnect (All mode should wait for all sources)" }
+            throw "Test 12 Assert 1 failed: MVO was marked for deletion after only one of two sources disconnected (All sources mode)"
+        }
+        Write-Host "  PASSED: MVO not marked after first source disconnect (HR source still connected)" -ForegroundColor Green
+
+        # Act 2: remove the HR user (CSV-only cycle) - the LAST listed source disconnects.
+        # The LDAP target CSO remains joined but is not a listed source, so it must not block deletion.
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.trigger.allsrc" -TestName "Test12"
+        Start-Sleep -Seconds 3
+
+        # Assert 2: MVO still exists (grace period) and is marked for pending deletion
+        if (-not (Test-MvoExistsById -MvoId $test12MvoId)) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "MVO deleted despite 1-hour grace period" }
+            throw "Test 12 Assert 2 failed: MVO $test12MvoId was deleted despite the 1-hour grace period"
+        }
+        $mvoDetail = Get-JIMMetaverseObject -Id $test12MvoId -ErrorAction SilentlyContinue
+        $isPending = $mvoDetail -and ($mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -and $mvoDetail.isPendingDeletion
+        if (-not $isPending) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "MVO not marked for deletion after all sources disconnected" }
+            throw "Test 12 Assert 2 failed: MVO isPendingDeletion=false after all listed sources disconnected (All sources mode)"
+        }
+        Write-Host "  PASSED: MVO marked for deletion once no listed source remained connected" -ForegroundColor Green
+
+        # Assert 3: the triggering system and decision-time policy snapshot are recorded on the MVO
+        $markers = Get-MvoDeletionMarkers -MvoId $test12MvoId
+        if ($markers.TriggeredBySystemId -ne $config.CSVSystemId) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "DeletionTriggeredBySystemId=$($markers.TriggeredBySystemId), expected $($config.CSVSystemId)" }
+            throw "Test 12 Assert 3 failed: expected DeletionTriggeredBySystemId=$($config.CSVSystemId) (HR CSV) but found '$($markers.TriggeredBySystemId)'"
+        }
+        if (-not $markers.TriggeredBySystemName) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "DeletionTriggeredBySystemName not recorded" }
+            throw "Test 12 Assert 3 failed: DeletionTriggeredBySystemName was not recorded"
+        }
+        if (-not $markers.HasPolicySnapshot) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "Decision-time policy snapshot not persisted on the MVO" }
+            throw "Test 12 Assert 3 failed: DeletionPolicySnapshotJson was not persisted at mark-time"
+        }
+        Write-Host "  PASSED: Deletion trigger recorded (system $($markers.TriggeredBySystemId) '$($markers.TriggeredBySystemName)') with policy snapshot" -ForegroundColor Green
+
+        # Act 3: re-add the HR user - in All mode ANY listed source rejoining falsifies the
+        # "all sources gone" condition, so the scheduled deletion must be cancelled
+        $test12MvoAfter = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "TRIG001" `
+            -SamAccountName "test.trigger.allsrc" `
+            -DisplayName "Test Trigger AllSrc" `
+            -TestName "Test12 rejoin"
+        Start-Sleep -Seconds 3
+
+        # Assert 4: the rejoin landed on the SAME MVO and cleared every deletion marker
+        if ($test12MvoAfter.id -ne $test12MvoId) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "Rejoin projected a new MVO instead of joining the marked one" }
+            throw "Test 12 Assert 4 failed: expected rejoin to land on MVO $test12MvoId but found $($test12MvoAfter.id)"
+        }
+        $markers = Get-MvoDeletionMarkers -MvoId $test12MvoId
+        if ($markers.IsMarkedForDeletion -or $null -ne $markers.TriggeredBySystemId -or $markers.HasPolicySnapshot) {
+            $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $false; Error = "Deletion markers not cleared after listed source rejoined" }
+            throw "Test 12 Assert 4 failed: deletion markers were not cleared after a listed source rejoined (All sources mode)"
+        }
+        Write-Host "  PASSED: Scheduled deletion cancelled and all deletion markers cleared on rejoin" -ForegroundColor Green
+
+        $testResults.Steps += @{ Name = "AuthoritativeAllSources"; Success = $true }
+    }
+
+    # =============================================================================================================
+    # Test 13: Mode-aware grace period rejoin cancellation - Specific mode (issue #119)
+    # =============================================================================================================
+    # SpecificSourcesDisconnect with two listed sources: any listed source disconnecting schedules
+    # deletion (asserted while the other source is still joined, the contrast with Test 12), and a
+    # rejoin only cancels the scheduled deletion when the rejoining system is the RECORDED
+    # triggering system. A listed-but-non-triggering source rejoining must not rescue the object.
+    # Both sources are disconnected (the second disconnect re-marks, so the recorded trigger is the
+    # most recent disconnector: the Training system), then each is rejoined in turn.
+    # =============================================================================================================
+    if ($Step -in @("AuthoritativeRejoinCancellation", "All")) {
+        Write-TestSection "Test 13: Mode-Aware Rejoin Cancellation (Specific Sources Mode)"
+        Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, TriggerMode: SpecificSourcesDisconnect" -ForegroundColor Gray
+        Write-Host "Authoritative sources: CSV (HR System) + Training, GracePeriod: 1 hour" -ForegroundColor Gray
+        Write-Host "Expected: a non-triggering listed source rejoining does NOT cancel the scheduled" -ForegroundColor Gray
+        Write-Host "          deletion; the recorded triggering system rejoining does" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
+
+        # Configure deletion rules - both sources authoritative, Specific mode, recall disabled on CSV
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+            -GracePeriod ([TimeSpan]::FromHours(1)) `
+            -DeletionTriggerConnectedSystemIds @($config.CSVSystemId, $config.TrainingSystemId) `
+            -DeletionTriggerMode "SpecificSourcesDisconnect" `
+            -RemoveContributedAttributesOnObsoletion $false
+
+        # Disable recall on the Training object type too; recall is irrelevant to deletion tests
+        $trainingObjectTypes = Get-JIMConnectedSystem -Id $config.TrainingSystemId -ObjectTypes
+        $trainingRecordType = $trainingObjectTypes | Where-Object { $_.name -match "^(trainingRecord|record)$" } | Select-Object -First 1
+        if ($trainingRecordType) {
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $config.TrainingSystemId -ObjectTypeId $trainingRecordType.id `
+                -RemoveContributedAttributesOnObsoletion $false
+        }
+
+        # Provision a test user via HR CSV, then join Training
+        $test13Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "TRIG002" `
+            -SamAccountName "test.trigger.rejoin" `
+            -DisplayName "Test Trigger Rejoin" `
+            -TestName "Test13"
+
+        $test13MvoId = $test13Mvo.id
+        Write-Host "  MVO ID: $test13MvoId" -ForegroundColor Gray
+
+        Invoke-ProvisionTrainingData -Config $config `
+            -EmployeeId "TRIG002" `
+            -SamAccountName "test.trigger.rejoin" `
+            -TestName "Test13"
+
+        # Act 1: remove the HR user (CSV-only cycle) - in Specific mode ANY listed source
+        # disconnecting schedules deletion, even though the Training source is still joined
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.trigger.rejoin" -TestName "Test13"
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO marked with the HR CSV system recorded as the trigger (contrast with
+        # Test 12 Assert 1, where the same one-of-two disconnect did NOT mark in All mode)
+        $markers = Get-MvoDeletionMarkers -MvoId $test13MvoId
+        if (-not $markers.IsMarkedForDeletion) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "MVO not marked when a listed source disconnected (Specific mode)" }
+            throw "Test 13 Assert 1 failed: MVO was not marked for deletion when a listed source disconnected (Specific sources mode)"
+        }
+        if ($markers.TriggeredBySystemId -ne $config.CSVSystemId) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "DeletionTriggeredBySystemId=$($markers.TriggeredBySystemId), expected $($config.CSVSystemId)" }
+            throw "Test 13 Assert 1 failed: expected DeletionTriggeredBySystemId=$($config.CSVSystemId) (HR CSV) but found '$($markers.TriggeredBySystemId)'"
+        }
+        Write-Host "  PASSED: MVO marked on single source disconnect with trigger recorded (Specific mode)" -ForegroundColor Green
+
+        # Act 2: remove the training record too - the disconnect re-marks the MVO, so the recorded
+        # trigger becomes the most recent disconnector (the Training system)
+        Invoke-RemoveTrainingData -Config $config -EmployeeId "TRIG002" -TestName "Test13"
+        Start-Sleep -Seconds 3
+
+        $markers = Get-MvoDeletionMarkers -MvoId $test13MvoId
+        if (-not $markers.IsMarkedForDeletion -or $markers.TriggeredBySystemId -ne $config.TrainingSystemId) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "Expected re-mark with DeletionTriggeredBySystemId=$($config.TrainingSystemId), found '$($markers.TriggeredBySystemId)'" }
+            throw "Test 13 Assert 2 failed: expected the second disconnect to record DeletionTriggeredBySystemId=$($config.TrainingSystemId) (Training) but found '$($markers.TriggeredBySystemId)'"
+        }
+        Write-Host "  PASSED: Second source disconnect re-marked the MVO (trigger now Training system)" -ForegroundColor Green
+
+        # Act 3: re-add the HR user - a LISTED source, but NOT the recorded triggering system.
+        # Its rejoin must NOT cancel the scheduled deletion (the triggering disconnection stands).
+        $test13MvoAfter = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "TRIG002" `
+            -SamAccountName "test.trigger.rejoin" `
+            -DisplayName "Test Trigger Rejoin" `
+            -TestName "Test13 non-trigger rejoin"
+        Start-Sleep -Seconds 3
+
+        # Assert 3: same MVO, still marked, trigger fields unchanged
+        if ($test13MvoAfter.id -ne $test13MvoId) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "Rejoin projected a new MVO instead of joining the marked one" }
+            throw "Test 13 Assert 3 failed: expected rejoin to land on MVO $test13MvoId but found $($test13MvoAfter.id)"
+        }
+        $markers = Get-MvoDeletionMarkers -MvoId $test13MvoId
+        if (-not $markers.IsMarkedForDeletion) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "Deletion cancelled by a non-triggering source rejoin" }
+            throw "Test 13 Assert 3 failed: the scheduled deletion was cancelled by a listed source that did NOT trigger it (Specific sources mode)"
+        }
+        if ($markers.TriggeredBySystemId -ne $config.TrainingSystemId) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "Trigger fields changed by a non-triggering source rejoin" }
+            throw "Test 13 Assert 3 failed: DeletionTriggeredBySystemId changed to '$($markers.TriggeredBySystemId)' after a non-triggering source rejoined"
+        }
+        $mvoDetail = Get-JIMMetaverseObject -Id $test13MvoId -ErrorAction SilentlyContinue
+        $isPending = $mvoDetail -and ($mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -and $mvoDetail.isPendingDeletion
+        if (-not $isPending) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "isPendingDeletion=false after non-triggering source rejoin" }
+            throw "Test 13 Assert 3 failed: MVO isPendingDeletion=false after a non-triggering source rejoined (deletion should still be scheduled)"
+        }
+        Write-Host "  PASSED: Non-triggering listed source rejoin did NOT cancel the scheduled deletion" -ForegroundColor Green
+
+        # Act 4: re-add the training record - the RECORDED triggering system rejoins, undoing the
+        # disconnection that caused the scheduling, so the deletion must be cancelled
+        Invoke-ProvisionTrainingData -Config $config `
+            -EmployeeId "TRIG002" `
+            -SamAccountName "test.trigger.rejoin" `
+            -TestName "Test13 trigger rejoin"
+        Start-Sleep -Seconds 3
+
+        # Assert 4: deletion cancelled, every marker cleared
+        $markers = Get-MvoDeletionMarkers -MvoId $test13MvoId
+        if ($markers.IsMarkedForDeletion -or $null -ne $markers.TriggeredBySystemId -or $markers.HasPolicySnapshot) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "Deletion markers not cleared after the triggering system rejoined" }
+            throw "Test 13 Assert 4 failed: deletion markers were not cleared after the recorded triggering system rejoined"
+        }
+        $mvoDetail = Get-JIMMetaverseObject -Id $test13MvoId -ErrorAction SilentlyContinue
+        $isPending = $mvoDetail -and ($mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') -and $mvoDetail.isPendingDeletion
+        if ($isPending) {
+            $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $false; Error = "isPendingDeletion=true after the triggering system rejoined" }
+            throw "Test 13 Assert 4 failed: MVO isPendingDeletion=true after the recorded triggering system rejoined"
+        }
+        Write-Host "  PASSED: Triggering system rejoin cancelled the deletion and cleared all markers" -ForegroundColor Green
+
+        $testResults.Steps += @{ Name = "AuthoritativeRejoinCancellation"; Success = $true }
     }
 
     # =============================================================================================================

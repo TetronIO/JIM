@@ -1,7 +1,8 @@
 # Initial Export Only Attribute Flows
 
-- **Status:** Doing
-- **Issue:** [#223](https://github.com/TetronIO/JIM/issues/223)
+- **Status:** Done
+- **Note:** Delivered slightly beyond the plan. PowerShell was not in the phase list but shipped as `New-JIMSyncRuleMapping -InitialExportOnly` (surface parity); and the Connected System Object detail page treats an attribute as unmanaged only when **every** export mapping targeting it is Initial Export Only, a rule the plan did not specify.
+- **Issue:** [#223](https://github.com/TetronIO/JIM/issues/223) (closed 2026-07-22)
 
 ## Overview
 
@@ -49,31 +50,31 @@ The flow is evaluated **only for Create (provisioning) exports**:
 
 ## Implementation Phases
 
-### Phase 1: Model and migration
+### Phase 1: Model and migration ✅
 
 - Add `InitialExportOnly` to `SyncRuleMapping` with XML documentation
 - `JimDbContext` fluent config default (`false`) and EF migration `AddInitialExportOnlyToSyncRuleMappings`
 
-### Phase 2: Export evaluation gate
+### Phase 2: Export evaluation gate ✅
 
 - Red-first tests in `test/JIM.Worker.Tests/OutboundSync/`: Create exports include the mapping; Update exports skip it (direct and expression sources; single and multi-valued); disabled flag behaves as today
 - Gate in `CreateAttributeValueChanges`
 
-### Phase 3: Drift Detection skip
+### Phase 3: Drift Detection skip ✅
 
 - Red-first tests in `test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs`: drifted value on an Initial Export Only attribute stages no corrective export; other attributes on the same rule still corrected
 - Skip in `DriftDetectionService.EvaluateDrift`
 
-### Phase 4: API exposure
+### Phase 4: API exposure ✅
 
 - Mapping DTOs and `SynchronisationController` create/update paths carry the flag; tests in `test/JIM.Web.Api.Tests/`
 
-### Phase 5: UI
+### Phase 5: UI ✅
 
 - Attribute Flow dialog checkbox (export rules only) and table indicator in `SyncRuleAttributeFlowTab.razor`
 - Unmanaged indicator on the Connected System Object detail page (derived; no schema change)
 
-### Phase 6: Documentation and changelog
+### Phase 6: Documentation and changelog ✅
 
 - `docs/` Synchronisation Rule documentation update; `CHANGELOG.md` entry under `[Unreleased]`
 

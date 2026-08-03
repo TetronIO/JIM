@@ -7,30 +7,15 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
-    <MudStack Row Spacing="2" Class="mb-4">
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Default"
-                   Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Storage"
-                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/connector-space")">
-            Connector Space
-        </MudButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="@(PendingExportCount > 0 ? Color.Warning : Color.Default)"
-                   Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Outbox"
-                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/pending-exports")">
-            Pending Export @(PendingExportCount > 0 ? $"({PendingExportCount.ToString("N0")})" : "")
-        </MudButton>
-    </MudStack>
     <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
         <PrefilledFormValidator />
         <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
         <MudTextField T="string" Label="Name" @bind-Value="ConnectedSystem.Name" Required="true" RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5" />
         <MudTextField T="string" Label="Description" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
     </MudForm>
+    @* mt-3 (+ the input control's own 4px bottom margin) gives a 16px gap, matching the panel's pa-4 padding below the button so it sits symmetrically inside the panel *@
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-3" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
 </MudPaper>
-<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
 
 @* ─── Directory Capabilities (hidden entirely when the Connector cannot detect capabilities) ─── *@
 @if (_capabilities != null)
@@ -72,9 +57,6 @@
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
-
-    [Parameter, EditorRequired]
-    public int PendingExportCount { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }

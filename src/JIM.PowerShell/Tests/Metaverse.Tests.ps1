@@ -930,6 +930,51 @@ Describe 'Get-JIMMetaverseAttributeDeletionPreview' {
     }
 }
 
+Describe 'New-JIMMetaverseObjectType' {
+
+    Context 'Parameter Validation' {
+
+        It 'Rejects a -DeletionTriggerMode value outside the ValidateSet' {
+            { New-JIMMetaverseObjectType -Name 'Test' -PluralName 'Tests' -DeletionTriggerMode 'Sometimes' -ErrorAction Stop } |
+                Should -Throw '*does not belong to the set*'
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { New-JIMMetaverseObjectType -Name 'Test' -PluralName 'Tests' -Confirm:$false -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Request body' {
+
+        It 'Omits deletionTriggerMode when -DeletionTriggerMode is not supplied (server default applies)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseObjectType -Name 'Test' -PluralName 'Tests' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and -not $Body.ContainsKey('deletionTriggerMode')
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help New-JIMMetaverseObjectType -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+    }
+}
+
 Describe 'Set-JIMMetaverseObjectType' {
 
     Context 'Parameter Validation' {
@@ -942,6 +987,11 @@ Describe 'Set-JIMMetaverseObjectType' {
             $command.Parameters.Keys | Should -Contain 'NewName'
             $command.Parameters.Keys | Should -Contain 'PluralName'
             $command.Parameters.Keys | Should -Contain 'Icon'
+        }
+
+        It 'Rejects a -DeletionTriggerMode value outside the ValidateSet' {
+            { Set-JIMMetaverseObjectType -Id 1 -DeletionTriggerMode 'Sometimes' -ErrorAction Stop } |
+                Should -Throw '*does not belong to the set*'
         }
 
         It 'Should not put ValidateNotNullOrEmpty on the clearable Icon parameter' {
@@ -989,6 +1039,19 @@ Describe 'Set-JIMMetaverseObjectType' {
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     $Method -eq 'PUT' -and $Body.ContainsKey('icon') -and $Body.icon -eq ''
+                }
+            }
+        }
+
+        It 'Omits deletionTriggerMode from the PUT body when -DeletionTriggerMode is not supplied (stored mode unchanged)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5 } }
+
+                Set-JIMMetaverseObjectType -Id 5 -NewName 'Gadget' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and -not $Body.ContainsKey('deletionTriggerMode')
                 }
             }
         }
