@@ -2368,47 +2368,47 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 }
 
 /* ─── Run phase step shared styling (#454) ───
-   Used by the phase stepper on the Activity detail page: the step name, its duration, the live
-   message beneath the rail, and the Connector's own steps shown while their step runs. */
+   Used by the phase stepper on the Activity detail page, and by the readout beneath it: a step's
+   duration, and the steps shown inside the one running. */
 .jim-phase-step-duration,
-.jim-phase-step-note {
+.jim-run-substep-duration {
     color: var(--mud-palette-text-secondary);
 }
 
-.jim-phase-substep {
+.jim-run-substep {
     display: flex;
     align-items: center;
     gap: 0.375rem;
     color: var(--mud-palette-text-secondary);
 }
 
-.jim-phase-substep .jim-phase-substep-icon {
+.jim-run-substep .jim-run-substep-icon {
     font-size: 0.875rem;
 }
 
-.jim-phase-substep--pending {
+.jim-run-substep--pending {
     color: var(--mud-palette-text-disabled);
 }
 
-.jim-phase-substep--completed .jim-phase-substep-icon {
+.jim-run-substep--completed .jim-run-substep-icon {
     color: var(--mud-palette-success);
 }
 
-.jim-phase-substep--active {
+.jim-run-substep--active {
     color: var(--mud-palette-text-primary);
 }
 
-.jim-phase-substep--active .jim-phase-substep-icon {
+.jim-run-substep--active .jim-run-substep-icon {
     color: var(--mud-palette-primary);
     animation: jim-worker-icon-tick 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-.jim-phase-substep--failed .jim-phase-substep-icon {
+.jim-run-substep--failed .jim-run-substep-icon {
     color: var(--mud-palette-error);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .jim-phase-substep--active .jim-phase-substep-icon {
+    .jim-run-substep--active .jim-run-substep-icon {
         animation: none;
     }
 }
@@ -2420,6 +2420,12 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     /* One token drives the marker and the connector's alignment to its centre, so resizing the
        markers cannot leave the rail running through them off-centre. */
     --jim-phase-marker-size: 1.75rem;
+
+    /* Separates the rail from the readout of the running step beneath it. The rule sits here
+       rather than on the readout because the readout is shown for Activities with no rail at all,
+       where a line with nothing above it would be a divider dividing nothing. */
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
 .jim-phase-stepper-h .mud-stepper-nav {
@@ -2588,17 +2594,9 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     to   { background-position: 0.75rem 0; }
 }
 
-/* What the running step is doing: the Connector's own steps, and the live message. */
-.jim-phase-h-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--mud-palette-lines-default);
-}
-
-.jim-phase-h-substeps {
+/* The steps inside the running step, shown in the readout beneath the rail rather than above it,
+   so each reads after the thing it belongs to. */
+.jim-run-substeps {
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem 1.25rem;

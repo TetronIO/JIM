@@ -29,6 +29,10 @@ public static class RunProfilePhaseCatalogue
     [
         new(RunPhaseKeys.ImportConnect, "Connecting to Connected System"),
         new(RunPhaseKeys.ImportFetch, "Importing objects", HostsConnectorPhases: true),
+        // Matching what arrived against the Connected System Objects already held. Nested rather
+        // than following, because a Connector that returns a page at a time alternates between
+        // fetching and this; see RunProfilePhase.ParentKey.
+        new(RunPhaseKeys.ImportProcess, "Processing imported objects", ParentKey: RunPhaseKeys.ImportFetch),
         new(RunPhaseKeys.ImportDeletions, "Processing deletions"),
         new(RunPhaseKeys.ImportResolveReferences, "Resolving references"),
         new(RunPhaseKeys.ImportSave, "Saving changes"),

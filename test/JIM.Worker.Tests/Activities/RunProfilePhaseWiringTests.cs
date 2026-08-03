@@ -223,6 +223,50 @@ public class RunProfilePhaseWiringTests : WorkflowTestBase
             "Connecting comes first, so fetching cannot have started before it.");
     }
 
+    [Test]
+    public async Task FullImport_ConnectorHasReturned_StopsShowingItsStepAsRunningAsync()
+    {
+        // A Connector's step is only true while its call is in flight. A directory that hands
+        // everything over in one call left "Fetching objects" shown as running for the whole time
+        // JIM then spent matching what it had been given.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync("HR File");
+        var connector = new MockPhaseDeclaringFileConnector(csoType);
+        var reporter = await ActivityPhaseReporter.StartAsync(SyncRepo, activity, connector, connectedSystem, runProfile);
+
+        // Act
+        await BuildProcessor(connector, connectedSystem, runProfile, activity, reporter).PerformImportAsync();
+
+        // Assert
+        var readPhase = SyncRepo.ActivityPhases.Single(p => p.Key == ActivityPhase.QualifyConnectorKey("read"));
+        var processPhase = SyncRepo.ActivityPhases.Single(p => p.Key == RunPhaseKeys.ImportProcess);
+        Assert.That(readPhase.Status, Is.EqualTo(ActivityPhaseStatus.Completed));
+        Assert.That(readPhase.Ended, Is.Not.Null, "A step nothing is running has to carry how long it took.");
+        Assert.That(processPhase.Started, Is.Not.Null);
+        Assert.That(readPhase.Ended, Is.LessThanOrEqualTo(processPhase.Started!.Value),
+            "The Connector's step has to end when its call returns, not survive until JIM enters its next step.");
+    }
+
+    [Test]
+    public async Task FullImport_MatchingWhatArrived_RecordsItAsAStepInsideTheFetchAsync()
+    {
+        // The work the progress figures measure for most of an import: matching what a page
+        // delivered against the Connected System Objects already held. It was narrated only as a
+        // message, under a step named after the fetching, so three lines said the same thing.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync("HR File");
+        var connector = new MockPhaseDeclaringFileConnector(csoType);
+        var reporter = await ActivityPhaseReporter.StartAsync(SyncRepo, activity, connector, connectedSystem, runProfile);
+
+        // Act
+        await BuildProcessor(connector, connectedSystem, runProfile, activity, reporter).PerformImportAsync();
+
+        // Assert
+        var process = SyncRepo.ActivityPhases.Single(p => p.Key == RunPhaseKeys.ImportProcess);
+        Assert.That(process.Status, Is.EqualTo(ActivityPhaseStatus.Completed));
+        Assert.That(process.ParentKey, Is.EqualTo(RunPhaseKeys.ImportFetch));
+        Assert.That(RunPhaseReading.TopLevel(SyncRepo.ActivityPhases).Count, Is.EqualTo(6),
+            "A file-based import opens no connection, so it is six steps; the nested one must not make it seven.");
+    }
+
     #region Helpers
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType CsoType, ConnectedSystemRunProfile RunProfile, Activity Activity)>

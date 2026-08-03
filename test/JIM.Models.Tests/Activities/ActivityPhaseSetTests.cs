@@ -61,12 +61,16 @@ public class ActivityPhaseSetTests
     }
 
     [Test]
-    public void Declare_WithConnectorPhases_LeavesJimPhasesWithoutAParent()
+    public void Declare_WithConnectorPhases_LeavesJimPhasesWithoutAParentUnlessTheCatalogueNestsThem()
     {
+        // A Connector's phases are always nested; JIM's own are top-level unless the catalogue
+        // declares otherwise, which it does only where the run alternates between the two.
         var set = DeclareImport([new ConnectorPhase("read", "Reading file")]);
 
-        var jimPhases = set.Phases.Where(p => !p.Key.StartsWith(ActivityPhase.ConnectorPhaseKeyPrefix, StringComparison.Ordinal));
-        Assert.That(jimPhases.All(p => p.ParentKey == null), Is.True);
+        var jimPhases = set.Phases
+            .Where(p => !p.Key.StartsWith(ActivityPhase.ConnectorPhaseKeyPrefix, StringComparison.Ordinal))
+            .ToList();
+        Assert.That(jimPhases.Where(p => p.ParentKey != null).Select(p => p.Key), Is.EqualTo(new[] { RunPhaseKeys.ImportProcess }));
     }
 
     [Test]
@@ -161,6 +165,71 @@ public class ActivityPhaseSetTests
 
         Assert.That(set.Phases.Single(p => p.Key == RunPhaseKeys.ImportFetch).Status, Is.EqualTo(ActivityPhaseStatus.Active));
         Assert.That(set.Phases.Single(p => p.Key == ActivityPhase.QualifyConnectorKey("read")).Status, Is.EqualTo(ActivityPhaseStatus.Active));
+    }
+
+    [Test]
+    public void Declare_APhaseJimNestsInsideAnother_RecordsItUnderThatPhase()
+    {
+        // Matching what a page delivered happens inside the step that fetched it, so it is declared
+        // as a step within it rather than one following it.
+        var set = DeclareImport();
+
+        var process = set.Phases.Single(p => p.Key == RunPhaseKeys.ImportProcess);
+        Assert.That(process.ParentKey, Is.EqualTo(RunPhaseKeys.ImportFetch));
+        Assert.That(RunPhaseReading.TopLevel(set.Phases).Select(p => p.Key), Does.Not.Contain(RunPhaseKeys.ImportProcess),
+            "A nested step must not change the run's step count; an import is still seven steps.");
+    }
+
+    [Test]
+    public void Declare_APhaseJimNestsInsideAnother_OrdersItAfterTheConnectorsOwnSteps()
+    {
+        // The Connector produces the objects, then JIM matches them, so within the group JIM's own
+        // step comes last however many the Connector declared.
+        var set = DeclareImport([new ConnectorPhase("read", "Reading the file")]);
+
+        var group = set.Phases.Where(p => p.ParentKey == RunPhaseKeys.ImportFetch).OrderBy(p => p.Order).Select(p => p.Key);
+        Assert.That(group, Is.EqualTo(new[] { ActivityPhase.QualifyConnectorKey("read"), RunPhaseKeys.ImportProcess }));
+    }
+
+    [Test]
+    public void ExitConnectorPhases_WhileAConnectorPhaseIsRunning_CompletesItAndLeavesTheHostRunning()
+    {
+        // A Connector's step is only true while its call is in flight. Nothing closed them when it
+        // returned, so a directory that hands everything over in one call left "Fetching objects"
+        // shown as running for the whole time JIM spent processing what it had been given.
+        var set = DeclareImport([new ConnectorPhase("fetch", "Fetching objects")]);
+        set.Enter(RunPhaseKeys.ImportFetch, T0);
+        set.Enter(ActivityPhase.QualifyConnectorKey("fetch"), T0.AddSeconds(1));
+
+        var changed = set.ExitConnectorPhases(T0.AddMinutes(2));
+
+        var connectorPhase = set.Phases.Single(p => p.Key == ActivityPhase.QualifyConnectorKey("fetch"));
+        Assert.That(connectorPhase.Status, Is.EqualTo(ActivityPhaseStatus.Completed));
+        Assert.That(connectorPhase.Ended, Is.EqualTo(T0.AddMinutes(2)));
+        Assert.That(set.Phases.Single(p => p.Key == RunPhaseKeys.ImportFetch).Status, Is.EqualTo(ActivityPhaseStatus.Active),
+            "The step that called the Connector is still running; only the Connector has finished.");
+        Assert.That(changed, Does.Contain(connectorPhase));
+    }
+
+    [Test]
+    public void ExitConnectorPhases_WithNoConnectorPhaseRunning_ChangesNothing()
+    {
+        var set = DeclareImport([new ConnectorPhase("fetch", "Fetching objects")]);
+        set.Enter(RunPhaseKeys.ImportFetch, T0);
+
+        Assert.That(set.ExitConnectorPhases(T0.AddSeconds(5)), Is.Empty);
+    }
+
+    [Test]
+    public void ExitConnectorPhases_LeavesJimsOwnNestedStepsAlone()
+    {
+        // JIM's own nested step is not the Connector's to finish; it ends when JIM moves on.
+        var set = DeclareImport([new ConnectorPhase("fetch", "Fetching objects")]);
+        set.Enter(RunPhaseKeys.ImportProcess, T0);
+
+        set.ExitConnectorPhases(T0.AddSeconds(5));
+
+        Assert.That(set.Phases.Single(p => p.Key == RunPhaseKeys.ImportProcess).Status, Is.EqualTo(ActivityPhaseStatus.Active));
     }
 
     [Test]
@@ -334,11 +403,13 @@ public class ActivityPhaseSetTests
 
         var changed = set.Enter(RunPhaseKeys.ImportSave, T0.AddSeconds(5));
 
-        // Completed: connect. Skipped: fetch, deletions, references. Active: save.
+        // Completed: connect. Skipped: fetch and the step nested in it, deletions, references.
+        // Active: save.
         Assert.That(changed.Select(p => p.Key), Is.EquivalentTo(new[]
         {
             RunPhaseKeys.ImportConnect,
             RunPhaseKeys.ImportFetch,
+            RunPhaseKeys.ImportProcess,
             RunPhaseKeys.ImportDeletions,
             RunPhaseKeys.ImportResolveReferences,
             RunPhaseKeys.ImportSave

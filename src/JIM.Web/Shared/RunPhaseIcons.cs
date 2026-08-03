@@ -23,6 +23,7 @@ public static class RunPhaseIcons
         // Import
         [RunPhaseKeys.ImportConnect] = Icons.Material.Filled.Lan,
         [RunPhaseKeys.ImportFetch] = Icons.Material.Filled.CloudDownload,
+        [RunPhaseKeys.ImportProcess] = Icons.Material.Filled.Rule,
         [RunPhaseKeys.ImportDeletions] = Icons.Material.Filled.DeleteSweep,
         [RunPhaseKeys.ImportResolveReferences] = Icons.Material.Filled.Link,
         [RunPhaseKeys.ImportSave] = Icons.Material.Filled.Save,

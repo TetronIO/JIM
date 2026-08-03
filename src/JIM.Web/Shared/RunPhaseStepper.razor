@@ -33,30 +33,6 @@
             </ActionContent>
         </MudStepper>
 
-        @* The active step's detail: the Connector's own steps. A horizontal rail has no room for
-           them, so they sit beneath it. What the run is doing inside the step belongs with the
-           figures further down, under the step's own name. *@
-        @if (CurrentPhase != null)
-        {
-            <div class="jim-phase-h-detail">
-                @if (ConnectorSteps.Count > 0)
-                {
-                    <div class="jim-phase-h-substeps">
-                        @foreach (var child in ConnectorSteps)
-                        {
-                            <div class="jim-phase-substep jim-phase-substep--@StatusModifier(child.Status)">
-                                <MudIcon Icon="@StatusIcon(child)" Size="Size.Small" Class="jim-phase-substep-icon" />
-                                <MudText Typo="Typo.body2">@child.Name</MudText>
-                                @if (child.Duration is { } childDuration)
-                                {
-                                    <MudText Typo="Typo.body2" Class="jim-phase-step-duration">@childDuration.ToAbbreviatedString()</MudText>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
-        }
     </div>
 }
 
@@ -78,20 +54,7 @@
 
     private List<ActivityPhase> TopLevelPhases => RunPhaseReading.TopLevel(Phases).ToList();
 
-    /// <summary>
-    /// The most specific step running: a Connector's step in preference to the JIM step hosting it.
-    /// </summary>
-    private ActivityPhase? CurrentPhase => Phases
-        .Where(p => p.Status == ActivityPhaseStatus.Active)
-        .OrderByDescending(p => p.ParentKey != null)
-        .ThenByDescending(p => p.Order)
-        .FirstOrDefault();
-
     private ActivityPhase? CurrentTopLevelPhase => RunPhaseReading.ActiveTopLevel(Phases);
-
-    private List<ActivityPhase> ConnectorSteps => CurrentTopLevelPhase == null
-        ? []
-        : Phases.Where(p => p.ParentKey == CurrentTopLevelPhase.Key).OrderBy(p => p.Order).ToList();
 
     private int ActiveIndex
     {

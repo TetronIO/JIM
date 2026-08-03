@@ -20,9 +20,25 @@
         <MudText Typo="Typo.caption" Class="jim-run-scope">@scope</MudText>
     }
 
-    @* What is happening inside that step, so it reads after the step rather than before it. This
-       sat above the rail's own detail block, which put the narrower thing above the context it
-       belongs to. *@
+    @* The steps within that step, and then what is happening inside them, so each reads after the
+       thing it belongs to. Both sat above the rail, which put the narrower thing first. *@
+    @if (SubSteps.Count > 0)
+    {
+        <div class="jim-run-substeps">
+            @foreach (var subStep in SubSteps)
+            {
+                <div class="jim-run-substep jim-run-substep--@StatusModifier(subStep.Status)">
+                    <MudIcon Icon="@StatusIcon(subStep)" Size="Size.Small" Class="jim-run-substep-icon" />
+                    <MudText Typo="Typo.body2">@subStep.Name</MudText>
+                    @if (subStep.Duration is { } subStepDuration)
+                    {
+                        <MudText Typo="Typo.body2" Class="jim-run-substep-duration">@subStepDuration.ToAbbreviatedString()</MudText>
+                    }
+                </div>
+            }
+        </div>
+    }
+
     @if (MessageWorthShowing is { } message)
     {
         <MudText Typo="Typo.caption" Class="jim-run-message">@message</MudText>
@@ -164,6 +180,42 @@
                 : step.Name;
         }
     }
+
+    /// <summary>
+    /// The steps inside the one running: the Connector's own, and JIM's where a step alternates
+    /// with the Connector's work. Empty once the run has moved past a step that had any.
+    /// </summary>
+    private List<ActivityPhase> SubSteps
+    {
+        get
+        {
+            var step = RunPhaseReading.ActiveTopLevel(Phases);
+            return step == null
+                ? []
+                : Phases.Where(p => p.ParentKey == step.Key).OrderBy(p => p.Order).ToList();
+        }
+    }
+
+    private static string StatusModifier(ActivityPhaseStatus status) => status switch
+    {
+        ActivityPhaseStatus.Active => "active",
+        ActivityPhaseStatus.Completed => "completed",
+        ActivityPhaseStatus.Skipped => "skipped",
+        ActivityPhaseStatus.Failed => "failed",
+        _ => "pending"
+    };
+
+    /// <summary>
+    /// A finished step shows the outcome; every other state shows what the step is for, matching
+    /// the rail above so the two read as one thing.
+    /// </summary>
+    private static string StatusIcon(ActivityPhase phase) => phase.Status switch
+    {
+        ActivityPhaseStatus.Completed => Icons.Material.Filled.Check,
+        ActivityPhaseStatus.Skipped => Icons.Material.Filled.Remove,
+        ActivityPhaseStatus.Failed => Icons.Material.Filled.PriorityHigh,
+        _ => RunPhaseIcons.ForPhase(phase.Key)
+    };
 
     private bool IsIndeterminate => ObjectsToProcess <= 0;
 

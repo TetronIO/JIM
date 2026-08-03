@@ -98,6 +98,22 @@ public sealed class ActivityPhaseReporter
         EnterCoreAsync(ActivityPhase.QualifyConnectorKey(connectorPhaseKey), message);
 
     /// <summary>
+    /// Finishes whichever step the Connector was running, leaving the JIM step that called it
+    /// running. Call it as soon as the Connector's call returns: its steps are only true while it
+    /// is working, and until this was called a Connector that handed everything over in one call
+    /// left its last step shown as running for as long as JIM then spent on what it was given.
+    /// </summary>
+    public async Task ExitConnectorPhasesAsync()
+    {
+        if (_phases == null)
+            return;
+
+        var changed = _phases.ExitConnectorPhases(DateTime.UtcNow);
+        if (changed.Count > 0)
+            await PersistAsync(changed, "finishing the Connector's phases");
+    }
+
+    /// <summary>
     /// Closes the run out: whatever step was running is completed (or recorded as the step the run
     /// failed in), and anything never reached is recorded as skipped.
     /// </summary>

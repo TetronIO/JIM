@@ -23,6 +23,14 @@ public static class RunPhaseKeys
     /// <summary>Fetching objects from the Connected System, and processing each page as it arrives. Hosts the Connector's own phases.</summary>
     public const string ImportFetch = "import.fetch";
 
+    /// <summary>
+    /// Matching the objects a page delivered against the Connected System Objects already held.
+    /// Nested inside <see cref="ImportFetch"/> rather than following it, because a Connector that
+    /// returns a page at a time alternates between the two, and a top-level step that un-ticked
+    /// once per page would read as the run going backwards.
+    /// </summary>
+    public const string ImportProcess = "import.process";
+
     /// <summary>Working out which Connected System Objects are absent from the source and marking them deleted. Full Imports only.</summary>
     public const string ImportDeletions = "import.deletions";
 

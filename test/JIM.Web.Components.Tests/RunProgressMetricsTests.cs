@@ -109,6 +109,22 @@ public class RunProgressMetricsTests : JimComponentTestContext
     }
 
     [Test]
+    public void RunProgressMetrics_StepsInsideTheRunningStep_ReadAfterTheStepThatOwnsThem()
+    {
+        // They sat above the rail's own detail, so the steps within a step introduced it rather
+        // than following it, exactly as the message did.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.ObjectsProcessed, 3500)
+            .Add(c => c.ObjectsToProcess, 10527)
+            .Add(c => c.Phases, ImportFetching()));
+
+        var lines = cut.FindAll(".jim-run-scope, .jim-run-substep").Select(e => e.TextContent.Trim()).ToList();
+        Assert.That(lines, Has.Count.EqualTo(2));
+        Assert.That(lines[0], Is.EqualTo("Step 2 of 3: Importing objects"));
+        Assert.That(lines[1], Does.Contain("Reading the file"));
+    }
+
+    [Test]
     public void RunProgressMetrics_MessageRepeatingTheRunningStepsName_IsNotShown()
     {
         // The message earns its line by saying something the step's name does not already say.

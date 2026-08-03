@@ -339,6 +339,10 @@ public class SyncImportTaskProcessor
                         {
                             result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                         }
+
+                        // The Connector has finished with this page, so its steps stop being shown
+                        // as running; what happens next is JIM's.
+                        await _phases.ExitConnectorPhasesAsync();
                         pageNumber++;
                         totalObjectsImported += result.ImportObjects.Count;
 
@@ -446,6 +450,8 @@ public class SyncImportTaskProcessor
                 {
                     result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                 }
+
+                await _phases.ExitConnectorPhasesAsync();
                 objectsReadInCurrentCall = 0;
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
@@ -1431,7 +1437,11 @@ public class SyncImportTaskProcessor
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
         _activity.ObjectsToProcess = totalObjectsInBatch;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
+
+        // A step of its own rather than a message, because this is different work from fetching and
+        // it is what the figures below measure for most of an import. Nested inside the fetching
+        // step: a Connector that returns a page at a time alternates between the two.
+        await _phases.EnterAsync(RunPhaseKeys.ImportProcess);
         const int progressUpdateInterval = 100;
 
         // CSO matching uses a pre-fetched external ID dictionary (O(1) lookup) + per-object hydration by ID.

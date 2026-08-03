@@ -181,14 +181,13 @@ public class RunPhaseStepperTests : JimComponentTestContext
     }
 
     [Test]
-    public void RunPhaseStepper_ConnectorSteps_AppearBeneathTheRailWhileTheirStepRuns()
+    public void RunPhaseStepper_RunInFlight_LeavesTheSubStepsToTheReadoutBeneathIt()
     {
-        // A horizontal rail has no room for a Connector's own steps, so they sit under it, and only
-        // while the step that called the Connector is the one running.
+        // The steps inside the running step belong under the line that names it, in the readout,
+        // for the same reason the message does: context first, then the detail within it.
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
 
-        Assert.That(cut.FindAll(".jim-phase-substep"), Has.Count.EqualTo(1));
-        Assert.That(cut.Markup, Does.Contain("Reading the file"));
+        Assert.That(cut.FindAll(".jim-phase-substep"), Is.Empty);
     }
 
     [Test]
