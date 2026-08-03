@@ -124,10 +124,19 @@ else
                                 </MudText>
                             </div>
                         </div>
-                        <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
-                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
-                                           OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
-                        </MudTooltip>
+                        <div class="d-flex align-center gap-2">
+                            <MudTooltip Text="See which step this Schedule Execution is on" Arrow="true" Placement="Placement.Top">
+                                <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
+                                           StartIcon="@Icons.Material.Filled.OpenInNew"
+                                           Href="@($"/admin/operations/schedule-executions/{executionId}")">
+                                    View execution
+                                </MudButton>
+                            </MudTooltip>
+                            <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
+                                               OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
+                            </MudTooltip>
+                        </div>
                     </div>
                 </MudTh>
             }

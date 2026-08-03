@@ -8,6 +8,7 @@ using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Logic;
@@ -253,6 +254,45 @@ public static class Helpers
             ActivityStatus.CompleteWithWarning => Color.Warning,
             ActivityStatus.CompleteWithError => Color.Tertiary,
             ActivityStatus.FailedWithError => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Returns the chip colour for a Schedule Execution's overall status.
+    /// </summary>
+    /// <param name="status">The Schedule Execution status to colour.</param>
+    public static Color GetScheduleExecutionMudBlazorColorForStatus(ScheduleExecutionStatus status)
+    {
+        return status switch
+        {
+            ScheduleExecutionStatus.Completed => Color.Success,
+            ScheduleExecutionStatus.InProgress => Color.Primary,
+            ScheduleExecutionStatus.Failed => Color.Error,
+            ScheduleExecutionStatus.Cancelled => Color.Warning,
+            ScheduleExecutionStatus.Paused => Color.Warning,
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Returns the chip colour for an individual step's status within a Schedule Execution. Mirrors
+    /// <see cref="GetActivityMudBlazorColorForStatus"/> for the statuses the two have in common, so a step and the
+    /// Activity behind it are never coloured differently.
+    /// </summary>
+    /// <param name="status">The step status to colour.</param>
+    public static Color GetScheduleExecutionStepMudBlazorColorForStatus(ScheduleExecutionStepStatus status)
+    {
+        return status switch
+        {
+            ScheduleExecutionStepStatus.Completed => Color.Success,
+            ScheduleExecutionStepStatus.CompletedWithWarning => Color.Warning,
+            ScheduleExecutionStepStatus.CompletedWithError => Color.Tertiary,
+            ScheduleExecutionStepStatus.Processing => Color.Primary,
+            ScheduleExecutionStepStatus.Queued => Color.Info,
+            ScheduleExecutionStepStatus.Cancelling => Color.Warning,
+            ScheduleExecutionStepStatus.Failed => Color.Error,
+            ScheduleExecutionStepStatus.Cancelled => Color.Warning,
             _ => Color.Default,
         };
     }
