@@ -160,9 +160,12 @@ public class ActivityPhaseSet
                 }));
         }
 
-        // A Connector phase runs inside the JIM phase that called the Connector; that phase stays active.
+        // A Connector phase runs inside the JIM phase that called the Connector; that phase stays
+        // active. A host already closed out is reopened rather than left finished, because a step
+        // cannot be over while work is still happening inside it, and a rail showing nothing running
+        // during the longest part of a run is worse than one step's duration reading long.
         var parent = phase.ParentKey == null ? null : _phases.SingleOrDefault(p => p.Key == phase.ParentKey);
-        if (parent is { Status: ActivityPhaseStatus.Pending or ActivityPhaseStatus.Skipped })
+        if (parent is { Status: not ActivityPhaseStatus.Active })
         {
             parent.Status = ActivityPhaseStatus.Active;
             parent.Started ??= nowUtc;

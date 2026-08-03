@@ -177,6 +177,52 @@ public class RunProfilePhaseWiringTests : WorkflowTestBase
         Assert.That(csoCount, Is.EqualTo(3));
     }
 
+    [Test]
+    public async Task FullImport_CallConnector_ShowsFetchingAsTheStepRunningWhileItFetchesAsync()
+    {
+        // Arrange: the step an administrator is shown must be the work actually happening. Fetching
+        // objects is where a call-based import spends its time, so it has to be the running step for
+        // the duration, not one closed out in milliseconds before the first page is asked for.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync("HR System");
+        ActivityPhaseReporter? reporter = null;
+        var stepsRunningDuringTheFetch = new List<string?>();
+
+        var connector = new MockPagingConnector(csoType, pages: 2, onImport: () =>
+            stepsRunningDuringTheFetch.Add(reporter?.Phases?
+                .FirstOrDefault(p => p.ParentKey == null && p.Status == ActivityPhaseStatus.Active)?.Key));
+
+        reporter = await ActivityPhaseReporter.StartAsync(SyncRepo, activity, connector, connectedSystem, runProfile);
+
+        // Act
+        await BuildProcessor(connector, connectedSystem, runProfile, activity, reporter).PerformImportAsync();
+
+        // Assert
+        Assert.That(stepsRunningDuringTheFetch, Is.EqualTo(new[] { RunPhaseKeys.ImportFetch, RunPhaseKeys.ImportFetch }),
+            "Every page is fetched under the fetching step, so that is the step the rail shows and the step the live progress figures are scoped to.");
+    }
+
+    [Test]
+    public async Task FullImport_CallConnector_OpensTheConnectionBeforeFetchingBeginsAsync()
+    {
+        // Arrange: the steps are recorded in the order they are declared, so their timings have to
+        // agree with that order; a fetch that started before the connection it uses reads as nonsense.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync("HR System");
+        var connector = new MockPagingConnector(csoType, pages: 1);
+        var reporter = await ActivityPhaseReporter.StartAsync(SyncRepo, activity, connector, connectedSystem, runProfile);
+
+        // Act
+        await BuildProcessor(connector, connectedSystem, runProfile, activity, reporter).PerformImportAsync();
+        await reporter.FinishAsync(failed: false);
+
+        // Assert
+        var connect = SyncRepo.ActivityPhases.Single(p => p.Key == RunPhaseKeys.ImportConnect);
+        var fetch = SyncRepo.ActivityPhases.Single(p => p.Key == RunPhaseKeys.ImportFetch);
+        Assert.That(connect.Status, Is.EqualTo(ActivityPhaseStatus.Completed));
+        Assert.That(connect.Started, Is.Not.Null);
+        Assert.That(fetch.Started, Is.GreaterThanOrEqualTo(connect.Started!.Value),
+            "Connecting comes first, so fetching cannot have started before it.");
+    }
+
     #region Helpers
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType CsoType, ConnectedSystemRunProfile RunProfile, Activity Activity)>
@@ -245,6 +291,45 @@ public class RunProfilePhaseWiringTests : WorkflowTestBase
             }
 
             return new ConnectedSystemImportResult { ImportObjects = BuildImportObjects(csoType, 3) };
+        }
+    }
+
+    /// <summary>
+    /// A call-based Connector that returns a fixed number of pages and declares no phases of its
+    /// own, standing in for the connectors whose narration cannot mask which JIM step is running.
+    /// </summary>
+    private class MockPagingConnector(ConnectedSystemObjectType csoType, int pages, Action? onImport = null)
+        : IConnector, IConnectorImportUsingCalls
+    {
+        private int _pagesReturned;
+
+        public string Name => "MockPagingConnector";
+        public string? Description => null;
+        public string? Url => null;
+
+        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger) { }
+
+        public void CloseImportConnection() { }
+
+        public Task<ConnectedSystemImportResult> ImportAsync(
+            ConnectedSystem connectedSystem,
+            ConnectedSystemRunProfile runProfile,
+            List<ConnectedSystemPaginationToken> paginationTokens,
+            string? persistedConnectorData,
+            ILogger logger,
+            CancellationToken cancellationToken,
+            IConnectorProgress progress)
+        {
+            onImport?.Invoke();
+            _pagesReturned++;
+
+            return Task.FromResult(new ConnectedSystemImportResult
+            {
+                ImportObjects = BuildImportObjects(csoType, 3),
+                PaginationTokens = _pagesReturned < pages
+                    ? [new ConnectedSystemPaginationToken("page", $"page-{_pagesReturned}")]
+                    : []
+            });
         }
     }
 

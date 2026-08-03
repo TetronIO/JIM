@@ -224,7 +224,9 @@ public class SyncImportTaskProcessor
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
-        await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Performing import");
+        // The fetching step is entered by each branch below, once the work it names is about to
+        // start: a call-based import connects first, and entering the later step here would close
+        // connecting out before it began.
         switch (_connector)
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
@@ -251,6 +253,10 @@ public class SyncImportTaskProcessor
                 {
                     callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
                 }
+
+                // Every page is read under this step, however many the Connected System returns, so
+                // it stays the step running for as long as objects are arriving.
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch);
 
                 try
                 {

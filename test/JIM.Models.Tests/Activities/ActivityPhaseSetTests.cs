@@ -164,6 +164,24 @@ public class ActivityPhaseSetTests
     }
 
     [Test]
+    public void Enter_ConnectorPhase_ReopensAHostPhaseAlreadyClosed()
+    {
+        // A Connector cannot be running inside a step that has finished. Whatever closed the host
+        // early, the step doing the work has to be the step shown as running, or the rail draws a
+        // run with nothing happening in it.
+        var set = DeclareImport([new ConnectorPhase("read", "Reading file")]);
+        set.Enter(RunPhaseKeys.ImportFetch, T0);
+        set.Enter(RunPhaseKeys.ImportSave, T0.AddSeconds(1));
+
+        set.Enter(ActivityPhase.QualifyConnectorKey("read"), T0.AddSeconds(5));
+
+        var fetch = set.Phases.Single(p => p.Key == RunPhaseKeys.ImportFetch);
+        Assert.That(fetch.Status, Is.EqualTo(ActivityPhaseStatus.Active));
+        Assert.That(fetch.Ended, Is.Null);
+        Assert.That(fetch.Started, Is.EqualTo(T0), "Reopening a step continues it rather than restarting it.");
+    }
+
+    [Test]
     public void Enter_PhaseAfterTheHost_CompletesBothTheHostAndItsConnectorPhase()
     {
         var set = DeclareImport([new ConnectorPhase("read", "Reading file")]);
