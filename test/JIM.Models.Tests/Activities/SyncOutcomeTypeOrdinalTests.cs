@@ -53,7 +53,8 @@ public class SyncOutcomeTypeOrdinalTests
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] = 20,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] = 21,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = 22,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = 23
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = 23,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = 24
     };
 
     [Test]

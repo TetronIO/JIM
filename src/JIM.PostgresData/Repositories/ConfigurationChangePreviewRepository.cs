@@ -10,6 +10,13 @@ namespace JIM.PostgresData.Repositories;
 
 public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewRepository
 {
+    /// <summary>
+    /// The escape character declared to `ILIKE`, so a `%` or `_` an administrator typed is matched as the character
+    /// they typed rather than as a wildcard. A search for "100%" that quietly returned the whole group would be a
+    /// worse answer than no results at all, because it looks like one.
+    /// </summary>
+    private const string LikeEscapeCharacter = "\\";
+
     private readonly JimDbContext _database;
 
     public ConfigurationChangePreviewRepository(JimDbContext database)
@@ -63,7 +70,8 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
         await _database.SaveChangesAsync();
     }
 
-    public async Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize)
+    public async Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize,
+        string? search = null)
     {
         if (page < 1)
             page = 1;
@@ -77,6 +85,20 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
             query = query.Where(d => d.GroupId == group);
         }
 
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // Searched across the columns the drill-down actually renders, because the administrator typing here is
+            // looking for an object by whatever they happen to know about it: its name, the attribute concerned, or
+            // the value it would move to or from.
+            var pattern = $"%{EscapeLikeWildcards(search)}%";
+            query = query.Where(d =>
+                (d.ObjectDisplayName != null && EF.Functions.ILike(d.ObjectDisplayName, pattern, LikeEscapeCharacter)) ||
+                (d.AttributeName != null && EF.Functions.ILike(d.AttributeName, pattern, LikeEscapeCharacter)) ||
+                (d.OldValue != null && EF.Functions.ILike(d.OldValue, pattern, LikeEscapeCharacter)) ||
+                (d.NewValue != null && EF.Functions.ILike(d.NewValue, pattern, LikeEscapeCharacter)));
+        }
+
+        // Counted after filtering, so the pager sizes itself to the matches rather than to the group.
         var totalResults = await query.CountAsync();
 
         // Ordered by display name then id: paging over an unordered set silently repeats and omits rows between
@@ -96,4 +118,9 @@ public class ConfigurationChangePreviewRepository : IConfigurationChangePreviewR
             PageSize = pageSize
         };
     }
+
+    private static string EscapeLikeWildcards(string search) =>
+        search.Replace(LikeEscapeCharacter, LikeEscapeCharacter + LikeEscapeCharacter)
+            .Replace("%", LikeEscapeCharacter + "%")
+            .Replace("_", LikeEscapeCharacter + "_");
 }

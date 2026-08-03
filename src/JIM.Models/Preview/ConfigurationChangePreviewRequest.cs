@@ -13,8 +13,12 @@ namespace JIM.Models.Preview;
 /// They are separate types because the Activity id is the difference between them, and it cannot be known until the
 /// framework has created the Activity. Folding them into one type would mean either a mutable id on the object
 /// adapters read, or every caller inventing an id the framework then has to honour.
+///
+/// A record rather than a class so the framework can answer the cap prompt with
+/// <c>request with { DeltaPersistence = ... }</c> instead of either mutating what the surface handed it or copying
+/// every property by hand, which is the kind of copy that silently drops a property added later.
 /// </summary>
-public class ConfigurationChangePreviewRequest
+public record ConfigurationChangePreviewRequest
 {
     /// <summary>The surface being previewed; selects the adapter.</summary>
     public required ConfigurationChangePreviewSurface Surface { get; init; }
@@ -36,6 +40,18 @@ public class ConfigurationChangePreviewRequest
 
     /// <summary>The proposed configuration, unsaved, as the surface's own update type.</summary>
     public required object ProposedConfiguration { get; init; }
+
+    /// <summary>
+    /// Whether every delta row is kept, or only the per-group cap's worth. Capped by default, because that is the
+    /// right answer for all but the largest previews and is what an administrator who was never asked should get.
+    /// <see cref="ConfigurationChangePreviewDeltaPersistence.Full"/> is the informed choice offered when the
+    /// estimate crosses the prompt threshold, and it is a real choice: nothing downstream re-imposes the cap.
+    ///
+    /// Note the difference from <see cref="ConfigurationChangePreview.DeltaPersistence"/>, which records what
+    /// actually happened. A capped request whose groups all fitted produces a full result.
+    /// </summary>
+    public ConfigurationChangePreviewDeltaPersistence DeltaPersistence { get; init; } =
+        ConfigurationChangePreviewDeltaPersistence.Capped;
 
     /// <summary>
     /// The proposed configuration serialised for storage, produced the same way an Activity's configuration change

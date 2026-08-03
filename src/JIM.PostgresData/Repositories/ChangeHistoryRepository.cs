@@ -67,6 +67,46 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     }
 
     /// <summary>
+    /// Clears the results of expired configuration change previews, bounded by preview rather than by row. See the
+    /// interface for why this runs ahead of the Activity cleanup that would otherwise cascade the same rows.
+    /// </summary>
+    public async Task<int> DeleteExpiredPreviewsAsync(DateTime olderThan, int maxRecords)
+    {
+        // Selected with exactly the predicate the general Activity cleanup uses, so this only ever clears previews
+        // whose Activity is genuinely on its way out. Clearing one that is being retained would leave a preview
+        // showing exact group counts with nothing behind them, which reads as "no detail was kept" rather than "the
+        // detail aged out".
+        var expiredPreviewIds = await _database.ConfigurationChangePreviews
+            .Where(p => _database.Activities.Any(a =>
+                a.Id == p.ActivityId
+                && a.Created < olderThan
+                && a.ConfigurationChangeVersion == null
+                && a.TargetType != ActivityTargetType.Authentication))
+            .OrderBy(p => p.ActivityId)
+            .Take(maxRecords)
+            .Select(p => p.ActivityId)
+            .ToListAsync();
+
+        if (expiredPreviewIds.Count == 0)
+            return 0;
+
+        // Deleted in dependency order rather than left to the cascade, so the row counts are this method's to
+        // report; every statement is bounded by the preview list above. Nothing in this context tracks preview
+        // rows (no read path loads them during housekeeping), so there are no tracked instances to detach.
+        var deltas = await _database.ConfigurationChangePreviewDeltas
+            .Where(d => expiredPreviewIds.Contains(d.ActivityId)).ExecuteDeleteAsync();
+        var groups = await _database.ConfigurationChangePreviewGroups
+            .Where(g => expiredPreviewIds.Contains(g.ActivityId)).ExecuteDeleteAsync();
+        var previews = await _database.ConfigurationChangePreviews
+            .Where(p => expiredPreviewIds.Contains(p.ActivityId)).ExecuteDeleteAsync();
+
+        Serilog.Log.Debug("DeleteExpiredPreviewsAsync: Removed {Previews} previews, {Groups} summary groups and {Deltas} object-level rows",
+            previews, groups, deltas);
+
+        return previews;
+    }
+
+    /// <summary>
     /// Deletes expired Activity records older than the specified date. Configuration-change Activities (those
     /// carrying a versioned configuration snapshot) are spared: they ARE the configuration change history and are
     /// governed by their own, longer retention period via <see cref="DeleteExpiredConfigurationChangeActivitiesAsync"/>.

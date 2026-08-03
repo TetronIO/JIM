@@ -152,7 +152,7 @@ public class PreviewsControllerTests
     {
         GivenPreview();
         var groupId = Guid.CreateVersion7();
-        _previewRepository.Setup(r => r.GetPreviewDeltasAsync(ActivityId, groupId, 2, 25))
+        _previewRepository.Setup(r => r.GetPreviewDeltasAsync(ActivityId, groupId, 2, 25, null))
             .ReturnsAsync(new PagedResultSet<ConfigurationChangePreviewDelta>
             {
                 Results = [new ConfigurationChangePreviewDelta
@@ -178,6 +178,33 @@ public class PreviewsControllerTests
             Assert.That(page.Page, Is.EqualTo(2));
             Assert.That(page.Items.Single().ObjectDisplayName, Is.EqualTo("Ada Lovelace"));
             Assert.That(page.Items.Single().GroupId, Is.EqualTo(groupId));
+        });
+    }
+
+    [Test]
+    public async Task GetPreviewDeltasAsync_WithASearchTerm_PassesItToTheQueryAsync()
+    {
+        // Filtering has to happen in the query, not in the caller: a capped group holds up to a thousand rows and a
+        // full one holds however many the change touches, so a drill-down that filtered the page it had already
+        // fetched would search a sample and report it as the whole answer.
+        GivenPreview();
+        _previewRepository.Setup(r => r.GetPreviewDeltasAsync(ActivityId, null, 1, 25, "lovelace"))
+            .ReturnsAsync(new PagedResultSet<ConfigurationChangePreviewDelta>
+            {
+                Results = [new ConfigurationChangePreviewDelta { Id = Guid.CreateVersion7(), ObjectDisplayName = "Ada Lovelace" }],
+                TotalResults = 1,
+                CurrentPage = 1,
+                PageSize = 25
+            });
+
+        var result = await _controller.GetPreviewDeltasAsync(ActivityId, new PaginationRequest { Page = 1, PageSize = 25 },
+            search: "lovelace") as OkObjectResult;
+        var page = result!.Value as PaginatedResponse<ConfigurationChangePreviewDeltaResponse>;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page!.TotalCount, Is.EqualTo(1), "the total must count the matches, not the whole group");
+            Assert.That(page.Items.Single().ObjectDisplayName, Is.EqualTo("Ada Lovelace"));
         });
     }
 

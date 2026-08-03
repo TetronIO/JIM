@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260803083156_PreviewRequestedDeltaPersistence")]
+    partial class PreviewRequestedDeltaPersistence
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -96,9 +99,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
-
-                    b.Property<Guid?>("ConnectedSystemObjectId")
-                        .HasColumnType("uuid");
 
                     b.Property<int?>("ConnectedSystemRunProfileId")
                         .HasColumnType("integer");
@@ -377,9 +377,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ConnectedSystemObjectId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("DeletionPolicySnapshotJson")
-                        .HasColumnType("text");
-
                     b.Property<string>("DisplayNameSnapshot")
                         .HasColumnType("text");
 
@@ -598,15 +595,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("DeletionInitiatedByType")
                         .HasColumnType("integer");
-
-                    b.Property<string>("DeletionPolicySnapshotJson")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("DeletionTriggeredBySystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DeletionTriggeredBySystemName")
-                        .HasColumnType("text");
 
                     b.Property<DateTime?>("LastConnectorDisconnectedDate")
                         .HasColumnType("timestamp with time zone");
@@ -904,11 +892,6 @@ namespace JIM.PostgresData.Migrations
                     b.PrimitiveCollection<List<int>>("DeletionTriggerConnectedSystemIds")
                         .IsRequired()
                         .HasColumnType("integer[]");
-
-                    b.Property<int>("DeletionTriggerMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.Property<string>("Icon")
                         .HasColumnType("text");

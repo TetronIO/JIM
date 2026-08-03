@@ -16,11 +16,36 @@
 # treat the first failure as a real build break; check whether this workflow
 # has since pushed a "regenerate NuGet lock files" commit before investigating.
 #
-# Self-limiting by design: the commit this workflow pushes is authored by the
-# jim-automation App, so the resulting push event has github.actor set to the
-# App's bot identity, not 'dependabot[bot]'. The job guard below only matches
-# 'dependabot[bot]', so the App's own push does not re-trigger this workflow;
-# there is no loop.
+# Why pull_request_target and not push: a workflow triggered by a Dependabot
+# `push` (or `pull_request`) runs in the Dependabot secret scope. GitHub Actions
+# secrets are simply not available there, so `secrets.JIM_AUTOMATION_APP_ID`
+# resolved to an empty string and every run died at the token step with
+# "The 'client-id' (or deprecated 'app-id') input must be set to a non-empty
+# string". The workflow had therefore never regenerated a single lock file. Of
+# the workarounds GitHub documents for this restriction, `pull_request_target`
+# is the one that keeps the automation self-contained: it runs in the context of
+# the base branch with the repository's normal Actions secrets, so the App token
+# can be minted. (Storing the App credentials a second time as Dependabot
+# secrets would also work, but leaves the same credential in two places to
+# rotate.) Because the workflow file is read from the base branch, this fix
+# applies to Dependabot PRs that are already open, not just new ones.
+#
+# Safety note for pull_request_target: this checks out the PR head and runs
+# `dotnet restore`, which evaluates MSBuild project files from that branch. The
+# job guard below therefore refuses anything that is not a same-repository
+# `dependabot/nuget/**` branch; Dependabot never opens PRs from forks, so a
+# fork head reaching this workflow would itself be the anomaly.
+#
+# Self-limiting by design, in two layers:
+#   1. The regeneration is deterministic (see the Release note on the restore
+#      step), so re-running it on an already-regenerated branch produces no
+#      diff and the job exits before committing anything.
+#   2. The commit this workflow pushes is authored by the jim-automation App,
+#      and the guard below skips runs whose PR head was last touched by that
+#      App. Unlike the previous `github.actor == 'dependabot[bot]'` guard, this
+#      still fires when a human pushes to a Dependabot branch (a maintainer
+#      merging `main` into it, say), which is exactly when the lock files can
+#      drift back out of date.
 #
 # Identity / token choice (same reasoning as apt-pin-check.yml and
 # tooling-pin-check.yml):
@@ -39,22 +64,46 @@
 name: regenerate-nuget-lock-files
 
 on:
-  push:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
     branches:
-      - 'dependabot/nuget/**'
+      - main
 
 permissions:
   contents: read
 
 concurrency:
-  group: regenerate-nuget-lock-files-${{ github.ref }}
+  # Keyed on the PR, not github.ref: under pull_request_target github.ref is the
+  # base branch, which would collapse every Dependabot PR into one group and let
+  # them cancel each other.
+  group: regenerate-nuget-lock-files-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   regenerate:
-    if: github.actor == 'dependabot[bot]'
+    # Same-repository dependabot/nuget branches only (see the safety note above),
+    # and never the App's own regeneration push.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'dependabot/nuget/')
+      && github.event.sender.login != 'jim-automation[bot]'
     runs-on: ubuntu-latest
     steps:
+      # Fails with a diagnosable message rather than create-github-app-token's
+      # opaque "'client-id' ... must be set to a non-empty string", which is what
+      # an empty secret looks like from inside the action. An empty value here
+      # means the credentials are missing from the repository's Actions secrets.
+      - name: Check App credentials are present
+        env:
+          APP_ID: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          PRIVATE_KEY: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::JIM_AUTOMATION_APP_ID / JIM_AUTOMATION_PRIVATE_KEY are not readable in this run." \
+                 "Regenerate the lock files manually: dotnet restore JIM.sln --force-evaluate -p:Configuration=Release"
+            exit 1
+          fi
+
       - name: Mint GitHub App installation token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
@@ -65,7 +114,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
-          ref: ${{ github.ref }}
+          # pull_request_target defaults to the base branch; the PR head is what
+          # needs regenerating. Pinned to the exact SHA the event carried, so a
+          # push landing mid-run cannot be silently regenerated against the
+          # wrong tree (createCommitOnBranch's expectedHeadOid then rejects it).
+          ref: ${{ github.event.pull_request.head.sha }}
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup .NET
@@ -73,18 +126,32 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Configuration=Release is what makes this deterministic, and determinism
+      # is what stops the workflow chasing its own tail. Directory.Build.props
+      # appends a VersionSuffix of dev.<date>.<minutes-since-midnight> in Debug,
+      # and project references are recorded in the lock file with the referenced
+      # project's version - so a Debug regeneration rewrites every project entry
+      # with a fresh timestamp on every run, producing a diff (and therefore a
+      # commit, and therefore another run) that never converges. Release leaves
+      # VersionSuffix empty, so re-running on an already-regenerated branch is a
+      # genuine no-op. Locked-mode restore does not compare project versions, so
+      # CI (which restores in Debug) is unaffected by the value recorded here.
       - name: Regenerate lock files
-        run: dotnet restore JIM.sln --force-evaluate
+        run: dotnet restore JIM.sln --force-evaluate -p:Configuration=Release
 
       - name: Commit regenerated lock files, if any changed
         shell: pwsh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # The PR head branch, not github.ref_name: under pull_request_target
+          # github.ref_name is the base branch, and committing the regenerated
+          # lock files there would push straight to main.
+          #
           # Passed via env rather than interpolated into the script body, so
           # the branch name can never be evaluated as script (CodeQL actions
           # injection hygiene; Dependabot branch names are trusted, belt and braces).
-          BRANCH_NAME: ${{ github.ref_name }}
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
         run: |
           $ErrorActionPreference = 'Stop'
 

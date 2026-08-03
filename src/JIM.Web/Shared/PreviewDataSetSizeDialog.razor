@@ -1,0 +1,81 @@
+@using JIM.Application.Servers
+@using JIM.Models.Preview
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The informed choice before a large Configuration Change Preview runs (#827, PRD scenario 5): how many
+   object-level rows to keep behind the summary.
+
+   Its job is to state a cost, not to warn. Summary counts are exact whichever option is taken, so neither answer is
+   wrong; what would be wrong is capping a preview of this size without saying so, and leaving an administrator to
+   read a sample as a complete list. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1">
+            This preview would produce about @EstimatedDeltaRows.ToString("N0") object-level rows
+            (roughly @ApproximateStorage of preview data).
+        </MudText>
+        <MudText Typo="Typo.body1" Class="mt-3">
+            The summary counts are exact either way. The choice is how much of it you can drill into, and how much
+            storage the preview uses until it ages out under the retention period.
+        </MudText>
+
+        <MudRadioGroup T="ConfigurationChangePreviewDeltaPersistence" @bind-Value="_choice" Class="mt-4">
+            <MudRadio T="ConfigurationChangePreviewDeltaPersistence" Value="@ConfigurationChangePreviewDeltaPersistence.Capped" Dense="false">
+                <MudText Typo="Typo.body1">Keep a sample of each group (recommended)</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Up to @ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0") rows per summary
+                    group. Groups showing a sample are labelled as such.
+                </MudText>
+            </MudRadio>
+            <MudRadio T="ConfigurationChangePreviewDeltaPersistence" Value="@ConfigurationChangePreviewDeltaPersistence.Full" Dense="false">
+                <MudText Typo="Typo.body1">Keep every row</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Every affected object is drillable. Takes longer and uses the storage above.
+                </MudText>
+            </MudRadio>
+        </MudRadioGroup>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton data-testid="jim-preview-size-confirm" Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">
+            Run preview
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>The estimated object-level rows, stated so the choice is made against a number rather than a feeling.</summary>
+    [Parameter, EditorRequired]
+    public long EstimatedDeltaRows { get; set; }
+
+    /// <summary>
+    /// Rough bytes per stored delta row: two snapshotted names, an attribute name, two values and the keys beside
+    /// them. Deliberately approximate and deliberately generous; the sentence it produces is meant to convey an
+    /// order of magnitude, and a figure precise enough to be argued with would be a false precision over values
+    /// nobody has measured yet.
+    /// </summary>
+    private const int ApproximateBytesPerDeltaRow = 400;
+
+    private ConfigurationChangePreviewDeltaPersistence _choice = ConfigurationChangePreviewDeltaPersistence.Capped;
+
+    private string ApproximateStorage
+    {
+        get
+        {
+            var megabytes = (double)EstimatedDeltaRows * ApproximateBytesPerDeltaRow / (1024 * 1024);
+            return megabytes >= 1024
+                ? $"{megabytes / 1024:N1} GB"
+                : $"{megabytes:N0} MB";
+        }
+    }
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(_choice));
+
+    private void Cancel() => MudDialog.Cancel();
+}

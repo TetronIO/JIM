@@ -2,12 +2,6 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
-      "AngleSharp": {
-        "type": "Direct",
-        "requested": "[1.7.0, )",
-        "resolved": "1.7.0",
-        "contentHash": "v1R++46dblGRBo2/fKFUfgtZOaFnDGQhqBM0AarxgZSJuumj1e1vexBbjlTv2hx3Olr3qeoJa2yUoWyv5fuJ5A=="
-      },
       "bunit": {
         "type": "Direct",
         "requested": "[2.8.6, )",
@@ -70,6 +64,11 @@
           "Microsoft.Testing.Platform.MSBuild": "2.1.0"
         }
       },
+      "AngleSharp": {
+        "type": "Transitive",
+        "resolved": "1.5.2",
+        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
+      },
       "AngleSharp.Css": {
         "type": "Transitive",
         "resolved": "1.0.0-beta.224",
@@ -117,6 +116,14 @@
         "contentHash": "ylPZe+LheFp0pt2tSMq2pPeGAkMLqWVOn5+1/xOB/eUj889n9b35Sny08bSQ0ziAGIFjp3BBTXaYsWJjRoFV4A==",
         "dependencies": {
           "Asp.Versioning.Mvc": "10.0.1"
+        }
+      },
+      "Castle.Core": {
+        "type": "Transitive",
+        "resolved": "5.1.1",
+        "contentHash": "rpYtIczkzGpf+EkZgDr9CClTdemhsrwA/W5hMoPjLkRFnXzH44zDLoovXeKtmxb1ykXK9aJVODSpiJml8CTw2g==",
+        "dependencies": {
+          "System.Diagnostics.EventLog": "6.0.0"
         }
       },
       "Castle.Core": {
@@ -818,10 +825,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.14.0-dev.20260803.789, )",
-          "JIM.Data": "[0.14.0-dev.20260803.789, )",
-          "JIM.Models": "[0.14.0-dev.20260803.789, )",
-          "JIM.Utilities": "[0.14.0-dev.20260803.789, )",
+          "JIM.Connectors": "[0.14.0, )",
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.10, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.10, )",
           "NCrontab": "[3.4.0, )",
@@ -833,16 +840,16 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.14.0-dev.20260803.789, )",
-          "JIM.Scim": "[0.14.0-dev.20260803.789, )",
-          "JIM.Utilities": "[0.14.0-dev.20260803.789, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Scim": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "System.DirectoryServices.Protocols": "[10.0.10, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260803.789, )"
+          "JIM.Models": "[0.14.0, )"
         }
       },
       "jim.models": {
@@ -855,9 +862,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.14.0-dev.20260803.789, )",
-          "JIM.Models": "[0.14.0-dev.20260803.789, )",
-          "JIM.Utilities": "[0.14.0-dev.20260803.789, )",
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -866,8 +873,8 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260803.789, )",
-          "JIM.Utilities": "[0.14.0-dev.20260803.789, )"
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )"
         }
       },
       "jim.testsupport": {
@@ -879,7 +886,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.14.0-dev.20260803.789, )",
+          "JIM.Models": "[0.14.0, )",
           "Serilog": "[4.4.0, )"
         }
       },
@@ -889,10 +896,10 @@
           "Asp.Versioning.Mvc": "[10.0.1, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.0.1, )",
           "Humanizer.Core": "[3.0.10, )",
-          "JIM.Application": "[0.14.0-dev.20260803.789, )",
-          "JIM.Models": "[0.14.0-dev.20260803.789, )",
-          "JIM.PostgresData": "[0.14.0-dev.20260803.789, )",
-          "JIM.Utilities": "[0.14.0-dev.20260803.789, )",
+          "JIM.Application": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.PostgresData": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.10, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.10, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.10, )",
