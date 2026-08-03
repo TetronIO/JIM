@@ -180,7 +180,7 @@ public class FileConnectorSubPhaseProgressTests
         Assert.That(result.ImportObjects, Has.Count.EqualTo(25_000));
         Assert.That(progress.PhaseKeys, Is.EqualTo(new[] { FileConnectorPhases.Read }),
             "Reading and parsing a file is one pass, so it is one step");
-        Assert.That(progress.ObjectsProduced, Is.EqualTo(new[] { 10_000, 20_000, 25_000 }),
+        Assert.That(progress.ObjectsRead, Is.EqualTo(new[] { 10_000, 20_000, 25_000 }),
             "Row progress must advance during the read, and finish on the true total");
         Assert.That(progress.Messages, Is.Empty,
             "The counters carry the figures now, so narrating them as prose as well would say the same thing twice");
@@ -248,7 +248,7 @@ public class FileConnectorSubPhaseProgressTests
         await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, progress);
 
         // Assert
-        Assert.That(progress.ObjectsProduced, Is.EqualTo(new[] { 3 }));
+        Assert.That(progress.ObjectsRead, Is.EqualTo(new[] { 3 }));
     }
 
     [Test]

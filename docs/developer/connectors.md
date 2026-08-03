@@ -112,12 +112,12 @@ Two figures, reported independently, through the same `IConnectorProgress`:
 // them, or reading the count a query's response states, is worth the extra pass.
 await progress.ReportExpectedObjectCountAsync(recordCount);
 
-// How many objects you have produced so far within the call you are currently serving.
-await progress.ReportObjectsProducedAsync(rowsRead);
+// How many objects you have read so far within the call you are currently serving.
+await progress.ReportObjectsReadAsync(rowsRead);
 ```
 
 - **`ReportExpectedObjectCountAsync`** gives the fetching step a percentage and a time remaining. Report the whole run's expected total, not the current page's. It is your best answer rather than a guarantee: report it again to correct it, and if more objects turn up than you expected, JIM raises the total rather than letting the bar read past complete. Say nothing if answering would mean doing your own work twice; JIM shows the count and rate alone rather than inventing a figure.
-- **`ReportObjectsProducedAsync`** moves the counters while your call is still running. JIM cannot count what you have not returned yet, so a Connector that hands everything over in one call leaves the Activity frozen for the whole read unless it reports this. Count only what the current call has produced; JIM adds it to what earlier calls delivered. A Connector that returns a page at a time gains little, because JIM counts each page as it arrives.
+- **`ReportObjectsReadAsync`** moves the counters while your call is still running. JIM cannot count what you have not returned yet, so a Connector that hands everything over in one call leaves the Activity frozen for the whole read unless it reports this. Count only what the current call has read; JIM adds it to what earlier calls delivered. A Connector that returns a page at a time gains little, because JIM counts each page as it arrives.
 
 Between them these are what tell an administrator the difference between a healthy long phase and a stuck run, alongside a step that advances.
 

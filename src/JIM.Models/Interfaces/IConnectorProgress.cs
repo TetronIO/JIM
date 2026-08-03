@@ -45,7 +45,7 @@ public interface IConnectorProgress
     /// Emit on phase and page boundaries rather than per object: each emit is a small write, and a
     /// message nobody can read at speed is worse than one that changes every few seconds. How many
     /// objects have arrived, how fast and how long is left are rendered from the counts reported
-    /// through <see cref="ReportObjectsProducedAsync"/> and <see cref="ReportExpectedObjectCountAsync"/>,
+    /// through <see cref="ReportObjectsReadAsync"/> and <see cref="ReportExpectedObjectCountAsync"/>,
     /// so a message repeating any of them says the same thing twice.
     /// </remarks>
     Task ReportAsync(string message);
@@ -68,7 +68,7 @@ public interface IConnectorProgress
     Task ReportExpectedObjectCountAsync(int objectCount);
 
     /// <summary>
-    /// Reports how many objects this Connector has produced so far within the call it is currently
+    /// Reports how many objects this Connector has read so far within the call it is currently
     /// serving, so the Activity's counters move while a long call is in flight rather than only
     /// when it returns. JIM adds this to the objects earlier calls already delivered.
     /// </summary>
@@ -77,5 +77,5 @@ public interface IConnectorProgress
     /// moves until the whole system has been read. A Connector that returns a page at a time gains
     /// little: JIM counts each page as it arrives.
     /// </remarks>
-    Task ReportObjectsProducedAsync(int objectCount);
+    Task ReportObjectsReadAsync(int objectCount);
 }

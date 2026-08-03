@@ -192,35 +192,12 @@ public class RunPhaseStepperTests : JimComponentTestContext
     }
 
     [Test]
-    public void RunPhaseStepper_WithAMessage_ShowsItBeneathTheRail()
+    public void RunPhaseStepper_RunInFlight_LeavesTheMessageToTheReadoutBeneathIt()
     {
-        var cut = Render<RunPhaseStepper>(p => p
-            .Add(c => c.Phases, ImportInProgress())
-            .Add(c => c.Message, "Parsed 50,000 rows..."));
-
-        Assert.That(cut.Find(".jim-phase-h-detail").InnerHtml, Does.Contain("Parsed 50,000 rows..."));
-    }
-
-    [Test]
-    public void RunPhaseStepper_MessageRepeatingTheRunningStepsName_IsNotShownUnderIt()
-    {
-        // The message earns its line by saying something the rail does not already say. PowerShell
-        // has always applied this rule; the portal printing the step's own name back under it was
-        // one of the duplicated lines on the Activity's Progress panel.
-        var cut = Render<RunPhaseStepper>(p => p
-            .Add(c => c.Phases, ImportInProgress())
-            .Add(c => c.Message, "Reading the file"));
-
-        Assert.That(cut.FindAll(".jim-phase-step-message"), Is.Empty);
-    }
-
-    [Test]
-    public void RunPhaseStepper_MessageRepeatingTheHostingStepsName_IsNotShownUnderItEither()
-    {
-        // The Connector reports a message matching the JIM step hosting it, rather than its own.
-        var cut = Render<RunPhaseStepper>(p => p
-            .Add(c => c.Phases, ImportInProgress())
-            .Add(c => c.Message, "importing objects"));
+        // The message describes what is happening inside the running step, so it belongs under the
+        // step's own name in the readout below, not above it. Rendered here it read backwards: the
+        // narrower thing introduced the broader one.
+        var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
 
         Assert.That(cut.FindAll(".jim-phase-step-message"), Is.Empty);
     }

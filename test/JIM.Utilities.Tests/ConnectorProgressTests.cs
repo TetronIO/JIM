@@ -48,19 +48,19 @@ public class ConnectorProgressTests
     }
 
     [Test]
-    public async Task ReportObjectsProducedAsync_WithDelegate_ForwardsTheCountAsync()
+    public async Task ReportObjectsReadAsync_WithDelegate_ForwardsTheCountAsync()
     {
         var counts = new List<int>();
         using var progress = new ConnectorProgress(
             report: null,
-            reportObjectsProduced: count =>
+            reportObjectsRead: count =>
             {
                 counts.Add(count);
                 return Task.CompletedTask;
             });
 
-        await progress.ReportObjectsProducedAsync(10_000);
-        await progress.ReportObjectsProducedAsync(20_000);
+        await progress.ReportObjectsReadAsync(10_000);
+        await progress.ReportObjectsReadAsync(20_000);
 
         Assert.That(counts, Is.EqualTo(new[] { 10_000, 20_000 }));
     }
@@ -85,9 +85,9 @@ public class ConnectorProgressTests
         using var progress = new ConnectorProgress(report: null);
 
         await progress.ReportExpectedObjectCountAsync(500);
-        await progress.ReportObjectsProducedAsync(250);
+        await progress.ReportObjectsReadAsync(250);
         await ConnectorProgress.None.ReportExpectedObjectCountAsync(500);
-        await ConnectorProgress.None.ReportObjectsProducedAsync(250);
+        await ConnectorProgress.None.ReportObjectsReadAsync(250);
 
         Assert.Pass();
     }

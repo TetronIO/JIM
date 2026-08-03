@@ -209,27 +209,21 @@
 
             @if (_phases.Count > 0)
             {
-                <RunPhaseStepper Phases="_phases"
-                                 Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)"
-                                 StepProgress="@StepProgressFraction" />
+                <RunPhaseStepper Phases="_phases" StepProgress="@StepProgressFraction" />
             }
 
             @if (_activity.Status == ActivityStatus.InProgress)
             {
                 <MudStack Spacing="2" Class="@(_phases.Count > 0 ? "mt-3" : "")">
-                    @* With steps, the message rides with the step it describes; without them there is
-                       nowhere else for it to go. *@
-                    @if (_phases.Count == 0 && !string.IsNullOrEmpty(_activity.Message))
-                    {
-                        <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
-                    }
-                    @* Counts, rate and time remaining (issue #202), each stated once. The Activity's
-                       message narrates what is happening; the numbers belong here. *@
+                    @* Counts, rate and time remaining (issue #202), each stated once, under the
+                       step they measure and the Activity's own narration of what it is doing
+                       within it. *@
                     <RunProgressMetrics ObjectsProcessed="@_activity.ObjectsProcessed"
                                         ObjectsToProcess="@_activity.ObjectsToProcess"
                                         ObjectsPerSecond="@_etaEstimate.ObjectsPerSecond"
                                         EstimatedSecondsRemaining="@_etaEstimate.EstimatedSecondsRemaining"
-                                        Phases="_phases" />
+                                        Phases="_phases"
+                                        Message="@_activity.Message" />
                 </MudStack>
             }
         </MudPaper>

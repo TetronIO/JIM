@@ -229,11 +229,11 @@ public class SyncImportTaskProcessor
         // stays open and the Activity counts up without a percentage, which is all JIM can honestly
         // show. See IConnectorProgress.
         int? expectedObjectCount = null;
-        var objectsProducedInCurrentCall = 0;
+        var objectsReadInCurrentCall = 0;
 
         void ApplyFetchCountingWindow()
         {
-            var processed = totalObjectsImported + objectsProducedInCurrentCall;
+            var processed = totalObjectsImported + objectsReadInCurrentCall;
             _activity.ObjectsProcessed = processed;
 
             // A stated total is the Connector's best answer, not a guarantee; more objects arriving
@@ -248,9 +248,9 @@ public class SyncImportTaskProcessor
             await _syncRepo.UpdateActivityAsync(_activity);
         }
 
-        async Task ReportObjectsProducedAsync(int count)
+        async Task ReportObjectsReadAsync(int count)
         {
-            objectsProducedInCurrentCall = count;
+            objectsReadInCurrentCall = count;
             ApplyFetchCountingWindow();
             await _syncRepo.UpdateActivityAsync(_activity);
         }
@@ -304,7 +304,7 @@ public class SyncImportTaskProcessor
                     var connectorProgress = _phases.CreateConnectorProgress(
                         async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
                         ReportExpectedObjectCountAsync,
-                        ReportObjectsProducedAsync);
+                        ReportObjectsReadAsync);
 
                     // Keep track of the original persisted data at the START of the import.
                     // This is critical for delta imports where subsequent pages must use the SAME
@@ -347,7 +347,7 @@ public class SyncImportTaskProcessor
 
                         // The page is delivered, so whatever the Connector reported while producing
                         // it is now part of the running total rather than something to add to it.
-                        objectsProducedInCurrentCall = 0;
+                        objectsReadInCurrentCall = 0;
                         ApplyFetchCountingWindow();
                         // How many have arrived is rendered from the Activity's counters, so the
                         // message says only what those cannot: which page is being read. A single
@@ -440,13 +440,13 @@ public class SyncImportTaskProcessor
                 var connectorProgress = _phases.CreateConnectorProgress(
                     async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
                     ReportExpectedObjectCountAsync,
-                    ReportObjectsProducedAsync);
+                    ReportObjectsReadAsync);
 
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
                     result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                 }
-                objectsProducedInCurrentCall = 0;
+                objectsReadInCurrentCall = 0;
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 

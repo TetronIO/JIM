@@ -27,7 +27,7 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
     private readonly Func<string, Task>? _report;
     private readonly Func<string, string?, Task>? _enterPhase;
     private readonly Func<int, Task>? _reportExpectedObjectCount;
-    private readonly Func<int, Task>? _reportObjectsProduced;
+    private readonly Func<int, Task>? _reportObjectsRead;
     private readonly SemaphoreSlim? _gate;
     private readonly bool _ownsGate;
     private readonly ILogger _logger;
@@ -51,15 +51,15 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
         ILogger? logger = null,
         SemaphoreSlim? sharedGate = null,
         Func<int, Task>? reportExpectedObjectCount = null,
-        Func<int, Task>? reportObjectsProduced = null)
+        Func<int, Task>? reportObjectsRead = null)
     {
         _report = report;
         _enterPhase = enterPhase;
         _reportExpectedObjectCount = reportExpectedObjectCount;
-        _reportObjectsProduced = reportObjectsProduced;
+        _reportObjectsRead = reportObjectsRead;
         _logger = logger ?? Log.ForContext<ConnectorProgress>();
 
-        if (report == null && enterPhase == null && reportExpectedObjectCount == null && reportObjectsProduced == null)
+        if (report == null && enterPhase == null && reportExpectedObjectCount == null && reportObjectsRead == null)
             return;
 
         _gate = sharedGate ?? new SemaphoreSlim(1, 1);
@@ -99,8 +99,8 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
         _reportExpectedObjectCount == null ? Task.CompletedTask : GuardAsync(() => _reportExpectedObjectCount(objectCount));
 
     /// <inheritdoc />
-    public Task ReportObjectsProducedAsync(int objectCount) =>
-        _reportObjectsProduced == null ? Task.CompletedTask : GuardAsync(() => _reportObjectsProduced(objectCount));
+    public Task ReportObjectsReadAsync(int objectCount) =>
+        _reportObjectsRead == null ? Task.CompletedTask : GuardAsync(() => _reportObjectsRead(objectCount));
 
     private async Task GuardAsync(Func<Task> emit)
     {

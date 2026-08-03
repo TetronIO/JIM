@@ -2375,11 +2375,6 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     color: var(--mud-palette-text-secondary);
 }
 
-.jim-phase-step-message {
-    color: var(--mud-palette-text-secondary);
-    margin-top: 0.125rem;
-}
-
 .jim-phase-substep {
     display: flex;
     align-items: center;
@@ -2632,8 +2627,15 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
    this carries a step's name, and upper-casing a sentence both slows it down and erases the Proper
    Case that distinguishes a JIM entity ("Connected System Objects") from an ordinary noun. */
 .jim-run-scope {
-    color: var(--mud-palette-text-secondary);
+    color: var(--mud-palette-text-primary);
     letter-spacing: 0.02em;
+}
+
+/* What the run is doing inside the step named above it: the detail follows the context, and takes
+   the quieter weight, because the step is the thing the figures below are measuring. */
+.jim-run-message {
+    color: var(--mud-palette-text-secondary);
+    margin-top: -0.125rem;
 }
 
 .jim-run-bar-row {

@@ -304,13 +304,13 @@ internal class FileConnectorImport
             // read and then skipped, so the two are not always the same number, and it is the
             // objects that the Activity's counters are showing.
             if (result.ImportObjects.Count % ProgressObjectInterval == 0)
-                await _progress.ReportObjectsProducedAsync(result.ImportObjects.Count);
+                await _progress.ReportObjectsReadAsync(result.ImportObjects.Count);
         }
 
         // Land on the true total so the last thing an operator sees is what was actually read,
         // rather than the last interval multiple. Skipped when the interval emit already reported it.
         if (result.ImportObjects.Count > 0 && result.ImportObjects.Count % ProgressObjectInterval != 0)
-            await _progress.ReportObjectsProducedAsync(result.ImportObjects.Count);
+            await _progress.ReportObjectsReadAsync(result.ImportObjects.Count);
 
         return FinaliseResult(result, stopwatch);
     }

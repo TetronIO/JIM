@@ -54,9 +54,9 @@ public class ImportObjectCountReportingTests : WorkflowTestBase
 
         var connector = new MockCountReportingConnector(csoType, objectsPerPage: 3, pages: 1, async progress =>
         {
-            await progress.ReportObjectsProducedAsync(1);
+            await progress.ReportObjectsReadAsync(1);
             processedSeenDuringTheImport.Add(activity.ObjectsProcessed);
-            await progress.ReportObjectsProducedAsync(2);
+            await progress.ReportObjectsReadAsync(2);
             processedSeenDuringTheImport.Add(activity.ObjectsProcessed);
         });
 
@@ -77,7 +77,7 @@ public class ImportObjectCountReportingTests : WorkflowTestBase
 
         var connector = new MockCountReportingConnector(csoType, objectsPerPage: 3, pages: 2, async progress =>
         {
-            await progress.ReportObjectsProducedAsync(2);
+            await progress.ReportObjectsReadAsync(2);
             processedSeenDuringTheImport.Add(activity.ObjectsProcessed);
         });
 
@@ -100,7 +100,7 @@ public class ImportObjectCountReportingTests : WorkflowTestBase
         var connector = new MockCountReportingConnector(csoType, objectsPerPage: 3, pages: 1, async progress =>
         {
             await progress.ReportExpectedObjectCountAsync(2);
-            await progress.ReportObjectsProducedAsync(3);
+            await progress.ReportObjectsReadAsync(3);
             countsSeenDuringTheImport.Add((activity.ObjectsProcessed, activity.ObjectsToProcess));
         });
 

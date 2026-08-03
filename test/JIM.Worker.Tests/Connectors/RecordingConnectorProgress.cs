@@ -51,7 +51,7 @@ public class RecordingConnectorProgress : IConnectorProgress
     /// <summary>
     /// Every running count of objects produced that the Connector reported, in order.
     /// </summary>
-    public List<int> ObjectsProduced { get; } = [];
+    public List<int> ObjectsRead { get; } = [];
 
     public Task ReportAsync(string message)
     {
@@ -65,9 +65,9 @@ public class RecordingConnectorProgress : IConnectorProgress
         return Task.CompletedTask;
     }
 
-    public Task ReportObjectsProducedAsync(int objectCount)
+    public Task ReportObjectsReadAsync(int objectCount)
     {
-        ObjectsProduced.Add(objectCount);
+        ObjectsRead.Add(objectCount);
         return Task.CompletedTask;
     }
 }

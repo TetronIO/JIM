@@ -33,8 +33,9 @@
             </ActionContent>
         </MudStepper>
 
-        @* The active step's detail: the Connector's own steps, and what is happening right now.
-           A horizontal rail has no room for either, so they sit beneath it. *@
+        @* The active step's detail: the Connector's own steps. A horizontal rail has no room for
+           them, so they sit beneath it. What the run is doing inside the step belongs with the
+           figures further down, under the step's own name. *@
         @if (CurrentPhase != null)
         {
             <div class="jim-phase-h-detail">
@@ -54,11 +55,6 @@
                         }
                     </div>
                 }
-
-                @if (MessageWorthShowing is { } message)
-                {
-                    <MudText Typo="Typo.body2" Class="jim-phase-step-message">@message</MudText>
-                }
             </div>
         }
     </div>
@@ -71,12 +67,6 @@
     /// </summary>
     [Parameter]
     public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
-
-    /// <summary>
-    /// The Activity's current message, shown beneath the rail while a step is running.
-    /// </summary>
-    [Parameter]
-    public string? Message { get; set; }
 
     /// <summary>
     /// How far through its own work the running step is, 0 to 1, or null when the step counts
@@ -98,27 +88,6 @@
         .FirstOrDefault();
 
     private ActivityPhase? CurrentTopLevelPhase => RunPhaseReading.ActiveTopLevel(Phases);
-
-    /// <summary>
-    /// The message, or null when it says nothing the rail does not already say. A message that
-    /// only repeats the name of the step it sits under is a duplicate line rather than narration;
-    /// PowerShell's live progress has always applied this rule, and the portal now matches it.
-    /// </summary>
-    private string? MessageWorthShowing
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(Message))
-                return null;
-
-            var message = Message.Trim();
-            var repeatsAStepName =
-                string.Equals(message, CurrentPhase?.Name, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(message, CurrentTopLevelPhase?.Name, StringComparison.OrdinalIgnoreCase);
-
-            return repeatsAStepName ? null : message;
-        }
-    }
 
     private List<ActivityPhase> ConnectorSteps => CurrentTopLevelPhase == null
         ? []

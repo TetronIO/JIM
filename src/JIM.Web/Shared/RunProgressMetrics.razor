@@ -20,6 +20,14 @@
         <MudText Typo="Typo.caption" Class="jim-run-scope">@scope</MudText>
     }
 
+    @* What is happening inside that step, so it reads after the step rather than before it. This
+       sat above the rail's own detail block, which put the narrower thing above the context it
+       belongs to. *@
+    @if (MessageWorthShowing is { } message)
+    {
+        <MudText Typo="Typo.caption" Class="jim-run-message">@message</MudText>
+    }
+
     <div class="jim-run-bar-row">
         @if (IsIndeterminate)
         {
@@ -107,6 +115,33 @@
     /// </summary>
     [Parameter]
     public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
+
+    /// <summary>
+    /// The Activity's message: what the run is doing inside the step it has reached. Null when the
+    /// run is not in flight.
+    /// </summary>
+    [Parameter]
+    public string? Message { get; set; }
+
+    /// <summary>
+    /// The message, unless it only repeats a step name the run is already showing. It earns its
+    /// line by saying something the rail and the scope line do not.
+    /// </summary>
+    private string? MessageWorthShowing
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Message))
+                return null;
+
+            var message = Message.Trim();
+            var repeatsAStepName = Phases
+                .Where(p => p.Status == ActivityPhaseStatus.Active)
+                .Any(p => string.Equals(message, p.Name, StringComparison.OrdinalIgnoreCase));
+
+            return repeatsAStepName ? null : message;
+        }
+    }
 
     /// <summary>
     /// "Step 2 of 3: Importing objects", matching what PowerShell's live progress already prints,

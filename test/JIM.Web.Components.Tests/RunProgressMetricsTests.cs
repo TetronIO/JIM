@@ -94,6 +94,53 @@ public class RunProgressMetricsTests : JimComponentTestContext
     }
 
     [Test]
+    public void RunProgressMetrics_WithAMessage_ShowsItUnderTheStepItDescribes()
+    {
+        // The message says what is happening inside the step, so it reads after the step, not
+        // before it: the rail showed the narrower thing above the context it belongs to.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.ObjectsProcessed, 3500)
+            .Add(c => c.ObjectsToProcess, 10527)
+            .Add(c => c.Phases, ImportFetching())
+            .Add(c => c.Message, "Creating Connected System Objects"));
+
+        var lines = cut.FindAll(".jim-run-scope, .jim-run-message").Select(e => e.TextContent.Trim()).ToList();
+        Assert.That(lines, Is.EqualTo(new[] { "Step 2 of 3: Importing objects", "Creating Connected System Objects" }));
+    }
+
+    [Test]
+    public void RunProgressMetrics_MessageRepeatingTheRunningStepsName_IsNotShown()
+    {
+        // The message earns its line by saying something the step's name does not already say.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.Phases, ImportFetching())
+            .Add(c => c.Message, "Importing objects"));
+
+        Assert.That(cut.FindAll(".jim-run-message"), Is.Empty);
+    }
+
+    [Test]
+    public void RunProgressMetrics_MessageRepeatingAConnectorStepsName_IsNotShownEither()
+    {
+        // The Connector narrates its own step's name, which the rail above is already showing.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.Phases, ImportFetching())
+            .Add(c => c.Message, "reading the file"));
+
+        Assert.That(cut.FindAll(".jim-run-message"), Is.Empty);
+    }
+
+    [Test]
+    public void RunProgressMetrics_MessageOnARunWithoutSteps_IsStillShown()
+    {
+        // Nothing to repeat, so nothing to suppress.
+        var cut = Render<RunProgressMetrics>(p => p
+            .Add(c => c.Message, "Working"));
+
+        Assert.That(cut.Find(".jim-run-message").TextContent.Trim(), Is.EqualTo("Working"));
+    }
+
+    [Test]
     public void RunProgressMetrics_RunWithoutSteps_OmitsTheScopeRatherThanShowingAnEmptyOne()
     {
         // Activities that are not Run Profile executions, and runs predating step recording.
