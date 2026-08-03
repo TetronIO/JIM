@@ -22,14 +22,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="bunit" Version="2.7.2" />
+    <PackageReference Include="bunit" Version="2.8.6" />
     <!--
       Transitive pin, not a direct use. bUnit 2.7.2 resolves AngleSharp 1.4.0, which carries
       CVE-2026-54570 (mXSS via MathML annotation-xml integration points), fixed in 1.5.0. Pinning
       forward keeps the restore audit clean without suppressing the finding. Drop this reference
       once bUnit's own floor moves past 1.5.0.
     -->
-    <PackageReference Include="AngleSharp" Version="1.6.0" />
+    <PackageReference Include="AngleSharp" Version="1.7.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="NUnit" Version="4.6.1" />
