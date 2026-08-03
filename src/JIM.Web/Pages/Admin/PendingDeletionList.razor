@@ -167,15 +167,16 @@
                 if (context.DaysUntilDeletion.HasValue)
                 {
                     var daysUntilDeletion = context.DaysUntilDeletion.Value;
+                    var deletionEligibleDate = context.DeletionEligibleDate.Value;
                     if (daysUntilDeletion <= 0)
                     {
-                        <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@deletionEligibleDate.ToString("g")" Arrow="true" Placement="Placement.Top">
                             <MudText Color="Color.Error">Overdue by @FormatDayCount(Math.Abs(daysUntilDeletion))</MudText>
                         </MudTooltip>
                     }
                     else
                     {
-                        <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@deletionEligibleDate.ToString("g")" Arrow="true" Placement="Placement.Top">
                             <span>@FormatDayCount(daysUntilDeletion)</span>
                         </MudTooltip>
                     }
