@@ -260,6 +260,7 @@
             <div class="mb-5">
                 <CausalityPanel Item="_activityRunProfileExecutionItem"
                                 Context="@BuildCausalityPageContext()"
+                                LivePendingExportIds="_livePendingExportIds"
                                 Timestamp="@_activity?.Executed" />
             </div>
         }
@@ -986,6 +987,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private MetaverseObject? _metaverseObject;
     private PendingExport? _pendingExport;
     private MetaverseObjectType? _metaverseObjectType;
+    private IReadOnlySet<Guid>? _livePendingExportIds;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
@@ -1138,6 +1140,8 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                     _activityRunProfileExecutionItem.PendingExportId.Value);
         }
 
+        await LoadLivePendingExportIdsAsync(jim);
+
         // Resolve the MVO type for headings and deletion rule display
         {
             // Try to get the MVO type from the CSO's linked MetaverseObject, or from Synchronisation Rules
@@ -1207,6 +1211,34 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves which of the Pending Exports this item created are still queued. A Pending Export is
+    /// deleted once it has been exported, while this page is a permanent record of the run that
+    /// created it, so without this every Pending Export link on an item older than the next export run
+    /// would land on "Pending Export not found". One projection query per page load, bounded by the
+    /// number of Pending Export outcomes on this one item.
+    /// </summary>
+    private async Task LoadLivePendingExportIdsAsync(JimApplication jim)
+    {
+        var pendingExportIds = _activityRunProfileExecutionItem?.SyncOutcomes
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+                        && o.TargetEntityId is { } id && id != Guid.Empty)
+            .Select(o => o.TargetEntityId!.Value)
+            .Distinct()
+            .ToList() ?? [];
+
+        if (pendingExportIds.Count == 0)
+        {
+            // An empty set, not null: this item names no Pending Export, so there is nothing to
+            // downgrade, and null would read as "the lookup did not run".
+            _livePendingExportIds = new HashSet<Guid>();
+            return;
+        }
+
+        var live = await jim.ConnectedSystems.GetExistingPendingExportIdsAsync(pendingExportIds);
+        _livePendingExportIds = live.ToHashSet();
     }
 
     /// <summary>

@@ -3355,6 +3355,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. Summary-tier: an id projection,
+    /// with no entity materialised, because the caller only needs to know whether a row is still there.
+    /// </summary>
+    public async Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return [];
+
+        return await Repository.Database.PendingExports
+            .Where(pe => pendingExportIds.Contains(pe.Id))
+            .Select(pe => pe.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
     /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
     /// CSO attributes, attribute value changes, and attribute definitions.

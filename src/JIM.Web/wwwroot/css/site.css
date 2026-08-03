@@ -1691,6 +1691,15 @@ html[lang] .jim-schema-change-table td {
     margin: 0;
 }
 
+/* A chip carries 12px of its own horizontal padding, so its label starts indented
+   relative to the plain-text values above and below it in the same column. Pull a
+   top-level chip back by that much so every value in the column shares one left edge.
+   Chips nested inside a link (the CSO/MVO chip links) are deliberately excluded: they
+   lead with an avatar that already carries its own negative margin. */
+.jim-detail-table tbody tr td > .mud-chip {
+    margin-left: -12px;
+}
+
 /* Blazor Server Reconnection UI */
 #components-reconnect-modal {
     display: none;

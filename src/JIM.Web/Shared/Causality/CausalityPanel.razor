@@ -107,6 +107,16 @@
     public CausalityPageContext Context { get; set; } = null!;
 
     /// <summary>
+    /// The Pending Exports this item created that are still queued, or null when the host page did
+    /// not resolve them (in which case every Pending Export link stays precise). Pending Export rows
+    /// are deleted once exported, so this is what lets a link degrade to the target system's queue
+    /// rather than 404. Pass the same instance across renders; a new set rebuilds the model and drops
+    /// the expanded and selected event.
+    /// </summary>
+    [Parameter]
+    public IReadOnlySet<Guid>? LivePendingExportIds { get; set; }
+
+    /// <summary>
     /// The execution timestamp (UTC) shown in the summary band.
     /// </summary>
     [Parameter]
@@ -120,17 +130,20 @@
     private CausalityEvent? _selectedEvent;
     private ActivityRunProfileExecutionItem? _builtItem;
     private CausalityPageContext? _builtContext;
+    private IReadOnlySet<Guid>? _builtLivePendingExportIds;
 
     protected override void OnParametersSet()
     {
         // Build once per (Item, Context) pair; parent re-renders with unchanged values must not
         // discard the expanded/selected-event state by rebuilding the model
-        if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext))
+        if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
+            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds))
             return;
 
         _builtItem = Item;
         _builtContext = Context;
-        _model = CausalityModelBuilder.Build(Item, Context);
+        _builtLivePendingExportIds = LivePendingExportIds;
+        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds);
         _summary = CausalitySummaryBuilder.Build(_model);
         _expandedEvent = null;
         _selectedEvent = null;

@@ -5520,6 +5520,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so anything holding historical ids (a causality record naming the Pending
+    /// Export an event created) needs this to tell a live row from one that has since been run.
+    /// </summary>
+    /// <param name="pendingExportIds">The ids to test. An empty list returns an empty result without querying.</param>
+    public async Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetExistingPendingExportIdsAsync(pendingExportIds);
+    }
+
+    /// <summary>
     /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>

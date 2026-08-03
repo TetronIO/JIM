@@ -246,6 +246,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
     /// <returns>Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so a caller holding historical ids needs this to tell live rows from gone
+    /// ones without materialising any of them.
+    /// </summary>
+    public Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds);
+
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>

@@ -20,7 +20,20 @@ public static class CausalityModelBuilder
     /// <summary>
     /// Builds the causality model for an execution item. Never throws for missing or legacy data.
     /// </summary>
-    public static CausalityModel Build(ActivityRunProfileExecutionItem item, CausalityPageContext context)
+    /// <param name="item">The execution item whose sync outcomes are being visualised.</param>
+    /// <param name="context">The page context supplying run and record identities.</param>
+    /// <param name="livePendingExportIds">
+    /// The Pending Exports referenced by this item that are still queued, or null when the caller did
+    /// not resolve them. A Pending Export row is hard-deleted once it has been exported, while the
+    /// causality record that names it is permanent, so a link to the individual row dies for every
+    /// item older than the next export run. Passing the live set lets those links degrade to the
+    /// target system's queue instead of promising a row that no longer exists. Null means "not
+    /// resolved", NOT "none are live": a caller that cannot run the lookup keeps the precise links.
+    /// </param>
+    public static CausalityModel Build(
+        ActivityRunProfileExecutionItem item,
+        CausalityPageContext context,
+        IReadOnlySet<Guid>? livePendingExportIds = null)
     {
         var outcomes = item.SyncOutcomes;
         var outcomeIds = outcomes.Select(o => o.Id).ToHashSet();
@@ -46,7 +59,8 @@ public static class CausalityModelBuilder
         var roots = outcomes
             .Where(o => !attachedChildIds.Contains(o.Id))
             .OrderBy(o => o.Ordinal)
-            .Select(o => BuildEvent(o, childrenByParentId, context, recordAttributeRows, identityAttributeRows))
+            .Select(o => BuildEvent(o, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
+                livePendingExportIds))
             .ToList();
 
         return new CausalityModel { Context = context, Roots = roots };
@@ -57,7 +71,8 @@ public static class CausalityModelBuilder
         Dictionary<Guid, List<ActivityRunProfileExecutionItemSyncOutcome>> childrenByParentId,
         CausalityPageContext context,
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
-        IReadOnlyList<CausalityAttributeRow> identityAttributeRows)
+        IReadOnlyList<CausalityAttributeRow> identityAttributeRows,
+        IReadOnlySet<Guid>? livePendingExportIds)
     {
         var display = OutcomeDisplayMap.Get(outcome.OutcomeType);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
@@ -68,7 +83,7 @@ public static class CausalityModelBuilder
             ? children
             : [];
 
-        var links = BuildLinks(outcome, childOutcomes, parsedDetail, context);
+        var links = BuildLinks(outcome, childOutcomes, parsedDetail, context, livePendingExportIds);
         var (systemId, systemName) = GetOwningSystem(outcome, lane, usesIdChannel, parsedDetail, context);
 
         return new CausalityEvent
@@ -89,7 +104,8 @@ public static class CausalityModelBuilder
             Links = links,
             AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
             Children = childOutcomes
-                .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows))
+                .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows,
+                    livePendingExportIds))
                 .ToList()
         };
     }
@@ -172,7 +188,8 @@ public static class CausalityModelBuilder
         ActivityRunProfileExecutionItemSyncOutcome outcome,
         IReadOnlyList<ActivityRunProfileExecutionItemSyncOutcome> childOutcomes,
         OutcomeDetailMessage parsedDetail,
-        CausalityPageContext context)
+        CausalityPageContext context,
+        IReadOnlySet<Guid>? livePendingExportIds)
     {
         var links = new List<CausalityEntityLink>();
 
@@ -220,10 +237,15 @@ public static class CausalityModelBuilder
                         CausalityEntityKind.ConnectedSystem));
 
                     var queueHref = $"/admin/connected-systems/{targetSystemId}/pending-exports";
-                    var hasPendingExportId = outcome.TargetEntityId is { } id && id != Guid.Empty;
+                    // Link the individual row only while it still exists. A Pending Export is
+                    // hard-deleted once exported, so on an item older than the next export run the row
+                    // is gone and a link to it 404s; the queue always exists. A null live set means the
+                    // caller did not resolve it, not that nothing is live, so the precise link stands.
+                    var isLinkable = outcome.TargetEntityId is { } id && id != Guid.Empty
+                                     && livePendingExportIds?.Contains(id) != false;
                     links.Add(new CausalityEntityLink(
-                        hasPendingExportId ? "Pending Export" : "Pending Exports",
-                        hasPendingExportId ? $"{queueHref}/{outcome.TargetEntityId}" : queueHref,
+                        isLinkable ? "Pending Export" : "Pending Exports",
+                        isLinkable ? $"{queueHref}/{outcome.TargetEntityId}" : queueHref,
                         CausalityEntityKind.PendingExport));
                 }
                 else if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))

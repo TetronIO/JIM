@@ -324,7 +324,16 @@
 }
 else if (_notFound)
 {
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Pending Export not found.</MudAlert>
+    @* A Pending Export is deleted the moment it is exported, so a link to one is only good while it
+       is still queued. Saying "not found" implies something is wrong; almost always nothing is, the
+       change simply reached its Connected System. Name the likely reasons rather than leave the
+       reader wondering whether they have hit a bug. *@
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        This Pending Export is no longer queued. It has either been exported to the Connected System,
+        or been superseded by a later change to the same Connected System Object. Pending Exports are
+        removed once they are no longer waiting to be applied, so links to an individual one stop
+        resolving after its export runs.
+    </MudAlert>
     <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
         Back to List

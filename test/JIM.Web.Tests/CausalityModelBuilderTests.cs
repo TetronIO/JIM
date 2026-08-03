@@ -169,6 +169,55 @@ public class CausalityModelBuilderTests
     }
 
     [Test]
+    public void Build_PendingExportAlreadyExported_LinksTheQueueRatherThanTheDeletedRow()
+    {
+        // A Pending Export is hard-deleted once it has been exported, so on any item older than the
+        // next export run the individual row is gone and a link to it 404s. The causality record is
+        // permanent, so the link has to degrade to the queue rather than promise a row that no longer
+        // exists. An empty live set stands for "every Pending Export on this item has since been run".
+        var model = CausalityModelBuilder.Build(
+            CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext(),
+            livePendingExportIds: new HashSet<Guid>());
+
+        var pendingExport = model.Roots[0].Children[0].Children[0].Children[0];
+        var peLink = pendingExport.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
+
+        Assert.That(peLink, Is.Not.Null);
+        Assert.That(peLink!.Href, Is.EqualTo("/admin/connected-systems/2/pending-exports"));
+        Assert.That(peLink.Label, Is.EqualTo("Pending Exports"));
+    }
+
+    [Test]
+    public void Build_PendingExportStillQueued_LinksTheIndividualRow()
+    {
+        var model = CausalityModelBuilder.Build(
+            CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext(),
+            livePendingExportIds: new HashSet<Guid> { CausalityTestData.PendingExportId });
+
+        var pendingExport = model.Roots[0].Children[0].Children[0].Children[0];
+        var peLink = pendingExport.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
+
+        Assert.That(peLink, Is.Not.Null);
+        Assert.That(peLink!.Href, Is.EqualTo($"/admin/connected-systems/2/pending-exports/{CausalityTestData.PendingExportId}"));
+        Assert.That(peLink.Label, Is.EqualTo("Pending Export"));
+    }
+
+    [Test]
+    public void Build_WithoutALivePendingExportSet_KeepsTheIndividualLink()
+    {
+        // Null means "not resolved", not "none are live": callers that cannot run the lookup (tests,
+        // and any future caller) must not have every Pending Export link silently downgraded.
+        var model = CausalityModelBuilder.Build(
+            CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext(),
+            livePendingExportIds: null);
+
+        var pendingExport = model.Roots[0].Children[0].Children[0].Children[0];
+        var peLink = pendingExport.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
+
+        Assert.That(peLink!.Href, Is.EqualTo($"/admin/connected-systems/2/pending-exports/{CausalityTestData.PendingExportId}"));
+    }
+
+    [Test]
     public void Build_CsoDeletedOutcome_LinksItsDeletionRecordByTheDeletedRecordsId()
     {
         var deletedCsoId = Guid.NewGuid();
