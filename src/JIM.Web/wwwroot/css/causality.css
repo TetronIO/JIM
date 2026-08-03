@@ -408,7 +408,9 @@
 }
 
 .causality-panel .flow-svg circle {
-    fill: var(--cz-line);
+    /* An opaque flatten of the (translucent) line colour over the canvas surface: the path runs
+       underneath the dot to the card edge, and a translucent fill would show it through the dot. */
+    fill: color-mix(in srgb, var(--cz-text) 12%, var(--cz-surface));
     stroke: none;
 }
 

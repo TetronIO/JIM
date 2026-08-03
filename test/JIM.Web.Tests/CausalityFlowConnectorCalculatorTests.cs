@@ -87,8 +87,8 @@ public class CausalityFlowConnectorCalculatorTests
         // control points sit at the horizontal midpoint (250)
         Assert.That(connectors, Has.Count.EqualTo(1));
         Assert.That(connectors[0].PathData, Is.EqualTo("M 200 34 C 250 34, 250 30, 300 30"));
-        // The dot sits its own radius clear of the destination edge; see Compute_TerminalDot_*
-        Assert.That(connectors[0].DotX, Is.EqualTo("295.5"));
+        // The dot is centred on the destination edge; see Compute_TerminalDot_*
+        Assert.That(connectors[0].DotX, Is.EqualTo("300"));
         Assert.That(connectors[0].DotY, Is.EqualTo("30"));
     }
 
@@ -146,12 +146,12 @@ public class CausalityFlowConnectorCalculatorTests
     }
 
     [Test]
-    public void Compute_TerminalDot_SitsClearOfTheDestinationEdgeRatherThanOnIt()
+    public void Compute_TerminalDot_IsCentredOnTheDestinationEdgeSoTheCardOverlapsHalfOfIt()
     {
-        // The connector overlay renders behind the cards (.flow-svg z-index 0, .flow-cols z-index 1),
-        // so a dot centred on the destination's left edge is half covered by the card. Offsetting it
-        // by its own radius leaves it tangent to the edge and wholly visible, while the path still
-        // runs to the edge so the line meets the card.
+        // The connector overlay renders behind the cards (.flow-svg z-index 0, .flow-cols z-index 1)
+        // and that layering is the design: the dot is centred on the destination's left edge so the
+        // card covers its right half, reading as the line plugging into the card rather than a bead
+        // floating beside it.
         var measurements = new CausalityFlowMeasurements
         {
             Cards =
@@ -164,10 +164,9 @@ public class CausalityFlowConnectorCalculatorTests
         var connectors = CausalityFlowConnectorCalculator.Compute(
             measurements, [new CausalityFlowConnectorPair("src", "evt-0")]);
 
-        var expectedDotX = 300 - CausalityFlowConnectorCalculator.TerminalDotRadius;
-        Assert.That(connectors[0].DotX, Is.EqualTo(CausalityFlowConnectorCalculator.FormatCoordinate(expectedDotX)));
+        Assert.That(connectors[0].DotX, Is.EqualTo("300"));
         Assert.That(connectors[0].PathData, Does.EndWith("300 30"),
-            "The path must still reach the card's edge; only the dot is pulled clear of it.");
+            "The path reaches the card's edge and the dot is centred on the same point.");
     }
 
     [Test]
