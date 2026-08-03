@@ -1,7 +1,8 @@
 # Scale Templates Reshape
 
-- **Status:** Doing (Phases 1-4 and 6 complete; Phase 5 population validation done, deeper performance characterisation pending)
-- **Issue:** [#741](https://github.com/TetronIO/JIM/issues/741)
+- **Status:** Done
+- **Note:** Phase 5's deeper performance characterisation was not captured as a standalone exercise; subsequent long-tail runs surfaced the JIM-side costs directly and are tracked under [#917](https://github.com/TetronIO/JIM/issues/917) (delta membership import memory spike), [#1004](https://github.com/TetronIO/JIM/issues/1004) and [#1019](https://github.com/TetronIO/JIM/issues/1019). The plan's non-goal of leaving the 200k-1m tiers alone was later revisited outside this plan: long-tail counterparts (`Scale200k10kGroups`, `Scale500k25kGroups`, `Scale750k40kGroups`, `Scale1m60kGroups`) now exist alongside the capped-groups ladder.
+- **Issue:** [#741](https://github.com/TetronIO/JIM/issues/741) (closed 2026-05-16)
 
 ## Overview
 
@@ -207,7 +208,7 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 
 **Validation:** Try running each non-Scenario-8 scenario with `Scale100k5kGroups`; confirm clear error before any work starts.
 
-### Phase 5: JIM-Side Validation Run (Partial)
+### Phase 5: JIM-Side Validation Run ✅ (deep characterisation deferred)
 
 **Goal:** Characterise the performance and correctness profile of the new template against JIM.
 
@@ -222,11 +223,10 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 - Long-tail buckets verified: groups <50 members = 3,698; 50-199 = 1,022; 200-999 = 232; 1,000-4,999 = 49; 5,000-19,999 = 22; 20,000-49,999 = 2; 50,000+ = 2 (the two all-staff groups).
 - Tier tables confirmed firing as designed across all 8 categories.
 
-**Activities still pending:**
+**Activities deferred (not blocking closure):**
 
-- Capture detailed timing metrics: import time, sync time, export time, worker memory peak, database row counts.
-- Compare against the same Scenario 8 run at `Scale100k50Groups` to characterise where the cost differs.
-- File follow-up issues for any JIM-side regressions surfaced by the comparison.
+- Detailed timing metrics (import/sync/export time, worker memory peak, database row counts) and a like-for-like comparison against `Scale100k50Groups` were never captured as a standalone exercise.
+- The JIM-side regressions the comparison was meant to surface were instead found by running the template in anger, and are tracked as issues in their own right: [#917](https://github.com/TetronIO/JIM/issues/917) (unbounded delta membership import memory spike), [#1004](https://github.com/TetronIO/JIM/issues/1004) (silent post-export bookkeeping phase), [#1019](https://github.com/TetronIO/JIM/issues/1019) (MVO deletion ghost member rows).
 
 **Validation criterion (still applies):** Run completes within the existing Scale100K time budget (< 2 hours). All Scenario 8 assertions pass.
 
@@ -288,7 +288,7 @@ Apply to: `Invoke-Scenario1-HRToIdentityDirectory.ps1`, `Invoke-Scenario7-ClearC
 
 ## Open Items
 
-- Capture the Phase 5 deep performance characterisation (per-phase timings, worker memory peak, database row counts, comparison against `Scale100k50Groups`). To be tracked in a follow-up issue rather than blocking this work.
+None. The Phase 5 deep performance characterisation was superseded by the issues listed in the Note at the top of this document.
 
 ## Decisions Recorded
 
