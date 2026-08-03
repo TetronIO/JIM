@@ -3,7 +3,6 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Preview;
-using System.Text.Json;
 
 namespace JIM.Web.Models.Api;
 
@@ -103,8 +102,8 @@ public class ConfigurationChangePreviewResponse
             DeltasStatus = preview.DeltasStatus,
             IsComplete = preview.IsComplete,
             HasFailed = preview.HasFailed,
-            ValidationFindings = Deserialise<PreviewValidationFinding>(preview.ValidationFindings),
-            ImpactCounts = Deserialise<PreviewImpactCount>(preview.ImpactCounts),
+            ValidationFindings = preview.ReadValidationFindings(),
+            ImpactCounts = preview.ReadImpactCounts(),
             Groups = [.. groups.Select(ConfigurationChangePreviewGroupResponse.FromEntity)],
             EstimatedAffectedObjects = preview.EstimatedAffectedObjects,
             EstimatedDeltaRows = preview.EstimatedDeltaRows,
@@ -112,25 +111,5 @@ public class ConfigurationChangePreviewResponse
             DispatchedToWorker = preview.DispatchedToWorker,
             StalenessBaseline = preview.StalenessBaseline
         };
-    }
-
-    /// <summary>
-    /// Reads one of the stored jsonb documents. An unreadable document yields an empty list rather than a failed
-    /// request: the rest of the preview is still worth showing, and a stage that recorded nothing readable has its
-    /// own status saying so.
-    /// </summary>
-    private static List<T> Deserialise<T>(string? document)
-    {
-        if (string.IsNullOrWhiteSpace(document))
-            return [];
-
-        try
-        {
-            return JsonSerializer.Deserialize<List<T>>(document) ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
     }
 }

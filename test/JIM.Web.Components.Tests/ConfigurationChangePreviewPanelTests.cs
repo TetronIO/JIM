@@ -372,6 +372,40 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         });
     }
 
+    [Test]
+    public void Panel_HostReRendersWithTheSamePreview_DoesNotReRead()
+    {
+        // Found by driving the portal (#1114): a host that binds OnPreviewChanged re-renders when the callback
+        // fires, because that is what an EventCallback does. A panel that re-read on every parameter set turned
+        // that into a loop, and the loop cancelled and restarted the reconciliation poll on each pass, so the
+        // poll's delay never elapsed. The panel sat on stage 1 for ever while the preview finished behind it.
+        GivenPreview(p => p.ValidationStatus = ConfigurationChangePreviewStageStatus.Complete,
+            a => a.Status = ActivityStatus.InProgress);
+        var panel = RenderPanel();
+        var readsAfterFirstLoad = ReadCount();
+
+        panel.Render();
+        panel.Render();
+
+        Assert.That(ReadCount(), Is.EqualTo(readsAfterFirstLoad),
+            "a parent re-render is not new information about the preview; the notification handler and the poll are what refresh it");
+    }
+
+    [Test]
+    public void Panel_PointedAtADifferentPreview_LoadsIt()
+    {
+        GivenPreview();
+        var panel = RenderPanel();
+        var otherActivityId = Guid.CreateVersion7();
+        _previewRepository.Setup(r => r.GetPreviewAsync(otherActivityId)).ReturnsAsync((ConfigurationChangePreview?)null);
+        var readsAfterFirstLoad = ReadCount();
+
+        panel.Render(p => p.Add(x => x.ActivityId, otherActivityId));
+
+        Assert.That(ReadCount(), Is.GreaterThan(readsAfterFirstLoad),
+            "the guard is about the same preview, not about never reading again; re-previewing must load the new one");
+    }
+
     #region Helpers
 
     private IRenderedComponent<ConfigurationChangePreviewPanel> RenderPanel()

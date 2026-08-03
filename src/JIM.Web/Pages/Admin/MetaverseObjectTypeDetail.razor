@@ -4,14 +4,17 @@
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
+@using JIM.Models.Preview
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
+@inject IConfigurationChangePreviewStarter PreviewStarter
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -159,8 +162,34 @@
                         Disabled="@(!CanSave())">
                         Save Changes
                     </MudButton>
+                    @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
+                    @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
+                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
+                        Disabled="@(!CanSave() || _startingPreview)">
+                        Preview Changes
+                    </MudButton>
                     <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
                 </MudStack>
+
+                @if (_previewActivityId.HasValue)
+                {
+                    var previewActivityId = _previewActivityId.Value;
+
+                    @if (DeletionSettingsPreviewIsStale)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                                  data-testid="jim-preview-stale">
+                            The deletion settings have been edited since this preview ran, so it no longer describes
+                            what saving would do. Preview again for an answer about the current settings.
+                        </MudAlert>
+                    }
+
+                    <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
+                                                     Title="Preview: Deletion Rules"
+                                                     OnPreviewChanged="OnDeletionSettingsPreviewChanged"
+                                                     Class="mt-6" />
+                }
             </MudPaper>
 
             <MudPaper Class="pa-4 mt-6" Outlined="true">
@@ -440,6 +469,14 @@
     private HashSet<int> _selectedAuthoritativeSources = new();
     private List<(int Id, string Name)> _contributingSystems = new();
 
+    // Configuration Change Preview of the deletion settings (#1114). The proposal the preview was started for is
+    // kept beside its Activity id so the panel can be labelled stale the moment the form moves on from it: a
+    // preview presented against settings it did not evaluate is worse than no preview, because it is believed.
+    private Guid? _previewActivityId;
+    private MetaverseObjectTypeDeletionSettingsProposal? _previewedProposal;
+    private ConfigurationChangePreview? _preview;
+    private bool _startingPreview;
+
     // Original values for change detection
     private MetaverseObjectDeletionRule _originalDeletionRule;
     private AuthoritativeSourceTriggerMode _originalDeletionTriggerMode;
@@ -589,6 +626,16 @@
         _gracePeriodHours = _originalGracePeriodHours;
         _gracePeriodMinutes = _originalGracePeriodMinutes;
         _selectedAuthoritativeSources = new HashSet<int>(_originalAuthoritativeSources);
+
+        // Reset means "discard my edits", and the preview is an answer about exactly those edits.
+        DiscardDeletionSettingsPreview();
+    }
+
+    private void DiscardDeletionSettingsPreview()
+    {
+        _previewActivityId = null;
+        _previewedProposal = null;
+        _preview = null;
     }
 
     private void ToggleAuthoritativeSource(int systemId, bool selected)
@@ -644,6 +691,85 @@
         return HasChanges();
     }
 
+    // ─── Configuration Change Preview (#1114) ───
+
+    /// <summary>
+    /// The deletion settings currently entered, as the preview framework's proposal type. Built from the form
+    /// rather than the entity so the preview evaluates what an administrator is about to save, which is the whole
+    /// point of asking before saving it.
+    /// </summary>
+    private MetaverseObjectTypeDeletionSettingsProposal BuildDeletionSettingsProposal() =>
+        new(_deletionRule,
+            GetEditedGracePeriod(),
+            _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _selectedAuthoritativeSources.OrderBy(id => id).ToList()
+                : [],
+            _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _deletionTriggerMode
+                : _metaverseObjectType?.DeletionTriggerMode ?? AuthoritativeSourceTriggerMode.AllSourcesDisconnect);
+
+    /// <summary>
+    /// Whether the form has moved on from the settings the visible preview was run against.
+    /// </summary>
+    private bool DeletionSettingsPreviewIsStale =>
+        _previewedProposal is not null && !BuildDeletionSettingsProposal().DescribesSameSettingsAs(_previewedProposal);
+
+    private async Task PreviewDeletionRulesAsync()
+    {
+        if (_metaverseObjectType == null || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildDeletionSettingsProposal();
+
+            // The starter, not StartAndDispatchPreviewAsync: it owns the question of whether a large preview keeps
+            // every drill-down row, and that decision belongs in one place rather than at each surface.
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
+                TargetId = _metaverseObjectType.Id,
+                TargetName = _metaverseObjectType.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.DisplayName
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+            _previewedProposal = proposal;
+            _preview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            DiscardDeletionSettingsPreview();
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Records the panel's latest read of the preview, for the save confirmation to state.
+    ///
+    /// Deliberately does not call <c>StateHasChanged</c>. The panel re-reads on every parameter set, so a page that
+    /// re-rendered in response to this callback would set the panel's parameters again, which would refresh again,
+    /// which would raise this again: a render loop that never settles and, worse, cancels and restarts the panel's
+    /// reconciliation poll on every pass, so its delay never elapses and the panel sits on stage 1 for ever. Found
+    /// by driving the portal; no test in the suite could have seen it. Nothing the page renders depends on this
+    /// value, so storing it is enough.
+    /// </summary>
+    private void OnDeletionSettingsPreviewChanged(ConfigurationChangePreview? preview) => _preview = preview;
+
     private bool HasChanges()
     {
         if (_deletionRule != _originalDeletionRule) return true;
@@ -691,10 +817,12 @@
             using var jim = JimFactory.Create();
 
             // Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects
-            // eligible for deletion, with no synchronisation run in between; the acknowledgement says so.
+            // eligible for deletion, with no synchronisation run in between; the acknowledgement says so, and where
+            // a preview was run it says how many objects that is (#1114).
             var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(_metaverseObjectType);
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                    "Metaverse Object Type", _metaverseObjectType.Name))
+                    "Metaverse Object Type", _metaverseObjectType.Name,
+                    ConfigurationChangePreviewCounts.ForConfirmation(_preview, DeletionSettingsPreviewIsStale)))
             {
                 RollBack();
                 return;
@@ -708,8 +836,12 @@
                 return;
             }
 
+            // The preview is linked only when it actually describes this change. A link to a preview run against
+            // different settings would make the audit assert something untrue about what the administrator read.
+            var previewActivityId = DeletionSettingsPreviewIsStale ? null : _previewActivityId;
+
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason);
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason, previewActivityId);
 
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;
