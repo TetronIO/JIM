@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Preview;
 using JIM.PostgresData;
+using JIM.PostgresData.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
@@ -99,6 +100,8 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             Assert.That(preview.DeltasCompleted, Is.Null);
             Assert.That(preview.EstimatedAffectedObjects, Is.EqualTo(4_812));
             Assert.That(preview.EstimatedDeltaRows, Is.EqualTo(9_624L));
+            Assert.That(preview.RequestedDeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full),
+                "what the administrator asked for is a separate column from what happened; a preview run from JIM.Worker reads its choice from here");
             Assert.That(preview.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
             Assert.That(preview.DispatchedToWorker, Is.True);
             Assert.That(preview.StalenessBaseline, Is.Not.Null);
@@ -191,6 +194,63 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
         Assert.That(reloaded.PreviewActivityId, Is.EqualTo(previewActivityId));
     }
 
+    [Test]
+    public async Task DeleteExpiredPreviewsAsync_RemovesResultsForExpiredPreviewsOnlyAsync()
+    {
+        // The cascade from the Activity would remove these anyway; what this path adds is a bound. The batch limit
+        // counts Activities, and one preview Activity can own hundreds of thousands of delta rows, so clearing the
+        // results first is what keeps a housekeeping pass the size the limit was chosen for.
+        var expired = await SeedPreviewAsync();
+        var current = await SeedPreviewAsync();
+        await AgeActivityAsync(expired, TimeSpan.FromDays(120));
+
+        await using (var context = NewContext())
+        {
+            var deleted = await new ChangeHistoryRepository(context).DeleteExpiredPreviewsAsync(DateTime.UtcNow.AddDays(-90), 100);
+            Assert.That(deleted, Is.EqualTo(1));
+        }
+
+        await using var verify = NewContext();
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await verify.ConfigurationChangePreviews.AnyAsync(p => p.ActivityId == expired), Is.False);
+            Assert.That(await verify.ConfigurationChangePreviewGroups.AnyAsync(g => g.ActivityId == expired), Is.False);
+            Assert.That(await verify.ConfigurationChangePreviewDeltas.AnyAsync(d => d.ActivityId == expired), Is.False);
+            Assert.That(await verify.ConfigurationChangePreviews.AnyAsync(p => p.ActivityId == current), Is.True,
+                "a preview inside the retention period is not housekeeping's to remove");
+            Assert.That(await verify.Activities.AnyAsync(a => a.Id == expired), Is.True,
+                "the Activity is left for the Activity cleanup; removing it here would delete a run record this pass had not budgeted for");
+        });
+    }
+
+    [Test]
+    public async Task DeleteExpiredPreviewsAsync_MorePreviewsThanTheBatchLimit_StopsAtTheLimitAsync()
+    {
+        var expired = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+        {
+            var activityId = await SeedPreviewAsync();
+            await AgeActivityAsync(activityId, TimeSpan.FromDays(120));
+            expired.Add(activityId);
+        }
+
+        await using (var context = NewContext())
+        {
+            var deleted = await new ChangeHistoryRepository(context).DeleteExpiredPreviewsAsync(DateTime.UtcNow.AddDays(-90), 2);
+            Assert.That(deleted, Is.EqualTo(2), "an unbounded delete is the long transaction the batch limit exists to prevent");
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConfigurationChangePreviews.CountAsync(p => expired.Contains(p.ActivityId)), Is.EqualTo(1));
+    }
+
+    private async Task AgeActivityAsync(Guid activityId, TimeSpan age)
+    {
+        await using var context = NewContext();
+        await context.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Activities\" SET \"Created\" = {0} WHERE \"Id\" = {1}", DateTime.UtcNow - age, activityId);
+    }
+
     /// <summary>
     /// A preview Activity carrying one fully populated preview, one group, and one delta. Every nullable column is
     /// given a value: a round-trip test whose fixture leaves columns null proves nothing about them.
@@ -228,6 +288,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             DeltasStatus = ConfigurationChangePreviewStageStatus.NotApplicable,
             EstimatedAffectedObjects = 4_812,
             EstimatedDeltaRows = 9_624L,
+            RequestedDeltaPersistence = ConfigurationChangePreviewDeltaPersistence.Full,
             DeltaPersistence = ConfigurationChangePreviewDeltaPersistence.Capped,
             DispatchedToWorker = true,
             StalenessBaseline = now.AddHours(-2)

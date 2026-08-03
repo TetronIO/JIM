@@ -103,7 +103,16 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// Preview only: the inverse. The Metaverse Object is eligible for deletion today and would cease to be, which
     /// is what a proposal that relaxes a deletion rule needs to state as plainly as one that tightens it.
     /// </summary>
-    WouldCeaseToBeDeletionEligible
+    WouldCeaseToBeDeletionEligible,
+
+    /// <summary>
+    /// Preview only: the Metaverse Object is on its way to deletion both before and after the proposal, but the
+    /// date it would be deleted on moves. Separate from the two above because it is a different question: those
+    /// answer "would this delete objects that are safe today", this answers "would this bring forward, push back,
+    /// or cancel a deletion already scheduled". A grace period edited from 30 days to 7 deletes nobody today and
+    /// changes the fate of everyone already waiting.
+    /// </summary>
+    WouldChangeDeletionEligibleDate
 }
 
 /// <summary>

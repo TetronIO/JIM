@@ -1063,6 +1063,15 @@ public static class Helpers
             // Attribute priority (#91): a value cleared with no contributor remaining; also worth attention.
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Color.Warning,
 
+            // Configuration change preview (#827). Coloured by what the transition costs the administrator, not by
+            // its direction: becoming deletion-eligible is the one that ends with objects gone, and it is worth the
+            // same weight here as an actual deletion.
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope => Color.Primary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope => Color.Warning,
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible => Color.Success,
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate => Color.Warning,
+
             _ => Color.Default,
         };
     }
@@ -1094,6 +1103,16 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "CSO Deprovisioned",
             ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => "MVO Null Asserted",
             ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => "MVO No Contributor",
+
+            // Configuration change preview (#827). Phrased as what would happen rather than in the CSO/MVO shorthand
+            // above: these appear in a panel an administrator reads to decide whether to make a change, not in a
+            // record of a run they have already made.
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope => "Would come into scope",
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope => "Would fall out of scope",
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible => "Would become eligible for deletion",
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible => "Would no longer be eligible for deletion",
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate => "Deletion date would change",
+
             _ => outcomeType.ToString()
         };
     }
