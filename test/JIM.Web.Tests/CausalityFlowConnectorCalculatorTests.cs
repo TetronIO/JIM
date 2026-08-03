@@ -73,8 +73,6 @@ public class CausalityFlowConnectorCalculatorTests
     {
         var measurements = new CausalityFlowMeasurements
         {
-            Width = 900,
-            Height = 400,
             Cards =
             [
                 new CausalityFlowCardRect { Id = "src", Left = 0, Right = 200, Top = 0, Height = 100 },
@@ -102,8 +100,6 @@ public class CausalityFlowConnectorCalculatorTests
         // fixed 34px cap therefore landed below the middle of both, by a different amount each time.
         var measurements = new CausalityFlowMeasurements
         {
-            Width = 900,
-            Height = 400,
             Cards =
             [
                 // Event card: 12px padding above a 28px icon row, so the middle sits at 26
@@ -136,8 +132,6 @@ public class CausalityFlowConnectorCalculatorTests
         // the connector must still land somewhere sensible rather than at the card's very top.
         var measurements = new CausalityFlowMeasurements
         {
-            Width = 900,
-            Height = 400,
             Cards =
             [
                 new CausalityFlowCardRect { Id = "src", Left = 0, Right = 200, Top = 0, Height = 100 },
@@ -160,8 +154,6 @@ public class CausalityFlowConnectorCalculatorTests
         // runs to the edge so the line meets the card.
         var measurements = new CausalityFlowMeasurements
         {
-            Width = 900,
-            Height = 400,
             Cards =
             [
                 new CausalityFlowCardRect { Id = "src", Left = 0, Right = 200, Top = 0, Height = 100 },
@@ -183,8 +175,6 @@ public class CausalityFlowConnectorCalculatorTests
     {
         var measurements = new CausalityFlowMeasurements
         {
-            Width = 900,
-            Height = 400,
             Cards = [new CausalityFlowCardRect { Id = "src", Left = 0, Right = 200, Top = 0, Height = 100 }]
         };
 

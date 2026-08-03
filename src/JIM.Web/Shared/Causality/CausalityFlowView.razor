@@ -12,7 +12,11 @@
    order, and the Downstream column the Downstream-lane events grouped per owning Connected System.
    An SVG overlay draws cubic bezier elbow connectors from measured card positions (source to the
    first Identity event, deepest Identity event to each system group) via a small JS measurement
-   interop; measurement re-runs on window resize (debounced JS-side). The connectors are decorative:
+   interop. The overlay is CSS-sized to the canvas and carries no viewBox, so its user units are CSS
+   pixels and a canvas resize can never scale or shift already-drawn connectors; measurement re-runs
+   whenever the canvas itself resizes (a JS ResizeObserver, debounced), which covers reflows that
+   fire no window resize: fonts swapping in, a scrollbar appearing, the nav drawer toggling. The
+   connectors are decorative:
    if the interop is unavailable or fails, the view renders cleanly without them, and below the
    responsive breakpoint the columns stack and the overlay is hidden in CSS. *@
 
@@ -20,7 +24,7 @@
     <div class="flow-canvas" id="@_canvasId">
         @if (_connectors.Count > 0)
         {
-            <svg class="flow-svg" viewBox="0 0 @_canvasWidth @_canvasHeight" aria-hidden="true">
+            <svg class="flow-svg" aria-hidden="true">
                 @foreach (var connector in _connectors)
                 {
                     <path d="@connector.PathData"></path>
@@ -172,8 +176,6 @@
     private Dictionary<CausalityEvent, string> _flowIdsByEvent = [];
     private List<CausalityFlowConnectorPair> _connectorPairs = [];
     private List<CausalityFlowConnector> _connectors = [];
-    private string _canvasWidth = "0";
-    private string _canvasHeight = "0";
     private DotNetObjectReference<CausalityFlowView>? _selfReference;
     private bool _disposed;
 
@@ -272,18 +274,12 @@
             return;
 
         List<CausalityFlowConnector> connectors = [];
-        var canvasWidth = "0";
-        var canvasHeight = "0";
 
         try
         {
             var measurements = await Js.InvokeAsync<CausalityFlowMeasurements?>("jimCausality.measure", _canvasId);
             if (measurements != null)
-            {
                 connectors = CausalityFlowConnectorCalculator.Compute(measurements, _connectorPairs);
-                canvasWidth = CausalityFlowConnectorCalculator.FormatCoordinate(measurements.Width);
-                canvasHeight = CausalityFlowConnectorCalculator.FormatCoordinate(measurements.Height);
-            }
         }
         catch (Exception ex) when (IsInteropUnavailable(ex))
         {
@@ -291,18 +287,17 @@
             // never break the view
         }
 
-        if (connectors.SequenceEqual(_connectors) && canvasWidth == _canvasWidth && canvasHeight == _canvasHeight)
+        if (connectors.SequenceEqual(_connectors))
             return;
 
         _connectors = connectors;
-        _canvasWidth = canvasWidth;
-        _canvasHeight = canvasHeight;
         StateHasChanged();
     }
 
     /// <summary>
-    /// Invoked from JavaScript when the window resize settles (debounced), so the connector overlay
-    /// tracks the reflowed card positions.
+    /// Invoked from JavaScript when a canvas resize settles (debounced), so the connector overlay
+    /// tracks the reflowed card positions. The canvas resizes on window resizes but also on reflows
+    /// that fire no window event: fonts swapping in, a scrollbar appearing, the nav drawer toggling.
     /// </summary>
     [JSInvokable]
     public Task OnFlowResizeAsync()

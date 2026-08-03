@@ -206,8 +206,6 @@ public class CausalityFlowViewTests
         context.JSInterop.Setup<CausalityFlowMeasurements?>("jimCausality.measure", _ => true)
             .SetResult(new CausalityFlowMeasurements
             {
-                Width = 900,
-                Height = 400,
                 Cards =
                 [
                     new CausalityFlowCardRect { Id = "src", Left = 0, Right = 200, Top = 0, Height = 100 },
@@ -226,7 +224,11 @@ public class CausalityFlowViewTests
             Assert.That(cut.FindAll(".flow-svg path"), Has.Count.EqualTo(2));
             Assert.That(cut.FindAll(".flow-svg circle"), Has.Count.EqualTo(2));
         });
-        Assert.That(cut.Find(".flow-svg").GetAttribute("viewBox"), Is.EqualTo("0 0 900 400"));
+        // No viewBox: the overlay is CSS-sized to the canvas and draws in CSS pixel coordinates.
+        // A viewBox frozen at measure-time size would uniformly scale and centre every connector
+        // whenever the canvas resizes without a re-measure (fonts swapping in, a scrollbar
+        // appearing, the nav drawer toggling), detaching all of them from their cards at once.
+        Assert.That(cut.Find(".flow-svg").GetAttribute("viewBox"), Is.Null);
     }
 
     /// <summary>

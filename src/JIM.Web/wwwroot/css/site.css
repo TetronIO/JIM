@@ -528,6 +528,14 @@ html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-wrapper {
     border-radius: inherit;
 }
 
+/* A tab's count badge is absolutely positioned around a zero-width anchor, so it
+   occupies no layout space; when the tab is wider than its 160px min-width the
+   badge's right half lands past the tab's padding edge and .mud-ripple's
+   overflow:hidden clips it. Reserve the badge's overhang in the tab's width. */
+html[lang] .mud-tab .mud-badge-root.mud-tab-badge {
+    margin-inline-end: 12px;
+}
+
 /* Strengthen tab bar separator line to match container borders */
 html[lang] .mud-tabs-tabbar.mud-tabs-border-bottom {
     border-top-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;

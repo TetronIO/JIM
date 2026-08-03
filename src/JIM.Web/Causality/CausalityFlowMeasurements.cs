@@ -4,22 +4,12 @@
 namespace JIM.Web.Causality;
 
 /// <summary>
-/// The Flow view canvas measurements returned by <c>jimCausality.measure</c>: the canvas size and
-/// the rectangle of every element carrying a <c>data-flow-id</c>, all relative to the canvas so the
-/// connector overlay's SVG coordinate space matches directly.
+/// The Flow view canvas measurements returned by <c>jimCausality.measure</c>: the rectangle of
+/// every element carrying a <c>data-flow-id</c>, relative to the canvas so the connector overlay's
+/// SVG coordinate space (CSS pixels, no viewBox) matches directly.
 /// </summary>
 public sealed class CausalityFlowMeasurements
 {
-    /// <summary>
-    /// Canvas width in pixels.
-    /// </summary>
-    public double Width { get; set; }
-
-    /// <summary>
-    /// Canvas height in pixels.
-    /// </summary>
-    public double Height { get; set; }
-
     /// <summary>
     /// The measured card rectangles.
     /// </summary>

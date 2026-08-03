@@ -2,10 +2,12 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 // Causality Flow view measurement interop. Blazor calls measure() after render to obtain the
-// canvas size and the rectangle of every element carrying a data-flow-id (relative to the canvas),
-// from which it computes the SVG connector overlay in C#. observeResize() registers a debounced
-// window resize listener that calls back into the component so the overlay tracks reflowed card
-// positions; unobserveResize() removes it on component disposal.
+// rectangle of every element carrying a data-flow-id (relative to the canvas), from which it
+// computes the SVG connector overlay in C#. observeResize() registers a debounced ResizeObserver
+// on the canvas element that calls back into the component so the overlay tracks reflowed card
+// positions; observing the canvas rather than the window also catches reflows that fire no window
+// resize event (fonts swapping in, a scrollbar appearing, the nav drawer toggling).
+// unobserveResize() disconnects it on component disposal.
 window.jimCausality = {
     _resizeStates: {},
 
@@ -34,20 +36,27 @@ window.jimCausality = {
                 headerHeight: headRect ? headRect.height : 0
             });
         });
-        return { width: canvasRect.width, height: canvasRect.height, cards: cards };
+        return { cards: cards };
     },
 
     observeResize: function (canvasId, dotNetRef) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+            return;
+        }
         const state = { timeoutId: null };
-        state.handler = function () {
+        state.observer = new ResizeObserver(function () {
             if (state.timeoutId) {
                 clearTimeout(state.timeoutId);
             }
             state.timeoutId = setTimeout(function () {
-                dotNetRef.invokeMethodAsync('OnFlowResizeAsync');
+                state.timeoutId = null;
+                dotNetRef.invokeMethodAsync('OnFlowResizeAsync').catch(function () {
+                    // The circuit is gone; disposal or page unload will disconnect the observer
+                });
             }, 150);
-        };
-        window.addEventListener('resize', state.handler);
+        });
+        state.observer.observe(canvas);
         this._resizeStates[canvasId] = state;
     },
 
@@ -57,7 +66,7 @@ window.jimCausality = {
             if (state.timeoutId) {
                 clearTimeout(state.timeoutId);
             }
-            window.removeEventListener('resize', state.handler);
+            state.observer.disconnect();
             delete this._resizeStates[canvasId];
         }
     }
