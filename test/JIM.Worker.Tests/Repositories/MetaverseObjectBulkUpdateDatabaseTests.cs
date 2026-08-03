@@ -182,4 +182,61 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId), Is.False, "removed Department deleted");
         });
     }
+
+    /// <summary>
+    /// The #119 deletion-trigger marker columns (DeletionTriggeredBySystemId/Name and the decision-time
+    /// DeletionPolicySnapshotJson) travel through the same raw bulk create and update paths as the existing
+    /// deletion markers (LastConnectorDisconnectedDate, DeletionInitiatedBy*). The in-memory provider stores
+    /// the object graph verbatim, so only a real-PostgreSQL round trip proves the hand-written column lists
+    /// and writers persist them.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_DeletionTriggerMarkerColumns_RoundTripThroughBulkPathsAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+
+        var snapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected","triggerMode":"SpecificSourcesDisconnect"}""";
+        var mvo = new MetaverseObject
+        {
+            Type = personType!,
+            AttributeValues = { TextValue(ids.DepartmentId, "Sales") },
+            DeletionTriggeredBySystemId = 7,
+            DeletionTriggeredBySystemName = "HR System",
+            DeletionPolicySnapshotJson = snapshotJson
+        };
+
+        // Raw COPY/INSERT create must persist the marker columns.
+        await repo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        await using (var verifyCreateCtx = NewContext())
+        {
+            var created = await verifyCreateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+            Assert.Multiple(() =>
+            {
+                Assert.That(created.DeletionTriggeredBySystemId, Is.EqualTo(7), "bulk create must persist DeletionTriggeredBySystemId");
+                Assert.That(created.DeletionTriggeredBySystemName, Is.EqualTo("HR System"), "bulk create must persist DeletionTriggeredBySystemName");
+                Assert.That(created.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson), "bulk create must persist DeletionPolicySnapshotJson");
+            });
+        }
+
+        // A rejoin cancels the scheduled deletion: the markers are cleared together, and the raw bulk update
+        // must persist the cleared state (a dropped column here would silently resurrect the stale trigger).
+        mvo.DeletionTriggeredBySystemId = null;
+        mvo.DeletionTriggeredBySystemName = null;
+        mvo.DeletionPolicySnapshotJson = null;
+        await repo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyUpdateCtx = NewContext();
+        var updated = await verifyUpdateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+        Assert.Multiple(() =>
+        {
+            Assert.That(updated.DeletionTriggeredBySystemId, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemId");
+            Assert.That(updated.DeletionTriggeredBySystemName, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemName");
+            Assert.That(updated.DeletionPolicySnapshotJson, Is.Null, "bulk update must persist a cleared DeletionPolicySnapshotJson");
+        });
+    }
 }

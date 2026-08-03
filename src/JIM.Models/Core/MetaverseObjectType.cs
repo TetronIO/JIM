@@ -93,4 +93,15 @@ public class MetaverseObjectType : IAuditable
     /// When empty/null: Delete MVO only when ALL connectors are disconnected.
     /// </summary>
     public List<int> DeletionTriggerConnectedSystemIds { get; set; } = new();
+
+    /// <summary>
+    /// For WhenAuthoritativeSourceDisconnected: whether any one selected source disconnecting triggers
+    /// deletion, or whether every selected source must disconnect first (#119).
+    /// The split between the enum's zero value and this initialiser is deliberate: existing database rows
+    /// read the added column's default value 0 (SpecificSourcesDisconnect), preserving pre-existing
+    /// behaviour with no backfill, while new entities constructed in code, the portal, or the API start
+    /// at the safe default (AllSourcesDisconnect).
+    /// </summary>
+    public AuthoritativeSourceTriggerMode DeletionTriggerMode { get; set; }
+        = AuthoritativeSourceTriggerMode.AllSourcesDisconnect;
 }

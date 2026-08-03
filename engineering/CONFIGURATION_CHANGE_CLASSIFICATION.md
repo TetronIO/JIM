@@ -249,6 +249,7 @@ That is why containers are the one place where a key's class depends on *how* it
 | `builtIn` | C | System flag; not administrator-editable. |
 | `icon` | C | Portal display only. |
 | `deletionRule` | **A** | Governs when a Metaverse Object is deleted; changing it makes objects deletion-eligible immediately (#827 gap G5). |
+| `deletionTriggerMode` | **A** | Switching between all-sources and specific-sources semantics changes which disconnections trigger deletion (#119). |
 | `deletionGracePeriod` | **A** | Shortening the period brings forward deletions that were pending (#827 gap G5). |
 | `deletionTriggerConnectedSystemIds` | **A** | Changes which system disconnections trigger deletion (#827 gap G5). |
 | `connectedSystemId` | **A** | One Connected System within that list; adding a trigger makes objects already disconnected from it deletion-eligible immediately (#827 gap G5). |

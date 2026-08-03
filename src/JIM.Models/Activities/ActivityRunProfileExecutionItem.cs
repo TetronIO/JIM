@@ -122,6 +122,14 @@ public class ActivityRunProfileExecutionItem
     public string? OutcomeSummary { get; set; }
 
     /// <summary>
+    /// The decision-time deletion policy snapshot (a serialised <c>MvoDeletionPolicySnapshot</c>), written
+    /// whenever a deletion rule evaluation records an outcome: scheduled, deleted, or evaluated-but-not-triggered.
+    /// Captured at decision time so the record stays accurate after the object type's deletion configuration
+    /// changes; null for RPEIs with no deletion evaluation (#119).
+    /// </summary>
+    public string? DeletionPolicySnapshotJson { get; set; }
+
+    /// <summary>
     /// The structured causal graph of sync outcomes for this RPEI.
     /// Each root outcome can have nested children forming a tree that tells the complete
     /// story of what happened when this CSO was processed.

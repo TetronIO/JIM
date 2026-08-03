@@ -19,6 +19,14 @@ public class MetaverseObjectTypeDetailDto
     public string? Icon { get; set; }
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
     public TimeSpan? DeletionGracePeriod { get; set; }
+
+    /// <summary>
+    /// For the WhenAuthoritativeSourceDisconnected deletion rule: whether any one selected authoritative
+    /// source disconnecting triggers deletion (SpecificSourcesDisconnect), or every selected source must
+    /// disconnect first (AllSourcesDisconnect). Serialised as the enum member name.
+    /// </summary>
+    public AuthoritativeSourceTriggerMode DeletionTriggerMode { get; set; }
+
     public List<int> DeletionTriggerConnectedSystemIds { get; set; } = new();
     public List<MetaverseAttributeSummaryDto> Attributes { get; set; } = new();
 
@@ -37,6 +45,7 @@ public class MetaverseObjectTypeDetailDto
             Icon = entity.Icon,
             DeletionRule = entity.DeletionRule,
             DeletionGracePeriod = entity.DeletionGracePeriod,
+            DeletionTriggerMode = entity.DeletionTriggerMode,
             DeletionTriggerConnectedSystemIds = entity.DeletionTriggerConnectedSystemIds ?? new(),
             Attributes = entity.Attributes?
                 .Select(MetaverseAttributeSummaryDto.FromEntity)
@@ -85,6 +94,14 @@ public class CreateMetaverseObjectTypeRequest
     /// Optional grace period before deletion is executed.
     /// </summary>
     public TimeSpan? DeletionGracePeriod { get; set; }
+
+    /// <summary>
+    /// For the WhenAuthoritativeSourceDisconnected deletion rule: whether any one selected authoritative
+    /// source disconnecting triggers deletion (SpecificSourcesDisconnect), or every selected source must
+    /// disconnect first (AllSourcesDisconnect). Omitted or null defaults to AllSourcesDisconnect, the safe
+    /// mode for new configurations. Supply the enum member name as a string.
+    /// </summary>
+    public AuthoritativeSourceTriggerMode? DeletionTriggerMode { get; set; }
 
     /// <summary>
     /// List of Connected System IDs that are authoritative sources for deletion.
@@ -137,9 +154,17 @@ public class UpdateMetaverseObjectTypeRequest
     public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
+    /// For the WhenAuthoritativeSourceDisconnected deletion rule: whether any one selected authoritative
+    /// source disconnecting triggers deletion (SpecificSourcesDisconnect), or every selected source must
+    /// disconnect first (AllSourcesDisconnect). Omitted or null leaves the stored mode unchanged. Supply
+    /// the enum member name as a string.
+    /// </summary>
+    public AuthoritativeSourceTriggerMode? DeletionTriggerMode { get; set; }
+
+    /// <summary>
     /// List of Connected System IDs that are authoritative sources for deletion.
     /// Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
-    /// When set: Delete MVO if ANY of these specific systems disconnect.
+    /// How they trigger deletion is governed by DeletionTriggerMode.
     /// Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
     /// </summary>
     public List<int>? DeletionTriggerConnectedSystemIds { get; set; }

@@ -30,7 +30,10 @@ public class ConnectedSystemDeletionPreview
     public int MvosWithOtherConnectorsCount { get; set; }
 
     /// <summary>
-    /// MVOs that may be deleted due to WhenLastConnectorDisconnected rule (no grace period).
+    /// MVOs that will be marked for deletion by deletion rule evaluation when this system is deleted.
+    /// Computed with the same mode-aware predicate execution uses (WhenLastConnectorDisconnected plus
+    /// WhenAuthoritativeSourceDisconnected under its configured trigger mode, #119), so the preview
+    /// always agrees with what deletion actually marks.
     /// </summary>
     public int MvosWithDeletionRuleCount { get; set; }
 
