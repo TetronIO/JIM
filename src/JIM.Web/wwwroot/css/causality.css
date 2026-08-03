@@ -200,8 +200,6 @@
 .causality-panel .summary-sentence {
     font-size: 1rem;
     font-weight: 480;
-    max-width: 78ch;
-    text-wrap: balance;
     line-height: 1.65;
 }
 
