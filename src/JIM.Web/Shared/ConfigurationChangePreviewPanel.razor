@@ -65,7 +65,7 @@
                 var activity = _activity;
 
                 @* ─── Progress ─── *@
-                @if (IsRunning)
+                @if (IsRunning && ShowProgress)
                 {
                     @if (activity.ObjectsToProcess > 0)
                     {
@@ -321,6 +321,15 @@
     /// <summary>Heading for the panel. Surfaces override it where a more specific noun reads better.</summary>
     [Parameter]
     public string Title { get; set; } = "Preview";
+
+    /// <summary>
+    /// Whether the panel renders the preview's own progress bar and message. Set false where the host already shows
+    /// them for the same Activity (the Activity detail page, which also has throughput and an ETA the panel does
+    /// not). The status chip and Cancel stay either way: the stages are the panel's own, and stopping a running
+    /// preview is an affordance no host currently offers.
+    /// </summary>
+    [Parameter]
+    public bool ShowProgress { get; set; } = true;
 
     /// <summary>
     /// Raised whenever the panel has re-read the preview, so a host can react to it reaching a terminal state (for

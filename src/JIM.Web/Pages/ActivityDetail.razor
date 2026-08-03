@@ -475,6 +475,15 @@
         </MudStack>
     }
 
+    @* A Configuration Change Preview's results. The Activity *is* the preview, so this page is where an
+       administrator lands from the Activity list, from a link they kept, or from the change the preview informed;
+       without this they would find a completed Activity with nothing to say what it found. Progress is left to the
+       block above, which already renders it with throughput and an ETA. *@
+    @if (_activity.TargetOperationType == ActivityTargetOperationType.Preview)
+    {
+        <ConfigurationChangePreviewPanel ActivityId="@_activity.Id" Title="Preview results" ShowProgress="false" Class="mt-6" />
+    }
+
     @if (ShowsExecutionItems && _initialisationComplete && _preferencesLoaded)
     {
         @if (_activityRunProfileExecutionStats != null)

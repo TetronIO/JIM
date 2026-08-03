@@ -277,6 +277,33 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_ProgressSuppressed_LeavesProgressToItsHostButKeepsCancel()
+    {
+        // The Activity detail page already renders this Activity's progress, message and ETA above the panel. A
+        // second bar underneath is noise; the ability to stop the thing is not, and that page has no cancel of its
+        // own.
+        GivenPreview(p => p.SummaryStatus = ConfigurationChangePreviewStageStatus.InProgress, a =>
+        {
+            a.Status = ActivityStatus.InProgress;
+            a.Message = "Evaluating what the change would do";
+            a.ObjectsToProcess = 100;
+            a.ObjectsProcessed = 40;
+        });
+
+        var panel = Render<ConfigurationChangePreviewPanel>(p => p
+            .Add(x => x.ActivityId, ActivityId)
+            .Add(x => x.ShowProgress, false));
+        panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(panel.Markup, Does.Not.Contain("Evaluating what the change would do"));
+            Assert.That(panel.FindAll("[data-testid='jim-preview-cancel']"), Is.Not.Empty);
+            Assert.That(panel.Markup, Does.Contain("Summary"), "the stages are the panel's own and stay either way");
+        });
+    }
+
+    [Test]
     public void Panel_UnknownPreview_SaysItIsNotThereRatherThanRenderingAnEmptyResult()
     {
         // What an administrator sees once retention has removed a preview, or if they follow a stale link. An empty
