@@ -2214,37 +2214,28 @@ html[lang] .jim-schema-change-table td {
 
 /* ─── Explanatory tooltip affordance ─── */
 
-/* Opt-in marker for a *value* that has an explanatory tooltip behind it, so the tooltip is
-   discoverable rather than found by accident, and so the fields carrying one are distinguishable
-   from the fields that do not. Deliberately not applied to every .mud-tooltip-root: a tooltip on a
-   button or a link already has its own affordance and must keep the pointer cursor.
+/* Opt-in hover response for a *value* that has an explanatory tooltip behind it: the help cursor
+   plus the icon lifting to full text colour. Deliberately not applied to every .mud-tooltip-root: a
+   tooltip on a button or a link already has its own affordance and must keep the pointer cursor.
+
+   Nothing marks the value at rest. A dotted underline was tried and rejected: it reads as decoration
+   on a panel whose direction is calmer and flatter, and the values it lands on are plain statements
+   of fact rather than terms needing a gloss.
 
    fit-content matters. MudStack's row is a flex container that fills its grid column, so without it
    the help cursor and the hover response would cover the empty space to the right of a short value,
-   which reads as a much larger target than the one that actually responds.
-
-   The underline is scoped to .mud-typography rather than set on the wrapper because text-decoration
-   propagates into flex items, and the icon beside the text is one; an ancestor underline is drawn
-   across it. */
+   which reads as a much larger target than the one that actually responds. */
 .jim-explained {
     cursor: help;
     width: fit-content;
 }
 
-.jim-explained .mud-typography {
-    text-decoration: underline dotted;
-    text-decoration-color: var(--mud-palette-text-disabled);
-    text-underline-offset: 3px;
-    transition: text-decoration-color 0.15s ease;
-}
-
-.jim-explained:hover .mud-typography {
-    text-decoration-color: var(--mud-palette-text-primary);
+.jim-explained .mud-icon-root {
+    transition: color 0.15s ease;
 }
 
 .jim-explained:hover .mud-icon-root {
     color: var(--mud-palette-text-primary);
-    transition: color 0.15s ease;
 }
 
 /* ─── Buttons inside alerts ─── */
