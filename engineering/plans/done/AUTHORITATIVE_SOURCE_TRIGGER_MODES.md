@@ -2,7 +2,7 @@
 
 - **Status:** Done
 - **Issue:** [#119](https://github.com/TetronIO/JIM/issues/119)
-- **Related design doc:** [`DELETION_RULES_DESIGN.md`](../doing/DELETION_RULES_DESIGN.md)
+- **Related design doc:** [`DELETION_RULES_DESIGN.md`](DELETION_RULES_DESIGN.md)
 
 ## Overview
 

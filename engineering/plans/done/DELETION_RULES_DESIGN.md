@@ -1,6 +1,7 @@
 # Deletion Rules Design
 
-- **Status:** Doing (#115 and #119 implemented; #116, #117, #118 and #126 remain open)
+- **Status:** Done
+- **Note:** Everything this document specified has shipped: #115 (authoritative source triggers) and, as of [#1194](https://github.com/TetronIO/JIM/pull/1194), #119 (all / specific trigger modes, designed in [`AUTHORITATIVE_SOURCE_TRIGGER_MODES.md`](AUTHORITATIVE_SOURCE_TRIGGER_MODES.md)). The further deletion options surveyed below are separate features with their own issues, not outstanding work in this plan: [#116](https://github.com/TetronIO/JIM/issues/116), [#117](https://github.com/TetronIO/JIM/issues/117) and [#118](https://github.com/TetronIO/JIM/issues/118) are open; #126 was closed as a duplicate on 2026-07-07. The survey stays here as the record of how they were assessed against each other.
 >
 > Design document for automatic Metaverse Object deletion based on connector disconnections.
 
@@ -209,9 +210,11 @@ All deletion rule features are now fully implemented:
 **Backend implementation details**: When a CSO is disconnected (obsolete or out-of-scope), `ProcessMvoDeletionRuleAsync()` evaluates the MVO type's deletion rule:
 - `Manual`: No automatic deletion
 - `WhenLastConnectorDisconnected`: Mark for deletion only when all CSOs are disconnected
-- `WhenAuthoritativeSourceDisconnected`: Mark for deletion when ANY authoritative source disconnects, regardless of remaining CSOs
+- `WhenAuthoritativeSourceDisconnected`: Mark for deletion when an authoritative source disconnects, regardless of remaining CSOs. Since #119 the trigger condition is mode-dependent: `SpecificSourcesDisconnect` fires on any one selected source disconnecting (the original behaviour, kept for existing configurations), `AllSourcesDisconnect` waits until every selected source has disconnected.
 
-### Required Changes
+> **Where the code lives now:** rule evaluation moved out of the task processor into `SyncEngine.EvaluateMvoDeletionRule`, which returns an `MvoDeletionDecision` rather than acting directly. The sketch below is kept as the record of what was specified; treat `SyncEngine` as the current source of truth.
+
+### Required Changes (implemented)
 
 In `SyncTaskProcessorBase.ProcessMvoDeletionRuleAsync()`:
 
@@ -288,8 +291,8 @@ The following GitHub issues define additional deletion rule features. This secti
 | #116 | ExcludedFromLastConnectorCheck | Open | P3 - Low |
 | #117 | Soft Delete / Recycle Bin | Open | P2 - Medium |
 | #118 | Conditional MVO Deletion (Attribute-Based) | Open | P2 - Medium |
-| #119 | Authoritative Source Trigger Modes (all / specific) | ✅ **Implemented** | P3 - Low |
-| #126 | CSO Deletion Behaviour Options | Open | P2 - Medium |
+| #119 | Authoritative Source Trigger Modes (all / specific) | ✅ **Closed** | P3 - Low |
+| #126 | CSO Deletion Behaviour Options | Closed as duplicate (2026-07-07) | P2 - Medium |
 
 ---
 
@@ -442,6 +445,8 @@ MetaverseObjectType:
 
 ### #126: CSO Deletion Behaviour Options
 
+> Closed as a duplicate on 2026-07-07; kept here because the assessment below informed the comparison.
+
 **Description**: Configurable behaviour for what happens to target system CSOs when MVO is deleted.
 
 **Current State**: MVP uses `JoinType = Provisioned` check - only provisioned CSOs are deleted, matched CSOs are disconnected.
@@ -485,7 +490,7 @@ MetaverseObjectType:
 |---------|-------|-----------|
 | Soft Delete / Recycle Bin | #117 | Enterprise compliance |
 | Conditional Deletion | #118 | Business rule enforcement |
-| CSO Deletion Behaviour | #126 | Admin control |
+| CSO Deletion Behaviour | #126 | Admin control (issue since closed as a duplicate) |
 
 #### Phase 3: Future (If Requested)
 | Feature | Issue | Rationale |
