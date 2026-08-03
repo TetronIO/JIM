@@ -7,10 +7,8 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality Flow view: a three-column pipeline (Source, Identity, Downstream) mirroring JIM's
-   conceptual data flow. The Source column carries a synthetic source record card and any Source-lane
-   events beneath it, together in one group so containment states the relationship (the record is the
-   subject the run processed, not the cause of what happened to it) and so the connector onward
-   leaves the whole stage; the Identity column carries the Identity-lane events flattened in tree
+   conceptual data flow. The source column carries a synthetic source record card (plus any
+   Source-lane events beneath it), the Identity column the Identity-lane events flattened in tree
    order, and the Downstream column the Downstream-lane events grouped per owning Connected System.
    An SVG overlay draws cubic bezier elbow connectors from measured card positions (source to the
    first Identity event, deepest Identity event to each system group) via a small JS measurement
@@ -34,61 +32,55 @@
             @* ─── Source: what came in ─── *@
             <div class="flow-col">
                 <div class="flow-col-head">Source <span class="hint">what came in</span></div>
-                @* The record card and the Source-lane events it accounts for are one group, so the
-                   relationship between them is stated by containment rather than by a connector: the
-                   record is the subject the run processed, not the cause of what happened to it. The
-                   flow id therefore names the group, not the card, so the connector onward to the
-                   Identity lane leaves the whole Source stage instead of the part above the events. *@
-                <div class="evt-group" data-flow-id="@CausalityFlowConnectorCalculator.SourceCardId">
-                    <div class="evt-card" style="--tone: var(--cz-secondary)">
-                        <div class="evt-head">
-                            <span class="evt-icon" aria-hidden="true">
-                                <MudIcon Icon="@Icons.Material.Filled.Description" />
-                            </span>
-                            <span class="evt-title">Source record</span>
-                        </div>
-                        <div class="evt-sub">
-                            @if (SourceProfileName != null)
-                            {
-                                <text>Processed by </text><b>@SourceProfileName</b>@GetSourceSentenceSuffix()
-                            }
-                            else
-                            {
-                                @GetSourceSentencePrefix()
-                            }
-                        </div>
-                        @{
-                            var recordLabel = GetRecordLabel();
-                            // The record's own Connected System (paired with the record chip below), not
-                            // the run's system named in the sentence above them; the two diverge for
-                            // cross-system cascades.
-                            var systemName = Model.Context.CsoConnectedSystemName;
-                        }
-                        @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
+                <div class="evt-card" data-flow-id="@CausalityFlowConnectorCalculator.SourceCardId"
+                     style="--tone: var(--cz-secondary)">
+                    <div class="evt-head">
+                        <span class="evt-icon" aria-hidden="true">
+                            <MudIcon Icon="@Icons.Material.Filled.Description" />
+                        </span>
+                        <span class="evt-title">Source record</span>
+                    </div>
+                    <div class="evt-sub">
+                        @if (SourceProfileName != null)
                         {
-                            <div class="evt-entities">
-                                @if (recordLabel != null)
-                                {
-                                    <CausalityEntityChip Label="@recordLabel" Href="@GetRecordHref()"
-                                                         Kind="CausalityEntityKind.Record"
-                                                         SubLabel="@Model.Context.CsoObjectTypeName" />
-                                }
-                                @if (!string.IsNullOrWhiteSpace(systemName))
-                                {
-                                    <CausalityEntityChip Label="@systemName" Href="@GetSystemHref()"
-                                                         Kind="CausalityEntityKind.ConnectedSystem" />
-                                }
-                            </div>
+                            <text>Processed by </text><b>@SourceProfileName</b>@GetSourceSentenceSuffix()
+                        }
+                        else
+                        {
+                            @GetSourceSentencePrefix()
                         }
                     </div>
-                    @foreach (var sourceEvent in _sourceEvents)
+                    @{
+                        var recordLabel = GetRecordLabel();
+                        // The record's own Connected System (paired with the record chip below), not
+                        // the run's system named in the sentence above them; the two diverge for
+                        // cross-system cascades.
+                        var systemName = Model.Context.CsoConnectedSystemName;
+                    }
+                    @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
                     {
-                        <CausalityEventCard Event="sourceEvent" TechnicalNames="TechnicalNames"
-                                            FlowId="@_flowIdsByEvent[sourceEvent]"
-                                            Selected="ReferenceEquals(SelectedEvent, sourceEvent)"
-                                            OnSelect="ToggleSelectionAsync" />
+                        <div class="evt-entities">
+                            @if (recordLabel != null)
+                            {
+                                <CausalityEntityChip Label="@recordLabel" Href="@GetRecordHref()"
+                                                     Kind="CausalityEntityKind.Record"
+                                                     SubLabel="@Model.Context.CsoObjectTypeName" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(systemName))
+                            {
+                                <CausalityEntityChip Label="@systemName" Href="@GetSystemHref()"
+                                                     Kind="CausalityEntityKind.ConnectedSystem" />
+                            }
+                        </div>
                     }
                 </div>
+                @foreach (var sourceEvent in _sourceEvents)
+                {
+                    <CausalityEventCard Event="sourceEvent" TechnicalNames="TechnicalNames"
+                                        FlowId="@_flowIdsByEvent[sourceEvent]"
+                                        Selected="ReferenceEquals(SelectedEvent, sourceEvent)"
+                                        OnSelect="ToggleSelectionAsync" />
+                }
             </div>
 
             @* ─── Identity: what JIM did ─── *@
@@ -121,9 +113,7 @@
                 {
                     @foreach (var group in _systemGroups)
                     {
-                        @* evt-group carries the container's look, shared with the Source column;
-                           sys-group marks this one as a Connected System's group. *@
-                        <div class="evt-group sys-group" data-flow-id="@group.FlowId">
+                        <div class="sys-group" data-flow-id="@group.FlowId">
                             <div class="sys-group-head">
                                 <CausalityEntityChip Label="@group.Name" Href="@group.Href"
                                                      Kind="CausalityEntityKind.ConnectedSystem" />

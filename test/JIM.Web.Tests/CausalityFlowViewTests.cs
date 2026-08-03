@@ -44,11 +44,10 @@ public class CausalityFlowViewTests
         var columns = cut.FindAll(".flow-col");
         Assert.That(columns, Has.Count.EqualTo(3));
 
-        // Source column: the synthetic source record card with record + Connected System chips, in
-        // the group that carries the stage's connector anchor
+        // Source column: the synthetic source record card with record + Connected System chips
         var sourceCards = columns[0].QuerySelectorAll(".evt-card");
         Assert.That(sourceCards, Has.Length.EqualTo(1));
-        Assert.That(columns[0].QuerySelector(".evt-group")!.GetAttribute("data-flow-id"), Is.EqualTo("src"));
+        Assert.That(sourceCards[0].GetAttribute("data-flow-id"), Is.EqualTo("src"));
         var sourceChips = sourceCards[0].QuerySelectorAll(".chip").Select(c => c.TextContent).ToList();
         Assert.That(sourceChips.Any(c => c.Contains("Liam Allen")), Is.True);
         Assert.That(sourceChips.Any(c => c.Contains("Yellowstone APAC")), Is.True);
@@ -65,63 +64,6 @@ public class CausalityFlowViewTests
         var groupTitles = groups[0].QuerySelectorAll(".evt-title").Select(t => t.TextContent.Trim()).ToArray();
         Assert.That(groupTitles[0], Does.StartWith("Provisioned"));
         Assert.That(groupTitles[1], Does.StartWith("Export queued"));
-    }
-
-    [Test]
-    public async Task Render_SourceLaneEvents_SitInsideTheSourceRecordsGroupAsync()
-    {
-        await using var context = CausalityBunitContext.Create();
-        var model = CausalityModelBuilder.Build(
-            CausalityTestData.DeletionDetectedItem(), CausalityTestData.NewJoinerContext());
-
-        var cut = RenderFlow(context, model);
-
-        // The source record card and the events it accounts for belong together: containment says so
-        // in the Source column exactly as it already does per Connected System in the Downstream one.
-        var group = cut.FindAll(".flow-col")[0].QuerySelector(".evt-group");
-        Assert.That(group, Is.Not.Null);
-
-        var titles = group!.QuerySelectorAll(".evt-title").Select(t => t.TextContent.Trim()).ToArray();
-        Assert.That(titles, Has.Length.EqualTo(2));
-        Assert.That(titles[0], Does.StartWith("Source record"));
-        Assert.That(titles[1], Does.StartWith("Deletion detected"));
-    }
-
-    [Test]
-    public async Task Render_SourceGroup_CarriesTheConnectorAnchorRatherThanTheRecordCardAsync()
-    {
-        await using var context = CausalityBunitContext.Create();
-        var model = CausalityModelBuilder.Build(
-            CausalityTestData.DeletedRecordSyncItem(), CausalityTestData.NewJoinerContext());
-
-        var cut = RenderFlow(context, model);
-        var sourceColumn = cut.FindAll(".flow-col")[0];
-
-        // The anchor belongs to the whole Source stage. On the record card it named only the part of
-        // the stage above the Source-lane events, so the connector into the Identity lane left from
-        // above them and read as routing past them.
-        Assert.That(sourceColumn.QuerySelector(".evt-group")!.GetAttribute("data-flow-id"), Is.EqualTo("src"));
-        // Cards inside a group still carry their own ids, exactly as the Downstream groups' cards do;
-        // what must not happen is a card claiming the stage's anchor.
-        Assert.That(sourceColumn.QuerySelector(".evt-card[data-flow-id='src']"), Is.Null);
-    }
-
-    [Test]
-    public async Task Render_NoSourceLaneEvents_StillGroupsSoTheAnchorIsAlwaysTheStageAsync()
-    {
-        await using var context = CausalityBunitContext.Create();
-        var model = CausalityModelBuilder.Build(
-            CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        var cut = RenderFlow(context, model);
-        var sourceColumn = cut.FindAll(".flow-col")[0];
-
-        // A lone record card renders identically either way (the group's border replaces the card's),
-        // so there is no case that needs the wrapper omitted and no second anchoring rule to keep.
-        var group = sourceColumn.QuerySelector(".evt-group");
-        Assert.That(group, Is.Not.Null);
-        Assert.That(group!.GetAttribute("data-flow-id"), Is.EqualTo("src"));
-        Assert.That(group.QuerySelectorAll(".evt-card"), Has.Length.EqualTo(1));
     }
 
     [Test]
