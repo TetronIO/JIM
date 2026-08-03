@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="bunit" Version="2.7.2" />
+    <PackageReference Include="bunit" Version="2.8.6" />
     <!--
       Transitive pin, not a direct use. bUnit 2.7.2 resolves AngleSharp 1.4.0, which carries
       CVE-2026-54570 (mXSS via MathML annotation-xml integration points), fixed in 1.5.0. Pinning
