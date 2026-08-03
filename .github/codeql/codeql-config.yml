@@ -53,8 +53,12 @@
 #   in a JIM deployment.
 #
 #   Note: for compiled languages (C#) paths-ignore cannot limit what gets
-#   built and extracted; it filters the alerts produced. That is exactly
-#   the intent here.
+#   built and extracted, and the codeql-action does NOT filter compiled-
+#   language alerts by it either (proven on PR #1177: an excluded path's
+#   alert re-minted on every analysis, re-opening past dismissal). The
+#   enforcement point is scripts/Filter-Sarif.ps1, which the CodeQL
+#   workflow runs between analysis and upload; it reads this block, so
+#   this file remains the single place a path is excluded.
 
 #   test/JIM.TestScimServiceProvider/** (SCIM integration-test service provider)
 #   -----------------------------------------------------------------------------
