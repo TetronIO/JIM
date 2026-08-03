@@ -24,12 +24,12 @@
   <ItemGroup>
     <PackageReference Include="bunit" Version="2.8.6" />
     <!--
-      Transitive pin, not a direct use. bUnit 2.7.2 resolves AngleSharp 1.4.0, which carries
-      CVE-2026-54570 (mXSS via MathML annotation-xml integration points), fixed in 1.5.0. Pinning
-      forward keeps the restore audit clean without suppressing the finding. Drop this reference
-      once bUnit's own floor moves past 1.5.0.
+      No direct AngleSharp reference here. One used to sit at this line, pinning forward past
+      CVE-2026-54570 (mXSS via MathML annotation-xml integration points) because bUnit 2.7.2
+      resolved AngleSharp 1.4.0. bUnit 2.8.6 resolves 1.5.2, above the 1.5.0 fix, so the pin's
+      own stated exit condition is met and it has been dropped. Reinstate it only if a future
+      advisory outruns bUnit's floor again.
     -->
-    <PackageReference Include="AngleSharp" Version="1.7.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <!--
       Components that read through the application layer (the Configuration Change Preview panel) need their
