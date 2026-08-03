@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Deliberately dependency-light: this library implements the SCIM 2.0 wire protocol (RFC 7643/7644)
+    and is shared by the client connector (JIM.Connectors) and JIM's own service provider (JIM.Web).
+    It references only JIM.Models and JIM.Utilities, and takes no third-party SCIM SDK; serialisation is
+    System.Text.Json from the BCL, keeping the air-gap posture and supply-chain surface unchanged.
+    JIM.Utilities is here for DecimalAttributeValue: SCIM decimals must be parsed and emitted through
+    that one helper so they never route through double, which the connector design requires.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\JIM.Models\JIM.Models.csproj" />
+    <ProjectReference Include="..\JIM.Utilities\JIM.Utilities.csproj" />
+  </ItemGroup>
+
+</Project>

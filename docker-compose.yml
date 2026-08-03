@@ -24,8 +24,13 @@ services:
     build:
       context: .
       dockerfile: src/JIM.Web/Dockerfile
+      network: ${JIM_BUILD_NETWORK:-default}
       args:
         VERSION_SUFFIX: ${VERSION_SUFFIX:-}
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+        HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
         # Local dev builds set OPENAPI_STAGE=publish to skip the expensive
         # openapi-gen step. CI/release builds leave it unset so the default
         # (openapi-gen) bakes a fresh OpenAPI doc into the image. Run
@@ -73,8 +78,13 @@ services:
     build:
       context: .
       dockerfile: src/JIM.Worker/Dockerfile
+      network: ${JIM_BUILD_NETWORK:-default}
       args:
         VERSION_SUFFIX: ${VERSION_SUFFIX:-}
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+        HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
     healthcheck:
       test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(stat -c %Y /tmp/healthcheck) )) -lt 60"]
       interval: 30s
@@ -110,8 +120,13 @@ services:
     build:
       context: .
       dockerfile: src/JIM.Scheduler/Dockerfile
+      network: ${JIM_BUILD_NETWORK:-default}
       args:
         VERSION_SUFFIX: ${VERSION_SUFFIX:-}
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+        HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
     healthcheck:
       test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(stat -c %Y /tmp/healthcheck) )) -lt 120"]
       interval: 30s
