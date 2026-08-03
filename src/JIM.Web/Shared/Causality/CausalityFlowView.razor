@@ -24,7 +24,7 @@
                 @foreach (var connector in _connectors)
                 {
                     <path d="@connector.PathData"></path>
-                    <circle cx="@connector.DotX" cy="@connector.DotY" r="3"></circle>
+                    <circle cx="@connector.DotX" cy="@connector.DotY" r="4.5"></circle>
                 }
             </svg>
         }
@@ -34,7 +34,7 @@
                 <div class="flow-col-head">Source <span class="hint">what came in</span></div>
                 <div class="evt-card" data-flow-id="@CausalityFlowConnectorCalculator.SourceCardId"
                      style="--tone: var(--cz-secondary)">
-                    <div class="evt-head">
+                    <div class="evt-head" data-flow-head>
                         <span class="evt-icon" aria-hidden="true">
                             <MudIcon Icon="@Icons.Material.Filled.Description" />
                         </span>
@@ -114,7 +114,7 @@
                     @foreach (var group in _systemGroups)
                     {
                         <div class="sys-group" data-flow-id="@group.FlowId">
-                            <div class="sys-group-head">
+                            <div class="sys-group-head" data-flow-head>
                                 <CausalityEntityChip Label="@group.Name" Href="@group.Href"
                                                      Kind="CausalityEntityKind.ConnectedSystem" />
                             </div>

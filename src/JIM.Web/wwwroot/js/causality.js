@@ -18,12 +18,20 @@ window.jimCausality = {
         const cards = [];
         canvas.querySelectorAll('[data-flow-id]').forEach(function (element) {
             const rect = element.getBoundingClientRect();
+            // The header row a connector anchors on. querySelector takes the first in document order,
+            // which for a Connected System group is the group's own header rather than the header of
+            // the first event card inside it. Absent for anything that has no header row, in which
+            // case C# falls back to the capped card centre.
+            const head = element.querySelector('[data-flow-head]');
+            const headRect = head ? head.getBoundingClientRect() : null;
             cards.push({
                 id: element.getAttribute('data-flow-id'),
                 left: rect.left - canvasRect.left,
                 right: rect.right - canvasRect.left,
                 top: rect.top - canvasRect.top,
-                height: rect.height
+                height: rect.height,
+                headerTop: headRect ? headRect.top - canvasRect.top : 0,
+                headerHeight: headRect ? headRect.height : 0
             });
         });
         return { width: canvasRect.width, height: canvasRect.height, cards: cards };

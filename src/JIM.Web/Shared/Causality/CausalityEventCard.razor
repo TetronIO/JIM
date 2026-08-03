@@ -16,7 +16,7 @@
      role="@(IsClickable ? "button" : null)" tabindex="@(IsClickable ? "0" : null)"
      aria-label="@(IsClickable ? $"{Title}: show attribute detail" : null)"
      @onclick="HandleActivationAsync" @onkeydown="HandleKeyDownAsync">
-    <div class="evt-head">
+    <div class="evt-head" data-flow-head>
         <span class="evt-icon" aria-hidden="true">
             <MudIcon Icon="@Event.Icon" />
         </span>

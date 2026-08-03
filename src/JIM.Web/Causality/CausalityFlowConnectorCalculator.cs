@@ -67,17 +67,15 @@ public static class CausalityFlowConnectorCalculator
     }
 
     /// <summary>
-    /// Builds one connector between two measured rectangles. Anchors sit on the cards' vertical
-    /// centres, capped at 34px from the top so tall cards and groups connect near their headers
-    /// (matching the mock-up's drawFlowLinks), with the elbow's control points at the horizontal
-    /// midpoint.
+    /// Builds one connector between two measured rectangles, anchored on each card's header row with
+    /// the elbow's control points at the horizontal midpoint.
     /// </summary>
     private static CausalityFlowConnector BuildConnector(CausalityFlowCardRect from, CausalityFlowCardRect to)
     {
         var x1 = from.Right;
-        var y1 = from.Top + Math.Min(from.Height / 2, 34);
+        var y1 = AnchorY(from);
         var x2 = to.Left;
-        var y2 = to.Top + Math.Min(to.Height / 2, 34);
+        var y2 = AnchorY(to);
         var midX = (x1 + x2) / 2;
 
         var pathData = $"M {FormatCoordinate(x1)} {FormatCoordinate(y1)} " +
@@ -85,6 +83,21 @@ public static class CausalityFlowConnectorCalculator
                        $"{FormatCoordinate(midX)} {FormatCoordinate(y2)}, " +
                        $"{FormatCoordinate(x2)} {FormatCoordinate(y2)}";
         return new CausalityFlowConnector(pathData, FormatCoordinate(x2), FormatCoordinate(y2));
+    }
+
+    /// <summary>
+    /// The vertical point a connector meets a card: the middle of its header row, which is the row
+    /// naming the thing being connected. Header heights differ by card kind (a Connected System
+    /// group's chip row is shorter than an event card's icon row), so the previous fixed 34px cap
+    /// from the mock-up's drawFlowLinks landed below the middle of both, by a different amount each.
+    /// The cap remains as the fallback for a card whose header could not be measured, where landing
+    /// near the top is still better than at the card's vertical centre on a tall card.
+    /// </summary>
+    private static double AnchorY(CausalityFlowCardRect rect)
+    {
+        return rect.HeaderHeight > 0
+            ? rect.HeaderTop + rect.HeaderHeight / 2
+            : rect.Top + Math.Min(rect.Height / 2, 34);
     }
 
     /// <summary>

@@ -34,4 +34,18 @@ public sealed class CausalityFlowCardRect
     /// Height in pixels.
     /// </summary>
     public double Height { get; set; }
+
+    /// <summary>
+    /// Top edge of the card's header row (the element marked <c>data-flow-head</c>) in pixels,
+    /// relative to the canvas. Zero alongside a zero <see cref="HeaderHeight"/> when no header was
+    /// found.
+    /// </summary>
+    public double HeaderTop { get; set; }
+
+    /// <summary>
+    /// Height of the card's header row in pixels, or zero when no header was found. Connectors
+    /// anchor on this row's middle, because it is the row that names the thing being connected and
+    /// its height differs by card kind.
+    /// </summary>
+    public double HeaderHeight { get; set; }
 }
