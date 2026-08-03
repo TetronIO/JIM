@@ -103,8 +103,17 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
-- **A multi-sentence explanation goes through `<TooltipText Text="@..." />`**, in the tooltip's `TooltipContent` fragment rather than its `Text` parameter. It renders one sentence per line, so a two-sentence description does not run as a single long line. The break is derived from the sentence boundary, never authored into the string: the descriptions range from a few words to two sentences, so a hand-placed break is in the wrong place for the next one. Tooltip text is also capped to a `24rem` measure and left-aligned site-wide (`site.css` > "Tooltip measure"), which is what stops a long *single* sentence running off the page.
 - **Exception:** tooltips anchored to elements inside the mini-drawer (e.g. the `DrawerUserMenu` avatar when the drawer is collapsed) should use `Placement.Right` so they emerge into the main content area rather than overlapping the drawer itself. This exception is scoped to drawer-anchored tooltips only; do not extend it to other contexts.
+
+### Tooltip text: one sentence per line
+
+An explanatory tooltip that runs as one long line is hard to read and stretches across the page. Three rules, in the order you meet them:
+
+1. **Write the explanation as sentences, not as one clause joined by "and".** Two facts get two sentences: "This object has been detected as deleted from the source system. It is pending removal during the next synchronisation." The same content joined with "and" is one sentence and renders as one unbroken line. This is the rule that actually decides the layout, and it lives in the string rather than in the component: `ExternalIdStatus.PendingRemoval` was the only one of three descriptions to render unbroken purely because it was written as a single clause while its two siblings were sentence pairs.
+2. **Render it through `<TooltipText Text="@..." />`,** placed in `MudTooltip`'s `TooltipContent` fragment rather than its `Text` parameter. `Text` is encoded, so a `<br>` written into it renders literally. `TooltipText` splits on the sentence boundary and emits one line per sentence, passing each through Blazor's encoder rather than a `MarkupString`, so a description that ever interpolates a connected-system value cannot inject markup.
+3. **Never hand-place the break.** No `<br>` and no line-break character written into a description string. Descriptions range from a few words to two sentences and get added over time, so a break authored for one string lands in the wrong place in the next and has to be re-judged every time one is added. Derive it or leave it.
+
+A single-sentence description needs none of this and renders unchanged. The site-wide `24rem` measure cap and left-alignment (`site.css` > "Tooltip measure") is what keeps a long *single* sentence from running off the page; MudBlazor sets no `max-width` on `.mud-tooltip` at all.
 
 ## Alerts
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components

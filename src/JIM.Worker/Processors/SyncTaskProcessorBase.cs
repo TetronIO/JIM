@@ -326,9 +326,14 @@ public abstract class SyncTaskProcessorBase
                             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
                             or ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
                     {
-                        // Fill in MVO display name if it was null at creation time
-                        if (string.IsNullOrEmpty(outcome.TargetEntityDescription)
-                            && !string.IsNullOrEmpty(mvo.NameOrId))
+                        // Fill in the MVO's description if it was blank at creation time. An all-zero
+                        // GUID counts as blank: it is what NameOrId yields before the MVO is persisted,
+                        // so treating it as a real description would leave it on display forever. The
+                        // creation sites write the name only and so no longer produce it, but this is
+                        // the last point at which a description can still be corrected, and it costs a
+                        // string comparison to make the whole class of mistake self-healing.
+                        if (IsBlankOrEmptyGuid(outcome.TargetEntityDescription)
+                            && !string.IsNullOrWhiteSpace(mvo.NameOrId))
                         {
                             outcome.TargetEntityDescription = mvo.NameOrId;
                         }
@@ -592,7 +597,11 @@ public abstract class SyncTaskProcessorBase
                         // disconnection (#1086).
                         var mvoRef = connectedSystemObject.MetaverseObject;
                         Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : changeResult.DisconnectedMvoId;
-                        string? mvoDescription = mvoRef?.NameOrId ?? changeResult.DisconnectedMvoDisplayName;
+                        // Name, not NameOrId, for the same reason as the projection path below: on a
+                        // projection the MVO is not persisted yet, so NameOrId's id fallback would write
+                        // an all-zero GUID that the retroactive pass then treats as a real description.
+                        string? mvoDescription = ObjectNaming.FirstPresent(mvoRef?.Name)
+                                                 ?? changeResult.DisconnectedMvoDisplayName;
 
                         // Only put detailCount on AttributeFlow/DisconnectedOutOfScope root outcomes, not on Joined/Projected
                         int? rootDetailCount = outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
@@ -1167,6 +1176,19 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Whether an outcome description carries no real information: blank, or the all-zero GUID that
+    /// <see cref="MetaverseObject.NameOrId"/> produces when asked for a label before the object has
+    /// been persisted and given an id. Both mean "not described yet" and are safe to overwrite.
+    /// </summary>
+    private static bool IsBlankOrEmptyGuid(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description)
+               || string.Equals(description.Trim(), EmptyGuidText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly string EmptyGuidText = Guid.Empty.ToString();
+
+    /// <summary>
     /// Formats a grace period TimeSpan into a human-readable string for outcome detail messages.
     /// </summary>
     private static string FormatGracePeriod(TimeSpan period)
@@ -1368,7 +1390,12 @@ public abstract class SyncTaskProcessorBase
                     // Only store the MVO ID if it's already persisted (non-empty).
                     // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
                     var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
-                    var mvoDescription = mvo.NameOrId;
+                    // Name, not NameOrId. NameOrId falls back to the id, and for a newly projected MVO
+                    // that id is still Guid.Empty here, so the fallback bakes an all-zero GUID into the
+                    // description. Leaving it null lets the retroactive pass above fill it once the name
+                    // has flowed and the real id exists; that pass only fills blanks, so a zero GUID
+                    // written here would survive it and reach the causality view as the Identity's name.
+                    var mvoDescription = ObjectNaming.FirstPresent(mvo.Name);
 
                     // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
                     // Joined/AttributeFlow roots have no single attributable rule here.

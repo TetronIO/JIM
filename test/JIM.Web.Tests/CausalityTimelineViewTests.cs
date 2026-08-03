@@ -43,6 +43,27 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
+    public async Task Render_RowWithChildren_MarksItsBodySoTheTrailingGapIsNotCountedTwiceAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderTimeline(context, model);
+
+        // Children render inside their parent's body, so a parent that keeps its own bottom padding
+        // adds it on top of the last child's: the gap after a nested branch came out double the gap
+        // between siblings, and compounded once more per level.
+        foreach (var row in cut.FindAll(".tl-row"))
+        {
+            var body = row.QuerySelector(".tl-body")!;
+            var hasChildren = body.QuerySelector(":scope > .tl-children") != null;
+            Assert.That(body.ClassList.Contains("has-children"), Is.EqualTo(hasChildren),
+                $"'{row.QuerySelector(".tl-line .verb")?.TextContent.Trim()}' marks has-children as " +
+                $"{!hasChildren} while it {(hasChildren ? "does" : "does not")} render a child container.");
+        }
+    }
+
+    [Test]
     public async Task Render_NewJoinerScenario_NestsChildEventsUnderTheirParentsAsync()
     {
         await using var context = CausalityBunitContext.Create();

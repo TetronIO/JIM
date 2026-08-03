@@ -675,8 +675,17 @@
 }
 
 .causality-panel .tl-body {
-    padding: 4px 0 22px;
+    padding: 4px 0 44px;
     min-width: 0;
+}
+
+/* A row's children render at the end of its own body, and each child body already carries the
+   trailing gap, so a parent keeping its bottom padding as well counts the gap twice: the space after
+   a nested branch came out at double the space between plain siblings, and compounded once more per
+   level of nesting. Zeroing it here makes every gap in the timeline the same 48px, whatever the
+   depth. */
+.causality-panel .tl-body.has-children {
+    padding-bottom: 0;
 }
 
 .causality-panel .tl-line {

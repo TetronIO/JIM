@@ -1571,7 +1571,9 @@ html[lang] .jim-schema-change-table td {
 
 /* Dense mode: tighten multi-valued attribute layout so MVA rows compact too.
    Removes the inter-item gap and per-item padding, and shrinks chips so each
-   value row matches the dense cell height instead of staying at default size. */
+   value row matches the dense cell height instead of staying at default size.
+   The chip keeps a little vertical margin: at the dense cell padding alone the
+   chip fills the row edge to edge and the rows read as cramped. */
 .jim-attribute-table.mud-table-dense .jim-attr-expanded {
     gap: 8px;
 }
@@ -1583,7 +1585,7 @@ html[lang] .jim-schema-change-table td {
 .jim-attribute-table.mud-table-dense .mud-chip {
     height: 24px;
     font-size: 0.75rem;
-    margin: 0 4px 0 0;
+    margin: 3px 4px 3px 0;
 }
 
 .jim-attribute-table.mud-table-dense .mud-chip .mud-chip-content {
@@ -1669,6 +1671,24 @@ html[lang] .jim-schema-change-table td {
 .jim-attribute-table tbody tr.jim-attr-row-mva td,
 .jim-attribute-table .mud-table-body .mud-table-cell.jim-attr-cell-mva {
     vertical-align: top;
+}
+
+/* Key/value detail tables (the label/value panels on detail pages).
+   Two things need normalising. MudSimpleTable renders its cells at body2 (0.875rem)
+   while MudText/MudLink children render at body1 (1rem), so a panel ends up mixing
+   two text sizes; and a MudChip carries its own 4px margin on top of its 32px height,
+   so chip-bearing rows sit taller than plain-text rows and the panel looks unbalanced.
+   A single cell height plus a zeroed chip margin makes every row identical. */
+.jim-detail-table tbody tr td {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    height: 44px;
+    padding: 4px 16px !important;
+    vertical-align: middle;
+}
+
+.jim-detail-table tbody tr td .mud-chip {
+    margin: 0;
 }
 
 /* Blazor Server Reconnection UI */

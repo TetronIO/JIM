@@ -110,7 +110,9 @@
                     <MudIcon Icon="@causalityEvent.Icon" aria-hidden="true" />
                 </span>
             </div>
-            <div class="tl-body">
+            @* has-children suppresses this row's own bottom padding: its children render inside this
+               body and the last of them already provides the trailing gap. *@
+            <div class="tl-body @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
                 <div class="tl-line">
                     <span class="verb">@(TechnicalNames ? causalityEvent.TechnicalLabel : causalityEvent.PlainLabel)</span>
                     <span class="tech">@(TechnicalNames ? causalityEvent.PlainLabel : causalityEvent.TechnicalLabel)</span>
