@@ -107,11 +107,15 @@ public class JimApplication : IDisposable
         ConfigurationChangePreflight = new ConfigurationChangePreflightService(this);
 
         // Preview adapters are listed here rather than discovered by reflection, so what can be previewed is one
-        // readable list that cannot vary with assembly load order. The list is empty until the first adapter ships
-        // (#1114); until then every surface keeps its save-time acknowledgement, which is the intended behaviour
-        // for a surface with no adapter and not a gap.
+        // readable list that cannot vary with assembly load order. A surface absent from it keeps its save-time
+        // acknowledgement, which is the intended behaviour for a surface with no adapter and not a gap. Adapters
+        // hold this facade and read through it at call time, so listing one before the servers it uses are
+        // constructed is safe.
         ConfigurationChangePreviews = new ConfigurationChangePreviewServer(this,
-            previewAdapters ?? new ConfigurationChangePreviewAdapterRegistry([]));
+            previewAdapters ?? new ConfigurationChangePreviewAdapterRegistry(
+            [
+                new MetaverseObjectTypeDeletionSettingsPreviewAdapter(this)
+            ]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);

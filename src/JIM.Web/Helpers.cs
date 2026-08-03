@@ -1070,6 +1070,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible => Color.Error,
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible => Color.Success,
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate => Color.Warning,
 
             _ => Color.Default,
         };
@@ -1110,6 +1111,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope => "Would fall out of scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible => "Would become eligible for deletion",
             ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible => "Would no longer be eligible for deletion",
+            ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate => "Deletion date would change",
 
             _ => outcomeType.ToString()
         };

@@ -310,6 +310,22 @@ public interface IMetaverseRepository
     public Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null);
 
     /// <summary>
+    /// How many Metaverse Objects of a type carry a disconnection mark, and are therefore the population a change
+    /// to that type's deletion settings could affect (#1114). Objects without a mark cannot become eligible under
+    /// any settings, so this is the whole population, not a subset of it.
+    /// </summary>
+    public Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Streams the marked Metaverse Objects of a type, reduced to the facts a deletion-settings preview needs.
+    ///
+    /// Streamed rather than paged because the read must be a single consistent pass: paging a set that the
+    /// synchronisation engine is concurrently marking and clearing would let an object be counted twice or skipped,
+    /// and a preview of deletions that miscounts is worse than no preview.
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Creates a MetaverseObjectChange record directly in the database.
     /// Used for DELETE operations where the change should not be linked via navigation property
     /// because the MVO is about to be deleted.
