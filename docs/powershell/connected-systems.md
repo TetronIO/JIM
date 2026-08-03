@@ -1025,6 +1025,42 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
+## Get-JIMConnectedSystemCapability
+
+Retrieves the Connector-detected capabilities for a Connected System, e.g. an LDAP directory's type, vendor, DNS host name, and paging support. These are facts read from the target system during a previous connection and persisted by JIM; calling this cmdlet does not open a new connection.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemCapability -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+Zero or more `PSCustomObject` instances, one per detected capability, each with `Name` and `Value` properties. Empty when the Connector does not detect any capabilities, or when nothing has been detected yet (for example, before the first successful connection).
+
+### Examples
+
+```powershell title="Get the detected capabilities for a Connected System"
+Get-JIMConnectedSystemCapability -ConnectedSystemId 1
+```
+
+```powershell title="Get capabilities for a named Connected System via pipeline"
+Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapability
+```
+
+### Notes
+
+- These facts mirror the **Directory Capabilities** card on the Connected System's Details page in the portal; see the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) documentation for what each fact means.
+
+---
+
 ## Clear-JIMConnectedSystem
 
 Removes all connector space objects (CSOs) and associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.

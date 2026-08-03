@@ -1869,6 +1869,31 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The Connector-detected capabilities for a Connected System (issue #231), e.g. an LDAP directory's type,
+    /// vendor, DNS host name, and paging support: facts detected from the target during a previous connection
+    /// and persisted onto <see cref="ConnectedSystem.PersistedConnectorData"/>. Purely a display concern for the
+    /// "Directory Capabilities" card on the Connected System details page; JIM never interprets the persisted
+    /// data itself, it is only ever replayed to the owning Connector to interpret.
+    /// <para>
+    /// Null when the Connected System does not exist or its Connector does not implement
+    /// <see cref="IConnectorDetectedCapabilities"/> (the UI hides the card entirely); an empty list when the
+    /// Connector supports detection but nothing has been detected yet (for example, before the first
+    /// successful connection), which the UI renders as a hint.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<ConnectorCapability>?> GetConnectedSystemDetectedCapabilitiesAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return null;
+
+        return CreateConnector(connectedSystem) is IConnectorDetectedCapabilities capabilitiesConnector
+            ? capabilitiesConnector.GetDetectedCapabilities(connectedSystem.PersistedConnectorData, Log.Logger)
+            : null;
+    }
+
+    /// <summary>
     /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy.
     /// <para>
     /// These are where JIM would be provisioning, and so where rights actually need to hold. Permissions are

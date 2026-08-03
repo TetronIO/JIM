@@ -877,6 +877,41 @@ public class SynchronisationController(
     }
     #endregion
 
+    #region Capabilities
+
+    /// <summary>
+    /// Get a Connected System's detected capabilities
+    /// </summary>
+    /// <remarks>
+    /// Returns the human-readable facts the Connector has detected about the target system, e.g. an LDAP
+    /// directory's type, vendor, DNS host name, and paging support. These are discovered from the target
+    /// during a previous connection and persisted by JIM; nothing here triggers a new connection. The list is
+    /// empty when the Connector does not detect any capabilities, or when no data has been detected yet
+    /// (for example, before the first successful connection).
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>An ordered list of detected capability facts.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/capabilities", Name = "GetConnectedSystemCapabilities")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectorCapabilityDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemCapabilitiesAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested detected capabilities for Connected System: {Id}", connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        // Null means the Connector does not support capability detection; the API flattens that to an empty
+        // list (the distinction only matters to the portal, which hides the card entirely).
+        var capabilities = await _application.ConnectedSystems.GetConnectedSystemDetectedCapabilitiesAsync(connectedSystemId) ?? [];
+        var dtos = capabilities.Select(ConnectorCapabilityDto.FromEntity);
+        return Ok(dtos);
+    }
+
+    #endregion
+
     #region Directory Servers
 
     /// <summary>

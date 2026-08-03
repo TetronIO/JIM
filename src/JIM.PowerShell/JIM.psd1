@@ -55,6 +55,7 @@
         'Get-JIMConnectedSystemObjectChangeHistory',
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
+        'Get-JIMConnectedSystemCapability',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 
