@@ -622,6 +622,18 @@
 
 .causality-panel .tl {
     max-width: 860px;
+
+    /* The timeline's whole vertical rhythm. Every row leaves --cz-tl-gap below its own content and
+       --cz-tl-lead above its first line (the lead centres that line against its dot), so the visual
+       distance from one row's content to the next is always the sum of the two (28px), whether the
+       next row is a sibling or the first child of a nested branch. Both distances are driven from
+       these two tokens, so they cannot drift apart: gaps used to be 48px between siblings and 8px
+       into a branch, which made a shallow item's timeline look airy and a deeply nested one cramped.
+       28px is the approved mock-up's 26px sibling gap scaled for JIM's larger body type (the mock
+       sets 14.5px against MudBlazor's 16px); the mock's own 8px child gap is not carried over,
+       because a uniform rhythm is what keeps every item's timeline reading the same. */
+    --cz-tl-gap: 24px;
+    --cz-tl-lead: 4px;
 }
 
 .causality-panel .tl-row {
@@ -680,15 +692,14 @@
 }
 
 .causality-panel .tl-body {
-    padding: 4px 0 44px;
+    padding: var(--cz-tl-lead) 0 var(--cz-tl-gap);
     min-width: 0;
 }
 
 /* A row's children render at the end of its own body, and each child body already carries the
    trailing gap, so a parent keeping its bottom padding as well counts the gap twice: the space after
    a nested branch came out at double the space between plain siblings, and compounded once more per
-   level of nesting. Zeroing it here makes every gap in the timeline the same 48px, whatever the
-   depth. */
+   level of nesting. */
 .causality-panel .tl-body.has-children {
     padding-bottom: 0;
 }
@@ -788,8 +799,10 @@
     transform: rotate(90deg);
 }
 
+/* The parent's own bottom padding is suppressed (see .tl-body.has-children), so descending into a
+   branch has to supply the same gap here that a sibling would have got from that padding. */
 .causality-panel .tl-children {
-    margin-top: 4px;
+    margin-top: var(--cz-tl-gap);
 }
 
 .causality-panel .tl-inline-detail {
