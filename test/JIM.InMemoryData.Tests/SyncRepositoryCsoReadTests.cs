@@ -536,18 +536,30 @@ public class SyncRepositoryCsoReadTests
 
     #endregion
 
-    #region CSO Count by MVO
+    #region CSO Joined System Ids by MVO
 
     [Test]
-    public async Task GetConnectedSystemObjectCountByMetaverseObjectIdAsync_ReturnCorrectCountAsync()
+    public async Task GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync_ReturnsOneEntryPerJoinedCsoAsync()
     {
+        // Two joined CSOs from system 1 and one from system 2: duplicates must be preserved
+        // (one entry per CSO), and the unjoined CSO must be excluded.
         var mvoId = Guid.NewGuid();
-        _repo.SeedConnectedSystemObject(CreateCso(metaverseObjectId: mvoId));
-        _repo.SeedConnectedSystemObject(CreateCso(metaverseObjectId: mvoId));
-        _repo.SeedConnectedSystemObject(CreateCso());
+        _repo.SeedConnectedSystemObject(CreateCso(metaverseObjectId: mvoId, connectedSystemId: 1));
+        _repo.SeedConnectedSystemObject(CreateCso(metaverseObjectId: mvoId, connectedSystemId: 1));
+        _repo.SeedConnectedSystemObject(CreateCso(metaverseObjectId: mvoId, connectedSystemId: 2));
+        _repo.SeedConnectedSystemObject(CreateCso(connectedSystemId: 3));
 
-        var count = await _repo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-        Assert.That(count, Is.EqualTo(2));
+        var systemIds = await _repo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
+        Assert.That(systemIds, Is.EquivalentTo(new[] { 1, 1, 2 }));
+    }
+
+    [Test]
+    public async Task GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync_NoJoinedCsos_ReturnsEmptyAsync()
+    {
+        _repo.SeedConnectedSystemObject(CreateCso(connectedSystemId: 1));
+
+        var systemIds = await _repo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid.NewGuid());
+        Assert.That(systemIds, Is.Empty);
     }
 
     [Test]

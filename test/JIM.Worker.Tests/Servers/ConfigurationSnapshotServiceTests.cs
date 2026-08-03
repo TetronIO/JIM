@@ -652,6 +652,52 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(referencedSet.Value, Is.EqualTo("7"), "a referenced data set is captured by its stable id");
     }
 
+    // -- Metaverse Object Type scope -----------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_MetaverseObjectType_CapturesDeletionTriggerMode()
+    {
+        // The trigger mode (#119) decides whether any one selected source disconnecting deletes the object or
+        // whether every selected source must disconnect first; it must be snapshotted so configuration change
+        // history diffs a mode change rather than reporting "no change".
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            DeletionTriggerConnectedSystemIds = [3]
+        };
+
+        var snapshot = _service.CreateSnapshot(objectType, HashKey);
+
+        var mode = Child(snapshot.Root, "deletionTriggerMode");
+        Assert.That(mode, Is.Not.Null, "the deletion trigger mode must be snapshotted");
+        Assert.That(mode!.Value, Is.EqualTo("SpecificSourcesDisconnect"));
+        Assert.That(mode!.Label, Is.EqualTo("Deletion trigger mode"));
+    }
+
+    [Test]
+    public void CreateSnapshot_MetaverseObjectType_CapturesAllSourcesDisconnectMode()
+    {
+        // Both mode values must round-trip through the snapshot so a Specific -> All change diffs in
+        // configuration change history.
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerMode = AuthoritativeSourceTriggerMode.AllSourcesDisconnect,
+            DeletionTriggerConnectedSystemIds = [3, 4]
+        };
+
+        var snapshot = _service.CreateSnapshot(objectType, HashKey);
+
+        Assert.That(Child(snapshot.Root, "deletionTriggerMode")!.Value, Is.EqualTo("AllSourcesDisconnect"));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static ConfigurationSnapshotNode? Child(ConfigurationSnapshotNode node, string key) =>

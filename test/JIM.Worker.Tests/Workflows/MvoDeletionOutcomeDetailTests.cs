@@ -191,8 +191,18 @@ public class MvoDeletionOutcomeDetailTests : WorkflowTestBase
         Assert.That(scheduledOutcome.TargetEntityDescription, Is.EqualTo("John Smith"),
             "The MvoDeletionScheduled outcome must record a display name snapshot");
         Assert.That(scheduledOutcome.DetailMessage,
-            Is.EqualTo("Deletion Rule: last connector disconnected. Grace period: 7 days"),
+            Does.StartWith("Deletion Rule: last connector disconnected. Grace period: 7 days"),
             "The MvoDeletionScheduled outcome must combine the Deletion Rule reason with the grace period");
+
+        // The scheduled deletion's due date must be stated, so the causality view can answer "when?"
+        // without the reader deriving it from the disconnection time and the grace period (#119).
+        var markedMvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        Assert.That(markedMvo!.LastConnectorDisconnectedDate, Is.Not.Null,
+            "The MVO must carry a disconnection date once the deletion is scheduled");
+        var expectedEligible = markedMvo.LastConnectorDisconnectedDate!.Value.Add(TimeSpan.FromDays(7));
+        Assert.That(scheduledOutcome.DetailMessage,
+            Does.Contain($"Eligible for deletion: {expectedEligible:dd MMM yyyy HH:mm:ss} UTC"),
+            "The MvoDeletionScheduled outcome must state when the deletion becomes due");
     }
 
     #endregion
@@ -303,8 +313,18 @@ public class MvoDeletionOutcomeDetailTests : WorkflowTestBase
         Assert.That(scheduledOutcome.TargetEntityDescription, Is.EqualTo("John Smith"),
             "The MvoDeletionScheduled outcome must record a display name snapshot");
         Assert.That(scheduledOutcome.DetailMessage,
-            Is.EqualTo("Deletion Rule: last connector disconnected. Grace period: 7 days"),
+            Does.StartWith("Deletion Rule: last connector disconnected. Grace period: 7 days"),
             "The MvoDeletionScheduled outcome must combine the Deletion Rule reason with the grace period");
+
+        // The scheduled deletion's due date must be stated, so the causality view can answer "when?"
+        // without the reader deriving it from the disconnection time and the grace period (#119).
+        var markedMvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        Assert.That(markedMvo!.LastConnectorDisconnectedDate, Is.Not.Null,
+            "The MVO must carry a disconnection date once the deletion is scheduled");
+        var expectedEligible = markedMvo.LastConnectorDisconnectedDate!.Value.Add(TimeSpan.FromDays(7));
+        Assert.That(scheduledOutcome.DetailMessage,
+            Does.Contain($"Eligible for deletion: {expectedEligible:dd MMM yyyy HH:mm:ss} UTC"),
+            "The MvoDeletionScheduled outcome must state when the deletion becomes due");
     }
 
     #endregion

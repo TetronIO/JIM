@@ -102,4 +102,60 @@ public class RpeiErrorFieldsBulkUpdateDatabaseTests
         Assert.That(persisted.ErrorStackTrace, Is.EqualTo("at JIM.Application.Servers.SyncEngine..."),
             "ErrorStackTrace is co-mutated with ErrorType/ErrorMessage and must be persisted with them.");
     }
+
+    /// <summary>
+    /// The decision-time deletion policy snapshot (#119) is outcome data attached after the RPEI is first
+    /// persisted (like OutcomeSummary), so the bulk field update must carry the column; a dropped column
+    /// here would silently strip the causality record whenever the snapshot is attached late.
+    /// </summary>
+    [Test]
+    public async Task BulkUpdateRpeiOutcomesAsync_DeletionPolicySnapshotAttachedToExistingRpei_PersistsTheColumnAsync()
+    {
+        // Arrange: an RPEI persisted without a snapshot, as the sync page flush leaves it
+        Guid activityId;
+        await using (var seed = NewContext())
+        {
+            var activity = new Activity
+            {
+                Id = Guid.NewGuid(),
+                TargetName = "Full Sync",
+                TargetOperationType = ActivityTargetOperationType.Execute,
+                Status = ActivityStatus.Complete,
+                InitiatedByType = ActivityInitiatorType.System
+            };
+            seed.Activities.Add(activity);
+            await seed.SaveChangesAsync();
+            activityId = activity.Id;
+        }
+
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Deleted,
+            DisplayNameSnapshot = "Jo Bloggs"
+        };
+        await using (var insertContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(insertContext);
+            await repository.Sync.BulkInsertRpeisAsync([rpei]);
+        }
+
+        // Act: a deletion rule evaluation records its outcome on the already-persisted RPEI
+        var snapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected","triggerMode":"SpecificSourcesDisconnect"}""";
+        rpei.OutcomeSummary = "Deletion scheduled";
+        rpei.DeletionPolicySnapshotJson = snapshotJson;
+        await using (var updateContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(updateContext);
+            await repository.Sync.BulkUpdateRpeiOutcomesAsync([rpei], []);
+        }
+
+        // Assert
+        await using var readContext = NewContext();
+        var persisted = await readContext.ActivityRunProfileExecutionItems.AsNoTracking().SingleAsync(r => r.Id == rpei.Id);
+        Assert.That(persisted.OutcomeSummary, Is.EqualTo("Deletion scheduled"));
+        Assert.That(persisted.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson),
+            "DeletionPolicySnapshotJson must be persisted by the bulk field update so late-attached decision records survive.");
+    }
 }
