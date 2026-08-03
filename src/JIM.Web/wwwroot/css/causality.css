@@ -586,11 +586,16 @@
     overflow: hidden;
 }
 
+/* The accent rail continues through the header, so it runs the group's full height instead of
+   appearing to start below it, and the header's content lines up with the cards underneath (each of
+   which is inset by its own 3px rail; without this the header sat 3px to their left). Padding-left
+   drops by the rail's width to keep the content in the same place. */
 .causality-panel .sys-group-head {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 9px 13px;
+    padding: 9px 13px 9px 10px;
+    border-left: 3px solid var(--tone, var(--cz-secondary));
     background: color-mix(in srgb, var(--mud-palette-text-primary) 7%, var(--cz-inner));
     font-weight: 650;
     font-size: 1rem;

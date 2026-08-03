@@ -67,6 +67,21 @@ public class CausalityFlowViewTests
     }
 
     [Test]
+    public async Task Render_SystemGroupHeader_CarriesTheAccentToneSoTheRailRunsTheGroupsFullHeightAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderFlow(context, model);
+
+        // Without a tone on the header the accent rail starts below it, so it reads as belonging to
+        // the cards rather than to the group, and the header's content sits 3px left of theirs.
+        var head = cut.Find(".sys-group .sys-group-head");
+        var firstEventTone = CausalityToneCss.CssVar(model.Roots[0].Children[0].Children[0].Tone);
+        Assert.That(head.GetAttribute("style"), Does.Contain($"--tone: {firstEventTone}"));
+    }
+
+    [Test]
     public async Task Render_LeaverScenario_GroupsDownstreamEventsPerConnectedSystemAsync()
     {
         await using var context = CausalityBunitContext.Create();

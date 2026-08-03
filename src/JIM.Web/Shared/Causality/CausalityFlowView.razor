@@ -114,7 +114,13 @@
                     @foreach (var group in _systemGroups)
                     {
                         <div class="sys-group" data-flow-id="@group.FlowId">
-                            <div class="sys-group-head" data-flow-head>
+                            @* The header carries the first event's tone so the accent rail runs the
+                               group's whole height rather than starting below the header, and so the
+                               header's content sits on the same left edge as the cards beneath it
+                               (each of which is inset by its own 3px rail). Cards keep their own
+                               tones below, so a group mixing outcomes still shows each one. *@
+                            <div class="sys-group-head" data-flow-head
+                                 style="--tone: @CausalityToneCss.CssVar(group.Events[0].Tone)">
                                 <CausalityEntityChip Label="@group.Name" Href="@group.Href"
                                                      Kind="CausalityEntityKind.ConnectedSystem" />
                             </div>
