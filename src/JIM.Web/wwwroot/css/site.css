@@ -1194,6 +1194,14 @@ html[lang] .mud-alert-filled-normal {
     min-width: 0;
 }
 
+/* A Configuration Change Preview drill-down shows before-and-after attribute values, and the values that matter
+   most (Distinguished Names, UPNs) are long and contain no spaces to wrap at. Left alone they run past the right
+   edge of the panel and the proposed value, the whole point of the row, is the part that gets cut off. */
+.jim-preview-deltas td {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
 /* Switch/checkbox label text */
 .mud-switch .mud-switch-label,
 .mud-checkbox .mud-checkbox-label {

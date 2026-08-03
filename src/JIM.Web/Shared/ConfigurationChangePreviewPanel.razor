@@ -252,10 +252,20 @@
                     @if (_selectedGroup != null)
                     {
                         var selected = _selectedGroup;
-                        <div class="d-flex align-center mt-6">
-                            <MudText Typo="Typo.subtitle1">
-                                @Helpers.GetOutcomeTypeDisplayName(selected.TransitionType)@(string.IsNullOrEmpty(DescribePopulation(selected)) ? "" : $": {DescribePopulation(selected)}")
-                            </MudText>
+                        @* Which group is open, on two lines: value pairs run to the length of a Distinguished Name,
+                           and on one line they push the Close button off the row they belong to. *@
+                        <div class="d-flex align-start mt-6" data-testid="jim-preview-drilldown-heading">
+                            <div>
+                                <MudText Typo="Typo.subtitle1">
+                                    @Helpers.GetOutcomeTypeDisplayName(selected.TransitionType)@(string.IsNullOrEmpty(DescribePopulation(selected)) ? "" : $": {DescribePopulation(selected)}")
+                                </MudText>
+                                @if (!string.IsNullOrEmpty(DescribeAttributeChange(selected)))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        @DescribeAttributeChange(selected)
+                                    </MudText>
+                                }
+                            </div>
                             <MudSpacer />
                             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseDrillDown">
                                 Close
@@ -274,7 +284,7 @@
                         <MudTable @ref="_deltasTable" T="ConfigurationChangePreviewDelta" ServerData="LoadDeltasAsync"
                                   Dense="@_dense" Hover="true" Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm"
                                   RowsPerPage="25" Loading="@_deltasLoading" LoadingProgressColor="Color.Primary"
-                                  Class="@(_dense ? "mt-2 dense-body-only" : "mt-2")">
+                                  Class="@(_dense ? "mt-2 dense-body-only jim-preview-deltas" : "mt-2 jim-preview-deltas")">
                             <ToolBarContent>
                                 <MudSpacer />
                                 <SearchField Value="@_search" ValueChanged="OnSearchChanged" DebounceInterval="500"
@@ -618,6 +628,23 @@
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// The attribute and value pair a group covers, for the drill-down heading. Value-pair grouping puts several
+    /// rows on screen that share a transition and a population and differ only in their values, so without this the
+    /// heading identifies none of them. Empty for a group that names no attribute.
+    /// </summary>
+    private static string DescribeAttributeChange(ConfigurationChangePreviewGroup group)
+    {
+        if (string.IsNullOrEmpty(group.AttributeName))
+            return string.Empty;
+
+        // The values are absent on a group that collapsed past the cardinality guard, which covers many of them and
+        // must not be labelled with one.
+        return string.IsNullOrEmpty(group.OldValue) && string.IsNullOrEmpty(group.NewValue)
+            ? group.AttributeName
+            : $"{group.AttributeName}: {group.OldValue} → {group.NewValue}";
     }
 
     private static string DescribePopulation(ConfigurationChangePreviewGroup group)

@@ -187,6 +187,59 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_GroupNamingAValuePair_ShowsBothValues()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(38_900, attributeName: "Email", oldValue: "@contoso.com", newValue: "@fabrikam.com"));
+
+        var panel = RenderPanel();
+
+        Assert.Multiple(() =>
+        {
+            // "38,900 would have Email changed" is a summary of the wrong thing; the values are what makes it
+            // reviewable without opening the drill-down at all.
+            Assert.That(panel.Markup, Does.Contain("@contoso.com"));
+            Assert.That(panel.Markup, Does.Contain("@fabrikam.com"));
+            Assert.That(panel.Markup, Does.Contain("Email"));
+        });
+    }
+
+    [Test]
+    public void Panel_GroupWithNoValuePair_ShowsTheAttributeAlone()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(38_900, attributeName: "Email"));
+
+        var panel = RenderPanel();
+
+        // A group that collapsed past the cardinality guard covers many values, so the row must not imply one.
+        Assert.That(panel.Markup, Does.Contain("Email"));
+        Assert.That(panel.Markup, Does.Not.Contain("→"), "the arrow only makes sense between two values");
+    }
+
+    [Test]
+    public void Panel_DrillDownOnOneOfSeveralValuePairGroups_NamesWhichOneIsOpen()
+    {
+        // Value-pair grouping puts several rows on screen that share a transition and a population and differ only
+        // in their values. A heading that names the transition alone identifies none of them.
+        GivenPreview(Complete);
+        GivenGroups(
+            Group(38_900, attributeName: "Email", oldValue: "@contoso.com", newValue: "@fabrikam.com"),
+            Group(1_650, attributeName: "Email", oldValue: "@contoso.co.uk", newValue: "@fabrikam.co.uk"));
+
+        var panel = RenderPanel();
+        panel.FindAll("tbody tr").Last().Click();
+
+        var heading = panel.Find("[data-testid='jim-preview-drilldown-heading']").TextContent;
+        Assert.Multiple(() =>
+        {
+            Assert.That(heading, Does.Contain("@contoso.co.uk"));
+            Assert.That(heading, Does.Contain("@fabrikam.co.uk"));
+            Assert.That(heading, Does.Contain("Email"));
+        });
+    }
+
+    [Test]
     public void Panel_BlockingValidationFinding_LeadsWithIt()
     {
         GivenPreview(p =>
@@ -364,13 +417,17 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     private void GivenGroups(params ConfigurationChangePreviewGroup[] groups) =>
         _previewRepository.Setup(r => r.GetPreviewGroupsAsync(ActivityId)).ReturnsAsync([.. groups]);
 
-    private static ConfigurationChangePreviewGroup Group(int objectCount, bool sampled = false) => new()
+    private static ConfigurationChangePreviewGroup Group(int objectCount, bool sampled = false,
+        string? attributeName = null, string? oldValue = null, string? newValue = null) => new()
     {
         Id = Guid.CreateVersion7(),
         ActivityId = ActivityId,
         TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible,
         MetaverseObjectTypeId = 11,
         MetaverseObjectTypeName = "User",
+        AttributeName = attributeName,
+        OldValue = oldValue,
+        NewValue = newValue,
         ObjectCount = objectCount,
         DeltasSampled = sampled
     };
