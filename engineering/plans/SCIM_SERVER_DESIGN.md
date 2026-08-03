@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Issue**: #124
 - **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync), #545 (SCIM 2.0 Client Connector)
-- **Related Plans**: [`doing/SCIM_CLIENT_CONNECTOR_DESIGN.md`](doing/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`METAVERSE_SCHEMA_POLICY.md`](doing/METAVERSE_SCHEMA_POLICY.md)
+- **Related Plans**: [`done/SCIM_CLIENT_CONNECTOR_DESIGN.md`](done/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`METAVERSE_SCHEMA_POLICY.md`](METAVERSE_SCHEMA_POLICY.md)
 - **Last Updated**: 2026-07-23
 
 > **July 2026 cross-design review (with #545):** the following decisions supersede the corresponding details in the body of this document, which predates them. The body remains valid otherwise and will be reconciled when implementation planning starts.
@@ -13,7 +13,7 @@
 > 3. **Shared protocol library `JIM.Scim`.** SCIM resource DTOs, serialisation, the PATCH operation model, filter/pagination primitives, schema URN constants and the attribute flattening convention are shared with the client connector via a dependency-light `JIM.Scim` library (referencing only `JIM.Models`). This server consumes it from `JIM.Web`; do not re-model SCIM types here.
 > 4. **One flattening convention, owned by `JIM.Scim`:** canonical-type flattening (`emails.work`, `emails.primary` from the `primary=true` entry). The first-entry-wins mapping in the Schema Mapping section below is superseded.
 > 5. **Naming (confirmed):** the client (#545) and this server surface as a deliberate pair named by JIM's role in the exchange, per RFC 7644 terms: **"JIM SCIM 2.0 Client Connector"** and **"JIM SCIM 2.0 Service Provider Connector"** (constants registered in `ConnectorConstants`). The server remains a Connected System via its pseudo-connector as designed; the "SCIM 2.0 Server" name sketched below is superseded.
-> 6. **Metaverse mapping targets:** built-in flow targets for SCIM resources (Emails, Account Enabled, etc.) and advisory standard-mapping metadata are defined in [`METAVERSE_SCHEMA_POLICY.md`](doing/METAVERSE_SCHEMA_POLICY.md).
+> 6. **Metaverse mapping targets:** built-in flow targets for SCIM resources (Emails, Account Enabled, etc.) and advisory standard-mapping metadata are defined in [`METAVERSE_SCHEMA_POLICY.md`](METAVERSE_SCHEMA_POLICY.md).
 
 ## Overview
 

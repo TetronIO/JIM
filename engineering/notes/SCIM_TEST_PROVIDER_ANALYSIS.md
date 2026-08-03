@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-26
 - **Context:** Choosing integration-test targets for the SCIM 2.0 Client Connector ([#545](https://github.com/TetronIO/JIM/issues/545))
-- **Related Plans:** [`../plans/doing/SCIM_CLIENT_CONNECTOR_DESIGN.md`](../plans/doing/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`../plans/SCIM_SERVER_DESIGN.md`](../plans/SCIM_SERVER_DESIGN.md)
+- **Related Plans:** [`../plans/done/SCIM_CLIENT_CONNECTOR_DESIGN.md`](../plans/done/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`../plans/SCIM_SERVER_DESIGN.md`](../plans/SCIM_SERVER_DESIGN.md)
 
 Point-in-time record of the survey and hands-on probing behind the connector's integration-test strategy. Kept so a future revisit does not repeat the search from scratch. Findings age: treat the capability table as accurate for July 2026 and re-probe before relying on it.
 
