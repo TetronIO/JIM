@@ -141,3 +141,66 @@ public enum ScheduleExecutionStatus
     /// </summary>
     Paused = 5
 }
+
+/// <summary>
+/// The display status of an individual step within a Schedule Execution. Derived from the step's Worker Task while
+/// it is still live, from its Activity once the Worker Task has been deleted, and otherwise from the execution's own
+/// position. Worker Tasks are ephemeral and Activities are permanent, so the Activity is the durable source.
+/// </summary>
+public enum ScheduleExecutionStepStatus
+{
+    /// <summary>
+    /// The step has not been reached, and will not run if the execution has already stopped.
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// The step is waiting for a previous step to finish.
+    /// </summary>
+    Waiting = 1,
+
+    /// <summary>
+    /// The step has been queued for a worker to pick up.
+    /// </summary>
+    Queued = 2,
+
+    /// <summary>
+    /// The step is currently being processed by a worker.
+    /// </summary>
+    Processing = 3,
+
+    /// <summary>
+    /// Cancellation has been requested for the step but has not yet taken effect.
+    /// </summary>
+    Cancelling = 4,
+
+    /// <summary>
+    /// The step completed without errors or warnings.
+    /// </summary>
+    Completed = 5,
+
+    /// <summary>
+    /// The step completed, but at least one object raised a warning.
+    /// </summary>
+    CompletedWithWarning = 6,
+
+    /// <summary>
+    /// The step ran to completion, but at least one object raised an error.
+    /// </summary>
+    CompletedWithError = 7,
+
+    /// <summary>
+    /// The step failed outright and did not complete.
+    /// </summary>
+    Failed = 8,
+
+    /// <summary>
+    /// The step was cancelled by a user or by the system.
+    /// </summary>
+    Cancelled = 9,
+
+    /// <summary>
+    /// The step's status could not be determined.
+    /// </summary>
+    Unknown = 10
+}
