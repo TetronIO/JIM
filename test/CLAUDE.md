@@ -245,9 +245,25 @@ These flags are for human developer iteration only. Claude must not use them bec
 - `-SkipReset` carries over state from previous runs, producing results that are not reproducible
 - Integration tests must always prove the code works from a clean state with freshly built containers
 
-### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker image builds)
+### Running the FULL runner in the Claude Code cloud sandbox (when Docker is available)
 
-`Run-IntegrationTests.ps1` cannot run unmodified in the cloud sandbox: Step 2/3 do `docker compose build` + `up -d` for the `jim.web`/`jim.worker` containers, and building those images fails here (the egress proxy re-terminates TLS, so `dotnet restore` inside a Docker build stage cannot validate certificates, and the SDK/runtime base images are not cached). This is why root `CLAUDE.md` says never `jim-build` in a sandbox. You can still run a **single scenario** against the **native light stack** (`dotnet run`, which restores through the proxy fine). The scenario scripts talk to the JIM Web API over HTTP and drive the worker via run profiles, so they do not care whether web/worker are containers or native, *provided* you bridge these sandbox-specific gaps first (each one bit us; documented so future sessions skip the discovery):
+When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA. Fix (verified 2026-08-02: Scenario 4 and Scenario 8 both green this way):
+
+1. `cp /root/.ccr/ca-bundle.crt .ccr-ca-bundle.crt` (repo root is the build context) and add `.ccr-ca-bundle.crt` to `.git/info/exclude`.
+2. In each of `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, `src/JIM.Scheduler/Dockerfile`, insert immediately after the `FROM ... AS build` line:
+   ```dockerfile
+   COPY .ccr-ca-bundle.crt /ccr-ca-bundle.crt
+   ENV SSL_CERT_FILE=/ccr-ca-bundle.crt
+   ```
+   (The bundle includes the system CAs, so pointing OpenSSL's `SSL_CERT_FILE` at it wholesale is safe. The base-image pulls and apt steps need nothing; only in-build `dotnet restore` fails.)
+3. Run the runner normally (e.g. `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario4-DeletionRules -DirectoryType OpenLDAP`). OpenLDAP is the sensible directory type here; Samba AD images may not be cached.
+4. **Revert the Dockerfile edits and delete the bundle before committing anything.** They are sandbox-only scaffolding and must never land in a commit (`git checkout -- src/*/Dockerfile && rm .ccr-ca-bundle.crt`).
+
+Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
+
+### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker daemon)
+
+When the sandbox has NO working Docker daemon, `Run-IntegrationTests.ps1` cannot run unmodified: Step 2/3 do `docker compose build` + `up -d` for the `jim.web`/`jim.worker` containers, and building those images fails here (the egress proxy re-terminates TLS, so `dotnet restore` inside a Docker build stage cannot validate certificates, and the SDK/runtime base images are not cached). This is why root `CLAUDE.md` says never `jim-build` in a sandbox. You can still run a **single scenario** against the **native light stack** (`dotnet run`, which restores through the proxy fine). The scenario scripts talk to the JIM Web API over HTTP and drive the worker via run profiles, so they do not care whether web/worker are containers or native, *provided* you bridge these sandbox-specific gaps first (each one bit us; documented so future sessions skip the discovery):
 
 1. **Build natively, then start the light stack:** `dotnet build JIM.sln`, then bring up db/keycloak/openldap containers and the native worker + web. `pwsh ./scripts/Start-SandboxStack.ps1` does most of this, but it does **not** set `JIM_INFRASTRUCTURE_API_KEY`, which scenarios need, so export it in the same environment before starting web+worker so the API accepts the scenario's key. **The key must be at least 32 characters** (e.g. `jim_ak_sandbox_0123456789abcdef01234567`); a shorter value is silently not created (`JIM.Web` logs "JIM_INFRASTRUCTURE_API_KEY is too short" at Warning and every scenario API call then fails with "Authentication failed").
    - **Start the light stack before `openldap-primary`, and never pre-create `jim-network` by hand.** The integration compose (`test/integration/docker/docker-compose.integration-tests.yml`) declares `jim-network` and `jim-connector-files-volume` as external: the main compose creates the network with its own labels when the light stack starts, and a hand-made `docker network create jim-network` is rejected by the main compose ("incorrect label"), requiring the network to be torn down and recreated. The volume is normally created by the full stack, so in a fresh sandbox run `docker volume create jim-connector-files-volume` once before `docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d openldap-primary`.

@@ -2615,3 +2615,29 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
         animation: none;
     }
 }
+
+/* Count chip inside a navigation button (the Connector Space and Pending Exports actions on a
+   Connected System). Sits inside the button label rather than as a MudBadge corner overlay, so the
+   number reads as part of the destination's name. The warning variant marks work waiting to be
+   exported without turning the whole button orange. */
+.jim-nav-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.375rem;
+    height: 1.25rem;
+    margin-left: 0.5rem;
+    padding: 0 0.4375rem;
+    border-radius: 0.625rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    background-color: var(--mud-palette-primary-hover);
+    color: var(--mud-palette-primary);
+}
+
+.jim-nav-count-warning {
+    background-color: var(--mud-palette-warning-hover);
+    color: var(--mud-palette-warning);
+}
