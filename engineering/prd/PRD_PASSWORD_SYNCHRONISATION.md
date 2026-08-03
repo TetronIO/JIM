@@ -4,6 +4,7 @@
 - **Created:** 2026-07-25
 - **Author:** Tetron
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
+- **Note:** Still `Planned` because none of this feature's own machinery (per-system configuration, queue, fan-out, coalescing, expiry, retry, retention, reporting) has been started. The shared connector foundation it depends on has, however, landed under [#1121](https://github.com/TetronIO/JIM/issues/1121) and [#1172](https://github.com/TetronIO/JIM/issues/1172); see [Implementation Progress](#implementation-progress) for exactly which requirements are already satisfied, so they are not built twice.
 
 ## Problem Statement
 
@@ -195,6 +196,43 @@ These were open during drafting and have since been decided; they are settled in
 2. **Unprovisioned target: queue it.** A password change for an identity that has no Connected System Object in an enabled target yet is queued rather than failed, bounded by the event time-to-live, so the provisioning-then-password race resolves itself when the account appears.
 3. **Initial-password generation: expression engine for v1, with a first-class generator tracked separately and built first.** v1 reuses the existing expression engine as the interim answer, but the first-class generator has since been promoted to its own feature, [#1121](https://github.com/TetronIO/JIM/issues/1121) (initial password generation and delivery on provisioning), which is a real provisioning gap in its own right and is intended to land ahead of the sync machinery. #1121 shares this feature's connector set-password foundation; the recommended sequencing is to build that connector capability once, land #1121 as its first consumer, then layer this PRD's queue, fan-out, and inbound capture on top. Either way the v1 model must keep initial-password sourcing behind a seam so #1121's generator can plug in without reworking the queue or delivery path.
 4. **Default event time-to-live: 7 days, configurable per Connected System.** Long enough to ride out a realistic outage, short enough not to resurrect a stale password indefinitely.
+
+## Implementation Progress
+
+This PRD's Resolved Decisions committed to building the connector set-password foundation **once**, under [#1121](https://github.com/TetronIO/JIM/issues/1121), and layering this feature's queue, fan-out, and inbound capture on top. That foundation has now shipped, so several of the functional requirements below are already met. This section records which, so that the eventual Password Synchronisation implementation extends them rather than duplicating them. It is a status record, not a change of scope: no requirement here has been added, removed, or reworded.
+
+Last reviewed 2026-08-03, against `main`.
+
+### Requirements already satisfied
+
+| Req | State | Where it landed |
+|-----|-------|-----------------|
+| 15 (credential attribute denylist) | Done | `CredentialAttributes` (`JIM.Models/Staging/`). The eight named LDAP attributes are blocked from import, from schema selection, and from being the source or target of an Attribute Flow, Object Matching Rule, or scoping criterion. A schema refresh reports what it blocked via `SchemaRefreshResult.BlockedCredentialAttributes`. |
+| 17 (`IConnectorPasswordManagement`) | Done | `JIM.Models/Interfaces/IConnectorPasswordManagement.cs`, with open and close semantics mirroring the export capability interfaces. |
+| 18 (capability flag, mirrored on Connector Definition) | Done | `IConnectorCapabilities`, mirrored to `ConnectorDefinition`. |
+| 19 (LDAP sets passwords, AD and generic modes) | Done, with one divergence | `LdapConnectorPassword`: Active Directory mode writes `unicodePwd` as a quoted UTF-16LE value; generic mode uses the Password Modify extended operation. The mandatory-LDAPS clause was deliberately not implemented as written; see Divergences. |
+| 20 (initial password on create, change-at-next-sign-in) | Done | `InitialPasswordDeliveryService` and `InitialPasswordDeliveryServer`, driven from export execution; `PasswordExpiryBehaviour` carries the change-at-next-sign-in behaviour. |
+| 31 (set a password on all three surfaces) | Done | Portal set-password dialog on both the Connected System Object and the Metaverse Object, `POST .../connector-space/{csoId}/password`, and the `Set-JIMConnectedSystemObjectPassword` / `Set-JIMMetaverseObjectPassword` cmdlets. |
+
+### Requirements partially satisfied
+
+| Req | Outstanding |
+|-----|-------------|
+| 16 (warn on a credential-like attribute outside the denylist) | The heuristic shipped (`CredentialAttributes.HasCredentialLikeName`, deliberately broad and warn-only) but has **no call site**: no configuration validation raises the warning yet. Wiring it into Attribute Flow configuration is outstanding. |
+| 34 (password endpoints are administrator-only, unlogged, secure-transport-only) | Authorisation and the never-log invariant are met: the endpoint is `[Authorize(Roles = "Administrator")]`, logs the target object and never the value or its length, and the connector redacts the password out of any message the directory echoes back. There is no per-endpoint secure-transport check; the deployment's HTTPS enforcement is currently the only guard. |
+
+Requirement 12's failure classification also exists in part, as `PasswordSetFailureReason` (transient, configuration fault, policy rejection, target not found), built for the synchronous set-password path. The queue will consume the same enum rather than defining a second one.
+
+Work delivered under #1121 that this PRD assumed but did not require: Connected System password policy discovery (`IConnectorPasswordPolicyDiscovery`), a first-class password generator (`PasswordGeneratorService`, superseding Resolved Decision 3's interim expression-engine answer), Tier 1 preflight checks, and a control-access-right evaluation for the service account. Requirement 5's per-system delivery options should be added alongside the discovered-policy configuration already on the Connected System, not beside it.
+
+### Divergences to carry forward
+
+1. **Requirement 19's "must refuse to transmit unless the connection is LDAPS" was implemented as a warning, not a block.** `OpenPasswordConnection` logs a warning when the connection is unencrypted, and a refusal that an unencrypted connection would explain is classified with encryption named as the likely fix. It does not pre-empt the attempt, because a signed and sealed bind is a legitimate encrypted alternative that JIM cannot detect from the Connected System's settings alone, and blocking on the settings would refuse a valid configuration. The residual risk is real and should be closed by requirement 5's per-system "secure transport is mandatory" option rather than by a hard-coded rule: without it, a generic-LDAP password write over a plain connection puts the value on the wire before the directory has a chance to refuse it.
+2. **`ActivityTargetOperationType.SetPassword` exists (value 12); the new Activity target *category* of requirement 24 does not.** Password events currently record against existing target types. Adding the category is still this feature's work, and the existing operation type should be reused rather than a second one introduced.
+
+### Not started
+
+Everything else: requirements 1 to 14 (Password Synchronisation configuration, the enable toggle and drain-on-enable, the encrypted queue, fan-out, coalescing, expiry, retry and backoff), 21 to 30 (queue page, Activities and the new category, the Metaverse Object panel, the Connected System list indicator, retention and the Schedule-driven trim), and 32 to 33 (configuration and queue parity across the three surfaces). Phase 2 inbound capture is untouched.
 
 ## Acceptance Criteria
 
