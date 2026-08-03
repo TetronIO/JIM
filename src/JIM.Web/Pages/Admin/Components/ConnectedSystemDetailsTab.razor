@@ -44,12 +44,13 @@
 
     @if (_capabilities.Count > 0)
     {
-        <MudSimpleTable Class="mt-4" Dense="false" Hover="false" Striped="true" Elevation="0">
+        <MudSimpleTable Class="mt-4" Dense="true" Hover="false" Striped="true" Elevation="0">
             <tbody>
                 @foreach (var capability in _capabilities)
                 {
+                    @* width: 1% + nowrap shrinks the label column to its content, keeping values beside their labels *@
                     <tr>
-                        <td style="width: 40%;">@capability.Name</td>
+                        <td style="width: 1%; white-space: nowrap; padding-right: 2rem;">@capability.Name</td>
                         <td>@capability.Value</td>
                     </tr>
                 }
