@@ -1,8 +1,9 @@
 # Plan: Scheduler Step Failure Detection (Activity-Based)
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Done
+- **Note:** Phase 1 (the fix) shipped and is verified in the codebase. Phase 2 was always "Future -- No Commitment"; of its five items only 2e (Queue tab schedule attribution) was built, and it went further than the sketch, grouping queued tasks under their schedule execution with a step count and a cancel action. 2a-2d (schedule execution detail view, History tab schedule filter, Activity detail schedule banner, Schedules tab execution history) remain unbuilt: the data and API surface each needs already exists, so they stay available as UX work whenever they are wanted.
 - **Milestone:** MVP
-- **Branch:** `feature/scheduler-step-failure-detection`
+- **Issue:** none filed; the fix was delivered directly on `feature/scheduler-step-failure-detection`
 
 ## Problem
 
@@ -106,6 +107,8 @@ Timeline (fixed):
 
 The Activity-to-ScheduleExecution link created in Phase 1 enables several UX improvements. These are independent of each other and can be implemented in any order.
 
+**Outcome:** 2e shipped; 2a, 2b, 2c and 2d were not built and carry no commitment.
+
 ### 2a. Schedule Execution Detail View
 
 **What:** When viewing a schedule execution, show each step with its activity status and a link to the activity detail page.
@@ -156,13 +159,15 @@ Error: Step 'LDAP Delta Import' failed and ContinueOnFailure is false.
 
 **Data available:** The `GET /api/v1/schedule-executions?scheduleId={id}` endpoint already supports this with pagination.
 
-### 2e. Queue Tab -- Schedule Attribution
+### 2e. Queue Tab -- Schedule Attribution ✅
 
 **What:** When a worker task was queued by a schedule, show "Queued by schedule [name]" in the queue display.
 
 **Where:** `OperationsQueueTab.razor` -- add a column or badge.
 
 **Data available:** `WorkerTask.ScheduleExecutionId` is already populated. Need to join to `ScheduleExecution.ScheduleName` for display.
+
+**Delivered** beyond the sketch: `OperationsQueueTab.razor` groups a schedule execution's queued tasks together under the schedule's name, shows how many steps the group spans, and offers a cancel action for the whole execution.
 
 ## Verification
 

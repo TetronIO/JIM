@@ -36,7 +36,17 @@ function New-JIMMetaverseObjectType {
 
     .PARAMETER DeletionTriggerConnectedSystemIds
         Required when DeletionRule is WhenAuthoritativeSourceDisconnected: the connected
-        system IDs whose disconnect should trigger deletion.
+        system IDs whose disconnect should trigger deletion. How they trigger deletion is
+        governed by -DeletionTriggerMode.
+
+    .PARAMETER DeletionTriggerMode
+        Optional. For the WhenAuthoritativeSourceDisconnected deletion rule, controls how
+        the selected authoritative sources trigger deletion.
+        - AllSourcesDisconnect: the Metaverse Object is deleted only once no selected
+          source retains a joined Connected System Object.
+        - SpecificSourcesDisconnect: the Metaverse Object is deleted when any one of the
+          selected sources disconnects, even if others remain connected.
+        When omitted, the server default (AllSourcesDisconnect) applies.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the object's
@@ -63,6 +73,15 @@ function New-JIMMetaverseObjectType {
 
         Creates a new type that is automatically deleted seven days after the authoritative
         source (connected system ID 5) disconnects.
+
+    .EXAMPLE
+        New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" `
+            -DeletionRule WhenAuthoritativeSourceDisconnected `
+            -DeletionTriggerConnectedSystemIds 3, 7 `
+            -DeletionTriggerMode SpecificSourcesDisconnect
+
+        Creates a new type whose objects are deleted as soon as either HR system (connected
+        system ID 3 or 7) disconnects, even if the other remains connected.
 
     .LINK
         Get-JIMMetaverseObjectType
@@ -97,7 +116,11 @@ function New-JIMMetaverseObjectType {
         [string]$ChangeReason,
 
         [Parameter()]
-        [int[]]$DeletionTriggerConnectedSystemIds
+        [int[]]$DeletionTriggerConnectedSystemIds,
+
+        [Parameter()]
+        [ValidateSet('AllSourcesDisconnect', 'SpecificSourcesDisconnect')]
+        [string]$DeletionTriggerMode
     )
 
     process {
@@ -135,6 +158,13 @@ function New-JIMMetaverseObjectType {
 
         if ($DeletionTriggerConnectedSystemIds) {
             $body.deletionTriggerConnectedSystemIds = $DeletionTriggerConnectedSystemIds
+        }
+
+        if ($PSBoundParameters.ContainsKey('DeletionTriggerMode')) {
+            # Enum sent as its string name; -DeletionTriggerMode's ValidateSet equals the
+            # AuthoritativeSourceTriggerMode member names. Only sent when bound, so an
+            # omitted parameter leaves the server-side default (AllSourcesDisconnect) to apply.
+            $body.deletionTriggerMode = $DeletionTriggerMode
         }
 
         if ($ChangeReason) {

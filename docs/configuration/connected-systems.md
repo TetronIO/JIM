@@ -31,6 +31,10 @@ This two-stage approach gives you:
 - **Comparison**<br /> JIM can detect what has changed between imports.
 - **Rollback potential**<br /> The metaverse is only updated in the sync phase.
 
+### Opening the Connector Space
+
+A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
+
 ### Connected System Objects (CSOs)
 
 A **CSO** is JIM's local representation of an object in an external system. Each CSO holds:

@@ -114,6 +114,28 @@ public enum MetaverseObjectDeletionRule
 }
 
 /// <summary>
+/// For the WhenAuthoritativeSourceDisconnected deletion rule: determines whether any one selected
+/// authoritative source disconnecting triggers Metaverse Object deletion, or whether every selected
+/// source must disconnect first (#119).
+/// </summary>
+public enum AuthoritativeSourceTriggerMode
+{
+    /// <summary>
+    /// Delete when any one of the selected sources disconnects, even if others remain connected.
+    /// Value 0 matches pre-existing rows, which read the added column's default and so keep the
+    /// behaviour they were configured with before trigger modes existed (#115).
+    /// </summary>
+    SpecificSourcesDisconnect = 0,
+
+    /// <summary>
+    /// Delete only once no selected source retains a joined Connected System Object.
+    /// Non-source connectors (targets) do not block deletion. The default for newly configured
+    /// object types (via the MetaverseObjectType property initialiser).
+    /// </summary>
+    AllSourcesDisconnect = 1
+}
+
+/// <summary>
 /// Tracks how a Metaverse Object was created - determines deletion rule applicability.
 /// </summary>
 public enum MetaverseObjectOrigin

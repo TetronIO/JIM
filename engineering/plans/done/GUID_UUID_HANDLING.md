@@ -1,6 +1,7 @@
 # GUID/UUID Handling Strategy
 
-- **Status:** Doing (Phases 1–4 complete)
+- **Status:** Done
+- **Note:** Phases 1-4 are complete and verified: `IdentifierParser` (`src/JIM.Utilities/IdentifierParser.cs`) with its unit tests, the connector migration onto it, and OpenLDAP `entryUUID` support. Phases 5 and 6 are not deferred by choice; they are blocked on database connectors, which do not exist yet (today: File, LDAP, SCIM, Mock). They unblock with [#170](https://github.com/TetronIO/JIM/issues/170) (SQL Database Connector) and should be picked up as part of it, which is why this plan is closed rather than left open indefinitely.
 - **Last Updated**: 2026-03-30
 - **Milestone**: Pre-connector expansion (before SCIM, database, or web service connectors)
 
@@ -249,7 +250,7 @@ Not needed for OpenLDAP (string-based identifiers). Will be implemented when SQL
 
 ---
 
-### Phase 5: SQL/Database Connector Binary UUID Support (When Database Connectors Built)
+### Phase 5: SQL/Database Connector Binary UUID Support (blocked on [#170](https://github.com/TetronIO/JIM/issues/170))
 
 Database connectors that store UUIDs in binary columns require byte order awareness. The `IdentifierParser` utility already provides `FromRfc4122Bytes()` and `ToRfc4122Bytes()`, but the connector layer needs metadata to determine which byte order a given target uses.
 
@@ -293,7 +294,7 @@ MySQL stores UUIDs in varying formats:
 
 ---
 
-### Phase 6: Cross-Connector Round-Trip Tests (After Database Connectors)
+### Phase 6: Cross-Connector Round-Trip Tests (blocked on [#170](https://github.com/TetronIO/JIM/issues/170))
 
 **6.1 Add round-trip integration tests**
 
@@ -305,6 +306,8 @@ Verify that a GUID imported from one connector type survives storage in JIM and 
 - Known GUID value: verify specific byte sequences at each stage
 
 **6.2 Add SCIM identifier tests (when SCIM connector built)**
+
+The SCIM connector now exists and reads `id` as an opaque string (`ScimConnectorExport.ReadId`, `ScimBulkExporter.ReadResourceId`), which is the behaviour this item asked for; only the round-trip matrix in 6.1 still waits on database connectors.
 
 - SCIM `id` stored as opaque string (not forced to Guid)
 - SCIM `externalId` populated with JIM's MVO ID
@@ -319,10 +322,10 @@ Verify that a GUID imported from one connector type survives storage in JIM and 
 2. ✅ `IdentifierParser` utility exists with comprehensive unit tests
 3. ✅ All connector code uses `IdentifierParser` instead of inline GUID operations
 4. ✅ OpenLDAP `entryUUID` is supported for import and export
-5. `GuidByteOrder` metadata allows connectors to declare their binary UUID format
-6. Database connectors (PostgreSQL, Oracle, SQL Server, MySQL) use correct byte order conversions
-7. GUID round-trip tests pass across all connector combinations
-8. No GUID-related data corruption when mixing connector types
+5. `GuidByteOrder` metadata allows connectors to declare their binary UUID format *(blocked on #170)*
+6. Database connectors (PostgreSQL, Oracle, SQL Server, MySQL) use correct byte order conversions *(blocked on #170)*
+7. GUID round-trip tests pass across all connector combinations *(blocked on #170)*
+8. No GUID-related data corruption when mixing connector types *(holds for the connectors that exist today; re-verify when #170 adds binary UUID columns)*
 
 ---
 
