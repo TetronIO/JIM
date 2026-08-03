@@ -101,30 +101,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (existingByPluralName != null)
             return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{request.PluralName}' already exists."));
 
-        // Negative grace period is never valid; the DB column tolerates it but the semantic is nonsense.
-        if (request.DeletionGracePeriod.HasValue && request.DeletionGracePeriod.Value < TimeSpan.Zero)
-            return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriod cannot be negative."));
-
         var deletionRule = request.DeletionRule ?? MetaverseObjectDeletionRule.Manual;
 
-        // WhenAuthoritativeSourceDisconnected requires at least one trigger system; same rule as Update.
-        if (deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
-            (request.DeletionTriggerConnectedSystemIds == null || request.DeletionTriggerConnectedSystemIds.Count == 0))
-        {
-            return BadRequest(ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds."));
-        }
-
-        // Validate trigger system IDs exist if supplied (regardless of rule type, to surface
-        // bad input early rather than silently storing dead IDs).
-        if (request.DeletionTriggerConnectedSystemIds != null && request.DeletionTriggerConnectedSystemIds.Count > 0)
-        {
-            foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
-            {
-                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
-                if (connectedSystem == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
-            }
-        }
+        // Deletion rule settings share their validation with Update; on create the request's trigger
+        // list is both the requested and the effective set (there is no stored state to fall back to).
+        var deletionRuleError = await ValidateDeletionRuleSettingsAsync(
+            deletionRule,
+            request.DeletionGracePeriod,
+            requestedTriggerSystemIds: request.DeletionTriggerConnectedSystemIds,
+            effectiveTriggerSystemIds: request.DeletionTriggerConnectedSystemIds);
+        if (deletionRuleError != null)
+            return BadRequest(deletionRuleError);
 
         var objectType = new MetaverseObjectType
         {
@@ -140,6 +127,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             Created = DateTime.UtcNow,
             Attributes = new List<MetaverseAttribute>()
         };
+
+        // Only apply a supplied trigger mode; when omitted the model's property initialiser supplies
+        // the safe default for new configurations (AllSourcesDisconnect, #119).
+        if (request.DeletionTriggerMode.HasValue)
+            objectType.DeletionTriggerMode = request.DeletionTriggerMode.Value;
 
         // Associate with existing attributes if specified. Look each one up so we surface
         // a clear 400 rather than letting EF raise a confusing FK error inside the create call.
@@ -223,37 +215,30 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (wantsIconChange)
             objectType.Icon = normalisedIcon;
 
-        // Apply updates
+        // Deletion rule settings share their validation with Create; a field the request omits keeps
+        // its stored value, so validation runs against the effective (request-or-stored) values.
+        var effectiveDeletionRule = request.DeletionRule ?? objectType.DeletionRule;
+        var effectiveTriggerIds = request.DeletionTriggerConnectedSystemIds ?? objectType.DeletionTriggerConnectedSystemIds;
+        var deletionRuleError = await ValidateDeletionRuleSettingsAsync(
+            effectiveDeletionRule,
+            request.DeletionGracePeriod,
+            requestedTriggerSystemIds: request.DeletionTriggerConnectedSystemIds,
+            effectiveTriggerSystemIds: effectiveTriggerIds);
+        if (deletionRuleError != null)
+            return BadRequest(deletionRuleError);
+
+        // Apply updates; omitted (null) fields leave the stored values unchanged.
         if (request.DeletionRule.HasValue)
             objectType.DeletionRule = request.DeletionRule.Value;
 
         if (request.DeletionGracePeriod.HasValue)
-        {
-            if (request.DeletionGracePeriod.Value < TimeSpan.Zero)
-                return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriod cannot be negative."));
             objectType.DeletionGracePeriod = request.DeletionGracePeriod.Value == TimeSpan.Zero ? null : request.DeletionGracePeriod.Value;
-        }
 
         if (request.DeletionTriggerConnectedSystemIds != null)
-        {
-            // Validate that the Connected System IDs exist (Core retrieval — we only need existence).
-            foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
-            {
-                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
-                if (connectedSystem == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
-            }
             objectType.DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds;
-        }
 
-        // Validate WhenAuthoritativeSourceDisconnected requires at least one trigger system
-        var effectiveDeletionRule = request.DeletionRule ?? objectType.DeletionRule;
-        var effectiveTriggerIds = request.DeletionTriggerConnectedSystemIds ?? objectType.DeletionTriggerConnectedSystemIds;
-        if (effectiveDeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
-            (effectiveTriggerIds == null || effectiveTriggerIds.Count == 0))
-        {
-            return BadRequest(ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds."));
-        }
+        if (request.DeletionTriggerMode.HasValue)
+            objectType.DeletionTriggerMode = request.DeletionTriggerMode.Value;
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -266,6 +251,46 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Validates the deletion rule settings shared by the create and update Object Type endpoints.
+    /// </summary>
+    /// <param name="effectiveDeletionRule">The deletion rule that will be in force after the operation.</param>
+    /// <param name="requestedGracePeriod">The grace period supplied in the request, if any.</param>
+    /// <param name="requestedTriggerSystemIds">The trigger Connected System IDs supplied in the request, if any; each is checked for existence.</param>
+    /// <param name="effectiveTriggerSystemIds">The trigger Connected System IDs that will be in force after the operation (the requested list, or on update the stored list when the request omits it).</param>
+    /// <returns>The error to return as a 400 Bad Request, or null when the settings are valid.</returns>
+    private async Task<ApiErrorResponse?> ValidateDeletionRuleSettingsAsync(
+        MetaverseObjectDeletionRule effectiveDeletionRule,
+        TimeSpan? requestedGracePeriod,
+        IReadOnlyCollection<int>? requestedTriggerSystemIds,
+        IReadOnlyCollection<int>? effectiveTriggerSystemIds)
+    {
+        // Negative grace period is never valid; the DB column tolerates it but the semantic is nonsense.
+        if (requestedGracePeriod.HasValue && requestedGracePeriod.Value < TimeSpan.Zero)
+            return ApiErrorResponse.BadRequest("DeletionGracePeriod cannot be negative.");
+
+        // WhenAuthoritativeSourceDisconnected requires at least one trigger system.
+        if (effectiveDeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
+            (effectiveTriggerSystemIds == null || effectiveTriggerSystemIds.Count == 0))
+        {
+            return ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds.");
+        }
+
+        // Validate that requested trigger system IDs exist, regardless of rule type, to surface bad
+        // input early rather than silently storing dead IDs (Core retrieval; we only need existence).
+        if (requestedTriggerSystemIds != null)
+        {
+            foreach (var connectedSystemId in requestedTriggerSystemIds)
+            {
+                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+                if (connectedSystem == null)
+                    return ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found.");
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

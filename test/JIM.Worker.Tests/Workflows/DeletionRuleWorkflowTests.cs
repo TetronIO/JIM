@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Worker.Processors;
 using NUnit.Framework;
 
@@ -865,6 +866,309 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
     #endregion
 
+    #region Trigger Mode and Decision-Time Policy Snapshot Tests (#119)
+
+    /// <summary>
+    /// All sources mode: the first of two listed sources disconnecting must NOT mark the Metaverse Object
+    /// for deletion (the other source remains connected), and the disconnection's execution item must carry
+    /// a decision-time policy snapshot recording the evaluated-but-not-triggered decision: All mode, the
+    /// triggering system, and the still-connected source, so the decision stays explainable after
+    /// configuration changes.
+    /// </summary>
+    [Test]
+    public async Task AllMode_FirstSourceDisconnects_MvoNotMarkedAndRpeiCarriesSnapshotAsync()
+    {
+        // Arrange: two authoritative sources, All mode, 30 day grace period.
+        var hrSystem = await CreateConnectedSystemAsync("HR System");
+        var crmSystem = await CreateConnectedSystemAsync("CRM System");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Employee");
+        var crmType = await CreateCsoTypeAsync(crmSystem.Id, "Contact");
+
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.FromDays(30),
+            triggerConnectedSystemIds: [hrSystem.Id, crmSystem.Id],
+            triggerMode: AuthoritativeSourceTriggerMode.AllSourcesDisconnect);
+
+        await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        await CreateImportSyncRuleAsync(crmSystem.Id, crmType, mvType, "CRM Import");
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(hrSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        hrCso = await ReloadEntityAsync(hrCso);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        // Join a CRM CSO to the same MVO (the second authoritative source).
+        var crmCso = await CreateCsoAsync(crmSystem.Id, crmType, "John Smith CRM", "EMP001");
+        crmCso.MetaverseObjectId = mvoId;
+        crmCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        crmCso.DateJoined = DateTime.UtcNow;
+        SyncRepo.RefreshCsoMvoIndex(crmCso);
+
+        // Act: obsolete the HR CSO and run a Delta Sync on HR (the first source disconnects).
+        await MarkCsoAsObsoleteAsync(hrCso);
+        var deltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var deltaSyncActivity = await CreateActivityAsync(hrSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // Assert: the MVO must NOT be marked (the CRM source remains connected in All mode).
+        var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        Assert.That(mvo, Is.Not.Null, "MVO should still exist");
+        Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Null,
+            "All sources mode must not mark the MVO for deletion while another listed source remains connected");
+        Assert.That(mvo!.DeletionTriggeredBySystemId, Is.Null,
+            "No deletion was scheduled, so no triggering system should be recorded on the MVO");
+        Assert.That(mvo!.DeletionPolicySnapshotJson, Is.Null,
+            "No deletion was scheduled, so no policy snapshot should be recorded on the MVO");
+
+        // Assert: the disconnection execution item carries the evaluated-but-not-triggered snapshot.
+        var disconnectedRpei = deltaSyncActivity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.Disconnected);
+        var snapshot = MvoDeletionPolicySnapshot.FromJson(disconnectedRpei.DeletionPolicySnapshotJson);
+        Assert.That(snapshot, Is.Not.Null,
+            "A deletion rule evaluation against a listed source must record a decision-time policy snapshot on the execution item, " +
+            "including when mode semantics decided not to trigger");
+        Assert.That(snapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        Assert.That(snapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.AllSourcesDisconnect));
+        Assert.That(snapshot!.TriggeringSystemId, Is.EqualTo(hrSystem.Id));
+        Assert.That(snapshot!.TriggeringSystemName, Is.EqualTo("HR System"));
+        Assert.That(snapshot!.SelectedSourceSystemIds, Is.EqualTo(new[] { hrSystem.Id, crmSystem.Id }));
+        Assert.That(snapshot!.SelectedSourceSystemNames, Is.EqualTo(new[] { "HR System", "CRM System" }));
+        Assert.That(snapshot!.RemainingConnectedSourceSystemIds, Is.EqualTo(new[] { crmSystem.Id }),
+            "The snapshot must record which listed sources were still connected at decision time");
+        Assert.That(snapshot!.RemainingConnectedSourceSystemNames, Is.EqualTo(new[] { "CRM System" }));
+        Assert.That(snapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
+    }
+
+    /// <summary>
+    /// All sources mode end-to-end: once the last listed source disconnects the Metaverse Object must be
+    /// marked for deletion with the grace period, carrying the triggering system and a deserialisable
+    /// decision-time policy snapshot whose fields match the configuration at decision time.
+    /// </summary>
+    [Test]
+    public async Task AllMode_LastSourceDisconnects_MvoMarkedWithTriggerAndSnapshotAsync()
+    {
+        // Arrange: two authoritative sources, All mode, 30 day grace period.
+        var hrSystem = await CreateConnectedSystemAsync("HR System");
+        var crmSystem = await CreateConnectedSystemAsync("CRM System");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Employee");
+        var crmType = await CreateCsoTypeAsync(crmSystem.Id, "Contact");
+
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.FromDays(30),
+            triggerConnectedSystemIds: [hrSystem.Id, crmSystem.Id],
+            triggerMode: AuthoritativeSourceTriggerMode.AllSourcesDisconnect);
+
+        await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        await CreateImportSyncRuleAsync(crmSystem.Id, crmType, mvType, "CRM Import");
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(hrSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        hrCso = await ReloadEntityAsync(hrCso);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        var crmCso = await CreateCsoAsync(crmSystem.Id, crmType, "John Smith CRM", "EMP001");
+        crmCso.MetaverseObjectId = mvoId;
+        crmCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        crmCso.DateJoined = DateTime.UtcNow;
+        SyncRepo.RefreshCsoMvoIndex(crmCso);
+
+        // First disconnect: HR goes; CRM remains, so nothing is marked.
+        await MarkCsoAsObsoleteAsync(hrCso);
+        var hrDeltaProfile = await CreateRunProfileAsync(hrSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var hrDeltaActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, hrDeltaProfile, hrDeltaActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // Act: second disconnect: CRM goes too; no listed source remains.
+        crmCso = await ReloadEntityAsync(crmCso);
+        await MarkCsoAsObsoleteAsync(crmCso);
+        var crmDeltaProfile = await CreateRunProfileAsync(crmSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        crmSystem = await ReloadEntityAsync(crmSystem);
+        var crmDeltaActivity = await CreateActivityAsync(crmSystem.Id, crmDeltaProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, crmSystem, crmDeltaProfile, crmDeltaActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // Assert: the MVO is marked, records the triggering system, and carries the mark-time snapshot.
+        var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        Assert.That(mvo, Is.Not.Null, "MVO should still exist (grace period > 0 means housekeeping deletes it)");
+        Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Not.Null,
+            "All sources mode must mark the MVO once no listed source remains connected");
+        Assert.That(mvo!.DeletionTriggeredBySystemId, Is.EqualTo(crmSystem.Id),
+            "The system whose disconnection completed the trigger condition must be recorded");
+        Assert.That(mvo!.DeletionTriggeredBySystemName, Is.EqualTo("CRM System"),
+            "The triggering system's display name must be snapshotted at decision time");
+
+        var mvoSnapshot = MvoDeletionPolicySnapshot.FromJson(mvo!.DeletionPolicySnapshotJson);
+        Assert.That(mvoSnapshot, Is.Not.Null,
+            "A scheduled deletion must carry the decision-time policy snapshot on the MVO so housekeeping can carry it through");
+        Assert.That(mvoSnapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        Assert.That(mvoSnapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.AllSourcesDisconnect));
+        Assert.That(mvoSnapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
+        Assert.That(mvoSnapshot!.TriggeringSystemId, Is.EqualTo(crmSystem.Id));
+        Assert.That(mvoSnapshot!.TriggeringSystemName, Is.EqualTo("CRM System"));
+        Assert.That(mvoSnapshot!.SelectedSourceSystemIds, Is.EqualTo(new[] { hrSystem.Id, crmSystem.Id }));
+        Assert.That(mvoSnapshot!.SelectedSourceSystemNames, Is.EqualTo(new[] { "HR System", "CRM System" }));
+        Assert.That(mvoSnapshot!.RemainingConnectedSourceSystemIds, Is.Empty,
+            "No listed source remained connected at decision time");
+
+        // Assert: the disconnection execution item carries the same snapshot, and the scheduled
+        // outcome's detail message names the mode.
+        var disconnectedRpei = crmDeltaActivity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.Disconnected);
+        Assert.That(disconnectedRpei.DeletionPolicySnapshotJson, Is.EqualTo(mvo!.DeletionPolicySnapshotJson),
+            "The outcome-bearing execution item must carry the same decision-time snapshot as the MVO");
+        var scheduledOutcome = disconnectedRpei.SyncOutcomes
+            .SingleOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+        Assert.That(scheduledOutcome, Is.Not.Null, "An MvoDeletionScheduled outcome must be recorded");
+        Assert.That(scheduledOutcome!.DetailMessage, Does.Contain("All sources mode"),
+            "The scheduled deletion's reason must name the trigger mode");
+    }
+
+    /// <summary>
+    /// Specific sources mode end-to-end (pre-existing behaviour): a listed source disconnecting marks the
+    /// Metaverse Object even though other connectors remain, and the persisted decision-time snapshot
+    /// records SpecificSourcesDisconnect.
+    /// </summary>
+    [Test]
+    public async Task SpecificMode_ListedSourceDisconnects_MvoMarkedAndSnapshotRecordsSpecificModeAsync()
+    {
+        // Arrange: HR is the only listed source; a target system remains connected.
+        var hrSystem = await CreateConnectedSystemAsync("HR System");
+        var adSystem = await CreateConnectedSystemAsync("Target AD System");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Employee");
+        var adType = await CreateCsoTypeAsync(adSystem.Id, "User");
+
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.FromDays(30),
+            triggerConnectedSystemIds: [hrSystem.Id],
+            triggerMode: AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
+
+        await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        await CreateExportSyncRuleAsync(adSystem.Id, adType, mvType, "AD Export");
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(hrSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        hrCso = await ReloadEntityAsync(hrCso);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        var adCso = await CreateCsoAsync(adSystem.Id, adType, "John Smith AD", "EMP001");
+        adCso.MetaverseObjectId = mvoId;
+        adCso.JoinType = ConnectedSystemObjectJoinType.Provisioned;
+        adCso.DateJoined = DateTime.UtcNow;
+        SyncRepo.RefreshCsoMvoIndex(adCso);
+
+        // Act: obsolete the HR CSO and run a Delta Sync on HR.
+        await MarkCsoAsObsoleteAsync(hrCso);
+        var deltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var deltaSyncActivity = await CreateActivityAsync(hrSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // Assert: marked with the triggering system recorded and a Specific mode snapshot persisted.
+        var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        Assert.That(mvo, Is.Not.Null, "MVO should still exist (grace period > 0)");
+        Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Not.Null,
+            "Specific sources mode must mark the MVO when a listed source disconnects, even though the target remains");
+        Assert.That(mvo!.DeletionTriggeredBySystemId, Is.EqualTo(hrSystem.Id));
+        Assert.That(mvo!.DeletionTriggeredBySystemName, Is.EqualTo("HR System"));
+
+        var snapshot = MvoDeletionPolicySnapshot.FromJson(mvo!.DeletionPolicySnapshotJson);
+        Assert.That(snapshot, Is.Not.Null, "The scheduled deletion must persist a decision-time policy snapshot");
+        Assert.That(snapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
+        Assert.That(snapshot!.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        Assert.That(snapshot!.TriggeringSystemId, Is.EqualTo(hrSystem.Id));
+        Assert.That(snapshot!.SelectedSourceSystemIds, Is.EqualTo(new[] { hrSystem.Id }));
+        Assert.That(snapshot!.SelectedSourceSystemNames, Is.EqualTo(new[] { "HR System" }));
+        Assert.That(snapshot!.RemainingConnectedSourceSystemIds, Is.Empty,
+            "The target system is not a listed source, so no listed source remained connected");
+
+        // Assert: the disconnection execution item carries the snapshot too.
+        var disconnectedRpei = deltaSyncActivity.RunProfileExecutionItems
+            .Single(r => r.ObjectChangeType == ObjectChangeType.Disconnected);
+        Assert.That(disconnectedRpei.DeletionPolicySnapshotJson, Is.EqualTo(mvo!.DeletionPolicySnapshotJson));
+    }
+
+    /// <summary>
+    /// Causality integrity: the persisted decision-time snapshot must keep reflecting the facts at
+    /// decision time after an administrator changes the object type's deletion configuration.
+    /// </summary>
+    [Test]
+    public async Task Snapshot_ConfigurationChangedAfterMarking_SnapshotRetainsDecisionTimeFactsAsync()
+    {
+        // Arrange: Specific mode, one listed source, 30 day grace period; mark the MVO for deletion.
+        var hrSystem = await CreateConnectedSystemAsync("HR System");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "Employee");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.FromDays(30),
+            triggerConnectedSystemIds: [hrSystem.Id],
+            triggerMode: AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
+        await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        var fullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(hrSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        hrCso = await ReloadEntityAsync(hrCso);
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        await MarkCsoAsObsoleteAsync(hrCso);
+        var deltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var deltaSyncActivity = await CreateActivityAsync(hrSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, hrSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
+        Assert.That(mvo?.DeletionPolicySnapshotJson, Is.Not.Null, "The scheduled deletion must persist a policy snapshot");
+
+        // Act: an administrator changes the deletion configuration AFTER the deletion was scheduled.
+        mvType.DeletionTriggerMode = AuthoritativeSourceTriggerMode.AllSourcesDisconnect;
+        mvType.DeletionGracePeriod = TimeSpan.FromDays(90);
+        mvType.DeletionTriggerConnectedSystemIds.Add(999);
+
+        // Assert: the persisted snapshot still reflects the decision-time facts, not the new configuration.
+        var snapshot = MvoDeletionPolicySnapshot.FromJson(mvo!.DeletionPolicySnapshotJson);
+        Assert.That(snapshot, Is.Not.Null);
+        Assert.That(snapshot!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect),
+            "The snapshot must retain the trigger mode in force at decision time");
+        Assert.That(snapshot!.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)),
+            "The snapshot must retain the grace period in force at decision time");
+        Assert.That(snapshot!.SelectedSourceSystemIds, Is.EqualTo(new[] { hrSystem.Id }),
+            "The snapshot must retain the source selection in force at decision time");
+    }
+
+    #endregion
+
     #region Grace Period Tests
 
     /// <summary>
@@ -930,7 +1234,8 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         string name,
         MetaverseObjectDeletionRule deletionRule,
         TimeSpan? gracePeriod = null,
-        List<int>? triggerConnectedSystemIds = null)
+        List<int>? triggerConnectedSystemIds = null,
+        AuthoritativeSourceTriggerMode triggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect)
     {
         var mvType = new MetaverseObjectType
         {
@@ -940,6 +1245,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             DeletionRule = deletionRule,
             DeletionGracePeriod = gracePeriod,
             DeletionTriggerConnectedSystemIds = triggerConnectedSystemIds ?? new List<int>(),
+            DeletionTriggerMode = triggerMode,
             Attributes = new List<MetaverseAttribute>(),
             ExampleDataTemplateAttributes = new List<JIM.Models.ExampleData.ExampleDataTemplateAttribute>(),
             PredefinedSearches = new List<JIM.Models.Search.PredefinedSearch>()

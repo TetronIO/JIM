@@ -245,9 +245,25 @@ These flags are for human developer iteration only. Claude must not use them bec
 - `-SkipReset` carries over state from previous runs, producing results that are not reproducible
 - Integration tests must always prove the code works from a clean state with freshly built containers
 
-### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker image builds)
+### Running the FULL runner in the Claude Code cloud sandbox (when Docker is available)
 
-`Run-IntegrationTests.ps1` cannot run unmodified in the cloud sandbox: Step 2/3 do `docker compose build` + `up -d` for the `jim.web`/`jim.worker` containers, and building those images fails here (the egress proxy re-terminates TLS, so `dotnet restore` inside a Docker build stage cannot validate certificates, and the SDK/runtime base images are not cached). This is why root `CLAUDE.md` says never `jim-build` in a sandbox. You can still run a **single scenario** against the **native light stack** (`dotnet run`, which restores through the proxy fine). The scenario scripts talk to the JIM Web API over HTTP and drive the worker via run profiles, so they do not care whether web/worker are containers or native, *provided* you bridge these sandbox-specific gaps first (each one bit us; documented so future sessions skip the discovery):
+When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA. Fix (verified 2026-08-02: Scenario 4 and Scenario 8 both green this way):
+
+1. `cp /root/.ccr/ca-bundle.crt .ccr-ca-bundle.crt` (repo root is the build context) and add `.ccr-ca-bundle.crt` to `.git/info/exclude`.
+2. In each of `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, `src/JIM.Scheduler/Dockerfile`, insert immediately after the `FROM ... AS build` line:
+   ```dockerfile
+   COPY .ccr-ca-bundle.crt /ccr-ca-bundle.crt
+   ENV SSL_CERT_FILE=/ccr-ca-bundle.crt
+   ```
+   (The bundle includes the system CAs, so pointing OpenSSL's `SSL_CERT_FILE` at it wholesale is safe. The base-image pulls and apt steps need nothing; only in-build `dotnet restore` fails.)
+3. Run the runner normally (e.g. `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario4-DeletionRules -DirectoryType OpenLDAP`). OpenLDAP is the sensible directory type here; Samba AD images may not be cached.
+4. **Revert the Dockerfile edits and delete the bundle before committing anything.** They are sandbox-only scaffolding and must never land in a commit (`git checkout -- src/*/Dockerfile && rm .ccr-ca-bundle.crt`).
+
+Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
+
+### Running a scenario in the Claude Code cloud sandbox (native stack; no Docker daemon)
+
+When the sandbox has NO working Docker daemon, `Run-IntegrationTests.ps1` cannot run unmodified: Step 2/3 do `docker compose build` + `up -d` for the `jim.web`/`jim.worker` containers, and building those images fails here (the egress proxy re-terminates TLS, so `dotnet restore` inside a Docker build stage cannot validate certificates, and the SDK/runtime base images are not cached). This is why root `CLAUDE.md` says never `jim-build` in a sandbox. You can still run a **single scenario** against the **native light stack** (`dotnet run`, which restores through the proxy fine). The scenario scripts talk to the JIM Web API over HTTP and drive the worker via run profiles, so they do not care whether web/worker are containers or native, *provided* you bridge these sandbox-specific gaps first (each one bit us; documented so future sessions skip the discovery):
 
 1. **Build natively, then start the light stack:** `dotnet build JIM.sln`, then bring up db/keycloak/openldap containers and the native worker + web. `pwsh ./scripts/Start-SandboxStack.ps1` does most of this, but it does **not** set `JIM_INFRASTRUCTURE_API_KEY`, which scenarios need, so export it in the same environment before starting web+worker so the API accepts the scenario's key. **The key must be at least 32 characters** (e.g. `jim_ak_sandbox_0123456789abcdef01234567`); a shorter value is silently not created (`JIM.Web` logs "JIM_INFRASTRUCTURE_API_KEY is too short" at Warning and every scenario API call then fails with "Authentication failed").
    - **Start the light stack before `openldap-primary`, and never pre-create `jim-network` by hand.** The integration compose (`test/integration/docker/docker-compose.integration-tests.yml`) declares `jim-network` and `jim-connector-files-volume` as external: the main compose creates the network with its own labels when the light stack starts, and a hand-made `docker network create jim-network` is rejected by the main compose ("incorrect label"), requiring the network to be torn down and recreated. The volume is normally created by the full stack, so in a fresh sandbox run `docker volume create jim-connector-files-volume` once before `docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d openldap-primary`.
@@ -258,6 +274,16 @@ These flags are for human developer iteration only. Claude must not use them bec
 6. **Invoke the scenario directly**, e.g. `Invoke-Scenario5-MatchingRules.ps1 -Step CaseSensitivity -Template Nano -JIMUrl http://localhost:5200 -ApiKey <key> -DirectoryConfig <openldap>`. This is the sanctioned sandbox exception to "never invoke scenario scripts directly / never `-SkipBuild`" above; those rules assume the Docker path, which is unavailable here. To prove red→green on a fix, revert just the fix files, `dotnet build src/JIM.Worker`, restart the worker, and re-run.
 
 See `engineering/SANDBOX_RUNTIME_VERIFICATION.md` for the broader sandbox runtime-verification workflow.
+
+### Running Samba AD in the cloud sandbox (AD-family runtime verification)
+
+Verified working 2026-08-02 (used to runtime-verify #230). The baked snapshot image (`ghcr.io/tetronio/jim-samba-ad:primary`) needs GHCR auth the sandbox does not have; the public base image works with these bridging steps, each of which bit before being documented:
+
+1. **Start with the public image:** `SAMBA_IMAGE_PRIMARY=diegogslomp/samba-ad-dc docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d samba-ad-primary` (light stack first, `jim-connector-files-volume` created, per the section above). First boot provisions the domain from scratch; expect 10+ minutes of forest/domain updates, and do not trust the healthcheck: it probes SMB, which comes up before LDAP.
+2. **Fix the interface binding after ANY restart.** Provisioning writes `interfaces = lo eth0@ifNN` into `smb.conf` with the veth index captured at provision time; after a container restart the index changes and LDAP silently binds loopback only (symptom: `smbclient -L localhost` works, host connections to 389/636 refused). Fix once: `docker exec samba-ad-primary sed -i 's/interfaces = lo eth0@if[0-9]*/interfaces = lo eth0/' /usr/local/samba/etc/smb.conf` then restart the container.
+3. **Use the certificate's name, not the service name.** LDAPS certificate validation is always on, and the autogenerated DC certificate carries only `dc1.panoply.local`. Point `/etc/hosts` at the container bridge IP for BOTH names (`<ip> samba-ad-primary dc1.panoply.local dc1`, re-derive the IP after restarts), set the Connected System's Host to `dc1.panoply.local` (override `$cfg.Host` after `Get-DirectoryConfig`), and add the DC's CA to the JIM certificate store: `docker cp samba-ad-primary:/usr/local/samba/private/tls/ca.pem /tmp/ && Add-JIMCertificate -Name "Samba AD test CA" -Path /tmp/ca.pem`.
+4. **Extend the schema.** The baked image's build-time extensions (extensionAttribute1-15, sshPublicKey) are missing from a raw base-image provision, and Scenario 1 requires them: `docker cp test/integration/docker/samba-ad-prebuilt/post-provision.sh samba-ad-primary:/tmp/ && docker exec samba-ad-primary bash /tmp/post-provision.sh`, then restart the container (re-applying step 2's sed if needed). It is idempotent.
+5. **Scenario limits on the native stack:** `Assert-ConnectorVolumeCsvParity` does `docker exec jim.worker`, which does not exist natively, so scripted scenarios stop after the baseline steps. Baseline Full Import/Full Sync, direct Run Profile invocations (`Start-JIMRunProfile`), and database-level assertions (`docker exec jim.database psql`) all work and are sufficient for targeted runtime verification.
 
 **Common templates by data size:**
 - **Nano**: 3 users, 1 group (~10 sec) - Fast dev iteration

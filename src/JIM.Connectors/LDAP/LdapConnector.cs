@@ -12,9 +12,10 @@ using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -96,7 +97,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
-    private readonly string _settingPreferredDomainController = "Preferred Domain Controller";
+    private readonly string _settingPreferredDomainController = ConnectorSettingNames.LdapPreferredDomainController;
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
@@ -280,6 +281,101 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
             return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorDetectedCapabilities members
+    /// <summary>
+    /// Maps the rootDSE facts JIM already persists between synchronisation runs (issue #230's
+    /// <see cref="LdapConnectorRootDse"/>) to human-readable capability facts for display on the Connected
+    /// System details page. Tolerates null/empty/corrupt persisted data (returns an empty list) and old
+    /// baselines missing newer properties (those simply deserialise to their defaults and, where the
+    /// property is optional, are omitted below rather than shown blank).
+    /// </summary>
+    public List<ConnectorCapability> GetDetectedCapabilities(string? persistedConnectorData, ILogger logger)
+    {
+        if (string.IsNullOrEmpty(persistedConnectorData))
+            return [];
+
+        LdapConnectorRootDse? rootDse;
+        try
+        {
+            rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+        }
+        catch (JsonException ex)
+        {
+            logger.Warning(ex, "GetDetectedCapabilities: Failed to deserialise persisted connector data. Returning no detected capabilities.");
+            return [];
+        }
+
+        if (rootDse == null)
+            return [];
+
+        var capabilities = new List<ConnectorCapability>
+        {
+            new() { Name = "Directory Type", Value = DescribeDirectoryTypeForCapabilities(rootDse.DirectoryType) }
+        };
+
+        if (!string.IsNullOrEmpty(rootDse.VendorName))
+            capabilities.Add(new ConnectorCapability { Name = "Vendor", Value = rootDse.VendorName });
+
+        if (!string.IsNullOrEmpty(rootDse.DnsHostName))
+            capabilities.Add(new ConnectorCapability { Name = "DNS Host Name", Value = rootDse.DnsHostName });
+
+        // Boolean fact: always shown, unlike the optional string facts above, because "Not Supported" is
+        // itself useful information and there is no "not yet known" state distinct from it here.
+        capabilities.Add(new ConnectorCapability { Name = "Paging", Value = rootDse.SupportsPaging ? "Supported" : "Not Supported" });
+
+        if (!string.IsNullOrEmpty(rootDse.PinnedDirectoryServer))
+            capabilities.Add(new ConnectorCapability { Name = "Pinned Directory Server", Value = rootDse.PinnedDirectoryServer });
+
+        if (rootDse.InvocationId.HasValue)
+            capabilities.Add(new ConnectorCapability { Name = "Invocation Id", Value = rootDse.InvocationId.Value.ToString() });
+
+        return capabilities;
+    }
+
+    private static string DescribeDirectoryTypeForCapabilities(LdapDirectoryType directoryType) => directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory => "Active Directory",
+        LdapDirectoryType.SambaAD => "Samba AD",
+        LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        LdapDirectoryType.Generic => "Generic",
+        _ => "Generic"
+    };
+    #endregion
+
+    #region IConnectorDirectoryServers members
+    /// <summary>
+    /// Lists the domain controllers in the connected AD-family directory's forest, with the Active Directory Site
+    /// each belongs to, so an administrator can choose one for the Preferred Domain Controller setting (issue
+    /// #1167) rather than having to already know a hostname. Purely informational: this never writes to any
+    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the
+    /// CN=Sites,CN=Configuration hierarchy that other LDAP directories do not have.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The connected directory is not AD-family.</exception>
+    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
+        // No persisted connector state applies to a discovery-only connection.
+        OpenImportConnection(settingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to discover directory servers with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            if (!rootDse.UseUsnDeltaImport)
+                throw new NotSupportedException(
+                    $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {rootDse.DirectoryType}.");
+
+            var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(_connection, logger);
+            return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
         }
         finally
         {

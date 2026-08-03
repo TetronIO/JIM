@@ -220,5 +220,19 @@ public enum ConnectedSystemExportErrorType
     /// does not reference an existing entry. The administrator should update the 'Group Placeholder
     /// Member DN' connector setting to point to a valid entry in the directory.
     /// </summary>
-    PlaceholderMemberConstraintViolation
+    PlaceholderMemberConstraintViolation,
+
+    /// <summary>
+    /// The Connected System rejected the change because something it references does not exist there
+    /// yet. The referenced object needs exporting first; this is an ordering problem, not bad data, so
+    /// the change is worth retrying once its dependency has landed.
+    /// </summary>
+    MissingDependency,
+
+    /// <summary>
+    /// The Connected System refused the change because the object had been altered there since JIM
+    /// last read it. Applying it anyway would silently overwrite whoever got there first, so the change
+    /// is reported and left for the next import to reconcile.
+    /// </summary>
+    ConcurrencyConflict
 }

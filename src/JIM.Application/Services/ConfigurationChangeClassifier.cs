@@ -218,6 +218,7 @@ public static class ConfigurationChangeClassifier
         ["builtIn"] = C,
         ["icon"] = C,
         ["deletionRule"] = A,
+        ["deletionTriggerMode"] = A,
         ["deletionGracePeriod"] = A,
         ["deletionTriggerConnectedSystemIds"] = A,
         // One Connected System within that list. Adding a trigger makes objects already disconnected from it eligible

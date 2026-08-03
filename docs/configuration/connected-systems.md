@@ -31,6 +31,10 @@ This two-stage approach gives you:
 - **Comparison**<br /> JIM can detect what has changed between imports.
 - **Rollback potential**<br /> The metaverse is only updated in the sync phase.
 
+### Opening the Connector Space
+
+A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
+
 ### Connected System Objects (CSOs)
 
 A **CSO** is JIM's local representation of an object in an external system. Each CSO holds:
@@ -140,6 +144,12 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 !!! note "The reset rights check needs somewhere to look"
     Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
+
+## Directory Capabilities
+
+The Details tab carries a Directory Capabilities card: read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing the card never opens a new connection. Before the first successful connection, the card shows a hint rather than an error.
+
+Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) detects and surfaces capabilities (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect capabilities, the card is not shown at all.
 
 ## Pending Exports
 

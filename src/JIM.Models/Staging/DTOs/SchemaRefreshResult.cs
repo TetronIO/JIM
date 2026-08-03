@@ -70,6 +70,13 @@ public class SchemaRefreshResult
     public Dictionary<string, List<string>> BlockedCredentialAttributes { get; set; } = new();
 
     /// <summary>
+    /// Discovery shortfalls the Connector worked around rather than failed on, copied from
+    /// <see cref="ConnectorSchema.Warnings"/> so the portal can show them alongside what changed. The schema
+    /// import's Activity carries the same warnings, which is how they reach the REST API and PowerShell.
+    /// </summary>
+    public List<string> DiscoveryWarnings { get; set; } = new();
+
+    /// <summary>
     /// The total number of credential attributes blocked across all object types.
     /// </summary>
     /// <summary>

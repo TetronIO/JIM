@@ -19,9 +19,17 @@
         customer release notes at all.
       - WARNING: entries longer than the recommended length are flagged for
         tightening to one or two sentences.
+      - HARD FAIL: two entries in the same subsection with identical text.
+      - WARNING: two entries in the same subsection that open with the same
+        eight words. CHANGELOG.md carries a `merge=union` driver, so a
+        concurrently-edited entry can be re-added alongside the version that
+        replaced it: the pair then shares an opening clause and diverges later.
+        Eight words is the shortest prefix that flags every such pair in the
+        file's history without a false positive.
 
     Warnings do not fail the run unless -WarningsAsErrors is set. The emoji
-    whitelist always fails the run, because it has no false positives.
+    whitelist and the identical-entry check always fail the run, because
+    neither has false positives.
 
 .PARAMETER Path
     Path to the changelog file. Defaults to CHANGELOG.md in the repo root.
@@ -68,12 +76,16 @@ $internalPatterns = @(
 )
 
 $maxEntryLength = 280  # characters; longer than this reads as "too verbose" for a changelog
+$duplicatePrefixWords = 8  # opening words compared when looking for a re-added entry
 
 $lines = Get-Content -Path $Path
 $header = if ($Section -eq 'Unreleased') { '## [Unreleased]' } else { "## [$Section]" }
 
-# Locate the section and collect its top-level entries (lines starting "- ").
+# Locate the section and collect its top-level entries (lines starting "- "),
+# remembering which subsection (### Added, ### Fixed, ...) each one sits under
+# so duplicates are only compared against their own kind.
 $inSection = $false
+$subsection = '(none)'
 $entries = [System.Collections.Generic.List[object]]::new()
 for ($i = 0; $i -lt $lines.Count; $i++) {
     $line = $lines[$i]
@@ -82,8 +94,13 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
         continue
     }
     if ($line -match '^##\s') { break }   # next version section
+    if ($line -match '^###\s+(.+)$') { $subsection = $Matches[1].Trim(); continue }
     if ($line -match '^- ') {
-        $entries.Add([pscustomobject]@{ Number = $i + 1; Text = $line.Substring(2).Trim() })
+        $entries.Add([pscustomobject]@{
+            Number     = $i + 1
+            Text       = $line.Substring(2).Trim()
+            Subsection = $subsection
+        })
     }
 }
 
@@ -109,6 +126,40 @@ foreach ($entry in $entries) {
     foreach ($h in $internalPatterns) {
         if ($entry.Text -match $h.Pattern) {
             $warnings.Add("$loc  entry $($h.Label); confirm it is customer-facing or remove it.")
+        }
+    }
+}
+
+# Duplicate detection. Compare entries within a subsection on their normalised
+# text: identical entries are always a mistake; a shared opening clause is the
+# signature of the merge=union re-add described above.
+function Get-NormalisedEntryText {
+    param([string]$Text)
+    # Strip the leading emoji, lower-case, and reduce to words so punctuation,
+    # backticks and issue references do not mask an otherwise identical opener.
+    $stripped = $Text -replace '^\W+', ''
+    return (($stripped.ToLowerInvariant() -replace '[^a-z0-9 ]', ' ') -split '\s+' | Where-Object { $_ })
+}
+
+foreach ($group in $entries | Group-Object Subsection) {
+    $byExact  = @{}
+    $byPrefix = @{}
+    foreach ($entry in $group.Group) {
+        $words = Get-NormalisedEntryText -Text $entry.Text
+        if ($words.Count -eq 0) { continue }
+
+        $exact = $words -join ' '
+        if ($byExact.ContainsKey($exact)) {
+            $errors.Add("$Path`:$($entry.Number)  entry is identical to the one at line $($byExact[$exact]) under '$($group.Name)'; remove one: `"$($entry.Text)`"")
+        }
+        else { $byExact[$exact] = $entry.Number }
+
+        if ($words.Count -ge $duplicatePrefixWords) {
+            $prefix = ($words | Select-Object -First $duplicatePrefixWords) -join ' '
+            if ($byPrefix.ContainsKey($prefix)) {
+                $warnings.Add("$Path`:$($entry.Number)  entry opens with the same $duplicatePrefixWords words as the one at line $($byPrefix[$prefix]) under '$($group.Name)'; if they describe the same change, keep the version you want and delete the other (CHANGELOG.md merges by union, so a replaced entry can come back).")
+            }
+            else { $byPrefix[$prefix] = $entry.Number }
         }
     }
 }
