@@ -24,7 +24,8 @@
                 @foreach (var connector in _connectors)
                 {
                     <path d="@connector.PathData"></path>
-                    <circle cx="@connector.DotX" cy="@connector.DotY" r="4.5"></circle>
+                    <circle cx="@connector.DotX" cy="@connector.DotY"
+                            r="@CausalityFlowConnectorCalculator.FormatCoordinate(CausalityFlowConnectorCalculator.TerminalDotRadius)"></circle>
                 }
             </svg>
         }

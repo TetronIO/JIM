@@ -18,6 +18,14 @@ public static class CausalityFlowConnectorCalculator
     public const string SourceCardId = "src";
 
     /// <summary>
+    /// Radius of the dot marking a connector's destination end, in pixels. Lives here rather than in
+    /// the markup because the geometry has to offset the dot's centre by it: the connector overlay
+    /// renders behind the cards, so a dot centred on the destination's edge is half covered by it.
+    /// The view reads this constant for the rendered radius, so the two cannot drift apart.
+    /// </summary>
+    public const double TerminalDotRadius = 4.5;
+
+    /// <summary>
     /// Builds the logical connector pairs for a flow layout.
     /// </summary>
     /// <param name="identityEventIds">Flow ids of the Identity-lane events, in tree order.</param>
@@ -82,7 +90,9 @@ public static class CausalityFlowConnectorCalculator
                        $"C {FormatCoordinate(midX)} {FormatCoordinate(y1)}, " +
                        $"{FormatCoordinate(midX)} {FormatCoordinate(y2)}, " +
                        $"{FormatCoordinate(x2)} {FormatCoordinate(y2)}";
-        return new CausalityFlowConnector(pathData, FormatCoordinate(x2), FormatCoordinate(y2));
+        // The path runs right up to the card's edge so the line meets it, but the dot is pulled back
+        // by its own radius so it sits tangent to the edge rather than half behind the card.
+        return new CausalityFlowConnector(pathData, FormatCoordinate(x2 - TerminalDotRadius), FormatCoordinate(y2));
     }
 
     /// <summary>

@@ -89,7 +89,8 @@ public class CausalityFlowConnectorCalculatorTests
         // control points sit at the horizontal midpoint (250)
         Assert.That(connectors, Has.Count.EqualTo(1));
         Assert.That(connectors[0].PathData, Is.EqualTo("M 200 34 C 250 34, 250 30, 300 30"));
-        Assert.That(connectors[0].DotX, Is.EqualTo("300"));
+        // The dot sits its own radius clear of the destination edge; see Compute_TerminalDot_*
+        Assert.That(connectors[0].DotX, Is.EqualTo("295.5"));
         Assert.That(connectors[0].DotY, Is.EqualTo("30"));
     }
 
@@ -148,6 +149,33 @@ public class CausalityFlowConnectorCalculatorTests
             measurements, [new CausalityFlowConnectorPair("src", "evt-0")]);
 
         Assert.That(connectors[0].PathData, Is.EqualTo("M 200 34 C 250 34, 250 30, 300 30"));
+    }
+
+    [Test]
+    public void Compute_TerminalDot_SitsClearOfTheDestinationEdgeRatherThanOnIt()
+    {
+        // The connector overlay renders behind the cards (.flow-svg z-index 0, .flow-cols z-index 1),
+        // so a dot centred on the destination's left edge is half covered by the card. Offsetting it
+        // by its own radius leaves it tangent to the edge and wholly visible, while the path still
+        // runs to the edge so the line meets the card.
+        var measurements = new CausalityFlowMeasurements
+        {
+            Width = 900,
+            Height = 400,
+            Cards =
+            [
+                new CausalityFlowCardRect { Id = "src", Left = 0, Right = 200, Top = 0, Height = 100 },
+                new CausalityFlowCardRect { Id = "evt-0", Left = 300, Right = 500, Top = 0, Height = 60 }
+            ]
+        };
+
+        var connectors = CausalityFlowConnectorCalculator.Compute(
+            measurements, [new CausalityFlowConnectorPair("src", "evt-0")]);
+
+        var expectedDotX = 300 - CausalityFlowConnectorCalculator.TerminalDotRadius;
+        Assert.That(connectors[0].DotX, Is.EqualTo(CausalityFlowConnectorCalculator.FormatCoordinate(expectedDotX)));
+        Assert.That(connectors[0].PathData, Does.EndWith("300 30"),
+            "The path must still reach the card's edge; only the dot is pulled clear of it.");
     }
 
     [Test]
