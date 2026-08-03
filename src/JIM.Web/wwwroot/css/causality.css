@@ -827,7 +827,7 @@
 
 .causality-panel .g-node text {
     fill: var(--cz-text);
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-weight: 600;
     font-family: inherit;
 }
@@ -835,7 +835,7 @@
 .causality-panel .g-node text.sub {
     fill: var(--cz-text-dim);
     font-weight: 450;
-    font-size: 0.75rem;
+    font-size: 0.875rem;
 }
 
 .causality-panel .g-legend {

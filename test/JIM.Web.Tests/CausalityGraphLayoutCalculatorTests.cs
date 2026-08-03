@@ -61,14 +61,14 @@ public class CausalityGraphLayoutCalculatorTests
     {
         var layout = ComputeNewJoiner();
 
-        // x = depth * (250 + 70) + 2; the chain occupies one column per depth
+        // x = depth * (280 + 70) + 2; the chain occupies one column per depth
         Assert.That(NodeById(layout, "src").Depth, Is.EqualTo(0));
         Assert.That(NodeById(layout, "src").X, Is.EqualTo(2));
-        Assert.That(NodeById(layout, "evt-0").X, Is.EqualTo(322));
-        Assert.That(NodeById(layout, "evt-1").X, Is.EqualTo(642));
-        Assert.That(NodeById(layout, "evt-2").X, Is.EqualTo(962));
+        Assert.That(NodeById(layout, "evt-0").X, Is.EqualTo(352));
+        Assert.That(NodeById(layout, "evt-1").X, Is.EqualTo(702));
+        Assert.That(NodeById(layout, "evt-2").X, Is.EqualTo(1052));
         Assert.That(NodeById(layout, "evt-3").Depth, Is.EqualTo(4));
-        Assert.That(NodeById(layout, "evt-3").X, Is.EqualTo(1282));
+        Assert.That(NodeById(layout, "evt-3").X, Is.EqualTo(1402));
     }
 
     [Test]
@@ -85,8 +85,8 @@ public class CausalityGraphLayoutCalculatorTests
     {
         var layout = ComputeNewJoiner();
 
-        // W = (maxDepth + 1) * 320 - 70 + 4; H = max(nextY - 26, 58) + 4
-        Assert.That(layout.Width, Is.EqualTo(1534));
+        // W = (maxDepth + 1) * 350 - 70 + 4; H = max(nextY - 26, 58) + 4
+        Assert.That(layout.Width, Is.EqualTo(1684));
         Assert.That(layout.Height, Is.EqualTo(62));
     }
 
@@ -95,11 +95,11 @@ public class CausalityGraphLayoutCalculatorTests
     {
         var layout = ComputeNewJoiner();
 
-        // src (right centre: 2 + 250, 2 + 29) to evt-0 (left centre: 322, 31); mid x = 287
+        // src (right centre: 2 + 280, 2 + 29) to evt-0 (left centre: 352, 31); mid x = 317
         var edge = layout.Edges[0];
         Assert.That(edge.FromId, Is.EqualTo("src"));
         Assert.That(edge.ToId, Is.EqualTo("evt-0"));
-        Assert.That(edge.PathData, Is.EqualTo("M 252 31 C 287 31, 287 31, 322 31"));
+        Assert.That(edge.PathData, Is.EqualTo("M 282 31 C 317 31, 317 31, 352 31"));
     }
 
     [Test]
@@ -182,8 +182,8 @@ public class CausalityGraphLayoutCalculatorTests
     {
         var layout = ComputeLeaver();
 
-        // maxDepth 3: W = 4 * 320 - 70 + 4; three leaf rows: H = (3 * 84) - 26 + 4
-        Assert.That(layout.Width, Is.EqualTo(1214));
+        // maxDepth 3: W = 4 * 350 - 70 + 4; three leaf rows: H = (3 * 84) - 26 + 4
+        Assert.That(layout.Width, Is.EqualTo(1334));
         Assert.That(layout.Height, Is.EqualTo(230));
     }
 
@@ -194,7 +194,7 @@ public class CausalityGraphLayoutCalculatorTests
 
         Assert.That(layout.Nodes, Has.Count.EqualTo(3));
         Assert.That(layout.Edges, Has.Count.EqualTo(2));
-        Assert.That(layout.Width, Is.EqualTo(894));
+        Assert.That(layout.Width, Is.EqualTo(984));
         Assert.That(layout.Height, Is.EqualTo(62));
 
         // Neither export event carries entity chips here, so the sub falls back to the system name
@@ -220,7 +220,7 @@ public class CausalityGraphLayoutCalculatorTests
         Assert.That(NodeById(layout, "evt-1").Y, Is.EqualTo(86));
         // The source root sits at the midpoint of the first and last roots: (0 + 84) / 2 + 2
         Assert.That(NodeById(layout, "src").Y, Is.EqualTo(44));
-        Assert.That(layout.Width, Is.EqualTo(574));
+        Assert.That(layout.Width, Is.EqualTo(634));
         Assert.That(layout.Height, Is.EqualTo(146));
     }
 
@@ -236,7 +236,7 @@ public class CausalityGraphLayoutCalculatorTests
         Assert.That(layout.Edges, Is.Empty);
         Assert.That(NodeById(layout, "src").Y, Is.EqualTo(2));
         // A single empty column: W = 280 - 70 + 4; H = max(0 - 26, 58) + 4
-        Assert.That(layout.Width, Is.EqualTo(254));
+        Assert.That(layout.Width, Is.EqualTo(284));
         Assert.That(layout.Height, Is.EqualTo(62));
     }
 

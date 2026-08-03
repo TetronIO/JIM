@@ -19,13 +19,13 @@ public static class CausalityGraphLayoutCalculator
     public const string SourceNodeId = "src";
 
     /// <summary>
-    /// Node rectangle width. Sized so a full-length title still fits at the panel's standard text size:
-    /// measured in the browser, 26 characters of typical label text at 0.875rem/600 in the site's font
-    /// occupy ~219px, plus the 14px text inset on each side. Narrowing this without also lowering
+    /// Node rectangle width. Sized so a full-length title still fits at the panel's body text size:
+    /// measured in the browser, 26 characters of typical label text at 1rem/600 in the site's font
+    /// occupy ~247px, plus the 14px text inset on each side. Narrowing this without also lowering
     /// <see cref="TitleMaxLength"/> would let titles run past the node's right edge, because nothing
     /// measures the rendered text at layout time.
     /// </summary>
-    public const double NodeWidth = 250;
+    public const double NodeWidth = 280;
 
     /// <summary>
     /// Node rectangle height.

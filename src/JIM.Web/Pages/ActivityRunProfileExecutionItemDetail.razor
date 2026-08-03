@@ -21,10 +21,9 @@
     @if (_activityRunProfileExecutionItem != null)
     {
         @* Page Title - must come before breadcrumbs for consistency *@
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-            <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
-            <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" Color="@GetStatusColor()" />
-        </MudStack>
+        @* No status icon after the title: the title already says what happened ("Person Deletion Detected"),
+           and the Operation field below states it again with its own icon. *@
+        <MudText Typo="Typo.h3" Class="mb-2"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
         <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
         @* Summary Section *@
@@ -138,11 +137,10 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
                         <MudTooltip Text="@Helpers.GetOperationDescription(_activityRunProfileExecutionItem.ObjectChangeType, IsSyncContext())"
                                     Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string"
-                                     Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
-                                     Variant="Variant.Filled" Size="Size.Medium" Icon="@GetStatusIcon()" Class="ml-0 mt-1">
-                                @GetOperationDisplayText()
-                            </MudChip>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@GetStatusIcon()" Class="mud-text-secondary" />
+                                <MudText>@GetOperationDisplayText()</MudText>
+                            </MudStack>
                         </MudTooltip>
                     </MudItem>
                 }
@@ -192,9 +190,10 @@
                             <MudTooltip
                                 Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Rejected)"
                                 Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Error" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)">
-                                    Rejected: @_activityRunProfileExecutionItem.ExternalIdSnapshot
-                                </MudChip>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)" Class="mud-text-secondary" />
+                                    <MudText>Rejected: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                                </MudStack>
                             </MudTooltip>
                         }
                         else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
@@ -203,9 +202,10 @@
                             <MudTooltip
                                 Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.PendingRemoval)"
                                 Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)">
-                                    Pending Removal: @_activityRunProfileExecutionItem.ExternalIdSnapshot
-                                </MudChip>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)" Class="mud-text-secondary" />
+                                    <MudText>Pending Removal: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                                </MudStack>
                             </MudTooltip>
                         }
                         else
@@ -214,9 +214,10 @@
                             <MudTooltip
                                 Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Deleted)"
                                 Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)">
-                                    Deleted: @_activityRunProfileExecutionItem.ExternalIdSnapshot
-                                </MudChip>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)" Class="mud-text-secondary" />
+                                    <MudText>Deleted: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                                </MudStack>
                             </MudTooltip>
                         }
                     }
@@ -1345,16 +1346,6 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private bool IsHousekeepingContext()
     {
         return _activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
-    }
-
-    private Color GetStatusColor()
-    {
-        if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return Color.Error;
-
-        // Use the same colour scheme as the Operation chip for consistency
-        return Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem?.ObjectChangeType ??
-        ObjectChangeType.NotSet);
     }
 
     private string GetStatusIcon()

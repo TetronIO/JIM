@@ -44,9 +44,9 @@ public class CausalityGraphViewTests
 
         // The SVG canvas carries the computed layout dimensions
         var svg = cut.Find(".graph-svg");
-        Assert.That(svg.GetAttribute("width"), Is.EqualTo("1534"));
+        Assert.That(svg.GetAttribute("width"), Is.EqualTo("1684"));
         Assert.That(svg.GetAttribute("height"), Is.EqualTo("62"));
-        Assert.That(svg.GetAttribute("viewBox"), Is.EqualTo("0 0 1534 62"));
+        Assert.That(svg.GetAttribute("viewBox"), Is.EqualTo("0 0 1684 62"));
     }
 
     [Test]
