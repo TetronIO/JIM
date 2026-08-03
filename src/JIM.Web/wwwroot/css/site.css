@@ -2197,6 +2197,56 @@ html[lang] .jim-schema-change-table td {
     margin: 4px 0 0;
 }
 
+/* ─── Tooltip measure ─── */
+
+/* MudBlazor sets no max-width on a tooltip, so a long explanatory one grows to a single line as wide
+   as the sentence needs (the Operation field's deletion description rendered ~690px wide across the
+   page). Capping the measure wraps it into a readable block instead. It is deliberately a cap rather
+   than a hard line break in each string: the descriptions range from a few words to two sentences,
+   so a break authored for one is in the wrong place for the rest, and translations would move it
+   again. Left-align follows from the cap; MudBlazor centres tooltip text, which is fine on the one
+   line it assumed and poor once the text wraps. Short tooltips are unaffected either way, because
+   the box still shrinks to fit its content. */
+.mud-tooltip {
+    max-width: 24rem;
+    text-align: left;
+}
+
+/* ─── Explanatory tooltip affordance ─── */
+
+/* Opt-in marker for a *value* that has an explanatory tooltip behind it, so the tooltip is
+   discoverable rather than found by accident, and so the fields carrying one are distinguishable
+   from the fields that do not. Deliberately not applied to every .mud-tooltip-root: a tooltip on a
+   button or a link already has its own affordance and must keep the pointer cursor.
+
+   fit-content matters. MudStack's row is a flex container that fills its grid column, so without it
+   the help cursor and the hover response would cover the empty space to the right of a short value,
+   which reads as a much larger target than the one that actually responds.
+
+   The underline is scoped to .mud-typography rather than set on the wrapper because text-decoration
+   propagates into flex items, and the icon beside the text is one; an ancestor underline is drawn
+   across it. */
+.jim-explained {
+    cursor: help;
+    width: fit-content;
+}
+
+.jim-explained .mud-typography {
+    text-decoration: underline dotted;
+    text-decoration-color: var(--mud-palette-text-disabled);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s ease;
+}
+
+.jim-explained:hover .mud-typography {
+    text-decoration-color: var(--mud-palette-text-primary);
+}
+
+.jim-explained:hover .mud-icon-root {
+    color: var(--mud-palette-text-primary);
+    transition: color 0.15s ease;
+}
+
 /* ─── Buttons inside alerts ─── */
 
 /* A button offered inside an alert belongs to that alert's message. Left to itself it renders in the page's

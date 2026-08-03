@@ -102,6 +102,8 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
+- **A tooltip explaining a *value* needs the `jim-explained` affordance.** Put the class on the element the tooltip wraps (typically the `MudStack` holding the icon and the text). It gives the value a faint dotted underline at rest, `cursor: help`, and a hover response that firms the underline and lifts the icon to full text colour. Without it there is nothing to say the explanation exists, so it is only ever found by accident, and a field that has one is indistinguishable from the fields beside it that do not. Do **not** add it to a tooltip on a button, link or icon button: those already advertise themselves and must keep the pointer cursor.
+- Tooltip text is capped to a `24rem` measure and left-aligned site-wide (`site.css` > "Tooltip measure"), so a long explanation wraps into a readable block. Write the sentence naturally; never hand-insert a line break to control where it wraps.
 - **Exception:** tooltips anchored to elements inside the mini-drawer (e.g. the `DrawerUserMenu` avatar when the drawer is collapsed) should use `Placement.Right` so they emerge into the main content area rather than overlapping the drawer itself. This exception is scoped to drawer-anchored tooltips only; do not extend it to other contexts.
 
 ## Alerts

@@ -137,7 +137,7 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
                         <MudTooltip Text="@Helpers.GetOperationDescription(_activityRunProfileExecutionItem.ObjectChangeType, IsSyncContext())"
                                     Arrow="true" Placement="Placement.Top">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                 <MudIcon Icon="@GetStatusIcon()" Class="mud-text-secondary" />
                                 <MudText>@GetOperationDisplayText()</MudText>
                             </MudStack>
@@ -190,7 +190,7 @@
                             <MudTooltip
                                 Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Rejected)"
                                 Arrow="true" Placement="Placement.Top">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                     <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)" Class="mud-text-secondary" />
                                     <MudText>Rejected: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
                                 </MudStack>
@@ -202,7 +202,7 @@
                             <MudTooltip
                                 Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.PendingRemoval)"
                                 Arrow="true" Placement="Placement.Top">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                     <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)" Class="mud-text-secondary" />
                                     <MudText>Pending Removal: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
                                 </MudStack>
@@ -214,7 +214,7 @@
                             <MudTooltip
                                 Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Deleted)"
                                 Arrow="true" Placement="Placement.Top">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                     <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)" Class="mud-text-secondary" />
                                     <MudText>Deleted: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
                                 </MudStack>
