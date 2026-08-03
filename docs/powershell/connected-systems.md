@@ -672,6 +672,46 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPartition
 
 ---
 
+## Get-JIMConnectedSystemDirectoryServer
+
+Discovers the domain controllers in a Connected System's directory, with the Active Directory Site each belongs to. Only Connected Systems using the LDAP connector against an Active Directory or Samba AD directory support this; other connectors, and non-AD-family LDAP directories (OpenLDAP, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+One object per discovered domain controller: `hostName` (its FQDN) and `site` (the Active Directory Site it belongs to, or `$null` for directories without Sites).
+
+### Examples
+
+```powershell title="Discover domain controllers for a Connected System"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3
+```
+
+```powershell title="Filter to a specific Active Directory Site"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3 | Where-Object { $_.site -eq 'London' }
+```
+
+```powershell title="Pipeline from Get-JIMConnectedSystem"
+Get-JIMConnectedSystem -Name "Corp AD" | Get-JIMConnectedSystemDirectoryServer
+```
+
+### Notes
+
+- This is a discovery aid, not a configuration write: use `Set-JIMConnectedSystem` to set the Preferred Domain Controller setting once you have chosen one.
+
+---
+
 ## Set-JIMConnectedSystemPartition
 
 Updates the selection state of a partition on a Connected System.
@@ -982,6 +1022,42 @@ Get-JIMConnectedSystem | ForEach-Object {
 ### Notes
 
 - A non-zero count indicates data integrity issues in the connector space. This commonly occurs after a partial import. Running a full import typically resolves outstanding references.
+
+---
+
+## Get-JIMConnectedSystemCapability
+
+Retrieves the Connector-detected capabilities for a Connected System, e.g. an LDAP directory's type, vendor, DNS host name, and paging support. These are facts read from the target system during a previous connection and persisted by JIM; calling this cmdlet does not open a new connection.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemCapability -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+
+### Output
+
+Zero or more `PSCustomObject` instances, one per detected capability, each with `Name` and `Value` properties. Empty when the Connector does not detect any capabilities, or when nothing has been detected yet (for example, before the first successful connection).
+
+### Examples
+
+```powershell title="Get the detected capabilities for a Connected System"
+Get-JIMConnectedSystemCapability -ConnectedSystemId 1
+```
+
+```powershell title="Get capabilities for a named Connected System via pipeline"
+Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapability
+```
+
+### Notes
+
+- These facts mirror the **Directory Capabilities** card on the Connected System's Details page in the portal; see the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) documentation for what each fact means.
 
 ---
 

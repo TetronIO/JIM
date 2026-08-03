@@ -141,6 +141,12 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 !!! note "The reset rights check needs somewhere to look"
     Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
 
+## Directory Capabilities
+
+The Details tab carries a Directory Capabilities card: read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing the card never opens a new connection. Before the first successful connection, the card shows a hint rather than an error.
+
+Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) detects and surfaces capabilities (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect capabilities, the card is not shown at all.
+
 ## Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
