@@ -2713,11 +2713,18 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     flex-direction: column;
 }
 
+/* One padding for every row this dialog lists, at the 1rem the rest of JIM gives a panel (the `pa-4` in the
+   panel-spacing rules). Defined once and shared by the picker and the results rather than set as a utility
+   class per call site, so the two lists cannot drift apart; they were at 8px and 10px/12px, both tighter than
+   anything else in the application. */
+.jim-password-row {
+    padding: 1rem;
+}
+
 .jim-password-result {
     display: flex;
     align-items: flex-start;
     gap: 0.625rem;
-    padding: 0.625rem 0.75rem;
     border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
@@ -2772,8 +2779,17 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
    stays, so the panel still reads as subordinate detail rather than as a peer of the row it sits in. A left
    accent rule was tried and rejected: the purple is reserved for interactive elements, and it made a third
    competing accent beside the error icon and its red text. */
-.jim-password-guidance.mud-alert {
+/* Opaque, not a wash. MudBlazor's outlined alerts tint with a transparent mix of the severity colour, which
+   is right on a plain surface and wrong here: this one sits on a row washed in the error colour, so the red
+   came straight through and the advice read as a paler part of the failure rather than as something separate.
+   The same mix is composited over the results list's own surface instead of over transparency, so it is blue
+   whatever the row beneath it is doing. */
+/* html[lang] to clear the theme's own `html[lang] .mud-alert-outlined-info` rule, which is !important and
+   would otherwise win on specificity. */
+html[lang] .jim-password-guidance.mud-alert {
     margin-top: 0.5rem;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 10%,
+        var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
 }
 
 /* The icon belongs beside the headline, not halfway down the advice. JIM centres alert icons app-wide (see
