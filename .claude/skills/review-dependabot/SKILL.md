@@ -79,8 +79,9 @@ Categorise each PR into one of three ecosystems:
 - Check: Does CI build and all tests pass?
 - **Lock files**: JIM enforces locked-mode NuGet restore in CI, so every NuGet PR needs its `packages.lock.json` file(s) updated to match. Dependabot does not reliably do this itself (dependabot-core#12318, dependabot-core#10863); the `regenerate-nuget-lock-files` workflow pushes an automated `chore: regenerate NuGet lock files for Dependabot update` commit to the PR branch when needed, so **a red first CI run on a fresh Dependabot NuGet PR is expected**, not a failure to investigate. Before assessing CI status:
   1. Confirm the regeneration commit is present (check the PR's commit list) and that CI is green on the current head, not the original Dependabot commit.
-  2. If the regeneration workflow itself failed (check its run log) and no lock-file commit landed, regenerate manually from a local checkout of the branch: `dotnet restore JIM.sln --force-evaluate`, review the diff, commit, and push.
-  3. See `engineering/DEPENDENCY_PINNING.md` for the full policy and mechanism.
+  2. If the regeneration workflow itself failed (check its run log) and no lock-file commit landed, regenerate manually from a local checkout of the branch: `dotnet restore JIM.sln --force-evaluate -p:Configuration=Release`, review the diff, commit, and push. Keep `Configuration=Release`: a Debug regeneration stamps a per-minute `dev.*` version into every project entry, so the real change drowns in churn. If files outside the bumped project's dependency chain still show only project-version changes, revert those to keep the diff to what actually moved.
+  3. The failure to expect is `NU1004: The project references jim.web whose dependencies has changed` on `JIM.Web.Api.Tests` / `JIM.Web.Components.Tests`. Dependabot updates the bumped project's own lock file but never its consumers'.
+  4. See `engineering/DEPENDENCY_PINNING.md` for the full policy and mechanism.
 
 ### GitHub Actions
 - Check: Is this a patch or minor update within the same major version tag?

@@ -72,7 +72,7 @@ public class TextValueDisplayTests : JimComponentTestContext
 
 Notes:
 - The project uses `Microsoft.NET.Sdk.Razor`, not the plain SDK; bUnit needs the Razor SDK's compilation support. This is why it is a separate project rather than tests added to `JIM.Web.Api.Tests`.
-- It pins `AngleSharp` forward as a direct reference. bUnit 2.7.2 resolves 1.4.0, which carries CVE-2026-54570; the pin keeps `NuGetAudit` clean without suppressing the finding. Drop it once bUnit's own floor moves past 1.5.0.
+- It used to pin `AngleSharp` forward as a direct reference, because bUnit 2.7.2 resolved 1.4.0 and that carries CVE-2026-54570. bUnit 2.8.6 resolves 1.5.2, past the 1.5.0 fix, so the pin was dropped. Add one back only if a future advisory outruns bUnit's own floor; the csproj comment records the pattern.
 
 ## Debugging Failing Tests
 
