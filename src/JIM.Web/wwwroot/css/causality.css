@@ -452,7 +452,7 @@
 
 .causality-panel .flow-empty {
     padding: 6px 2px;
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--cz-text-dim);
 }
 
@@ -521,7 +521,7 @@
 
 .causality-panel .evt-sub {
     margin-top: 6px;
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--cz-text-dim);
 }
 
@@ -547,7 +547,7 @@
     margin-top: 10px;
     padding-top: 9px;
     border-top: 1px dashed var(--cz-line-soft);
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--cz-text-faint);
 }
 
@@ -595,7 +595,7 @@
     padding: 9px 13px;
     background: color-mix(in srgb, var(--mud-palette-text-primary) 7%, var(--cz-inner));
     font-weight: 650;
-    font-size: 0.875rem;
+    font-size: 1rem;
 }
 
 .causality-panel .sys-group .evt-card {
@@ -696,7 +696,7 @@
 
 .causality-panel .tl-detail-line {
     margin-top: 4px;
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--cz-text-dim);
     max-width: 72ch;
 }
@@ -721,7 +721,7 @@
     flex-wrap: wrap;
     gap: 14px;
     margin-top: 6px;
-    font-size: 0.875rem;
+    font-size: 1rem;
 }
 
 .causality-panel .tl-links a {
@@ -970,7 +970,7 @@
 }
 
 .causality-panel .drawer-sub {
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--cz-text-faint);
 }
 
