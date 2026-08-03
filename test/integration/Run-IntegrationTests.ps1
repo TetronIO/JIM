@@ -2252,6 +2252,10 @@ if (-not $SkipBuild -and -not $SkipReset) {
     $now = (Get-Date).ToUniversalTime()
     $minutesSinceMidnight = $now.Hour * 60 + $now.Minute
     $env:VERSION_SUFFIX = "dev.$($now.ToString('yyyyMMdd')).$minutesSinceMidnight"
+    # Skip the openapi-gen Dockerfile stage, as the jim-build aliases do: integration tests exercise the
+    # API itself, never the generated OpenAPI document, and the stage boots the app inside the build
+    # (expensive, and re-run every build because VERSION_SUFFIX invalidates the publish layer it copies).
+    $env:OPENAPI_STAGE = "publish"
     $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml build 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to build JIM stack"
