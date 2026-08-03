@@ -1,6 +1,6 @@
 # Initial Password Generation and Delivery on Provisioning
 
-- **Status:** Doing (Phases 1 to 3 complete; Phase 4 next)
+- **Status:** Doing (Phases 1 to 4 complete; Phase 5 next)
 - **Issue:** [#1121](https://github.com/TetronIO/JIM/issues/1121)
 - **Related:** [#1119](https://github.com/TetronIO/JIM/issues/1119) Password Synchronisation, [#1120](https://github.com/TetronIO/JIM/issues/1120) Defensive password filtering, [#618](https://github.com/TetronIO/JIM/issues/618) Email Notifications
 - **UI mockups:** [Initial Password Provisioning: UI Mockups](https://claude.ai/code/artifact/77c228ff-4f9b-48d0-a9b6-1b7b25c833bc) (all seven screens, built against `engineering/DESIGN.md` tokens)
@@ -169,7 +169,7 @@ Neither blocks Phase 1, and both need resolving before the end-to-end assertions
 - **The entropy readout is a deliberate underestimate.** It counts the draws that feed a password and treats the ordering as worth nothing: for the random-character style that discards what the shuffle contributes, which is a meaningful number of bits. Erring high is the harmful direction, since it would present a weak configuration as a strong one, so the figure is built to sit below the truth.
 - **The assessment and the generator are cross-checked against each other by test.** What `Assess` promises is worked out analytically; what `Generate` produces is built independently. A test drives every combination of the separator and capitalisation axes and asserts that every promised category really is present in the generated value and that the promised minimum length is never an overstatement. Without it the two would drift, and the drift would surface as a target rejecting one account in twenty.
 
-### Phase 4: Synchronisation Rule configuration and delivery
+### Phase 4: Synchronisation Rule configuration and delivery ✅
 
 1. `SyncRule` gains initial-password configuration (enabled flag, Discovered-or-Custom source, and the policy); migration.
 2. UI: Initial Password section on the Synchronisation Rule, gated off `ProvisionToConnectedSystem`, pre-populated from the Connected System's discovered policy, overridable.
@@ -187,6 +187,17 @@ Clipboard access is JS interop (`navigator.clipboard.writeText`) from a Blazor S
 Credential *delivery* (emailing the password to the user or their manager) is out of scope here and belongs with notifications (#618); this dialog hands the value to the administrator to convey through whatever channel their policy allows.
 
 **Tests:** delivery invoked only for Create and only when enabled; correct ordering (create → set → enable); no password value reaches any persisted field; disabled configuration is a no-op; the dialog starts masked, copy succeeds while masked, and reveal re-conceals on the timer.
+
+
+#### What Phase 4 found
+
+- **The route to the administrator's set-password dialog was `/metaverse/objects/{id}` in this plan, and that route does not exist.** The Metaverse Object page is `/t/{type}/v/{id}` and is `[Authorize(Roles = "User")]`: every signed-in user can see it. Hanging a password-reset primitive off it would have needed a role check bolted on beside the existing one, on a page whose whole purpose is the self-service view. The dialog lives on the Connected System Object page instead (`/admin/connected-systems/{csId}/connector-space/{csoId}`), which is Administrator-gated already and is where the account being reset actually is. The password is set on an account, not on a Metaverse Object, so this is also the more honest place for it.
+- **A server method that instantiates a Connector was untestable, and the fix was one optional constructor parameter.** `ConnectedSystemServer` held `new ConnectorFactory()` in a field, so nothing that resolves a Connector could be driven from a test. `JimApplication` now takes an optional `IConnectorFactory`; production passes nothing. That single seam is what let the connection lifecycle (opened once, closed however the attempt ends, not closed when the open failed) be mutation-checked at all.
+- **The Activity target type had to be new, and the reason is the category rather than the id.** `ActivityTargetType.ConnectedSystem` is categorised as Configuration and carries a Connected System's configuration-change history. A password set is neither, and reusing that type would have put credential operations into the filter administrators use to review configuration drift. `ConnectedSystemObject` is categorised as Identity Data alongside `MetaverseObject`, with `Activity.ConnectedSystemObjectId` added so the Activity deep-links to the account.
+- **The API cannot generate the password, and that is not an oversight in the parity story.** Generation would mean returning a password in a response body, which the security constraints on this work rule out outright. REST and PowerShell therefore take a caller-supplied password; generation stays a portal affordance, where the value is rendered once into a circuit and never serialised into a response. Stated in the cmdlet help and the docs rather than left as an apparent gap.
+- **`localhost` is a secure context over plain HTTP, which makes the clipboard fallback invisible in development.** `window.isSecureContext` is true on `localhost` regardless of scheme, so the "clipboard unavailable" alert never appears while developing and only shows on a real non-TLS deployment. Worth knowing before concluding the detection is broken; it was verified by asserting on `isClipboardAvailable()` directly rather than on the alert.
+- **bUnit's `WaitForAssertion` and NUnit 4 do not compose.** `WaitForAssertion` catches the assertion exception and retries, but NUnit records every failed `Assert.That` into the test result as it happens, so a wait whose *first* evaluation fails leaves the test red even after a later evaluation succeeds. It fails with "Multiple failures or warnings in test" listing an assertion that ultimately passed, which reads as a flake rather than a harness mismatch. Use `WaitForState(() => predicate)` and assert once afterwards.
+- **The reveal timeout is a component parameter purely so it can be tested.** Thirty seconds is the shipped value; the tests pass 150 milliseconds. Without the seam the auto-conceal, which is the whole point of offering reveal at all, would have no coverage.
 
 ### Phase 5: Rejection handling and administrator feedback loop
 

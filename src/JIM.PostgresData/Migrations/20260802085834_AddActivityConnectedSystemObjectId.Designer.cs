@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260802085834_AddActivityConnectedSystemObjectId")]
+    partial class AddActivityConnectedSystemObjectId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -189,9 +192,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("PredefinedSearchId")
                         .HasColumnType("integer");
-
-                    b.Property<Guid?>("PreviewActivityId")
-                        .HasColumnType("uuid");
 
                     b.Property<int?>("RoleId")
                         .HasColumnType("integer");
@@ -376,9 +376,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid?>("ConnectedSystemObjectId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("DeletionPolicySnapshotJson")
-                        .HasColumnType("text");
 
                     b.Property<string>("DisplayNameSnapshot")
                         .HasColumnType("text");
@@ -598,15 +595,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("DeletionInitiatedByType")
                         .HasColumnType("integer");
-
-                    b.Property<string>("DeletionPolicySnapshotJson")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("DeletionTriggeredBySystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DeletionTriggeredBySystemName")
-                        .HasColumnType("text");
 
                     b.Property<DateTime?>("LastConnectorDisconnectedDate")
                         .HasColumnType("timestamp with time zone");
@@ -904,11 +892,6 @@ namespace JIM.PostgresData.Migrations
                     b.PrimitiveCollection<List<int>>("DeletionTriggerConnectedSystemIds")
                         .IsRequired()
                         .HasColumnType("integer[]");
-
-                    b.Property<int>("DeletionTriggerMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
 
                     b.Property<string>("Icon")
                         .HasColumnType("text");
@@ -1831,187 +1814,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("SyncRuleId");
 
                     b.ToTable("SyncRuleScopingCriteriaGroups");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreview", b =>
-                {
-                    b.Property<Guid>("ActivityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("DeltaPersistence")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DeltasCompleted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("DeltasStarted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("DeltasStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("DispatchedToWorker")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("EstimatedAffectedObjects")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("EstimatedDeltaRows")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("ImpactCounts")
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime?>("ImpactCountsCompleted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ImpactCountsStarted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("ImpactCountsStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ProposedConfigurationSnapshot")
-                        .HasColumnType("jsonb");
-
-                    b.Property<int>("RequestedDeltaPersistence")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("StalenessBaseline")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SummaryCompleted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SummaryStarted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SummaryStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Surface")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("ValidationCompleted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ValidationFindings")
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime?>("ValidationStarted")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("ValidationStatus")
-                        .HasColumnType("integer");
-
-                    b.HasKey("ActivityId");
-
-                    b.ToTable("ConfigurationChangePreviews");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewDelta", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ActivityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AttributeName")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("ConnectedSystemObjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("MetaverseObjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("NewValue")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ObjectDisplayName")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ObjectTypeName")
-                        .HasColumnType("text");
-
-                    b.Property<string>("OldValue")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PatternKey")
-                        .HasColumnType("text");
-
-                    b.Property<int>("TransitionType")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GroupId");
-
-                    b.HasIndex("ActivityId", "GroupId")
-                        .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_GroupId");
-
-                    b.HasIndex("ActivityId", "TransitionType")
-                        .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_TransitionType");
-
-                    b.ToTable("ConfigurationChangePreviewDeltas");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewGroup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ActivityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AttributeName")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ConnectedSystemName")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("DeltasSampled")
-                        .HasColumnType("boolean");
-
-                    b.Property<int?>("MetaverseObjectTypeId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("MetaverseObjectTypeName")
-                        .HasColumnType("text");
-
-                    b.Property<string>("NewValue")
-                        .HasColumnType("text");
-
-                    b.Property<int>("ObjectCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("OldValue")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PatternKey")
-                        .HasColumnType("text");
-
-                    b.Property<int>("TransitionType")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActivityId")
-                        .HasDatabaseName("IX_ConfigurationChangePreviewGroups_ActivityId");
-
-                    b.ToTable("ConfigurationChangePreviewGroups");
                 });
 
             modelBuilder.Entity("JIM.Models.Scheduling.Schedule", b =>
@@ -3786,29 +3588,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasDiscriminator().HasValue("ClearConnectedSystemObjectsWorkerTask");
                 });
 
-            modelBuilder.Entity("JIM.Models.Tasking.ConfigurationChangePreviewWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<string>("ProposedConfigurationPayload")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<int>("Surface")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("TargetGuidId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("TargetId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TargetName")
-                        .HasColumnType("text");
-
-                    b.HasDiscriminator().HasValue("ConfigurationChangePreviewWorkerTask");
-                });
-
             modelBuilder.Entity("JIM.Models.Tasking.DeleteConnectedSystemWorkerTask", b =>
                 {
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
@@ -4402,48 +4181,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ParentGroup");
                 });
 
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreview", b =>
-                {
-                    b.HasOne("JIM.Models.Activities.Activity", "Activity")
-                        .WithOne()
-                        .HasForeignKey("JIM.Models.Preview.ConfigurationChangePreview", "ActivityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Activity");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewDelta", b =>
-                {
-                    b.HasOne("JIM.Models.Preview.ConfigurationChangePreview", "Preview")
-                        .WithMany("Deltas")
-                        .HasForeignKey("ActivityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("JIM.Models.Preview.ConfigurationChangePreviewGroup", "Group")
-                        .WithMany("Deltas")
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_ConfigurationChangePreviewDeltas_ConfigurationChangePrevie~1");
-
-                    b.Navigation("Group");
-
-                    b.Navigation("Preview");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewGroup", b =>
-                {
-                    b.HasOne("JIM.Models.Preview.ConfigurationChangePreview", "Preview")
-                        .WithMany("Groups")
-                        .HasForeignKey("ActivityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Preview");
-                });
-
             modelBuilder.Entity("JIM.Models.Scheduling.ScheduleExecution", b =>
                 {
                     b.HasOne("JIM.Models.Scheduling.Schedule", "Schedule")
@@ -5030,18 +4767,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ChildGroups");
 
                     b.Navigation("Criteria");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreview", b =>
-                {
-                    b.Navigation("Deltas");
-
-                    b.Navigation("Groups");
-                });
-
-            modelBuilder.Entity("JIM.Models.Preview.ConfigurationChangePreviewGroup", b =>
-                {
-                    b.Navigation("Deltas");
                 });
 
             modelBuilder.Entity("JIM.Models.Scheduling.Schedule", b =>

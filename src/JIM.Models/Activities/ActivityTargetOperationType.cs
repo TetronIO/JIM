@@ -44,5 +44,11 @@ public enum ActivityTargetOperationType
     /// administrator establishes what was actually done to the system, and a preview must never be mistaken for the
     /// change it was previewing.
     /// </summary>
-    Preview = 11
+    Preview = 11,
+    /// <summary>
+    /// Sets the password on a single Connected System Object. Used with
+    /// <see cref="ActivityTargetType.ConnectedSystemObject"/>. The Activity records that a password was set and
+    /// what the target said about it, never the password itself.
+    /// </summary>
+    SetPassword = 12
 }

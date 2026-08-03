@@ -31,6 +31,9 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.ExampleDataSet, ActivityTargetCategory.Configuration },
         { ActivityTargetType.ExampleDataTemplate, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseObject, ActivityTargetCategory.IdentityData },
+        // An administrator setting an account's password changes that account, not JIM's configuration, so it
+        // belongs beside the Metaverse Object rather than in the Configuration filter.
+        { ActivityTargetType.ConnectedSystemObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetCategory.SyncRuns },

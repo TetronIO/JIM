@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using JIM.Models.Activities;
 using JIM.Web;
 using NUnit.Framework;
@@ -87,5 +88,35 @@ public class ActivityTargetHrefTests
         var href = Helpers.GetServiceSettingActivityHref(null);
 
         Assert.That(href, Is.Null, "without a target name there is nothing to search for; the caller falls back to plain text");
+    }
+
+    /// <summary>
+    /// A password set is recorded against the account it happened to, so the Activity has to reach that account.
+    /// The object's page is nested under its Connected System, which is why both identifiers are needed.
+    /// </summary>
+    [Test]
+    public void GetConnectedSystemObjectActivityHref_WithBothIdentifiers_LinksToTheObjectInTheConnectorSpace()
+    {
+        var objectId = Guid.Parse("3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60");
+
+        var href = Helpers.GetConnectedSystemObjectActivityHref(2, objectId);
+
+        Assert.That(href, Is.EqualTo($"/admin/connected-systems/2/connector-space/{objectId}"));
+    }
+
+    [Test]
+    public void GetConnectedSystemObjectActivityHref_WithoutTheConnectedSystem_ReturnsNull()
+    {
+        var href = Helpers.GetConnectedSystemObjectActivityHref(null, Guid.NewGuid());
+
+        Assert.That(href, Is.Null, "the object's page is nested under its Connected System; without one there is nothing to link to");
+    }
+
+    [Test]
+    public void GetConnectedSystemObjectActivityHref_WithoutTheObject_ReturnsNull()
+    {
+        var href = Helpers.GetConnectedSystemObjectActivityHref(2, null);
+
+        Assert.That(href, Is.Null);
     }
 }
