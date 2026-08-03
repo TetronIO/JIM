@@ -572,9 +572,12 @@
                                 {
                                     <text> will be deleted after the grace period expires</text>
                                 }
-                                @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.DetailMessage))
+                                @* The outcome's own due-date segment is dropped from the parenthetical when the
+                                   sentence already states the date above, so it is not said twice (#119). *@
+                                var deletionDetail = StripEligibleForDeletionSegment(mvoDeletionScheduledOutcome.DetailMessage);
+                                @if (!string.IsNullOrEmpty(deletionDetail))
                                 {
-                                    <text> (@mvoDeletionScheduledOutcome.DetailMessage.ToLowerInvariant())</text>
+                                    <text> (@deletionDetail.ToLowerInvariant())</text>
                                 }
                                 <text>, unless a new connector is established before then.</text>
                             }
@@ -1074,6 +1077,20 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _metaverseObjectType != null
             ? Utilities.GetMetaverseObjectHref(mvoId, _metaverseObjectType.PluralName)
             : $"/identity/search/{mvoId}";
+
+    /// <summary>
+    /// Removes the "Eligible for deletion: ..." segment from a deletion outcome's detail message, for
+    /// callers that already state the due date in their own sentence (#119). The segments are joined
+    /// with ". ", and the due date is always last.
+    /// </summary>
+    private static string StripEligibleForDeletionSegment(string? detailMessage)
+    {
+        if (string.IsNullOrEmpty(detailMessage))
+            return string.Empty;
+
+        var index = detailMessage.IndexOf("Eligible for deletion:", StringComparison.Ordinal);
+        return index < 0 ? detailMessage : detailMessage[..index].TrimEnd(' ', '.');
+    }
 
     private static string FormatGracePeriod(TimeSpan period)
     {
