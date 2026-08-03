@@ -223,6 +223,38 @@ public class SyncImportTaskProcessor
         // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // A Connector is the only thing that can know how many objects a Connected System holds
+        // before it has finished handing them over, so the fetching step has a total only where the
+        // Connector states one. Nothing is invented in its place: without a statement the window
+        // stays open and the Activity counts up without a percentage, which is all JIM can honestly
+        // show. See IConnectorProgress.
+        int? expectedObjectCount = null;
+        var objectsProducedInCurrentCall = 0;
+
+        void ApplyFetchCountingWindow()
+        {
+            var processed = totalObjectsImported + objectsProducedInCurrentCall;
+            _activity.ObjectsProcessed = processed;
+
+            // A stated total is the Connector's best answer, not a guarantee; more objects arriving
+            // than it expected raises the total rather than pushing the bar past complete.
+            _activity.ObjectsToProcess = expectedObjectCount is { } expected ? Math.Max(expected, processed) : 0;
+        }
+
+        async Task ReportExpectedObjectCountAsync(int count)
+        {
+            expectedObjectCount = count;
+            ApplyFetchCountingWindow();
+            await _syncRepo.UpdateActivityAsync(_activity);
+        }
+
+        async Task ReportObjectsProducedAsync(int count)
+        {
+            objectsProducedInCurrentCall = count;
+            ApplyFetchCountingWindow();
+            await _syncRepo.UpdateActivityAsync(_activity);
+        }
+
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
@@ -270,7 +302,9 @@ public class SyncImportTaskProcessor
                     // (issue #637). Emits are serialised because a connector may fan out internally, and
                     // a failure to narrate must never fail the import.
                     var connectorProgress = _phases.CreateConnectorProgress(
-                        async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message));
+                        async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
+                        ReportExpectedObjectCountAsync,
+                        ReportObjectsProducedAsync);
 
                     // Keep track of the original persisted data at the START of the import.
                     // This is critical for delta imports where subsequent pages must use the SAME
@@ -311,8 +345,10 @@ public class SyncImportTaskProcessor
                         Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
                             totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
 
-                        // Update progress - for paginated imports we don't know the total, but we track objects imported so far
-                        _activity.ObjectsProcessed = totalObjectsImported;
+                        // The page is delivered, so whatever the Connector reported while producing
+                        // it is now part of the running total rather than something to add to it.
+                        objectsProducedInCurrentCall = 0;
+                        ApplyFetchCountingWindow();
                         // How many have arrived is rendered from the Activity's counters, so the
                         // message says only what those cannot: which page is being read. A single
                         // page adds nothing over the running step's own name.
@@ -399,15 +435,18 @@ public class SyncImportTaskProcessor
                 await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Importing objects from file");
                 ConnectedSystemImportResult result;
 
-                // The whole file is read inside this one call, so the connector's own narration is the
-                // only progress an operator sees until it returns (issue #637).
+                // The whole file is read inside this one call, so what the Connector reports about
+                // it is the only progress an operator sees until it returns (issue #637).
                 var connectorProgress = _phases.CreateConnectorProgress(
-                    async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message));
+                    async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
+                    ReportExpectedObjectCountAsync,
+                    ReportObjectsProducedAsync);
 
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
                     result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                 }
+                objectsProducedInCurrentCall = 0;
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 

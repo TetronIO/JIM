@@ -43,9 +43,31 @@ public class RecordingConnectorProgress : IConnectorProgress
         return message == null ? Task.CompletedTask : ReportAsync(message);
     }
 
+    /// <summary>
+    /// Every expected object count the Connector stated, in order.
+    /// </summary>
+    public List<int> ExpectedObjectCounts { get; } = [];
+
+    /// <summary>
+    /// Every running count of objects produced that the Connector reported, in order.
+    /// </summary>
+    public List<int> ObjectsProduced { get; } = [];
+
     public Task ReportAsync(string message)
     {
         Messages.Add(message);
         return _onReport?.Invoke(message) ?? Task.CompletedTask;
+    }
+
+    public Task ReportExpectedObjectCountAsync(int objectCount)
+    {
+        ExpectedObjectCounts.Add(objectCount);
+        return Task.CompletedTask;
+    }
+
+    public Task ReportObjectsProducedAsync(int objectCount)
+    {
+        ObjectsProduced.Add(objectCount);
+        return Task.CompletedTask;
     }
 }

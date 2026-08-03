@@ -120,9 +120,22 @@ public sealed class ActivityPhaseReporter
     /// How a narration message reaches the Activity; the import path writes it straight to the
     /// Activity message.
     /// </param>
-    public IConnectorProgress CreateConnectorProgress(Func<string, Task> reportMessage) =>
+    /// <param name="reportExpectedObjectCount">
+    /// How a Connector's statement of the run's total object count reaches the Activity, or null
+    /// where the caller has nowhere to put it.
+    /// </param>
+    /// <param name="reportObjectsProduced">
+    /// How a Connector's running count of the objects it has produced within the current call
+    /// reaches the Activity, or null where the caller has nowhere to put it.
+    /// </param>
+    public IConnectorProgress CreateConnectorProgress(
+        Func<string, Task> reportMessage,
+        Func<int, Task>? reportExpectedObjectCount = null,
+        Func<int, Task>? reportObjectsProduced = null) =>
         new ConnectorProgress(
             report: reportMessage,
+            reportExpectedObjectCount: reportExpectedObjectCount,
+            reportObjectsProduced: reportObjectsProduced,
             // A reporter that records nothing hands over no phase delegate, so that a Connector's
             // narration still reaches the Activity through the message path rather than being lost
             // because it arrived attached to a phase change.

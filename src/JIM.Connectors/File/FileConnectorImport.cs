@@ -12,11 +12,11 @@ namespace JIM.Connectors.File;
 internal class FileConnectorImport
 {
     /// <summary>
-    /// How often to narrate row progress while reading the file. A file import is a single call that
+    /// How often to report progress while reading the file. A file import is a single call that
     /// returns only once the whole file is read, so this is the only movement an operator sees; the
     /// interval is coarse enough that the Activity write cost stays negligible even for a million rows.
     /// </summary>
-    private const int ProgressRowInterval = 10_000;
+    private const int ProgressObjectInterval = 10_000;
 
     private readonly CancellationToken _cancellationToken;
     private readonly ConnectedSystem _connectedSystem;
@@ -76,8 +76,6 @@ internal class FileConnectorImport
             }
 
             rowsRead++;
-            if (rowsRead % ProgressRowInterval == 0)
-                await _progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
 
             // start building the object that we pass back to JIM, representing the Connected System Object.
             // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
@@ -301,12 +299,18 @@ internal class FileConnectorImport
             }
 
             result.ImportObjects.Add(importObject);
+
+            // Paced on objects rather than rows: a row for an object type that is not selected is
+            // read and then skipped, so the two are not always the same number, and it is the
+            // objects that the Activity's counters are showing.
+            if (result.ImportObjects.Count % ProgressObjectInterval == 0)
+                await _progress.ReportObjectsProducedAsync(result.ImportObjects.Count);
         }
 
-        // Land on the true total so the last thing an operator sees is the row count actually read,
+        // Land on the true total so the last thing an operator sees is what was actually read,
         // rather than the last interval multiple. Skipped when the interval emit already reported it.
-        if (rowsRead > 0 && rowsRead % ProgressRowInterval != 0)
-            await _progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
+        if (result.ImportObjects.Count > 0 && result.ImportObjects.Count % ProgressObjectInterval != 0)
+            await _progress.ReportObjectsProducedAsync(result.ImportObjects.Count);
 
         return FinaliseResult(result, stopwatch);
     }

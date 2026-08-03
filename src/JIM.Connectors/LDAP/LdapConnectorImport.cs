@@ -31,6 +31,14 @@ internal class LdapConnectorImport
     private readonly TimeSpan _searchTimeout;
     private readonly string _placeholderMemberDn;
     private readonly IConnectorProgress _progress;
+
+    /// <summary>
+    /// Objects handed over so far within the call currently being served. A Full Import against a
+    /// directory that pages per connection drains every page inside one call, so without this the
+    /// Activity's counters would not move until the whole directory had been read. Written from
+    /// parallel combos, hence the interlocked increments.
+    /// </summary>
+    private int _objectsProducedThisCall;
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
@@ -187,7 +195,8 @@ internal class LdapConnectorImport
                     }
 
                     await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching {selectedObjectType.Name} objects from {selectedContainer.Name}...");
-                    GetFisoResults(result, selectedContainer, selectedObjectType, lastRunsCookie);
+                    await ReportObjectsProducedByAsync(result,
+                        () => GetFisoResults(result, selectedContainer, selectedObjectType, lastRunsCookie));
                 }
             }
         }
@@ -275,7 +284,8 @@ internal class LdapConnectorImport
                             continue;
 
                         await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching changed {selectedObjectType.Name} objects from {selectedContainer.Name}...");
-                        GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
+                        await ReportObjectsProducedByAsync(result,
+                            () => GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie));
                     }
                 }
 
@@ -289,7 +299,8 @@ internal class LdapConnectorImport
                 }
 
                 await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryDeletions, $"Querying deleted objects in {selectedPartition.Name}...");
-                GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
+                await ReportObjectsProducedByAsync(result,
+                    () => GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value));
             }
         }
         else if (_previousRootDse.UseAccesslogDeltaImport)
@@ -327,7 +338,7 @@ internal class LdapConnectorImport
             // OpenLDAP uses a shared cn=accesslog for all databases, so entries from other suffixes
             // (e.g., Target) must be excluded when importing from Source.
             var targetPartitions = GetTargetPartitions().ToList();
-            GetDeltaResultsUsingAccesslog(result, _previousRootDse.LastAccesslogTimestamp, targetPartitions);
+            await GetDeltaResultsUsingAccesslogAsync(result, _previousRootDse.LastAccesslogTimestamp, targetPartitions);
         }
         else
         {
@@ -341,7 +352,8 @@ internal class LdapConnectorImport
                 _previousRootDse.LastChangeNumber);
 
             await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {_previousRootDse.LastChangeNumber.Value:N0}...");
-            GetDeltaResultsUsingChangelog(result, _previousRootDse.LastChangeNumber.Value);
+            await ReportObjectsProducedByAsync(result,
+                () => GetDeltaResultsUsingChangelog(result, _previousRootDse.LastChangeNumber.Value));
         }
 
         return result;
@@ -501,6 +513,7 @@ internal class LdapConnectorImport
             GetFisoResults(comboResult, connection, container, objectType, pagingCookie);
 
             result.ImportObjects.AddRange(comboResult.ImportObjects);
+            await ReportObjectsProducedAsync(comboResult.ImportObjects.Count);
 
             // Check if there are more pages
             if (comboResult.PaginationTokens.Count > 0)
@@ -516,6 +529,33 @@ internal class LdapConnectorImport
     }
 
     #region private methods
+    /// <summary>
+    /// Tells JIM how many objects this call has produced so far, so the Activity's counters move
+    /// while a call that drains many directory pages is still in flight.
+    /// </summary>
+    /// <remarks>
+    /// The directory cannot be asked how many objects a search will return without running it, so
+    /// this Connector states no expected total: a percentage would have to be invented, and the
+    /// count and rate on their own are honest.
+    /// </remarks>
+    private Task ReportObjectsProducedAsync(int objectsJustProduced)
+    {
+        if (objectsJustProduced <= 0)
+            return Task.CompletedTask;
+
+        return _progress.ReportObjectsProducedAsync(Interlocked.Add(ref _objectsProducedThisCall, objectsJustProduced));
+    }
+
+    /// <summary>
+    /// Runs a piece of work that appends to the import result, and reports whatever it produced.
+    /// </summary>
+    private async Task ReportObjectsProducedByAsync(ConnectedSystemImportResult result, Action produce)
+    {
+        var producedBefore = result.ImportObjects.Count;
+        produce();
+        await ReportObjectsProducedAsync(result.ImportObjects.Count - producedBefore);
+    }
+
     /// <summary>
     /// For directories that support changelog.
     /// </summary>
@@ -1239,7 +1279,7 @@ internal class LdapConnectorImport
     /// when the size limit is exceeded, the latest timestamp from partial results is used to narrow
     /// the next query, effectively walking forward through the accesslog until all changes are found.
     /// </summary>
-    private void GetDeltaResultsUsingAccesslog(ConnectedSystemImportResult result, string previousTimestamp,
+    private async Task GetDeltaResultsUsingAccesslogAsync(ConnectedSystemImportResult result, string previousTimestamp,
         List<ConnectedSystemPartition> targetPartitions)
     {
         _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
@@ -1282,6 +1322,7 @@ internal class LdapConnectorImport
 
             SearchResponse response;
             var hitSizeLimit = false;
+            var objectsProducedBeforeThisBatch = result.ImportObjects.Count;
 
             try
             {
@@ -1401,6 +1442,11 @@ internal class LdapConnectorImport
                     }
                 }
             }
+
+            // A delta that follows an outage can run to a very large number of changes, each one
+            // costing a round trip to fetch the object's current state, so report at every batch
+            // boundary rather than leaving the Activity's counters still until the whole walk ends.
+            await ReportObjectsProducedAsync(result.ImportObjects.Count - objectsProducedBeforeThisBatch);
 
             if (!hitSizeLimit)
                 break; // Got all results without hitting the limit — done

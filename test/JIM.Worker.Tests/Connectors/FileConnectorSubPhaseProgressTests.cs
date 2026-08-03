@@ -180,12 +180,55 @@ public class FileConnectorSubPhaseProgressTests
         Assert.That(result.ImportObjects, Has.Count.EqualTo(25_000));
         Assert.That(progress.PhaseKeys, Is.EqualTo(new[] { FileConnectorPhases.Read }),
             "Reading and parsing a file is one pass, so it is one step");
-        Assert.That(progress.Messages, Is.EqualTo(new[]
+        Assert.That(progress.ObjectsProduced, Is.EqualTo(new[] { 10_000, 20_000, 25_000 }),
+            "Row progress must advance during the read, and finish on the true total");
+        Assert.That(progress.Messages, Is.Empty,
+            "The counters carry the figures now, so narrating them as prose as well would say the same thing twice");
+    }
+
+    [Test]
+    public async Task ImportAsync_WithProgressCallback_StatesHowManyRowsTheFileHoldsBeforeParsingThemAsync()
+    {
+        // Arrange - a file import returns everything in one call, so without a stated total the
+        // Activity can only show a bar with no end to it for the whole read.
+        var filePath = CreateCsvFile(rowCount: 25_000);
+        var connectedSystem = CreateConnectedSystem(filePath);
+        var runProfile = new ConnectedSystemRunProfile
         {
-            "Parsed 10,000 rows...",
-            "Parsed 20,000 rows...",
-            "Parsed 25,000 rows..."
-        }), "Row progress must advance during the read, and finish on the true total");
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+        var progress = new RecordingConnectorProgress();
+
+        // Act
+        await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, progress);
+
+        // Assert
+        Assert.That(progress.ExpectedObjectCounts, Is.EqualTo(new[] { 25_000 }),
+            "The rows are counted once, before the read, and the figure does not need correcting afterwards");
+    }
+
+    [Test]
+    public async Task ImportAsync_WithARowSpanningLines_CountsItOnceAsync()
+    {
+        // Arrange - a quoted field may hold line breaks, so counting lines rather than records
+        // would overstate the file and leave the bar stuck short of complete.
+        var filePath = CreateCsvFileWithAMultiLineField();
+        var connectedSystem = CreateConnectedSystem(filePath);
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+        var progress = new RecordingConnectorProgress();
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, progress);
+
+        // Assert
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(2));
+        Assert.That(progress.ExpectedObjectCounts, Is.EqualTo(new[] { 2 }),
+            "The stated total has to match what the Connector actually hands over, or the bar never reaches the end");
     }
 
     [Test]
@@ -205,7 +248,7 @@ public class FileConnectorSubPhaseProgressTests
         await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, progress);
 
         // Assert
-        Assert.That(progress.Messages, Is.EqualTo(new[] { "Parsed 3 rows..." }));
+        Assert.That(progress.ObjectsProduced, Is.EqualTo(new[] { 3 }));
     }
 
     [Test]
@@ -240,6 +283,18 @@ public class FileConnectorSubPhaseProgressTests
             builder.AppendLine($"{i},User {i}");
 
         File.WriteAllText(filePath, builder.ToString());
+        _importFilePaths.Add(filePath);
+        return filePath;
+    }
+
+    /// <summary>
+    /// Two records, the first of which carries a line break inside a quoted field, so the file has
+    /// three lines but holds two objects.
+    /// </summary>
+    private string CreateCsvFileWithAMultiLineField()
+    {
+        var filePath = Path.Combine(_testDirectory, $"import_{Guid.NewGuid():N}.csv");
+        File.WriteAllText(filePath, "Id,Name\r\n1,\"User\r\nOne\"\r\n2,User Two\r\n");
         _importFilePaths.Add(filePath);
         return filePath;
     }
