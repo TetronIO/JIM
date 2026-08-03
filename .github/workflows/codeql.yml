@@ -43,7 +43,25 @@ jobs:
     - name: Autobuild
       uses: github/codeql-action/autobuild@4187e74d05793876e9989daffde9c3e66b4acd07  # v3.37.3
 
+    # The analyze/filter/upload split exists because the action applies the configuration's
+    # paths-ignore to extraction only, which does nothing for compiled languages: C# is built and
+    # analysed whole, and alerts in excluded paths re-mint on every analysis (and re-open past any
+    # dismissal). Filtering the SARIF before upload is the only point the exclusion can be enforced
+    # for every language identically. The filter reads the same paths-ignore block, so the config
+    # file remains the single place a path is excluded.
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@4187e74d05793876e9989daffde9c3e66b4acd07  # v3.37.3
       with:
+        category: "/language:${{ matrix.language }}"
+        upload: failure-only
+        output: sarif-results
+
+    - name: Filter excluded paths from SARIF
+      shell: pwsh
+      run: ./scripts/Filter-Sarif.ps1 -SarifDirectory sarif-results -ConfigFile ./.github/codeql/codeql-config.yml
+
+    - name: Upload filtered SARIF
+      uses: github/codeql-action/upload-sarif@4187e74d05793876e9989daffde9c3e66b4acd07  # v3.37.3
+      with:
+        sarif_file: sarif-results
         category: "/language:${{ matrix.language }}"
