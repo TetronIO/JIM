@@ -191,6 +191,12 @@
         'Get-JIMHistoryCount',
         'Invoke-JIMHistoryCleanup',
 
+        # Configuration Change Previews
+        'New-JIMConfigurationChangePreview',
+        'Get-JIMConfigurationChangePreview',
+        'Get-JIMConfigurationChangePreviewDelta',
+        'Stop-JIMConfigurationChangePreview',
+
         # Worker Tasks
         'Get-JIMWorkerTask',
         'Stop-JIMWorkerTask',
