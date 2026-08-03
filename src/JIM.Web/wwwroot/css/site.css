@@ -2817,9 +2817,10 @@ html[lang] .jim-password-guidance .mud-alert-position {
     color: var(--mud-palette-text-secondary);
 }
 
-/* Sentence case: this button carries a Connected System's name and a tab label, and MudBlazor's default
-   upper-casing turns that into a line of shouting rather than a destination. */
-.jim-password-guidance-link.mud-button-root {
+/* Sentence case for every action in the panel. One carries a Connected System's name and a tab label and the
+   other a sentence with a count in it; MudBlazor's default upper-casing turns both into lines of shouting,
+   and applying it to only one of them left two buttons in the same alert set differently. */
+.jim-password-guidance .mud-button-root {
     text-transform: none;
     letter-spacing: normal;
 }
