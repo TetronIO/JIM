@@ -41,6 +41,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, "Would Fall Out Of Scope")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Would Become Deletion Eligible")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "Would Cease To Be Deletion Eligible")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "CSO Pending Delete")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -71,6 +72,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, Color.Error)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, Color.Success)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, Color.Error)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -105,7 +107,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] = Icons.Material.Filled.FilterAlt,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] = Icons.Material.Filled.FilterAltOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = Icons.Material.Filled.DeleteOutline,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = Icons.Material.Filled.RestoreFromTrash
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = Icons.Material.Filled.RestoreFromTrash,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = Icons.Material.Filled.AutoDelete
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

@@ -55,6 +55,11 @@ public static class OutcomeDisplayMap
             new OutcomeDisplay("Provisioned", "CSO Provisioned", CausalityTone.Primary, Icons.Material.Filled.SwitchAccessShortcut),
         [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated] =
             new OutcomeDisplay("Export queued", "CSO Pending Export", CausalityTone.Info, Icons.Material.Filled.Schedule),
+        // The delete-flavoured staging outcome. Error-toned and named for what it will do, because "Export
+        // queued" over a single distinguishedName row read as an attribute update rather than an account
+        // being removed. AutoDelete (a clock inside a bin) is the queued form of Deprovisioned's CloudOff.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] =
+            new OutcomeDisplay("Deprovision queued", "CSO Pending Delete", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
 
         // Export execution outcomes
         [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] =

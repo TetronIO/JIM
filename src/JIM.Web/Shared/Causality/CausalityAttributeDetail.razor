@@ -25,32 +25,41 @@
         <input type="text" placeholder="Filter attributes…" aria-label="Filter attributes"
                @bind="_search" @bind:event="oninput" />
     </label>
-    <div class="filter-chips" role="group" aria-label="Filter by operation">
-        <button type="button" class="@(_operationFilter == null ? "on" : null)"
-                aria-pressed="@(_operationFilter == null ? "true" : "false")"
-                @onclick="() => _operationFilter = null">All</button>
-        @foreach (var (operation, count) in GetOperationCounts())
-        {
-            <button type="button" class="@(_operationFilter == operation ? "on" : null)"
-                    aria-pressed="@(_operationFilter == operation ? "true" : "false")"
-                    @onclick="() => _operationFilter = operation">@operation · @count</button>
-        }
-    </div>
+    @if (ShowOperations)
+    {
+        <div class="filter-chips" role="group" aria-label="Filter by operation">
+            <button type="button" class="@(_operationFilter == null ? "on" : null)"
+                    aria-pressed="@(_operationFilter == null ? "true" : "false")"
+                    @onclick="() => _operationFilter = null">All</button>
+            @foreach (var (operation, count) in GetOperationCounts())
+            {
+                <button type="button" class="@(_operationFilter == operation ? "on" : null)"
+                        aria-pressed="@(_operationFilter == operation ? "true" : "false")"
+                        @onclick="() => _operationFilter = operation">@operation · @count</button>
+            }
+        </div>
+    }
     <span class="attr-meta-count">@GetFilteredRows().Count of @Rows.Count</span>
 </div>
 
 <MudTable Items="@GetFilteredRows()" Hover="true" Dense="true" Outlined="true" Elevation="0">
     <HeaderContent>
-        <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Change</MudText></MudTh>
+        @if (ShowOperations)
+        {
+            <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Change</MudText></MudTh>
+        }
         <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Change" Class="attr-col-shrink">
-            <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Operation)" Class="ml-0">
-                @context.Operation
-            </MudChip>
-        </MudTd>
+        @if (ShowOperations)
+        {
+            <MudTd DataLabel="Change" Class="attr-col-shrink">
+                <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Operation)" Class="ml-0">
+                    @context.Operation
+                </MudChip>
+            </MudTd>
+        }
         <MudTd DataLabel="Attribute" Class="attr-col-shrink">
             @context.Name
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.TypeAndPlurality</MudText>
@@ -74,6 +83,16 @@
     /// </summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<CausalityAttributeRow> Rows { get; set; } = [];
+
+    /// <summary>
+    /// Whether the rows are attribute *changes*, and so carry a meaningful operation. Set false where they
+    /// are values that identify an object rather than values being written to it: a queued deprovision
+    /// carries the target's distinguished name so the Connector can find the entry, and reporting that as
+    /// "Set" is the same claim the event's "Target identified by" caption exists to correct. The values
+    /// themselves are always shown; only the operation column and its filter chips are suppressed.
+    /// </summary>
+    [Parameter]
+    public bool ShowOperations { get; set; } = true;
 
     private string _search = string.Empty;
     private CausalityAttributeOperation? _operationFilter;

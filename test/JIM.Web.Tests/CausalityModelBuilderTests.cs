@@ -77,6 +77,7 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated] = CausalityLane.Downstream,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Exported] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned] = CausalityLane.Downstream,
             [ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled] = CausalityLane.Identity,
@@ -281,6 +282,63 @@ public class CausalityModelBuilderTests
         Assert.That(displayNameRow.Value, Is.EqualTo("Liam Allen"));
         Assert.That(displayNameRow.PreviousValue, Is.Null);
         Assert.That(displayNameRow.TypeAndPlurality, Is.EqualTo("Text · Single-valued"));
+    }
+
+    /// <summary>
+    /// A queued deprovision is a staged Pending Export, so it must behave exactly as PendingExportCreated
+    /// does in the causality graph: downstream lane, its target system linked, its own Pending Export row
+    /// linked, and its persisted snapshot rendered as the event's attribute rows.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionQueuedOutcome_BehavesAsAStagedPendingExport()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var mvoDeleted = model.Roots[0].Children
+            .Single(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var deprovision = mvoDeleted.Children
+            .First(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+
+        Assert.That(deprovision.Lane, Is.EqualTo(CausalityLane.Downstream));
+        Assert.That(deprovision.SystemId, Is.EqualTo(2),
+            "The target system id travels in DetailMessage on both staging outcome types");
+
+        var csLink = deprovision.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.ConnectedSystem);
+        Assert.That(csLink, Is.Not.Null);
+        Assert.That(csLink!.Href, Is.EqualTo("/admin/connected-systems/2"));
+
+        var peLink = deprovision.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
+        Assert.That(peLink, Is.Not.Null);
+
+        Assert.That(deprovision.AttributeRows, Has.Count.EqualTo(1));
+        Assert.That(deprovision.AttributeRows[0].Name, Is.EqualTo("distinguishedName"));
+    }
+
+    /// <summary>
+    /// The delete Pending Export's single row is the target's DN, carried so the connector can still find
+    /// the entry after the Connected System Object is disconnected. Labelled "1 attribute" like every other
+    /// event's change set, it read as though a deprovision had merely set one attribute; the caption says
+    /// what the rows are instead.
+    /// </summary>
+    [Test]
+    public void Build_DeprovisionQueuedOutcome_CaptionsItsRowsAsTargetIdentification()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var mvoDeleted = model.Roots[0].Children
+            .Single(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var deprovision = mvoDeleted.Children
+            .First(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+
+        Assert.That(deprovision.AttributeRowsCaption, Is.EqualTo("Target identified by"));
+    }
+
+    [Test]
+    public void Build_PendingExportCreatedOutcome_HasNoAttributeRowsCaption()
+    {
+        // Every other event's rows genuinely are attribute changes, so they keep the plain count label.
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        var pendingExport = model.Roots[0].Children[0].Children[0].Children[0];
+
+        Assert.That(pendingExport.AttributeRowsCaption, Is.Null);
     }
 
     [Test]

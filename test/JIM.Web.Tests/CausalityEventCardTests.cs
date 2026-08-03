@@ -139,6 +139,26 @@ public class CausalityEventCardTests
         Assert.That(cut.Find(".evt-badge").TextContent.Trim(), Is.EqualTo("Destructive"));
     }
 
+    /// <summary>
+    /// A queued deprovision's only attribute row is the target's own identifier (the DN), carried on the
+    /// delete Pending Export so the connector can still find the entry. Counted like a change set, the card
+    /// announced "1 attribute" and a deprovisioning cascade read as an attribute update.
+    /// </summary>
+    [Test]
+    public async Task Render_DeprovisionQueuedFooter_NamesItsRowsRatherThanCountingThemAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+        var deprovision = FindEvent(model, ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
+
+        var cut = RenderCard(context, deprovision);
+
+        var footer = cut.Find(".evt-foot .attr-count").TextContent;
+        Assert.That(footer, Does.Contain("Target identified by"));
+        Assert.That(footer, Does.Not.Contain("attribute"),
+            "Calling the target's own identifier an attribute change is what made a deprovision unreadable");
+    }
+
     [Test]
     public async Task Render_Footer_ShowsAttributeCountAndUpToTwoActionLinksAsync()
     {

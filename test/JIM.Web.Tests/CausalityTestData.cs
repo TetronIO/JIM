@@ -136,11 +136,16 @@ public static class CausalityTestData
         // queues them, and #1044 made the worker emit them nested this way (both from the sync path and from the
         // Metaverse Object Housekeeping batch). They were siblings here until that landed, which no longer models
         // any shape production can produce.
-        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+        // DeprovisionQueued, not PendingExportCreated: these stage Pending Exports whose change type is Delete.
+        // Their single attribute value change is the target's secondary external ID (the DN), carried so the
+        // connector can still find the entry after the Connected System Object is disconnected; it is how the
+        // target is identified, not an attribute being written.
+        var glitterbandDeprovision = AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
             parent: mvoDeleted, ordinal: 0, targetEntityId: Guid.NewGuid(),
             targetEntityDescription: "Glitterband EMEA", detailCount: 1, detailMessage: "2");
+        glitterbandDeprovision.ConnectedSystemObjectChange = BuildDeprovisionTargetSnapshot();
 
-        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+        AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,
             parent: mvoDeleted, ordinal: 1, targetEntityId: Guid.NewGuid(),
             targetEntityDescription: "Contoso AD", detailCount: 1, detailMessage: "3");
 
@@ -223,6 +228,34 @@ public static class CausalityTestData
             });
             change.AttributeChanges.Add(attribute);
         }
+
+        return change;
+    }
+
+    /// <summary>
+    /// The snapshot a delete Pending Export carries: the target's secondary external ID, staged so the
+    /// connector can still resolve the entry once the Connected System Object is disconnected. One row,
+    /// and it identifies the object rather than changing it.
+    /// </summary>
+    public static ConnectedSystemObjectChange BuildDeprovisionTargetSnapshot()
+    {
+        var change = new ConnectedSystemObjectChange { Id = Guid.NewGuid() };
+        var attribute = new ConnectedSystemObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = "distinguishedName",
+            AttributeType = AttributeDataType.Text,
+            Attribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = "distinguishedName", AttributePlurality = AttributePlurality.SingleValued
+            }
+        };
+        attribute.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = "uid=erin.byrne,ou=People,dc=glitterband,dc=local"
+        });
+        change.AttributeChanges.Add(attribute);
 
         return change;
     }

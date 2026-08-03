@@ -117,7 +117,7 @@ public static class CausalityModelBuilder
     private static bool UsesDetailMessageIdChannel(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
-            or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated;
+            || SyncOutcomeTypes.IsPendingExport(outcomeType);
     }
 
     private static CausalityLane GetLane(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
@@ -134,6 +134,7 @@ public static class CausalityModelBuilder
             // Provisioning and export-side events: what it caused
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
                 or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed
@@ -224,6 +225,7 @@ public static class CausalityModelBuilder
                 break;
 
             case ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated:
+            case ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued:
                 // TargetEntityId is the Pending Export's own id, so link straight to it rather than to the
                 // target system's whole queue: on a deprovisioning cascade that queue can hold thousands of
                 // rows, and "which of these did this event create?" is the one question the link should not
@@ -356,7 +358,8 @@ public static class CausalityModelBuilder
     }
 
     /// <summary>
-    /// Selects the attribute rows for an event by the change set it owns: PendingExportCreated uses
+    /// Selects the attribute rows for an event by the change set it owns: the Pending Export staging
+    /// outcomes (PendingExportCreated and DeprovisionQueued) use
     /// its persisted CSO change snapshot, record-side events (import changes and export executions)
     /// use the item's CSO change rows, and Attribute Flow uses the item's MVO change rows. Events
     /// never share the combined item-level list, so each event's row count agrees with its own
@@ -367,7 +370,7 @@ public static class CausalityModelBuilder
         IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
         IReadOnlyList<CausalityAttributeRow> identityAttributeRows)
     {
-        if (outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+        if (SyncOutcomeTypes.IsPendingExport(outcome.OutcomeType))
             return NormaliseAttributeRows(outcome.ConnectedSystemObjectChange?.AttributeChanges, null);
 
         return outcome.OutcomeType switch

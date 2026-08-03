@@ -1676,7 +1676,7 @@ public abstract class SyncTaskProcessorBase
                     if (peCsId > 0 && provisionedByCs.TryGetValue(peCsId, out var provisionedParent))
                     {
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1688,7 +1688,7 @@ public abstract class SyncTaskProcessorBase
                         csNameLookup.TryGetValue(peCsId, out var peCsName);
                         peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1699,7 +1699,7 @@ public abstract class SyncTaskProcessorBase
                         csNameLookup.TryGetValue(peCsId, out var peCsName);
                         peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1728,7 +1728,7 @@ public abstract class SyncTaskProcessorBase
                 foreach (var pe in result.PendingExports)
                 {
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
-                        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                        SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
@@ -3222,7 +3222,7 @@ public abstract class SyncTaskProcessorBase
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
                 var nestedOutcome = SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
@@ -3250,7 +3250,7 @@ public abstract class SyncTaskProcessorBase
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var cascadeOutcome = SyncOutcomeBuilder.AddRootOutcome(cascadeRpei,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
@@ -3341,7 +3341,7 @@ public abstract class SyncTaskProcessorBase
                 // own, unrelated purpose of identifying the referencing CSO after it is later deleted).
                 csNameLookup.TryGetValue(stagedPendingExport.ConnectedSystemId, out var targetSystemName);
                 var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(stagedPendingExport),
                     targetEntityId: stagedPendingExport.Id,
                     targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,

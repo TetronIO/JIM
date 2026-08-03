@@ -53,7 +53,12 @@ public class SyncOutcomeTypeOrdinalTests
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] = 20,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] = 21,
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = 22,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = 23
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = 23,
+
+        // The delete-flavoured sibling of PendingExportCreated (14): staging a Pending Export whose
+        // ChangeType is Delete. Before this existed, a deprovisioning cascade was indistinguishable
+        // from an attribute update in the causality views.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = 24
     };
 
     [Test]

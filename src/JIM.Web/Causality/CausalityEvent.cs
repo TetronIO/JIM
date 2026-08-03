@@ -92,6 +92,20 @@ public sealed class CausalityEvent
     public IReadOnlyList<CausalityAttributeRow> AttributeRows { get; init; } = [];
 
     /// <summary>
+    /// What this event's <see cref="AttributeRows"/> are, when they are not attribute changes; null for
+    /// every event whose rows genuinely are changes, which then label themselves by count ("3 attributes").
+    ///
+    /// A queued deprovision is the one case: its rows are the target's secondary external ID (the DN, for
+    /// LDAP), carried on the delete Pending Export so the connector can still resolve the entry after the
+    /// Connected System Object is disconnected. Counted as changes, a deprovisioning cascade announced
+    /// itself as "1 attribute", which read as an attribute update rather than an account being removed.
+    /// </summary>
+    public string? AttributeRowsCaption =>
+        OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
+            ? "Target identified by"
+            : null;
+
+    /// <summary>
     /// Child events ordered by Ordinal.
     /// </summary>
     public IReadOnlyList<CausalityEvent> Children { get; init; } = [];

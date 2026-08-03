@@ -54,9 +54,12 @@
         <div class="evt-foot">
             @if (Event.AttributeRows.Count > 0)
             {
+                @* A queued deprovision's rows identify the target rather than change it, so it says what
+                   they are instead of counting them; see CausalityEvent.AttributeRowsCaption. *@
                 <span class="attr-count">
                     <MudIcon Icon="@Icons.Material.Filled.TableChart" aria-hidden="true" />
-                    @Event.AttributeRows.Count attribute@(Event.AttributeRows.Count == 1 ? "" : "s")
+                    @(Event.AttributeRowsCaption
+                      ?? $"{Event.AttributeRows.Count} attribute{(Event.AttributeRows.Count == 1 ? "" : "s")}")
                 </span>
             }
             <span class="spacer"></span>

@@ -961,13 +961,13 @@ public class Worker : BackgroundService
     {
         var outcome = parent == null
             ? SyncOutcomeBuilder.AddRootOutcome(executionItem,
-                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
                 detailMessage: pendingExport.ConnectedSystemId.ToString())
             : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
-                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1144,7 +1144,7 @@ public class Worker : BackgroundService
             activity.TotalExported += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
             activity.TotalDeprovisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            activity.TotalPendingExports += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            activity.TotalPendingExports += allOutcomes.Count(o => SyncOutcomeTypes.IsPendingExport(o.OutcomeType));
             activity.TotalDriftCorrections += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
             activity.TotalProvisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
         }
@@ -1207,8 +1207,8 @@ public class Worker : BackgroundService
             activity.TotalExported = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
             activity.TotalDeprovisioned = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            // Pending Export stats from outcomes
-            activity.TotalPendingExports = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            // Pending Export stats from outcomes; a queued deprovision is a Pending Export too
+            activity.TotalPendingExports = allOutcomes.Count(o => SyncOutcomeTypes.IsPendingExport(o.OutcomeType));
 
             // Drift correction from outcomes
             activity.TotalDriftCorrections = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);

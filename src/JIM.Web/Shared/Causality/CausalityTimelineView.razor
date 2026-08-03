@@ -149,12 +149,18 @@
                             aria-expanded="@(expanded ? "true" : "false")"
                             @onclick="() => ToggleExpandedAsync(causalityEvent)">
                         <span class="chev"><MudIcon Icon="@Icons.Material.Filled.ChevronRight" aria-hidden="true" /></span>
-                        @causalityEvent.AttributeRows.Count attribute@(causalityEvent.AttributeRows.Count == 1 ? "" : "s")
+                        @* A queued deprovision's rows identify the target rather than change it, so it says
+                           what they are instead of counting them; see CausalityEvent.AttributeRowsCaption. *@
+                        @(causalityEvent.AttributeRowsCaption
+                          ?? $"{causalityEvent.AttributeRows.Count} attribute{(causalityEvent.AttributeRows.Count == 1 ? "" : "s")}")
                     </button>
                     @if (expanded)
                     {
                         <div class="tl-inline-detail">
-                            <CausalityAttributeDetail Rows="causalityEvent.AttributeRows" />
+                            @* An event with a rows caption is naming what its rows are rather than counting
+                               changes, so those rows carry no meaningful operation to show. *@
+                            <CausalityAttributeDetail Rows="causalityEvent.AttributeRows"
+                                                      ShowOperations="@(causalityEvent.AttributeRowsCaption == null)" />
                         </div>
                     }
                 }

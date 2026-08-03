@@ -78,7 +78,10 @@
                                 @onclick="CloseDrawer">&#x2715;</button>
                     </div>
                     @* Keyed on the event so the detail's filter state resets when another card is selected *@
-                    <CausalityAttributeDetail @key="selectedEvent" Rows="selectedEvent.AttributeRows" />
+                    @* An event with a rows caption is naming what its rows are rather than counting changes,
+                       so those rows carry no meaningful operation to show. *@
+                    <CausalityAttributeDetail @key="selectedEvent" Rows="selectedEvent.AttributeRows"
+                                              ShowOperations="@(selectedEvent.AttributeRowsCaption == null)" />
                 </div>
             </div>
         }
@@ -188,7 +191,10 @@
     private static string GetDrawerSubtitle(CausalityEvent selectedEvent)
     {
         var count = selectedEvent.AttributeRows.Count;
-        var subtitle = $"{count} attribute change{(count == 1 ? "" : "s")}";
+        // A queued deprovision's rows identify the target rather than change it, so the drawer says what
+        // they are rather than calling them changes; see CausalityEvent.AttributeRowsCaption.
+        var subtitle = selectedEvent.AttributeRowsCaption
+                       ?? $"{count} attribute change{(count == 1 ? "" : "s")}";
         return string.IsNullOrWhiteSpace(selectedEvent.SystemName)
             ? subtitle
             : $"{subtitle} · {selectedEvent.SystemName}";

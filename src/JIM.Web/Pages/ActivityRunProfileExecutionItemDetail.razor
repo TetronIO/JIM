@@ -1223,7 +1223,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private async Task LoadLivePendingExportIdsAsync(JimApplication jim)
     {
         var pendingExportIds = _activityRunProfileExecutionItem?.SyncOutcomes
-            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+            .Where(o => SyncOutcomeTypes.IsPendingExport(o.OutcomeType)
                         && o.TargetEntityId is { } id && id != Guid.Empty)
             .Select(o => o.TargetEntityId!.Value)
             .Distinct()

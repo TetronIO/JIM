@@ -50,6 +50,44 @@ public class CausalityAttributeDetailTests
         return cut.FindComponents<TextValueDisplay>().Count;
     }
 
+    /// <summary>
+    /// A queued deprovision's rows are the target's identifying attribute values, carried on the delete
+    /// Pending Export so the Connector can still find the entry; nothing is being written. The operation
+    /// column and its filter chips would report every such row as "Set", which is the same claim the
+    /// "Target identified by" caption exists to correct, one level further down.
+    /// </summary>
+    [Test]
+    public async Task Render_WithoutOperations_HidesTheChangeColumnAndItsFilterChipsAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var rows = new List<CausalityAttributeRow>
+        {
+            new(CausalityAttributeOperation.Set, "distinguishedName", "Text · Single-valued",
+                "uid=erin.byrne,ou=People,dc=glitterband,dc=local", null)
+        };
+
+        var cut = context.Render<CausalityAttributeDetail>(ps => ps
+            .Add(c => c.Rows, rows)
+            .Add(c => c.ShowOperations, false));
+
+        Assert.That(cut.Markup, Does.Not.Contain("Change"),
+            "Nothing is being changed, so the operation column has no honest value to show");
+        Assert.That(cut.FindAll(".filter-chips button"), Is.Empty);
+        Assert.That(RenderedRowCount(cut), Is.EqualTo(1), "The values themselves must still be shown");
+        Assert.That(cut.Markup, Does.Contain("uid=erin.byrne,ou=People,dc=glitterband,dc=local"));
+    }
+
+    [Test]
+    public async Task Render_Default_ShowsTheChangeColumnAndOperationChipsAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+
+        var cut = RenderDetail(context);
+
+        Assert.That(cut.Markup, Does.Contain("Change"));
+        Assert.That(cut.FindAll(".filter-chips button"), Is.Not.Empty);
+    }
+
     [Test]
     public async Task Render_Default_ShowsAllRowsAndTheFullCountAsync()
     {

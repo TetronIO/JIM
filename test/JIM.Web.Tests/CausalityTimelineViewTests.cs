@@ -115,6 +115,25 @@ public class CausalityTimelineViewTests
         Assert.That(deletionLinks, Is.Not.Empty);
     }
 
+    /// <summary>
+    /// The Timeline's counterpart of CausalityEventCardTests' footer test: a queued deprovision's expander
+    /// names what its rows are, because they identify the target rather than change it.
+    /// </summary>
+    [Test]
+    public async Task Render_LeaverScenario_DeprovisionExpanderNamesItsRowsRatherThanCountingThemAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderTimeline(context, model);
+
+        var expanders = cut.FindAll(".tl-expander").Select(e => e.TextContent.Trim()).ToList();
+        Assert.That(expanders, Has.Count.EqualTo(1),
+            "Only the Glitterband EMEA deprovision carries a snapshot in this fixture");
+        Assert.That(expanders[0], Does.Contain("Target identified by"));
+        Assert.That(expanders[0], Does.Not.Contain("attribute"));
+    }
+
     [Test]
     public async Task Render_LeaverScenario_RendersTheDestructiveBadgeAsync()
     {

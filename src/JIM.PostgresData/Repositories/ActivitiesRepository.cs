@@ -1407,7 +1407,9 @@ public class ActivityRepository : IActivityRepository
 
             // Pending Export, drift correction, provisioning and Metaverse Object deletion
             // stats from outcomes (housekeeping batches, #1020)
-            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            // Both staging outcome types: a queued deprovision is a Pending Export, and only its intent differs
+            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+                                              + OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
             totalDriftCorrections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
             totalProvisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
             totalMvoDeleted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);

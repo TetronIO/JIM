@@ -292,8 +292,11 @@ public static class CausalitySummaryBuilder
             }
         }
 
+        // DeprovisionQueued (staged) and Deprovisioned (written). Before DeprovisionQueued existed this had
+        // to accept every PendingExportCreated on a deletion item, which over-counted any export that was
+        // merely an attribute update caused by the same deletion (a group's membership recall, say).
         var deprovisionSystemCount = allEvents
-            .Where(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+            .Where(e => e.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)
             .Select(e => (e.SystemId, e.SystemName))
             .Distinct()
@@ -406,6 +409,10 @@ public static class CausalitySummaryBuilder
                 $"Export queued · {detailSum} change{(detailSum == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.Exported when detailSum > 0 =>
                 $"Exported · {detailSum} change{(detailSum == 1 ? string.Empty : "s")}",
+            // Both deprovisioning pills count systems, never changes: a delete Pending Export's only attribute
+            // row is the target's own identifier, so "1 change" would be a meaningless number to show.
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued =>
+                $"Deprovision queued · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned =>
                 $"Deprovisioning · {systemCount} system{(systemCount == 1 ? string.Empty : "s")}",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of scope",
