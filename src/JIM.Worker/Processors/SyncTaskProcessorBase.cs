@@ -553,7 +553,8 @@ public abstract class SyncTaskProcessorBase
                                 targetEntityId: changeResult.DisconnectedMvoId,
                                 targetEntityDescription: changeResult.DisconnectedMvoDisplayName,
                                 detailMessage: BuildMvoDeletionDetailMessage(changeResult.MvoDeletionFate,
-                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod));
+                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod,
+                                    changeResult.MvoDeletionEligibleDate));
                         }
                     }
                 }
@@ -651,7 +652,8 @@ public abstract class SyncTaskProcessorBase
                                 targetEntityId: mvoId,
                                 targetEntityDescription: mvoDescription,
                                 detailMessage: BuildMvoDeletionDetailMessage(changeResult.MvoDeletionFate,
-                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod));
+                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod,
+                                    changeResult.MvoDeletionEligibleDate));
                         }
                     }
 
@@ -1031,7 +1033,7 @@ public abstract class SyncTaskProcessorBase
                     ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                     targetEntityId: mvoId,
                     targetEntityDescription: mvoDisplayName,
-                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, null));
+                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, null, null));
             }
             else if (mvoDeletionFate == MvoDeletionFate.DeletionScheduled)
             {
@@ -1041,7 +1043,7 @@ public abstract class SyncTaskProcessorBase
                     ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
                     targetEntityId: mvoId,
                     targetEntityDescription: mvoDisplayName,
-                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, gracePeriod));
+                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, gracePeriod, mvo.DeletionEligibleDate));
             }
         }
 
@@ -1147,7 +1149,12 @@ public abstract class SyncTaskProcessorBase
             TriggerMode = type.DeletionTriggerMode,
             GracePeriod = type.DeletionGracePeriod,
             TriggeringSystemId = disconnectingSystemId,
-            TriggeringSystemName = await ResolveConnectedSystemNameAsync(disconnectingSystemId)
+            TriggeringSystemName = await ResolveConnectedSystemNameAsync(disconnectingSystemId),
+            // Record when the deletion becomes due, so surfaces can answer "when?" without deriving it
+            // from the disconnection time and a grace period that may since have been reconfigured (#119).
+            DeletionEligibleDate = decision.Fate == MvoDeletionFate.DeletionScheduled && decision.GracePeriod.HasValue
+                ? DateTime.UtcNow.Add(decision.GracePeriod.Value)
+                : null
         };
 
         foreach (var sourceSystemId in triggerIds)
@@ -1269,17 +1276,30 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Builds the detail message for an MvoDeleted or MvoDeletionScheduled outcome node: the
-    /// Metaverse Object Deletion Rule reason (when known) plus the grace period for scheduled
-    /// deletions, e.g. "Deletion Rule: last connector disconnected. Grace period: 7 days" (#1086).
-    /// Returns null when neither part is available.
+    /// Metaverse Object Deletion Rule reason (when known), plus the grace period and the resulting due
+    /// date for scheduled deletions, e.g. "Deletion Rule: last connector disconnected. Grace period:
+    /// 7 days. Eligible for deletion: 10 Aug 2026 08:00:57 UTC" (#1086, due date added under #119).
+    /// Returns null when no part is available.
     /// </summary>
-    private static string? BuildMvoDeletionDetailMessage(MvoDeletionFate fate, string? reason, TimeSpan? gracePeriod)
+    /// <remarks>
+    /// NOTE FOR THE CAUSALITY VIEW REDESIGN (#1087): the due date is a deliberate capability, added
+    /// because "scheduled for deletion" without a date makes the reader derive it from the disconnection
+    /// time and the grace period. Carry it into the new views; the structured value is also available on
+    /// the decision-time policy snapshot (<see cref="MvoDeletionPolicySnapshot.DeletionEligibleDate"/>),
+    /// which is the better source for a view that formats dates itself.
+    /// </remarks>
+    private static string? BuildMvoDeletionDetailMessage(MvoDeletionFate fate, string? reason, TimeSpan? gracePeriod, DateTime? deletionEligibleDate)
     {
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(reason))
             parts.Add($"Deletion Rule: {reason}");
         if (fate == MvoDeletionFate.DeletionScheduled && gracePeriod.HasValue)
             parts.Add($"Grace period: {FormatGracePeriod(gracePeriod.Value)}");
+        if (fate == MvoDeletionFate.DeletionScheduled && deletionEligibleDate.HasValue)
+        {
+            // Stored text cannot be localised when it is later rendered, so state the zone explicitly.
+            parts.Add($"Eligible for deletion: {deletionEligibleDate.Value:dd MMM yyyy HH:mm:ss} UTC");
+        }
         return parts.Count > 0 ? string.Join(". ", parts) : null;
     }
 
@@ -4382,7 +4402,10 @@ public abstract class SyncTaskProcessorBase
                     disconnectedMvoDisplayName: mvoDisplayName,
                     mvoDeletionReason: mvoDeletionFate != MvoDeletionFate.NotDeleted ? mvoDeletionDecision.Reason : null,
                     mvoDeletionGracePeriod: mvoDeletionDecision.GracePeriod,
-                    mvoDeletionPolicySnapshotJson: mvoDeletionPolicySnapshotJson);
+                    mvoDeletionPolicySnapshotJson: mvoDeletionPolicySnapshotJson,
+                    // The MVO has been marked by this point, so its computed due date is the
+                    // decision-time value the outcome node should state (#119).
+                    mvoDeletionEligibleDate: mvo.DeletionEligibleDate);
         }
     }
 

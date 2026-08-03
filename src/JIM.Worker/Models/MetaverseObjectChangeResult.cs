@@ -116,6 +116,13 @@ public readonly struct MetaverseObjectChangeResult
     public string? MvoDeletionPolicySnapshotJson { get; init; }
 
     /// <summary>
+    /// When a scheduled deletion becomes due (UTC), so the outcome node can state the date rather than
+    /// leaving the reader to derive it from the disconnection time and the grace period (#119).
+    /// Null unless the deletion was scheduled.
+    /// </summary>
+    public DateTime? MvoDeletionEligibleDate { get; init; }
+
+    /// <summary>
     /// The id of the Synchronisation Rule attributed to this change, when one was determinable at
     /// decision time (#1085): the scoping rule the Connected System Object fell out of scope of for
     /// DisconnectedOutOfScope, or the projecting rule for Projected. Threaded through to the sync
@@ -195,6 +202,7 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="mvoDeletionReason">A human-readable Deletion Rule reason when the deletion rule was triggered (#1086).</param>
     /// <param name="mvoDeletionGracePeriod">The grace period applied when the deletion was scheduled (#1086).</param>
     /// <param name="mvoDeletionPolicySnapshotJson">The serialised decision-time deletion policy snapshot, when the evaluation recorded an outcome (#119).</param>
+    /// <param name="mvoDeletionEligibleDate">When a scheduled deletion becomes due (UTC), for the outcome node's detail message (#119).</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
         MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,
@@ -206,7 +214,8 @@ public readonly struct MetaverseObjectChangeResult
         string? disconnectedMvoDisplayName = null,
         string? mvoDeletionReason = null,
         TimeSpan? mvoDeletionGracePeriod = null,
-        string? mvoDeletionPolicySnapshotJson = null) => new()
+        string? mvoDeletionPolicySnapshotJson = null,
+        DateTime? mvoDeletionEligibleDate = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.DisconnectedOutOfScope,
@@ -221,7 +230,8 @@ public readonly struct MetaverseObjectChangeResult
         DisconnectedMvoDisplayName = disconnectedMvoDisplayName,
         MvoDeletionReason = mvoDeletionReason,
         MvoDeletionGracePeriod = mvoDeletionGracePeriod,
-        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson
+        MvoDeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson,
+        MvoDeletionEligibleDate = mvoDeletionEligibleDate
     };
 
     /// <summary>

@@ -559,7 +559,19 @@
                                 {
                                     <strong>@mvoDeletionScheduledOutcome.TargetEntityDescription</strong>
                                 }
-                                <text> will be deleted after the grace period expires</text>
+                                @* Decision-time due date (#119): state WHEN, in the reader's local time,
+                                   rather than leaving them to add the grace period to the disconnection time.
+                                   NOTE FOR THE CAUSALITY VIEW REDESIGN (#1087): keep this capability; the
+                                   structured value is on the decision-time snapshot, so it stays accurate
+                                   even after the object type's grace period is reconfigured. *@
+                                @if (_deletionPolicySnapshot?.DeletionEligibleDate is { } deletionEligibleDate)
+                                {
+                                    <text> is due for deletion on <strong>@deletionEligibleDate.ToLocalTime().ToFriendlyDate()</strong></text>
+                                }
+                                else
+                                {
+                                    <text> will be deleted after the grace period expires</text>
+                                }
                                 @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.DetailMessage))
                                 {
                                     <text> (@mvoDeletionScheduledOutcome.DetailMessage.ToLowerInvariant())</text>

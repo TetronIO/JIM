@@ -1652,7 +1652,12 @@ public class MetaverseServer
             TriggerMode = type.DeletionTriggerMode,
             GracePeriod = type.DeletionGracePeriod,
             TriggeringSystemId = deletedSystemId,
-            TriggeringSystemName = deletedSystemName
+            TriggeringSystemName = deletedSystemName,
+            // When the deletion becomes due, recorded rather than derived so it survives a later grace
+            // period change, matching the worker's disconnect path (#119).
+            DeletionEligibleDate = type.DeletionGracePeriod.HasValue && type.DeletionGracePeriod.Value > TimeSpan.Zero
+                ? DateTime.UtcNow.Add(type.DeletionGracePeriod.Value)
+                : null
         };
 
         foreach (var sourceSystemId in type.DeletionTriggerConnectedSystemIds ?? [])

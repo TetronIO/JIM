@@ -57,6 +57,13 @@ public class MvoDeletionPolicySnapshot
     public TimeSpan? GracePeriod { get; set; }
 
     /// <summary>
+    /// When the scheduled deletion becomes due (decision time plus the grace period), in UTC. Null for
+    /// decisions that did not schedule a deletion. Recorded rather than derived so the due date stays
+    /// accurate after the grace period is reconfigured (#119).
+    /// </summary>
+    public DateTime? DeletionEligibleDate { get; set; }
+
+    /// <summary>
     /// The Connected System whose disconnection triggered the evaluation.
     /// </summary>
     public int? TriggeringSystemId { get; set; }
