@@ -79,7 +79,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
         MetaverseObjectDeletionRule rule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
         TimeSpan? gracePeriod = null,
         params int[] triggerSystemIds) =>
-        new(rule, gracePeriod, triggerSystemIds);
+        new(rule, gracePeriod, triggerSystemIds, AuthoritativeSourceTriggerMode.AllSourcesDisconnect);
 
     private void GivenCandidate(string displayName, int disconnectedDaysAgo, bool hasConnectors = false) =>
         _candidates.Add(new MetaverseObjectDeletionCandidate(Guid.CreateVersion7(), displayName,
@@ -123,6 +123,28 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
         {
             Assert.That(findings.Any(f => f.Severity == PreviewValidationSeverity.Blocking), Is.False);
             Assert.That(findings.Any(f => f.PropertyName == nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ValidateAsync_TriggerModeChangedButNothingElse_SaysSoWithoutBlockingAsync()
+    {
+        // The trigger mode (#119) is read at the same moment as the source list and has the same standing impact:
+        // none. It still has to be said, or an empty preview looks like a broken one.
+        _objectType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        _objectType.DeletionTriggerConnectedSystemIds = [1];
+        _objectType.DeletionTriggerMode = AuthoritativeSourceTriggerMode.AllSourcesDisconnect;
+
+        var findings = await NewAdapter().ValidateAsync(Context(new MetaverseObjectTypeDeletionSettingsProposal(
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            _objectType.DeletionGracePeriod,
+            [1],
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(findings.Any(f => f.Severity == PreviewValidationSeverity.Blocking), Is.False);
+            Assert.That(findings.Any(f => f.PropertyName == nameof(MetaverseObjectType.DeletionTriggerMode)), Is.True);
         });
     }
 

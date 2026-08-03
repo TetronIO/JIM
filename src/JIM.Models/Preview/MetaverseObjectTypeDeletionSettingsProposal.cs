@@ -23,12 +23,21 @@ namespace JIM.Models.Preview;
 /// preview will honestly report no impact from it alone. What it can do is make the proposal invalid, which stage
 /// 1 catches.
 /// </param>
+/// <param name="DeletionTriggerMode">
+/// Whether any one authoritative source disconnecting triggers deletion, or all of them must have gone (#119).
+/// Read at the same moment, and therefore with the same standing impact as the trigger list: none.
+/// </param>
 public record MetaverseObjectTypeDeletionSettingsProposal(
     MetaverseObjectDeletionRule DeletionRule,
     TimeSpan? DeletionGracePeriod,
-    IReadOnlyList<int> DeletionTriggerConnectedSystemIds)
+    IReadOnlyList<int> DeletionTriggerConnectedSystemIds,
+    AuthoritativeSourceTriggerMode DeletionTriggerMode = AuthoritativeSourceTriggerMode.AllSourcesDisconnect)
 {
-    /// <summary>The settings this proposal would put in force, apart from the trigger list.</summary>
+    /// <summary>
+    /// The settings this proposal would put in force that decide a marked object's fate. The trigger list and mode
+    /// are absent by design: they are read when a Connected System Object disconnects, not by the housekeeping
+    /// sweep, so they cannot move the deletion date of an object that is already marked.
+    /// </summary>
     public MetaverseObjectDeletionSettings ToSettings() =>
         new(DeletionRule, DeletionGracePeriod);
 }

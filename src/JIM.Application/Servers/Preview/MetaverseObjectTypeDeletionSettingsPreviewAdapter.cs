@@ -77,14 +77,19 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
                 nameof(MetaverseObjectType.DeletionGracePeriod)));
         }
 
-        if (!proposal.DeletionTriggerConnectedSystemIds.OrderBy(id => id)
-                .SequenceEqual(objectType.DeletionTriggerConnectedSystemIds.OrderBy(id => id)))
+        var sourcesChanged = !proposal.DeletionTriggerConnectedSystemIds.OrderBy(id => id)
+            .SequenceEqual(objectType.DeletionTriggerConnectedSystemIds.OrderBy(id => id));
+        var modeChanged = proposal.DeletionTriggerMode != objectType.DeletionTriggerMode;
+
+        if (sourcesChanged || modeChanged)
         {
             findings.Add(new PreviewValidationFinding(
                 PreviewValidationSeverity.Information,
                 "The authoritative sources have changed. This decides what happens the next time a Connected System " +
                 "Object disconnects, so it moves no Metaverse Object's deletion date today and is not counted below.",
-                nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)));
+                sourcesChanged
+                    ? nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)
+                    : nameof(MetaverseObjectType.DeletionTriggerMode)));
         }
 
         return findings;
