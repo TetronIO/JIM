@@ -838,6 +838,13 @@ public class JimDbContext : DbContext
             .HasIndex(se => new { se.Status, se.QueuedAt })
             .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
 
+        // Index for a Schedule's most recent execution. The Schedules list projects each Schedule's last execution
+        // via a correlated "order by QueuedAt descending, take one" subquery; this composite index makes each of
+        // those an index-backed LIMIT 1 rather than a sort over every execution the Schedule has ever had.
+        modelBuilder.Entity<ScheduleExecution>()
+            .HasIndex(se => new { se.ScheduleId, se.QueuedAt })
+            .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
+
         // Index for worker tasks by schedule execution
         modelBuilder.Entity<WorkerTask>()
             .HasIndex(wt => wt.ScheduleExecutionId)

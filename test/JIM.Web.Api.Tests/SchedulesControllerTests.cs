@@ -11,6 +11,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 using JIM.Models.Utility;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -70,14 +71,14 @@ public class SchedulesControllerTests
     [Test]
     public async Task GetAllAsync_ReturnsOkResultAsync()
     {
-        var pagedResult = new PagedResultSet<Schedule>
+        var pagedResult = new PagedResultSet<ScheduleHeader>
         {
-            Results = new List<Schedule>(),
+            Results = new List<ScheduleHeader>(),
             TotalResults = 0,
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetSchedulesAsync(1, 20, null, null, false))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync();
@@ -88,14 +89,14 @@ public class SchedulesControllerTests
     [Test]
     public async Task GetAllAsync_ReturnsEmptyListWhenNoSchedulesAsync()
     {
-        var pagedResult = new PagedResultSet<Schedule>
+        var pagedResult = new PagedResultSet<ScheduleHeader>
         {
-            Results = new List<Schedule>(),
+            Results = new List<ScheduleHeader>(),
             TotalResults = 0,
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetSchedulesAsync(1, 20, null, null, false))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync() as OkObjectResult;
@@ -109,19 +110,19 @@ public class SchedulesControllerTests
     [Test]
     public async Task GetAllAsync_ReturnsAllSchedulesAsync()
     {
-        var schedules = new List<Schedule>
+        var headers = new List<ScheduleHeader>
         {
-            new() { Id = Guid.NewGuid(), Name = "Schedule 1", Steps = new List<ScheduleStep>() },
-            new() { Id = Guid.NewGuid(), Name = "Schedule 2", Steps = new List<ScheduleStep>() }
+            new() { Id = Guid.NewGuid(), Name = "Schedule 1", StepCount = 0 },
+            new() { Id = Guid.NewGuid(), Name = "Schedule 2", StepCount = 2 }
         };
-        var pagedResult = new PagedResultSet<Schedule>
+        var pagedResult = new PagedResultSet<ScheduleHeader>
         {
-            Results = schedules,
+            Results = headers,
             TotalResults = 2,
             CurrentPage = 1,
             PageSize = 20
         };
-        _mockSchedulingRepository.Setup(r => r.GetSchedulesAsync(1, 20, null, null, false))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
             .ReturnsAsync(pagedResult);
 
         var result = await _controller.GetAllAsync() as OkObjectResult;
@@ -133,21 +134,76 @@ public class SchedulesControllerTests
     }
 
     [Test]
+    public async Task GetAllAsync_MapsHeaderFieldsOntoTheDtoAsync()
+    {
+        // The list endpoint's response shape is unchanged by the switch to a ScheduleHeader projection (#1196); the
+        // step count in particular used to come from the materialised Steps collection and is now projected.
+        var id = Guid.NewGuid();
+        var lastRun = new DateTime(2026, 2, 1, 3, 0, 0, DateTimeKind.Utc);
+        var lastUpdated = new DateTime(2026, 1, 15, 9, 0, 0, DateTimeKind.Utc);
+        var headers = new List<ScheduleHeader>
+        {
+            new()
+            {
+                Id = id,
+                Name = "Nightly Sync",
+                Description = "Runs overnight",
+                TriggerType = ScheduleTriggerType.Cron,
+                CronExpression = "0 3 * * *",
+                PatternType = SchedulePatternType.SpecificTimes,
+                DaysOfWeek = "1,2,3,4,5",
+                RunTimes = "03:00",
+                IsEnabled = true,
+                LastRunTime = lastRun,
+                StepCount = 6,
+                LastUpdated = lastUpdated
+            }
+        };
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(1, 20, null, null, false))
+            .ReturnsAsync(new PagedResultSet<ScheduleHeader>
+            {
+                Results = headers,
+                TotalResults = 1,
+                CurrentPage = 1,
+                PageSize = 20
+            });
+
+        var result = await _controller.GetAllAsync() as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ScheduleDto>;
+        var dto = response!.Items.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dto.Id, Is.EqualTo(id));
+            Assert.That(dto.Name, Is.EqualTo("Nightly Sync"));
+            Assert.That(dto.Description, Is.EqualTo("Runs overnight"));
+            Assert.That(dto.TriggerType, Is.EqualTo(ScheduleTriggerType.Cron));
+            Assert.That(dto.CronExpression, Is.EqualTo("0 3 * * *"));
+            Assert.That(dto.DaysOfWeek, Is.EqualTo("1,2,3,4,5"));
+            Assert.That(dto.RunTimes, Is.EqualTo("03:00"));
+            Assert.That(dto.IsEnabled, Is.True);
+            Assert.That(dto.LastRunTime, Is.EqualTo(lastRun));
+            Assert.That(dto.StepCount, Is.EqualTo(6));
+            Assert.That(dto.LastUpdated, Is.EqualTo(lastUpdated));
+        });
+    }
+
+    [Test]
     public async Task GetAllAsync_WithPaginationParameters_PassesParametersToRepositoryAsync()
     {
-        var pagedResult = new PagedResultSet<Schedule>
+        var pagedResult = new PagedResultSet<ScheduleHeader>
         {
-            Results = new List<Schedule>(),
+            Results = new List<ScheduleHeader>(),
             TotalResults = 0,
             CurrentPage = 2,
             PageSize = 10
         };
-        _mockSchedulingRepository.Setup(r => r.GetSchedulesAsync(2, 10, "test", "name", true))
+        _mockSchedulingRepository.Setup(r => r.GetScheduleHeadersAsync(2, 10, "test", "name", true))
             .ReturnsAsync(pagedResult);
 
         await _controller.GetAllAsync(page: 2, pageSize: 10, search: "test", sortBy: "name", sortDescending: true);
 
-        _mockSchedulingRepository.Verify(r => r.GetSchedulesAsync(2, 10, "test", "name", true), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.GetScheduleHeadersAsync(2, 10, "test", "name", true), Times.Once);
     }
 
     #endregion

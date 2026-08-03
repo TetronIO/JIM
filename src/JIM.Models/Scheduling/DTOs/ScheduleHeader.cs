@@ -100,6 +100,11 @@ public class ScheduleHeader
     public DateTime Created { get; set; }
 
     /// <summary>
+    /// When the Schedule was last modified (UTC).
+    /// </summary>
+    public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
     /// How many steps the Schedule has.
     /// </summary>
     public int StepCount { get; set; }

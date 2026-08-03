@@ -50,14 +50,23 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetAllSchedulesAsync();
     }
 
-    public async Task<PagedResultSet<Schedule>> GetSchedulesAsync(
+    /// <summary>
+    /// Gets a page of Schedules as lightweight headers, each carrying its step count and the outcome of its most
+    /// recent execution, so a list view can show whether the last run succeeded rather than only when it happened.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="searchQuery">Optional filter over name and description.</param>
+    /// <param name="sortBy">Optional field to sort by (name, isEnabled, lastRunTime, nextRunTime).</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    public async Task<PagedResultSet<ScheduleHeader>> GetScheduleHeadersAsync(
         int page,
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false)
     {
-        return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+        return await Application.Repository.Scheduling.GetScheduleHeadersAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
     public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)

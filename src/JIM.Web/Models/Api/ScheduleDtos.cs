@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -128,6 +129,36 @@ public class ScheduleDto
             StepCount = schedule.Steps?.Count ?? 0,
             Created = schedule.Created,
             LastUpdated = schedule.LastUpdated
+        };
+    }
+
+    /// <summary>
+    /// Creates a DTO from a ScheduleHeader projection, as returned by the list query. Produces exactly the same
+    /// response shape as <see cref="FromEntity"/>; the header simply carries the step count as a projected value
+    /// rather than as a materialised collection.
+    /// </summary>
+    public static ScheduleDto FromHeader(ScheduleHeader header)
+    {
+        return new ScheduleDto
+        {
+            Id = header.Id,
+            Name = header.Name,
+            Description = header.Description,
+            TriggerType = header.TriggerType,
+            CronExpression = header.CronExpression,
+            PatternType = header.PatternType,
+            DaysOfWeek = header.DaysOfWeek,
+            RunTimes = header.RunTimes,
+            IntervalValue = header.IntervalValue,
+            IntervalUnit = header.IntervalUnit,
+            IntervalWindowStart = header.IntervalWindowStart,
+            IntervalWindowEnd = header.IntervalWindowEnd,
+            IsEnabled = header.IsEnabled,
+            LastRunTime = header.LastRunTime,
+            NextRunTime = header.NextRunTime,
+            StepCount = header.StepCount,
+            Created = header.Created,
+            LastUpdated = header.LastUpdated
         };
     }
 }
