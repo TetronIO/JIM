@@ -1743,6 +1743,23 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// How many Metaverse Objects of a type a change to that type's deletion settings could affect (#1114): its
+    /// projected objects carrying a disconnection mark.
+    /// </summary>
+    public async Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectDeletionCandidateCountAsync(metaverseObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams those same objects, reduced to the facts a deletion-settings preview needs about each one.
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId)
+    {
+        return Application.Repository.Metaverse.StreamMetaverseObjectDeletionCandidates(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

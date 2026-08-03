@@ -78,6 +78,10 @@ public class PreviewsController(ILogger<PreviewsController> logger, JimApplicati
     /// <param name="activityId">The preview's Activity id.</param>
     /// <param name="pagination">Pagination parameters.</param>
     /// <param name="groupId">Optional summary group to restrict the rows to.</param>
+    /// <param name="search">
+    /// Optional case-insensitive text filter over the object's display name, the attribute, and the old and new
+    /// values. Filtering happens in the query, so the totals returned alongside the page count the matches.
+    /// </param>
     /// <response code="200">Returns the requested page of object-level detail.</response>
     /// <response code="401">If the caller is not authenticated.</response>
     /// <response code="404">If no preview exists for that Activity.</response>
@@ -86,14 +90,14 @@ public class PreviewsController(ILogger<PreviewsController> logger, JimApplicati
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPreviewDeltasAsync(Guid activityId, [FromQuery] PaginationRequest pagination,
-        [FromQuery] Guid? groupId = null)
+        [FromQuery] Guid? groupId = null, [FromQuery] string? search = null)
     {
         var preview = await _application.ConfigurationChangePreviews.GetPreviewAsync(activityId);
         if (preview is null)
             return NotFound();
 
         var page = await _application.ConfigurationChangePreviews.GetPreviewDeltasAsync(
-            activityId, groupId, pagination.Page, pagination.PageSize);
+            activityId, groupId, pagination.Page, pagination.PageSize, search);
 
         return Ok(new PaginatedResponse<ConfigurationChangePreviewDeltaResponse>
         {
