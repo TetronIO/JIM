@@ -322,7 +322,7 @@ public static class Helpers
             ExternalIdStatus.Rejected =>
                 "This object was not created due to an import error. The external ID shown is from the source data.",
             ExternalIdStatus.PendingRemoval =>
-                "This object has been detected as deleted from the source system and is pending removal during the next synchronisation.",
+                "This object has been detected as deleted from the source system. It is pending removal during the next synchronisation.",
             ExternalIdStatus.Deleted =>
                 "This object has been deleted. The external ID shown is preserved from when this operation was recorded.",
             _ => "The external ID shown is preserved from when this operation was recorded."
