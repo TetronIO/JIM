@@ -482,6 +482,11 @@
                 </MudChip>
             </div>
 
+            @* Schedule context; renders nothing unless a Schedule produced this Activity. *@
+            <ActivityScheduleContext ScheduleExecutionId="_selectedActivity.ScheduleExecutionId"
+                                     ScheduleStepIndex="_selectedActivity.ScheduleStepIndex"
+                                     Compact="true" />
+
             @* Target Information *@
             <MudPaper Elevation="0" Class="pa-3" Outlined="true">
                 <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Target</MudText>

@@ -27,6 +27,11 @@
 
 @if (_activity != null)
 {
+    @* Renders nothing unless a Schedule produced this Activity. *@
+    <ActivityScheduleContext ScheduleExecutionId="_activity.ScheduleExecutionId"
+                             ScheduleStepIndex="_activity.ScheduleStepIndex"
+                             Class="mt-2 mb-6" />
+
     <MudPaper Class="pa-4 mt-2" Outlined="true">
         <MudText Typo="Typo.h5" Class="mb-4">Summary</MudText>
         <MudGrid Spacing="4">

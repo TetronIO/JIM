@@ -1,0 +1,111 @@
+@using JIM.Models.Scheduling
+@using JIM.Utilities
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Says where an Activity came from when a Schedule produced it, and links back to the Schedule Execution that
+    did. Renders nothing at all for an Activity with no Schedule behind it, or whose Schedule Execution has since
+    been pruned, so a call site can place it unconditionally.
+*@
+
+@if (_execution is { } execution)
+{
+    var href = $"/admin/operations/schedule-executions/{execution.Id}";
+    var contextText = BuildContextText(execution);
+    var statusText = execution.Status.ToString().SplitOnCapitalLetters();
+    var statusColour = Helpers.GetScheduleExecutionMudBlazorColorForStatus(execution.Status);
+
+    if (Compact)
+    {
+        @* Panel-section treatment, matching the sibling sections of the Operations History side panel. *@
+        <MudPaper Elevation="0" Class="@CompactClass" Outlined="true">
+            <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Schedule</MudText>
+            <div class="d-flex align-center flex-wrap gap-2">
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" />
+                <MudLink Href="@href">@contextText</MudLink>
+                <MudChip T="string" Variant="Variant.Text" Class="ml-0" Color="@statusColour">@statusText</MudChip>
+            </div>
+        </MudPaper>
+    }
+    else
+    {
+        @* Page-width treatment, for a detail page that has room for a full notice. *@
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Schedule" Class="@Class">
+            <div class="d-flex align-center flex-wrap gap-2">
+                <span>@contextText</span>
+                <MudChip T="string" Variant="Variant.Text" Class="ml-0" Color="@statusColour">@statusText</MudChip>
+                <MudLink Href="@href" Color="Color.Inherit">View Schedule Execution</MudLink>
+            </div>
+        </MudAlert>
+    }
+}
+
+@code {
+    /// <summary>
+    /// The Schedule Execution that produced the Activity, if any. Nothing is rendered when there is none.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The zero-based index of the step within the Schedule Execution that produced the Activity. The step is
+    /// shown one-based, and omitted entirely when this is not supplied.
+    /// </summary>
+    [Parameter]
+    public int? ScheduleStepIndex { get; set; }
+
+    /// <summary>
+    /// When false (the default), renders a page-width alert. When true, renders a panel section matching the
+    /// other sections of the Operations History side panel.
+    /// </summary>
+    [Parameter]
+    public bool Compact { get; set; }
+
+    /// <summary>
+    /// Spacing and layout classes for the rendered element. The call site owns this decision, since only it
+    /// knows what sits above and below.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private ScheduleExecution? _execution;
+
+    /// <summary>
+    /// The Schedule Execution id the current <see cref="_execution"/> was loaded for. Guards the lookup: the
+    /// Operations History tab polls and re-renders continuously, so an unguarded lookup would query the database
+    /// on every poll tick.
+    /// </summary>
+    private Guid? _loadedExecutionId;
+
+    private string CompactClass => string.IsNullOrWhiteSpace(Class) ? "pa-3" : $"pa-3 {Class}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedExecutionId == ScheduleExecutionId)
+            return;
+
+        _loadedExecutionId = ScheduleExecutionId;
+        _execution = null;
+
+        if (!ScheduleExecutionId.HasValue)
+            return;
+
+        var executionId = ScheduleExecutionId.Value;
+        using var jim = JimFactory.Create();
+        _execution = await jim.Scheduler.GetScheduleExecutionAsync(executionId);
+    }
+
+    private string BuildContextText(ScheduleExecution execution)
+    {
+        if (ScheduleStepIndex.HasValue && execution.TotalSteps > 0)
+        {
+            var stepIndex = ScheduleStepIndex.Value;
+            return $"Part of {execution.ScheduleName}, step {stepIndex + 1} of {execution.TotalSteps}";
+        }
+
+        return $"Part of {execution.ScheduleName}";
+    }
+}
