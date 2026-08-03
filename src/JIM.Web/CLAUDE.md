@@ -22,6 +22,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
 | `<RunPhaseStepper Phases="@x" Message="@y" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
+| `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 
 ## Form action gating and input immediacy
 
@@ -102,7 +103,7 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 ## Tooltips
 - ALWAYS use `Arrow="true" Placement="Placement.Top"` on all `<MudTooltip>` components
 - This ensures tooltips appear above the element with a downward-pointing arrow, consistent across the entire UI
-- Tooltip text is capped to a `24rem` measure and left-aligned site-wide (`site.css` > "Tooltip measure"), so a long explanation wraps into a readable block. Write the sentence naturally; never hand-insert a line break to control where it wraps.
+- **A multi-sentence explanation goes through `<TooltipText Text="@..." />`**, in the tooltip's `TooltipContent` fragment rather than its `Text` parameter. It renders one sentence per line, so a two-sentence description does not run as a single long line. The break is derived from the sentence boundary, never authored into the string: the descriptions range from a few words to two sentences, so a hand-placed break is in the wrong place for the next one. Tooltip text is also capped to a `24rem` measure and left-aligned site-wide (`site.css` > "Tooltip measure"), which is what stops a long *single* sentence running off the page.
 - **Exception:** tooltips anchored to elements inside the mini-drawer (e.g. the `DrawerUserMenu` avatar when the drawer is collapsed) should use `Placement.Right` so they emerge into the main content area rather than overlapping the drawer itself. This exception is scoped to drawer-anchored tooltips only; do not extend it to other contexts.
 
 ## Alerts
