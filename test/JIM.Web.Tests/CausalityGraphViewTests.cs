@@ -13,7 +13,8 @@ namespace JIM.Web.Tests;
 /// <summary>
 /// bUnit tests for <see cref="CausalityGraphView"/>: node and edge rendering from the computed
 /// layout, selection through the two-way binding (click and keyboard), the technical-names title
-/// swap, the non-interactive synthetic source root, and the tone legend.
+/// swap, the inert rendering of nodes the drawer cannot open for (the synthetic source root and any
+/// event without attribute rows), and the tone legend.
 /// </summary>
 [TestFixture]
 public class CausalityGraphViewTests
@@ -67,14 +68,14 @@ public class CausalityGraphViewTests
     }
 
     [Test]
-    public async Task Render_EventNodes_AreKeyboardOperableButtonsWhileTheSourceRootIsStaticAsync()
+    public async Task Render_SelectableNodes_AreKeyboardOperableButtonsWhileTheSourceRootIsStaticAsync()
     {
         await using var context = CausalityBunitContext.Create();
 
         var cut = RenderGraph(context, NewJoinerModel());
 
         var interactiveNodes = cut.FindAll(".g-node[role=button]");
-        Assert.That(interactiveNodes, Has.Count.EqualTo(4));
+        Assert.That(interactiveNodes, Is.Not.Empty);
         Assert.That(interactiveNodes.Select(n => n.GetAttribute("tabindex")), Is.All.EqualTo("0"));
 
         var sourceNode = cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Source record"));
@@ -89,15 +90,46 @@ public class CausalityGraphViewTests
         await using var context = CausalityBunitContext.Create();
         var cut = context.Render<GraphHost>(ps => ps.Add(c => c.Model, NewJoinerModel()));
 
-        var node = cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Identity created"));
+        var node = cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Export queued"));
         node.Click();
 
         Assert.That(cut.FindAll(".g-node.selected"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Identity created")).ClassList,
+        Assert.That(cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Export queued")).ClassList,
             Does.Contain("selected"));
 
         // Selecting the same node again clears the selection
+        cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Export queued")).Click();
+        Assert.That(cut.FindAll(".g-node.selected"), Is.Empty);
+    }
+
+    [Test]
+    public async Task Render_EventNodeWithoutAttributeDetail_IsStaticNotAButtonAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+
+        var cut = RenderGraph(context, NewJoinerModel());
+
+        // The drawer only opens for an event carrying attribute rows, and in this model only Export
+        // queued has any, so it is the sole node entitled to present itself as a button. A node whose
+        // click could do nothing must not advertise one (the rule CausalityEventCard already applies).
+        var interactiveNodes = cut.FindAll(".g-node[role=button]");
+        Assert.That(interactiveNodes, Has.Count.EqualTo(1));
+        Assert.That(interactiveNodes.Single().TextContent, Does.Contain("Export queued"));
+
+        var identityNode = cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Identity created"));
+        Assert.That(identityNode.ClassList, Does.Contain("static"));
+        Assert.That(identityNode.GetAttribute("role"), Is.Null);
+        Assert.That(identityNode.GetAttribute("tabindex"), Is.Null);
+    }
+
+    [Test]
+    public async Task NodeClick_OnAnEventWithoutAttributeDetail_LeavesTheSelectionUntouchedAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var cut = context.Render<GraphHost>(ps => ps.Add(c => c.Model, NewJoinerModel()));
+
         cut.FindAll(".g-node").Single(n => n.TextContent.Contains("Identity created")).Click();
+
         Assert.That(cut.FindAll(".g-node.selected"), Is.Empty);
     }
 

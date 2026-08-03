@@ -253,14 +253,20 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void GraphNodeSelection_NonAttributeNode_SelectsWithoutOpeningTheDrawer()
+    public void GraphNodeSelection_NonAttributeNode_IsInertRatherThanSelectable()
     {
         _preferences.StoredCausalityView = "graph";
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        cut.FindAll(".g-node").Single(g => g.TextContent.Contains("Identity created")).Click();
+        // The drawer is the only thing selection drives, so a node with no attribute rows must not
+        // invite a click: selecting it would highlight the node and open nothing, which reads as the
+        // click having failed.
+        var node = cut.FindAll(".g-node").Single(g => g.TextContent.Contains("Identity created"));
+        Assert.That(node.GetAttribute("role"), Is.Null);
 
-        Assert.That(cut.FindAll(".g-node.selected"), Has.Count.EqualTo(1));
+        node.Click();
+
+        Assert.That(cut.FindAll(".g-node.selected"), Is.Empty);
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
     }
 
