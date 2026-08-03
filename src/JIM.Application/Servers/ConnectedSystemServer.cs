@@ -1925,6 +1925,60 @@ public class ConnectedSystemServer
     }
     #endregion
 
+    #region Connected System Directory Servers
+    /// <summary>
+    /// Discovers the domain controllers in this Connected System's forest, with the Active Directory Site each
+    /// belongs to, so an administrator can be shown a choice for the Preferred Domain Controller setting rather
+    /// than having to already know a hostname (issue #1167).
+    /// <para>
+    /// Deliberately not recorded as an Activity, for the same reason as <see cref="RunPasswordPreflightAsync"/>:
+    /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the
+    /// Preferred Domain Controller setting itself; the setting is intent, and only the administrator's own
+    /// selection in the portal, REST API caller, or PowerShell caller updates it.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
+    /// <param name="draftSettingValues">Connectivity settings entered on screen but not yet saved, applied over the saved ones (encrypted settings always come from the saved values). Supplied by the portal so an administrator configuring a system can discover before saving, mirroring <see cref="CertificateServer.ReadServerCertificateAsync"/>.</param>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
+    /// <exception cref="NotSupportedException">The Connector does not support directory server discovery, or (thrown by the Connector) the connected directory is not AD-family.</exception>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    {
+        // Loaded without change tracking, so applying the drafts below cannot reach the database.
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
+
+        if (draftSettingValues is { Count: > 0 })
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorDirectoryServers directoryServersConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery.");
+
+        Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering directory servers for Connected System {ConnectedSystemId}.", connectedSystemId);
+        return await directoryServersConnector.GetDirectoryServersAsync(connectedSystem.SettingValues, Log.Logger);
+    }
+
+    /// <summary>
+    /// Whether this Connected System's Connector supports discovering directory servers at all, so the portal can
+    /// show the Discover action beside the Preferred Domain Controller field only where it means something.
+    /// <para>
+    /// A property of the Connector, not of the current settings: stable for the life of a Connected System, so it
+    /// can be asked once, mirroring <see cref="JIM.Application.Servers.CertificateServer.SupportsServerCertificateReadAsync"/>.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<bool> SupportsDirectoryServerDiscoveryAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return false;
+
+        return CreateConnector(connectedSystem) is IConnectorDirectoryServers;
+    }
+    #endregion
+
     #region Connected System Hierarchy
     /// <summary>
     /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the Connected System.

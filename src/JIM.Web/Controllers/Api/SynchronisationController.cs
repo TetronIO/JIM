@@ -912,6 +912,68 @@ public class SynchronisationController(
 
     #endregion
 
+    #region Directory Servers
+
+    /// <summary>
+    /// Discover the domain controllers in a Connected System's directory
+    /// </summary>
+    /// <remarks>
+    /// Lists the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site
+    /// each belongs to, using the Connected System's currently saved connectivity settings. Purely informational:
+    /// this never writes to the Preferred Domain Controller setting; only an administrator's own subsequent
+    /// update of the Connected System does that.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
+    /// <returns>The discovered domain controllers.</returns>
+    /// <response code="200">The domain controllers discovered.</response>
+    /// <response code="400">The Connector does not support directory server discovery, or the connected directory is not AD-family.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">JIM could not discover domain controllers, e.g. the directory was unreachable or refused the credentials.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/directory-servers", Name = "GetConnectedSystemDirectoryServers")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectedSystemDirectoryServerDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetConnectedSystemDirectoryServersAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Discovering directory servers for Connected System: {Id}", connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (!await _application.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(connectedSystemId))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."));
+
+        try
+        {
+            var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId);
+            return Ok(directoryServers.Select(ConnectedSystemDirectoryServerDto.FromModel));
+        }
+        catch (NotSupportedException ex)
+        {
+            // The capability check above passed (the Connector implements IConnectorDirectoryServers), but the
+            // Connector itself has refused: e.g. the LDAP Connector only discovers domain controllers for
+            // AD-family directories, and the connected directory turned out not to be one.
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        // Fallback dispatcher: any connectivity failure (unreachable directory, refused credentials, a malformed
+        // response) becomes a 502 rather than the generic 500 the global exception handler would otherwise
+        // return, and the cancellation exclusion keeps a genuinely aborted request propagating rather than
+        // being reported as a discovery failure.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to discover directory servers for Connected System {Id}: {Message}",
+                connectedSystemId, LogSanitiser.Sanitise(ex.Message));
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiErrorResponse.BadRequest($"JIM could not discover directory servers: {ex.Message}"));
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// Create a Connected System
     /// </summary>
