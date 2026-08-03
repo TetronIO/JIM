@@ -30,7 +30,11 @@ public class ConnectedSystemServer
 {
     private JimApplication Application { get; }
 
-    private readonly IConnectorFactory _connectorFactory = new ConnectorFactory();
+    /// <summary>
+    /// Internal and settable so tests can substitute a stub Connector for the server's own schema handling;
+    /// production code never assigns it.
+    /// </summary>
+    internal IConnectorFactory ConnectorFactory { private get; set; } = new ConnectorFactory();
 
     internal ConnectedSystemServer(JimApplication application)
     {
@@ -44,7 +48,7 @@ public class ConnectedSystemServer
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
     private IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
-        return _connectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
+        return ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -1405,7 +1409,7 @@ public class ConnectedSystemServer
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
             // finish the activity
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteSchemaImportActivityAsync(activity, result);
 
             return result;
         }
@@ -1459,7 +1463,7 @@ public class ConnectedSystemServer
             // Capture the configuration change onto the ImportSchema activity: see the user-initiated overload above.
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
-            await Application.Activities.CompleteActivityAsync(activity);
+            await CompleteSchemaImportActivityAsync(activity, result);
 
             return result;
         }
@@ -1469,6 +1473,23 @@ public class ConnectedSystemServer
             Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Completes a schema import's Activity, downgraded to complete-with-warning when discovery reported
+    /// shortfalls, so an import that discovered less than it should have never presents as an unqualified success.
+    /// </summary>
+    private async Task CompleteSchemaImportActivityAsync(Activity activity, SchemaRefreshResult result)
+    {
+        if (result.DiscoveryWarnings.Count > 0)
+        {
+            activity.WarningMessage = string.Join(Environment.NewLine, result.DiscoveryWarnings);
+            await Application.Activities.CompleteActivityWithWarningAsync(activity);
+        }
+        else
+        {
+            await Application.Activities.CompleteActivityAsync(activity);
         }
     }
 
@@ -1488,7 +1509,9 @@ public class ConnectedSystemServer
     /// </remarks>
     private static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
     {
-        var result = new SchemaRefreshResult { Success = true };
+        // Discovery warnings travel on the result so the portal can show them beside what changed; the import's
+        // Activity carries the same warnings for the other surfaces.
+        var result = new SchemaRefreshResult { Success = true, DiscoveryWarnings = schema.Warnings.ToList() };
 
         // Credential attributes must never enter JIM's schema as new, manageable attributes.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);

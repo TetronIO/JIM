@@ -56,8 +56,20 @@
 #   built and extracted; it filters the alerts produced. That is exactly
 #   the intent here.
 
+#   test/JIM.TestScimServiceProvider/** (SCIM integration-test service provider)
+#   -----------------------------------------------------------------------------
+#   A test-only SCIM 2.0 service provider (the unit suite's MockScimProvider
+#   hosted over HTTPS) that integration Scenario 15 drives the SCIM Connector
+#   against. Its whole purpose is to echo request-derived JSON back at the
+#   caller, which CodeQL's taint analysis reads as reflected XSS even though
+#   every response is served as application/scim+json (never HTML) on an
+#   isolated test network. Like the unit test projects above, this code never
+#   ships in a JIM deployment: the image is labelled not-for-production and is
+#   built only by the integration test runner.
+
 paths-ignore:
   - test/JIM.*.Tests/**
+  - test/JIM.TestScimServiceProvider/**
 
 query-filters:
   - exclude:

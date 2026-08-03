@@ -72,7 +72,8 @@
                                     }
                                     @for (var k = 0; k < groupMembers.Count; k++)
                                     {
-                                        <ConnectedSystemSettingField SettingValue="@groupMembers[k]"
+                                        <ConnectedSystemSettingField @key="groupMembers[k].Setting.Id"
+                                                                     SettingValue="@groupMembers[k]"
                                                                      CssClass="@(k == groupMembers.Count - 1 ? "" : "mb-5")"
                                                                      Immediate="true"
                                                                      IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
@@ -97,7 +98,8 @@
                                     headingsRendered++;
                                 }
 
-                                <ConnectedSystemSettingField SettingValue="@settingValue"
+                                <ConnectedSystemSettingField @key="settingValue.Setting.Id"
+                                                             SettingValue="@settingValue"
                                                              CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
                                                              IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
                                                              Immediate="true"

@@ -3,6 +3,7 @@
 
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Connectors.SCIM;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -550,15 +551,12 @@ internal class SeedingServer
         #endregion
 
         #region Connector Definitions
-        var ldapConnector = new LdapConnector();
-        var ldapConnectorDefinition = await PrepareConnectorDefinitionAsync(ldapConnector);
-        if (ldapConnectorDefinition != null)
-            connectorDefinitions.Add(ldapConnectorDefinition);
-
-        var fileConnector = new FileConnector();
-        var fileConnectorDefinition = await PrepareConnectorDefinitionAsync(fileConnector);
-        if (fileConnectorDefinition != null)
-            connectorDefinitions.Add(fileConnectorDefinition);
+        foreach (var connector in BuiltInConnectors())
+        {
+            var connectorDefinition = await PrepareConnectorDefinitionAsync(connector);
+            if (connectorDefinition != null)
+                connectorDefinitions.Add(connectorDefinition);
+        }
         #endregion
 
         // submit all the preparations to the repository for creation. Roles are not seeded here: built-in Roles
@@ -782,6 +780,16 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// The connectors JIM ships with, named once because seeding and the startup reconciliation must
+    /// agree. A connector in one list and not the other would either never appear to administrators or
+    /// never pick up settings added in a later release, and both failures are silent.
+    /// </summary>
+    internal static List<IConnector> BuiltInConnectors()
+    {
+        return [new LdapConnector(), new FileConnector(), new ScimConnector()];
+    }
+
+    /// <summary>
     /// Synchronises built-in connector definitions with the latest settings from the connector code.
     /// This should be called on every application startup to ensure connector settings are up-to-date.
     /// Unlike SeedAsync, this method updates existing connector definitions when their settings change.
@@ -792,13 +800,7 @@ internal class SeedingServer
         stopwatch.Start();
         Log.Information("SyncBuiltInConnectorDefinitionsAsync: Starting built-in connector definition synchronisation...");
 
-        var connectors = new List<IConnector>
-        {
-            new LdapConnector(),
-            new FileConnector()
-        };
-
-        foreach (var connector in connectors)
+        foreach (var connector in BuiltInConnectors())
         {
             await SyncConnectorDefinitionAsync(connector);
         }
