@@ -201,7 +201,8 @@
                                       Outlined="true" Elevation="0"
                                       Loading="@_loadingScheduleIds.Contains(context.Id)" LoadingProgressColor="Color.Primary">
                                 <ToolBarContent>
-                                    <MudText Typo="Typo.h6">Recent Schedule Executions: @context.Name</MudText>
+                                    @* The Schedule is named on the parent row directly above, so repeating it here is noise. *@
+                                    <MudText Typo="Typo.h6">Recent Schedule Executions</MudText>
                                 </ToolBarContent>
                                 <HeaderContent>
                                     <MudTh><MudText Typo="Typo.button">Started</MudText></MudTh>
