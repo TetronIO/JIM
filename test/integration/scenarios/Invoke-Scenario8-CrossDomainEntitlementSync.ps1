@@ -1908,7 +1908,7 @@ try {
             $reconMaxWaitSeconds = 600; $reconElapsed = 0
             while ($reconElapsed -lt $reconMaxWaitSeconds) {
                 $reconStatus = (Get-JIMScheduleExecution -Id $reconExec.id).status
-                $isTerminal = $reconStatus -eq "Completed" -or $reconStatus -eq "Failed" -or $reconStatus -eq "Cancelled"
+                $isTerminal = $reconStatus -eq "Complete" -or $reconStatus -eq "Failed" -or $reconStatus -eq "Cancelled"
                 if (($reconStatus -is [int] -or $reconStatus -is [long]) -and $reconStatus -ge 2) { $isTerminal = $true }
                 if ($isTerminal) { break }
                 Start-Sleep -Seconds 3; $reconElapsed += 3

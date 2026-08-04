@@ -6287,12 +6287,40 @@ public class ConnectedSystemServer
             activity.TargetOperationType = ActivityTargetOperationType.Update;
             AuditHelper.SetUpdated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+            // Read before the write, or there is nothing left to compare the new configuration against.
+            var previousInitialPassword = await Application.Repository.ConnectedSystems.GetSyncRuleInitialPasswordAsync(syncRule.Id);
+
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
+            await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
         }
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
+    }
+
+    /// <summary>
+    /// Sets a Synchronisation Rule's parked initial passwords retrying, when the save changed what would be
+    /// delivered (#1221).
+    /// <para>
+    /// A policy rejection parks an account because the same configuration produces another password the target
+    /// refuses for the same reason. The administrator correcting that configuration is the only event that makes
+    /// another attempt worth making, and this is where it reaches the parked work: without it, parking is a
+    /// one-way door and the account never gets a password.
+    /// </para>
+    /// <para>
+    /// Gated on the configuration actually changing rather than firing on every save. An unrelated edit to the
+    /// rule would otherwise set those accounts retrying against settings the target has already answered, which
+    /// fails identically and inflates an attempt count that is supposed to count distinct configurations tried.
+    /// </para>
+    /// </summary>
+    private async Task ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(SyncRule syncRule, SyncRuleInitialPassword? previous)
+    {
+        if (SyncRuleInitialPassword.WouldDeliverTheSameAs(previous, syncRule.InitialPassword))
+            return;
+
+        await Application.InitialPasswords.ReleaseParkedForSyncRuleAsync(syncRule.Id);
     }
 
     /// <summary>

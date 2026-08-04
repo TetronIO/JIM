@@ -2078,12 +2078,12 @@ function Assert-ScheduleExecutionSuccess {
 
     .DESCRIPTION
         Validates that a JIM Schedule Execution completed without errors by checking:
-        1. The overall execution status is 'Completed'
+        1. The overall execution status is 'Complete'
         2. Every step's activity status is acceptable (Complete, or CompleteWithWarning if allowed)
 
         Uses the execution detail endpoint which returns step-level activity status information.
         This prevents integration tests from silently passing when a schedule execution
-        reports 'Completed' but individual step activities had warnings or errors.
+        reports 'Complete' but individual step activities had warnings or errors.
 
     .PARAMETER ExecutionId
         The Schedule Execution ID (GUID) to validate.
@@ -2121,7 +2121,7 @@ function Assert-ScheduleExecutionSuccess {
 
     # Check overall execution status
     $status = $execution.status
-    $executionFailed = ($status -ne "Completed" -and $status -ne 2)
+    $executionFailed = ($status -ne "Complete" -and $status -ne 2)
 
     if ($executionFailed) {
         Write-Host "  ✗ $Name FAILED (execution status: $status)" -ForegroundColor Red
@@ -2142,7 +2142,7 @@ function Assert-ScheduleExecutionSuccess {
             throw $errorMsg
         }
         # No step detail available - fall back to execution status check only
-        Write-Host "  ✓ $Name completed successfully (Status: Completed)" -ForegroundColor Green
+        Write-Host "  ✓ $Name completed successfully (Status: Complete)" -ForegroundColor Green
         return
     }
 
@@ -2201,7 +2201,7 @@ function Assert-ScheduleExecutionSuccess {
         throw $errorMsg
     }
 
-    Write-Host "  ✓ $Name completed successfully (Status: Completed, $validatedCount step activities OK)" -ForegroundColor Green
+    Write-Host "  ✓ $Name completed successfully (Status: Complete, $validatedCount step activities OK)" -ForegroundColor Green
 }
 
 function Assert-ParallelExecutionTiming {

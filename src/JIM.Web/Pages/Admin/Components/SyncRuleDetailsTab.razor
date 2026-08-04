@@ -2,6 +2,7 @@
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Transactional.DTOs
 @using JIM.Utilities
 @inject IJimApplicationFactory JimFactory
 
@@ -175,6 +176,8 @@
                                     SupportedExpiryBehaviours="@SupportedExpiryBehaviours"
                                     Assessment="@InitialPasswordAssessment"
                                     ConnectorName="@PasswordConnectorName"
+                                    ParkedReasons="@InitialPasswordParkedReasons"
+                                    WillReleaseParkedOnSave="@WillReleaseParkedInitialPasswordsOnSave"
                                     OnChanged="HandleInitialPasswordChangedAsync" />
 }
 
@@ -238,6 +241,27 @@
     private SyncRuleInitialPassword? _initialPasswordEditor;
 
     /// <summary>
+    /// What the rule's initial-password settings were when this tab bound to it, so an edit can be recognised as
+    /// one. The editor mutates its instance in place, so without a copy taken up front there is nothing left to
+    /// compare against.
+    /// </summary>
+    private SyncRuleInitialPassword? _initialPasswordAsSaved;
+
+    /// <summary>
+    /// What the target said about the accounts parked against this rule. Loaded once with the rest of the
+    /// password context, not per keystroke: the answer only changes when a run attempts a delivery.
+    /// </summary>
+    private IReadOnlyList<InitialPasswordRejection>? InitialPasswordParkedReasons { get; set; }
+
+    /// <summary>
+    /// Whether saving would release the parked accounts, decided by the same comparison the save path itself
+    /// uses, so the panel cannot promise a release that saving will not perform.
+    /// </summary>
+    private bool WillReleaseParkedInitialPasswordsOnSave =>
+        InitialPasswordParkedReasons is { Count: > 0 } &&
+        !SyncRuleInitialPassword.WouldDeliverTheSameAs(_initialPasswordAsSaved, SyncRule.InitialPassword);
+
+    /// <summary>
     /// What the initial-password editor binds to: the rule's own configuration where it has one, otherwise a
     /// fresh one held aside.
     /// <para>
@@ -255,6 +279,10 @@
             {
                 _initialPasswordEditorBoundTo = SyncRule;
                 _initialPasswordEditor = SyncRule.InitialPassword ?? new SyncRuleInitialPassword { SyncRuleId = SyncRule.Id };
+
+                // Taken from the rule's own configuration, not the editor's: a rule that has none is saved as
+                // having none, and the editor's held-aside instance would wrongly read as the saved state.
+                _initialPasswordAsSaved = SyncRule.InitialPassword?.SnapshotDeliverySettings();
             }
 
             return _initialPasswordEditor!;
@@ -292,6 +320,10 @@
 
         var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemCoreAsync(SyncRule.ConnectedSystem.Id);
         PasswordConnectorName = connectedSystem?.ConnectorDefinition?.Name ?? "Connected System's";
+
+        // A rule being created has no id and therefore nothing parked against it yet.
+        if (SyncRule.Id > 0)
+            InitialPasswordParkedReasons = await jim.InitialPasswords.GetParkedReasonsAsync(SyncRule.Id);
 
         AssessInitialPassword(jim);
     }

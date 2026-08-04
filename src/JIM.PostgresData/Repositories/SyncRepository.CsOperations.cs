@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -811,6 +812,111 @@ public partial class SyncRepository
 
         await _context.Database.ExecuteSqlRawAsync(
             """DELETE FROM "PendingInitialPasswords" WHERE "Id" = ANY({0})""", idList);
+    }
+
+    public async Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        // A targeted status mark rather than a write of the entity, so it is deliberately not driven from
+        // PendingInitialPasswordBulkColumns: the three columns here are exactly the ones a release changes, and
+        // a future column must not be swept into it by being added to that list.
+        //
+        // The WHERE clause carries the Parked filter rather than the caller doing it: a record awaiting retry is
+        // already going to be tried, and an expired one has outlived the purpose it was created for, so neither
+        // should be disturbed by an administrator saving a rule.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}, "FailureReason" = NULL, "TargetMessage" = NULL
+            WHERE "SyncRuleId" = {1} AND "Status" = {2}
+            """,
+            (int)PendingInitialPasswordStatus.Pending,
+            syncRuleId,
+            (int)PendingInitialPasswordStatus.Parked);
+    }
+
+    public async Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        // A targeted status mark, deliberately not driven from PendingInitialPasswordBulkColumns for the same
+        // reason as the release above: these are exactly the columns an expiry changes.
+        //
+        // The reason and attempt count are left as they are. They say why the account never got its password,
+        // which is the whole value of recording the expiry rather than deleting the row.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}
+            WHERE "ConnectedSystemId" = {1} AND "ExpiresAt" IS NOT NULL AND "ExpiresAt" < {2}
+              AND "Status" <> {0}
+            """,
+            (int)PendingInitialPasswordStatus.Expired,
+            connectedSystemId,
+            asOf);
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // Grouped in the database rather than by materialising the records: this backs a list indicator, and the
+        // only thing the indicator needs is two numbers per row.
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { SyncRuleId = p.SyncRuleId!.Value, p.Status })
+            .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.SyncRuleId, c.Status, c.Count)));
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { p.ConnectedSystemId, p.Status })
+            .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.ConnectedSystemId, c.Status, c.Count)));
+    }
+
+    public async Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        return await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Max(p => p.FailureReason),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Folds one row per (key, status) into one <see cref="InitialPasswordAttention"/> per key. The query groups
+    /// by status because that is what the database can count in one pass; the surfaces want them side by side.
+    /// </summary>
+    private static Dictionary<int, InitialPasswordAttention> ToAttentionByKey(IEnumerable<(int Key, PendingInitialPasswordStatus Status, int Count)> counts)
+    {
+        return counts
+            .GroupBy(c => c.Key)
+            .ToDictionary(g => g.Key, g => new InitialPasswordAttention
+            {
+                ParkedCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Parked).Sum(c => c.Count),
+                ExpiredCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Expired).Sum(c => c.Count)
+            });
     }
 
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)

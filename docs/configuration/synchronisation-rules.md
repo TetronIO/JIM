@@ -139,6 +139,55 @@ Every delete queued by a Deprovisioning Action is reported on the Activity of th
 
 This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Metaverse Object Housekeeping](activities.md#metaverse-object-housekeeping) batch that deletes identities once their grace period expires.
 
+## Initial password
+
+An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** section of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
+
+It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
+
+The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
+
+### What you configure
+
+- **Password Settings**<br /> Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here. Choosing your own starts from the discovered policy rather than from nothing, and switching between the two never discards what you configured. The generator produces random characters, words, or a pronounceable password, and tells you the minimum length and character classes the result is guaranteed to carry.
+- **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
+- **Enable the account once the password is set**<br /> On by default. A provisioned account nobody can sign in to is rarely what was wanted, and directories that refuse to enable an account without a policy-compliant password need the enable to follow the password rather than accompany the create.
+
+**No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped. Getting the password to the person who needs it is a matter for the account's own delivery path (a first sign-in that forces a change, a service desk call, a self-service reset), not for JIM to hold on their behalf. Where you need a password in your hand for a specific account, use the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) instead.
+
+### What happens after provisioning
+
+Setting the password is a separate step from creating the account, and deliberately cannot fail the export that created it. The account exists; reporting its export as failed would have JIM retry the create.
+
+The password is therefore delivered in its own pass at the end of every export run, over everything the Connected System still owes rather than only what this run created. An ordinary export run is consequently the retry vehicle: a directory brought back online, or a right granted to JIM's service account, is picked up by the next run that was going to happen anyway, with no separate Run Profile to schedule.
+
+Each account ends up in one of these states, all of them reported on the export's Activity:
+
+| State | Meaning | What clears it |
+|-------|---------|----------------|
+| Delivered | The password was set. | Nothing; the account no longer owes one and JIM keeps no record beyond the Activity. |
+| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the account was not visible yet (after a create, usually replication catching up). | The next export run over that Connected System. |
+| Parked | The target refused the password itself, for not satisfying the rules in force for that account. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
+| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the account. | Nothing automatic; the account needs a password set by other means. |
+
+The target's own words are kept verbatim on a parked account, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
+
+### Clearing parked accounts
+
+Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every account parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime, because no password was ever stored: the retry uses your corrected settings by construction.
+
+Saving an unrelated part of the same rule releases nothing. Those accounts were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
+
+The typical loop is therefore: read what the target said on the parked account, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
+
+### Where JIM tells you
+
+You do not have to go looking. Parked and expired accounts are reported in three places:
+
+- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the accounts parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
+- **The Initial Password section itself**<br /> The panel heading carries the parked count even while collapsed, and opening it shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and the panel confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
+- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
+
 ## Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.

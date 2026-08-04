@@ -323,6 +323,7 @@ public class SyncExportTaskProcessor
         span.SetTag("attempted", result.AttemptedCount);
         span.SetTag("delivered", result.DeliveredCount);
         span.SetTag("parked", result.ParkedCount);
+        span.SetTag("expired", result.ExpiredCount);
 
         if (!result.HasSomethingToReport)
             return;
@@ -346,6 +347,10 @@ public class SyncExportTaskProcessor
             parts.Add($"{result.ParkedCount:N0} needing attention");
         if (result.RetryingCount > 0)
             parts.Add($"{result.RetryingCount:N0} to retry");
+        // Named on the Activity rather than left to the log. These accounts were provisioned and will never now
+        // get an initial password from JIM, which an administrator has to be told rather than left to discover.
+        if (result.ExpiredCount > 0)
+            parts.Add($"{result.ExpiredCount:N0} expired without one");
 
         return $"Initial passwords: {string.Join(", ", parts)}";
     }

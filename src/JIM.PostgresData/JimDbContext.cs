@@ -739,6 +739,17 @@ public class JimDbContext : DbContext
             .HasIndex(a => new { a.TargetType, a.Created })
             .HasDatabaseName("IX_Activities_TargetType_Created");
 
+        // Schedule attribution on Activities (issue #1196). The Operations History Schedule filter narrows on the
+        // denormalised ScheduledByScheduleId, and the Schedule Execution drill-downs select on ScheduleExecutionId,
+        // which carried no index at all; without both, either query sequential-scans the whole Activities table.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ScheduledByScheduleId)
+            .HasDatabaseName("IX_Activities_ScheduledByScheduleId");
+
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ScheduleExecutionId)
+            .HasDatabaseName("IX_Activities_ScheduleExecutionId");
+
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => o.ActivityRunProfileExecutionItemId)
@@ -858,6 +869,13 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ScheduleExecution>()
             .HasIndex(se => new { se.Status, se.QueuedAt })
             .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
+
+        // Index for a Schedule's most recent execution. The Schedules list projects each Schedule's last execution
+        // via a correlated "order by QueuedAt descending, take one" subquery; this composite index makes each of
+        // those an index-backed LIMIT 1 rather than a sort over every execution the Schedule has ever had.
+        modelBuilder.Entity<ScheduleExecution>()
+            .HasIndex(se => new { se.ScheduleId, se.QueuedAt })
+            .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
 
         // Index for worker tasks by schedule execution
         modelBuilder.Entity<WorkerTask>()

@@ -195,6 +195,28 @@ Describe 'Get-JIMConfigurationChangePreview' {
             $script:capturedEndpoint | Should -Be "/api/v1/previews/$activityId"
         }
     }
+
+    It 'Surfaces the pattern a group was recognised as' {
+        # The detected pattern is what makes a scripted preview reviewable without opening the portal:
+        # "4,812 objects, EmailDomainChanged" is actionable where a bare count is not.
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    ActivityId = [guid]::NewGuid()
+                    Groups     = @(
+                        [PSCustomObject]@{ AttributeName = 'Email'; PatternKey = 'EmailDomainChanged'; ObjectCount = 4812 }
+                        [PSCustomObject]@{ AttributeName = 'Department'; PatternKey = $null; ObjectCount = 12 }
+                    )
+                }
+            }
+
+            $preview = Get-JIMConfigurationChangePreview -ActivityId ([guid]::NewGuid())
+
+            $preview.Groups[0].PatternKey | Should -Be 'EmailDomainChanged'
+            $preview.Groups[1].PatternKey | Should -BeNullOrEmpty
+        }
+    }
 }
 
 Describe 'Get-JIMConfigurationChangePreviewDelta' {

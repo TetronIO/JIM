@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -543,6 +544,75 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Returns every parked initial-password record for a Synchronisation Rule to the outstanding state, so the
+    /// next delivery pass attempts it again, and returns how many were released.
+    /// <para>
+    /// Parking stops the retry loop on purpose, which is only safe because this exists: the administrator
+    /// changing the configuration the target objected to is the event that makes another attempt worth making.
+    /// Records in any other state are left alone, because a record awaiting retry is already going to be tried
+    /// and an expired one has outlived the purpose it was created for.
+    /// </para>
+    /// <para>
+    /// The target's reason goes with the release. It described a configuration that no longer exists, so
+    /// keeping it would have the portal report a complaint an administrator has already acted on. The attempt
+    /// count survives: those attempts really were made, and a release is not another one.
+    /// </para>
+    /// </summary>
+    Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId);
+
+    /// <summary>
+    /// Marks every initial-password record on a Connected System whose time to live has passed as expired, and
+    /// returns how many were expired.
+    /// <para>
+    /// Expiry is recorded, never a deletion. An account that quietly stopped being owed a password, with nothing
+    /// left to say so, is the silent loss this whole feature is built to avoid: nobody would learn that it was
+    /// provisioned without a working password.
+    /// </para>
+    /// <para>
+    /// Covers records awaiting retry and parked records alike. Parking waits for an administrator, and one who
+    /// never comes is exactly what an expiry is for; leaving those parked for ever would hold a permanent
+    /// needs-attention marker over work nobody is going to do. A record with no expiry never expires, so rows
+    /// staged before initial passwords carried a time to live are left alone rather than being given one
+    /// retrospectively.
+    /// </para>
+    /// </summary>
+    Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
+    /// Counts the accounts needing a person's attention over their initial password, by Synchronisation Rule.
+    /// <para>
+    /// One grouped count for every rule on the page rather than one query per row: this backs a list indicator,
+    /// which is exactly the shape that turns into N+1 queries if each row asks for itself.
+    /// </para>
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, so a caller
+    /// that renders nothing for a settled rule can do so by lookup failure alone.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// The Connected System counterpart of
+    /// <see cref="GetInitialPasswordAttentionBySyncRuleAsync"/>, for the Connected Systems list.
+    /// <para>
+    /// Counted against the record's own denormalised Connected System rather than through its Synchronisation
+    /// Rule, so an account whose rule has since been deleted is still counted against the system it lives in.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// The distinct reasons a target gave for refusing the initial passwords parked against a Synchronisation
+    /// Rule, each with how many accounts it is holding up, most accounts first.
+    /// <para>
+    /// Grouped rather than listed per account because the administrator reading this is fixing a setting: the
+    /// number of distinct reasons is the number of problems, and it is almost always very much smaller than the
+    /// number of accounts.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId);
 
     /// <summary>
     /// Bulk deletes Pending Exports.

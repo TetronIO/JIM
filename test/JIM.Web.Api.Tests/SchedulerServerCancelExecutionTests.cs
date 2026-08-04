@@ -114,7 +114,7 @@ public class SchedulerServerCancelExecutionTests
         var execution = new ScheduleExecution
         {
             Id = executionId,
-            Status = ScheduleExecutionStatus.Completed
+            Status = ScheduleExecutionStatus.Complete
         };
 
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId))
@@ -125,7 +125,7 @@ public class SchedulerServerCancelExecutionTests
 
         // Assert
         Assert.That(result, Is.False);
-        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Completed));
+        Assert.That(execution.Status, Is.EqualTo(ScheduleExecutionStatus.Complete));
     }
 
     [Test]

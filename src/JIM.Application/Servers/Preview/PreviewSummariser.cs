@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Servers.Preview.Patterns;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
 
@@ -44,6 +45,7 @@ public class PreviewSummariser
 
     private readonly int? _maximumDeltasPerGroup;
     private readonly int _maximumValuePairsPerGroup;
+    private readonly PreviewPatternDetectorRegistry _patternDetectors;
     private readonly Dictionary<GroupKey, GroupAccumulator> _groups = [];
 
     /// <param name="maximumDeltasPerGroup">
@@ -56,7 +58,14 @@ public class PreviewSummariser
     /// The value-pair cardinality guard. Overridable for tests; production uses
     /// <see cref="DefaultMaximumValuePairsPerGroup"/>.
     /// </param>
-    public PreviewSummariser(int? maximumDeltasPerGroup, int maximumValuePairsPerGroup = DefaultMaximumValuePairsPerGroup)
+    /// <param name="patternDetectors">
+    /// The detectors that name what kind of change a group's deltas describe, or null for the curated set. Injectable
+    /// so a test can drive one detector in isolation; production has no reason to vary it, because which patterns
+    /// exist and in what order they win is a product decision made once in
+    /// <see cref="PreviewPatternDetectorRegistry.Default"/>.
+    /// </param>
+    public PreviewSummariser(int? maximumDeltasPerGroup, int maximumValuePairsPerGroup = DefaultMaximumValuePairsPerGroup,
+        PreviewPatternDetectorRegistry? patternDetectors = null)
     {
         if (maximumDeltasPerGroup is < 1)
             throw new ArgumentOutOfRangeException(nameof(maximumDeltasPerGroup), maximumDeltasPerGroup,
@@ -68,6 +77,7 @@ public class PreviewSummariser
 
         _maximumDeltasPerGroup = maximumDeltasPerGroup;
         _maximumValuePairsPerGroup = maximumValuePairsPerGroup;
+        _patternDetectors = patternDetectors ?? PreviewPatternDetectorRegistry.Default;
     }
 
     /// <summary>Every delta seen, including those not kept. The unit the Activity reports progress in.</summary>
@@ -98,10 +108,22 @@ public class PreviewSummariser
         else
             AnyGroupCapped = true;
 
-        AccumulateValuePair(accumulator, delta);
+        // Detection is skipped only once neither consumer of the answer can use it: the coarse group's consensus is
+        // already broken and its value pairs have collapsed, so nothing is left to label. Everywhere else the answer
+        // is wanted, and the detectors are cheap ordinal string work.
+        var patternWanted = !accumulator.PatternConflicted || !accumulator.ValuePairsExceededGuard;
+        var patternKey = patternWanted ? DetectPattern(delta) : null;
+
+        if (patternWanted)
+            accumulator.FoldPattern(patternKey);
+
+        AccumulateValuePair(accumulator, delta, patternKey);
     }
 
-    private void AccumulateValuePair(GroupAccumulator accumulator, PreviewDelta delta)
+    private string? DetectPattern(PreviewDelta delta) =>
+        _patternDetectors.Detect(new PreviewPatternCandidate(delta.AttributeName, delta.OldValue, delta.NewValue));
+
+    private void AccumulateValuePair(GroupAccumulator accumulator, PreviewDelta delta, string? patternKey)
     {
         if (accumulator.ValuePairsExceededGuard)
             return;
@@ -119,7 +141,9 @@ public class PreviewSummariser
                 return;
             }
 
-            pairAccumulator = new PairAccumulator();
+            // Every delta in a value pair shares its attribute and both its values, so they all detect the same
+            // pattern; recording the first one's answer is recording the pair's.
+            pairAccumulator = new PairAccumulator { PatternKey = patternKey };
             accumulator.ValuePairs.Add(pair, pairAccumulator);
         }
 
@@ -167,8 +191,11 @@ public class PreviewSummariser
 
     private static IEnumerable<GroupCandidate> BuildCandidates(GroupKey key, GroupAccumulator accumulator)
     {
+        // A collapsed group carries a pattern only where every delta in it agreed on one. Anything less would be a
+        // claim about a population from a majority of it, which is the kind of number this framework exists to
+        // refuse.
         if (accumulator.ValuePairsExceededGuard)
-            return [new GroupCandidate(key, null, null, accumulator.ObjectCount, accumulator.Kept)];
+            return [new GroupCandidate(key, null, null, accumulator.PatternKey, accumulator.ObjectCount, accumulator.Kept)];
 
         return accumulator.ValuePairs.Select(entry => BuildCandidate(key, accumulator, entry.Key, entry.Value));
     }
@@ -180,11 +207,11 @@ public class PreviewSummariser
             .Where(d => d.OldValue == pair.OldValue && d.NewValue == pair.NewValue)
             .ToList();
 
-        return new GroupCandidate(key, pair.OldValue, pair.NewValue, pairAccumulator.ObjectCount,
-            kept.Count > 0 ? kept : pairAccumulator.Reserve);
+        return new GroupCandidate(key, pair.OldValue, pair.NewValue, pairAccumulator.PatternKey,
+            pairAccumulator.ObjectCount, kept.Count > 0 ? kept : pairAccumulator.Reserve);
     }
 
-    private static ConfigurationChangePreviewGroup BuildGroup(Guid activityId, GroupCandidate candidate,
+    private ConfigurationChangePreviewGroup BuildGroup(Guid activityId, GroupCandidate candidate,
         IReadOnlyDictionary<int, string> connectedSystemNames)
     {
         var key = candidate.Key;
@@ -201,6 +228,7 @@ public class PreviewSummariser
             AttributeName = key.AttributeName,
             OldValue = candidate.OldValue,
             NewValue = candidate.NewValue,
+            PatternKey = candidate.PatternKey,
             ObjectCount = candidate.ObjectCount,
             DeltasSampled = candidate.ObjectCount > candidate.Kept.Count
         };
@@ -218,7 +246,10 @@ public class PreviewSummariser
             ObjectTypeName = d.ObjectTypeName,
             AttributeName = d.AttributeName,
             OldValue = d.OldValue,
-            NewValue = d.NewValue
+            NewValue = d.NewValue,
+            // Detected here rather than carried from Add: a collapsed group's rows do not share a pattern, and the
+            // rows kept are bounded by the cap, so this is the cheapest place to get each row's own answer right.
+            PatternKey = DetectPattern(d)
         })];
 
         return group;
@@ -249,7 +280,7 @@ public class PreviewSummariser
     private record ValuePairKey(string? OldValue, string? NewValue);
 
     /// <summary>One group as it will be emitted, after the decision to split by value pair or not has been made.</summary>
-    private record GroupCandidate(GroupKey Key, string? OldValue, string? NewValue, int ObjectCount,
+    private record GroupCandidate(GroupKey Key, string? OldValue, string? NewValue, string? PatternKey, int ObjectCount,
         IReadOnlyList<PreviewDelta> Kept);
 
     private sealed class GroupAccumulator
@@ -262,6 +293,40 @@ public class PreviewSummariser
 
         /// <summary>True once this group has seen more distinct value pairs than are worth naming.</summary>
         public bool ValuePairsExceededGuard { get; set; }
+
+        /// <summary>The pattern every delta seen so far agreed on, or null where they did not, or none did.</summary>
+        public string? PatternKey { get; private set; }
+
+        private bool _patternSeen;
+
+        private bool _patternConflicted;
+
+        /// <summary>True once two deltas in this group disagreed, which settles the group's pattern as "none".</summary>
+        public bool PatternConflicted => _patternConflicted;
+
+        /// <summary>
+        /// Folds one delta's detected pattern into the group's. Unanimity is required rather than a majority: a
+        /// group described as "email domain changed" is read as a statement about every object in it, so one delta
+        /// that is something else, or is nothing recognisable, ends the claim rather than being outvoted by it.
+        /// </summary>
+        public void FoldPattern(string? key)
+        {
+            if (_patternConflicted)
+                return;
+
+            if (!_patternSeen)
+            {
+                PatternKey = key;
+                _patternSeen = true;
+                return;
+            }
+
+            if (PatternKey == key)
+                return;
+
+            _patternConflicted = true;
+            PatternKey = null;
+        }
     }
 
     private sealed class PairAccumulator
@@ -269,5 +334,11 @@ public class PreviewSummariser
         public int ObjectCount { get; set; }
 
         public List<PreviewDelta> Reserve { get; } = [];
+
+        /// <summary>
+        /// The pattern this pair's values describe. Fixed when the pair is first seen: every delta in it carries the
+        /// same attribute and the same two values, so every one of them detects the same thing.
+        /// </summary>
+        public string? PatternKey { get; init; }
     }
 }

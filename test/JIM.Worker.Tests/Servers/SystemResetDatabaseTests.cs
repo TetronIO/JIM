@@ -297,7 +297,7 @@ public class SystemResetDatabaseTests
             {
                 Schedule = schedule,
                 ScheduleName = schedule.Name,
-                Status = ScheduleExecutionStatus.Completed
+                Status = ScheduleExecutionStatus.Complete
             });
             await ctx.SaveChangesAsync();
         }

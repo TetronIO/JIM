@@ -86,6 +86,27 @@ and Destructive changes count, so a rename never registers here.
 | `ChangeCount` | `int` | How many qualifying changes there are |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
 
+#### Initial password attention (ById only)
+
+How many accounts in the Connected System are waiting on a person over their initial password.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ParkedInitialPasswordCount` | `int?` | Accounts whose target refused the password and which JIM has stopped retrying |
+| `ExpiredInitialPasswordCount` | `int?` | Accounts never given an initial password within its time to live |
+
+The two are never summed, because they ask for different things. Parked accounts are released by correcting the
+initial password settings on the [Synchronisation Rule](synchronisation-rules.md) that provisioned them and saving;
+`Get-JIMSyncRuleInitialPassword` reports what the target actually said. Expired accounts cannot be helped that way at
+all and need a password set by other means.
+
+```powershell title="Find the systems with initial password work waiting"
+Get-JIMConnectedSystem -All |
+    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
+    Where-Object { $_.ParkedInitialPasswordCount -or $_.ExpiredInitialPasswordCount } |
+    Select-Object Name, ParkedInitialPasswordCount, ExpiredInitialPasswordCount
+```
+
 !!! warning "Check `IsDeterminable` before treating `HasPendingChanges` as false"
     `HasPendingChanges` is also `$false` when JIM cannot tell: when the Connected System has never completed a Full
     Synchronisation, and when configuration change tracking is switched off. Scripts that gate a run on

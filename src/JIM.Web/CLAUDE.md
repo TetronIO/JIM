@@ -24,6 +24,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
+| `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 
 ## Form action gating and input immediacy
 
@@ -149,6 +150,19 @@ Three failure modes here are invisible to `dotnet build`, invisible to bUnit (wh
 ## Errors and stack traces
 - The **error message is the thing to read**; the stack trace is for the occasions it is not enough. Never render a stack trace unconditionally beside its message: it buries the sentence that actually answers the question, and stack traces routinely run to thousands of characters.
 - Use `<CollapsibleStackTrace StackTrace="@x" />` wherever a trace is available. It renders nothing when there is no trace, shows a "Show stack trace" toggle when there is, and only puts the trace in the DOM once it has been asked for. Do not hand-roll the toggle, and do not wrap it in an expansion panel of its own; that is what it already is.
+
+## Activity Schedule context
+
+An Activity that a Schedule produced carries `ScheduleExecutionId` and `ScheduleStepIndex`; anywhere an Activity is presented, say so and link back to the Schedule Execution that produced it. Use `<ActivityScheduleContext />` rather than hand-rolling it: the duplicated part is the load-and-derive logic (look up the execution, guard the nulls, turn the 0-based step index into the 1-based "step 3 of 6" a person reads, build the href), and the two call sites want different visual treatments.
+
+- It renders **nothing** when `ScheduleExecutionId` is null or the execution has since been pruned, so a call site can place it unconditionally without an `@if` of its own.
+- `Compact="false"` (the default) is a page-width `MudPaper Outlined` panel headed "Part of a Schedule", built to match the detail page's own panels (`Typo.h5` heading, `pa-4`); `Compact="true"` is a panel section matching the sibling `MudPaper` sections of the Operations History side panel. It is deliberately **not** an alert: the context is another section of the page, not a notice interrupting it.
+- **The page-width panel is a labelled multi-line field block, not one line of chips and links.** It uses the same `MudGrid Spacing="4"` / `MudItem xs="12" sm="6" md="4"` layout, uppercase `Typo.button` + `mud-text-secondary` labels and plain values as the Summary panel it sits directly beneath on `ActivityDetail`, so the two read as siblings rather than as two unrelated designs stacked on each other. The fields are **Schedule** (the name, linked to the Schedule Execution), **Step** ("3 of 6", 1-based, omitted entirely when the Activity carries no step index rather than rendered empty) and **Schedule Execution** (the run's status chip beside the "View Schedule Execution" link).
+- **The status chip must stay labelled.** The Activity page shows two chips: the Summary panel's `ActivityStatus` and this panel's `ScheduleExecutionStatus`. They describe different objects, and unlabelled a reader cannot tell which is which; the "Schedule Execution:" label is the only thing telling a reader that this one is the whole run's outcome, not this Activity's. The two enums used to disagree on the word for success ("Complete" beside "Completed"), which read as an outright contradiction; the Schedule Execution vocabulary was aligned onto `Complete` in #1196 as a deliberate breaking API change (the REST API serialises enums by name, `JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)` in `ApiJsonConfiguration.cs`, so the member name is the wire value). `ScheduleExecutionStatusWireContractTests` pins those names now; do not rename one again without the same deliberate decision, changelog entry and documentation sweep.
+- The compact treatment keeps the single-sentence form ("Part of &lt;Schedule&gt;, step 3 of 6"); it has no heading of its own and sits in a narrow side panel, so a field grid would not fit.
+- `Class` is the call site's to set, because only it knows the surrounding geometry. On `ActivityDetail` it sits directly below the Summary panel, so that is `mt-6` per the Panel spacing rules; inside the History panel's `gap-4` flex column it is nothing at all.
+- The component guards its own lookup on the loaded execution id. Anything that polls (the History tab does) would otherwise query the database on every tick.
+- Do **not** add it to `ActivityRunProfileExecutionItemDetail`: its subject is one object's per-item outcome, it is only ever reached from the Activity page whose panel already carries the context, and Schedule context two levels down is noise.
 
 ## Date and time display
 - **Relative** ("2 hours ago"): `dateTime.ToRelativeTime()`, e.g. as the primary text under a tooltip
