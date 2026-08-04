@@ -45,20 +45,24 @@ One append-only table. The effect side is a real cascading foreign key; the caus
 ```csharp
 public class CausalEdge
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
 
     // ─── Effect side: real FK, cascades when the Activity and its RPEIs are purged ───
-    public Guid EffectRpeiId { get; set; }
-    public ActivityRunProfileExecutionItem EffectRpei { get; set; } = null!;
+    public Guid EffectRunProfileExecutionItemId { get; set; }
+    public ActivityRunProfileExecutionItem EffectRunProfileExecutionItem { get; set; } = null!;
 
     /// Nullable: the specific outcome node this cause produced, when one exists. Carrying it is what
     /// makes cohort grouping correct on an item with more than one outcome (PRD Open Question 1).
     public Guid? EffectSyncOutcomeId { get; set; }
 
     // ─── Cause side: snapshot scalars, NO foreign key, resolved best-effort at read time ───
-    public Guid? CauseRpeiId { get; set; }
+    public Guid? CauseRunProfileExecutionItemId { get; set; }
+    public Guid? CauseSyncOutcomeId { get; set; }
     public Guid? CauseMetaverseObjectId { get; set; }
     public Guid? CauseConnectedSystemObjectId { get; set; }
+    /// The export cycle, for the export-to-confirmation seam. Not a foreign key for the usual reason and
+    /// one more: reconciliation deletes the confirmed Pending Export moments after writing the edge.
+    public Guid? CausePendingExportId { get; set; }
     public string? CauseDisplayName { get; set; }
 
     // ─── Attribution tuple: what cohort grouping keys on ───
@@ -122,7 +126,7 @@ Edge writes join the existing RPEI flush transaction, never a new one, so an edg
 
    **The cause side needs the same treatment, not just the effect side.** Where cause and effect are persisted in the *same* batch, which is exactly what Metaverse Object Housekeeping does when it deletes an object and records the removals that deletion caused in one Activity, the causing item and outcome have no ids either. Resolving the cause eagerly there stores an edge with no cause at all, and it reads as correct everywhere else.
 
-2. **There are three RPEI persistence paths, and all three need the edge insert.** Inside `BulkInsertRpeisAsync` a small batch takes a single-connection transactional path and a large batch takes a parallel COPY path whose partitions have already committed by the time stat counters are written ("Not transactional with the COPY partitions"). Wiring only the small-batch path would silently drop every edge on exactly the large cascades this feature exists to explain, and no test that runs under the batch threshold would notice. The third is `ActivitiesRepository.CreateActivityRunProfileExecutionItemsAsync`, the EF-based path used by everything recorded outside sync task processing, which is where Metaverse Object Housekeeping (and therefore every grace-period deletion) persists. `AddRange` cannot reach the buffer, since it is unmapped, so that path needs its own explicit drain. Each has a `RequiresPostgres` test, and the parallel-path one had to be made real first: it engages only when `SyncRepository` can build its own connection string from the `JIM_DB_*` variables, which test fixtures do not set, so every "parallel path" test in the suite was silently running the single-connection path and passing. `ParallelWritePathScope` sets the variables and asserts the precondition.
+2. **There are four RPEI persistence paths, and all four need the edge insert.** Inside `BulkInsertRpeisAsync` a small batch takes a single-connection transactional path and a large batch takes a parallel COPY path whose partitions have already committed by the time stat counters are written ("Not transactional with the COPY partitions"). Wiring only the small-batch path would silently drop every edge on exactly the large cascades this feature exists to explain, and no test that runs under the batch threshold would notice. The third is `ActivitiesRepository.CreateActivityRunProfileExecutionItemsAsync`, the EF-based path used by everything recorded outside sync task processing, which is where Metaverse Object Housekeeping (and therefore every grace-period deletion) persists. `AddRange` cannot reach the buffer, since it is unmapped, so that path needs its own explicit drain. The fourth is `BulkUpdateRpeiOutcomesAsync`, which merges new outcomes onto already-persisted items and is how a confirming import records its confirmations. Each has a `RequiresPostgres` test, and the parallel-path one had to be made real first: it engages only when `SyncRepository` can build its own connection string from the `JIM_DB_*` variables, which test fixtures do not set, so every "parallel path" test in the suite was silently running the single-connection path and passing. `ParallelWritePathScope` sets the variables and asserts the precondition.
 
 Because there is more than one path, id resolution lives on the model (`CausalEdge.ResolveTransientReferences`) rather than in each path. A path that resolved three of the four ids would store an edge that looks complete and silently names no cause.
 
@@ -149,14 +153,13 @@ What remains is exactly the set that crosses a Run Profile Execution Item or Act
 | Grace-period deletion to its deprovisioning and recall | `Worker.PerformMetaverseObjectHousekeepingAsync` | Runs in a **different Activity** from the disconnect that scheduled it, so nothing links the two. Without this, grace-period deployments get no provenance at all |
 | Export execution to confirming import | `SyncImportTaskProcessor.ReconcilePendingExportsAsync` | Reconciliation correlates only by `ConnectedSystemObjectId`, and an object can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle |
 
-The first three are implemented. **The fourth costs materially more than the others and buys the least**, so it is worth pricing before starting rather than after:
+All four are implemented. The fourth cost more than the others, which is a reason to plan it, not to drop it: the hop is either reconstructable from what is already persisted or it is not, and it is not.
 
-- It needs a **schema change**. What disambiguates one export cycle from the next is the Pending Export, and `CausalEdge` has no column for one. Adding `CausePendingExportId` pulls in a migration, the bulk column constants, the completeness test and a round-trip test, per the raw-SQL rules in `src/CLAUDE.md`.
-- It needs a **fourth persistence path** wired. Confirming imports merge outcomes onto already-persisted items via `BulkUpdateRpeiOutcomesAsync`, which is neither of the two paths in `BulkInsertRpeisAsync` nor the EF path.
-- Naming the causing item needs a **lookup per confirmed export** (export items carry `PendingExportId`, so the join is available but not free) on the import hot path, where a run confirms one export per changed object.
-- And Phase 1d **collapses confirming-import hops by default as low-signal**, so the payoff is a chain segment most readers never expand.
+- It needed a **schema change**, because what distinguishes one export cycle from the next is the Pending Export and the edge had no column for one. `CausePendingExportId` is a snapshot scalar like the rest of the cause side, which suits it exactly: reconciliation deletes the confirmed Pending Export moments after writing the edge, so a foreign key was never an option. Storing the id also keeps the import hot path free of lookups; the read path resolves back to the export item, which carries the same id, best-effort like every other cause reference.
+- It needed a **fourth persistence path** wired. Confirming imports merge outcomes onto already-persisted items via `BulkUpdateRpeiOutcomesAsync`, which is neither of the two paths inside `BulkInsertRpeisAsync` nor the EF path.
+- No reason code: the effect outcome already distinguishes confirmed from failed, and cohorts are computed per effect, so a code would add nothing to group on.
 
-The three cross-boundary seams that actually explain a cascade are done. Land this one only if the confirming hop earns its place in the UI; otherwise `PendingExportId` plus the reconciliation outcome already tell most of the story, and the cycle ambiguity affects only objects exported repeatedly between imports.
+Phase 1d collapses confirming-import hops by default as low-signal, which governs how prominently the segment is *rendered*; it says nothing about whether the link should be recorded. An unrecorded hop cannot be expanded when someone does want it.
 
 Consequence for Phase 1d: the "Caused by" affordance has **two** sources, and must render them as one story. Same-item causes come from the outcome tree already on the page; cross-item causes come from edges. The cohort model applies to both.
 

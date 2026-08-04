@@ -121,6 +121,21 @@ public class CausalEdge
     public Guid? CauseConnectedSystemObjectId { get; set; }
 
     /// <summary>
+    /// The Pending Export whose execution was the cause. Not a foreign key: a confirmed Pending Export is
+    /// deleted by the very reconciliation that writes this edge, so the row is already gone.
+    /// </summary>
+    /// <remarks>
+    /// This is the export cycle's identity, and recording it is the whole reason the export-to-confirmation
+    /// hop needs an edge at all. Reconciliation correlates a Pending Export to an imported object by Connected
+    /// System Object id alone, and an object cycles through export and import repeatedly, so pairing a
+    /// confirmation with its export after the fact can pick the wrong cycle and attribute a confirmation to an
+    /// export that did not produce it. The Pending Export row is unique per cycle, so it distinguishes them;
+    /// the export's own Run Profile Execution Item carries the same id, which is how the read path resolves
+    /// from here back to the export, best-effort like every other cause reference.
+    /// </remarks>
+    public Guid? CausePendingExportId { get; set; }
+
+    /// <summary>
     /// How the cause was named at the time, so a chain still reads sensibly after the cause itself
     /// has been purged. Without this a truncated chain could only say that something unidentifiable
     /// used to be here.

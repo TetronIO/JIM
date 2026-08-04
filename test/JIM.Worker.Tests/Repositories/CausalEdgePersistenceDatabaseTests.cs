@@ -85,6 +85,7 @@ public class CausalEdgePersistenceDatabaseTests
 
         var causeMvoId = Guid.NewGuid();
         var causeCsoId = Guid.NewGuid();
+        var causePendingExportId = Guid.NewGuid();
         var effectOutcomeId = Guid.NewGuid();
         var causeOutcomeId = Guid.NewGuid();
         var created = new DateTime(2026, 8, 4, 9, 12, 2, DateTimeKind.Utc);
@@ -98,6 +99,7 @@ public class CausalEdgePersistenceDatabaseTests
             CauseSyncOutcomeId = causeOutcomeId,
             CauseMetaverseObjectId = causeMvoId,
             CauseConnectedSystemObjectId = causeCsoId,
+            CausePendingExportId = causePendingExportId,
             CauseDisplayName = "Tina Adams (S8-99)",
             EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
             ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
@@ -126,6 +128,8 @@ public class CausalEdgePersistenceDatabaseTests
             Assert.That(persisted.CauseMetaverseObjectId, Is.EqualTo(causeMvoId),
                 "a transposed Guid parameter would attribute the cascade to the wrong object");
             Assert.That(persisted.CauseConnectedSystemObjectId, Is.EqualTo(causeCsoId));
+            Assert.That(persisted.CausePendingExportId, Is.EqualTo(causePendingExportId),
+                "the Pending Export identifies which export cycle a confirmation confirms; losing it reintroduces the wrong-cycle attribution");
             Assert.That(persisted.CauseDisplayName, Is.EqualTo("Tina Adams (S8-99)"));
             Assert.That(persisted.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval));
             Assert.That(persisted.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected));
@@ -172,6 +176,7 @@ public class CausalEdgePersistenceDatabaseTests
             Assert.That(persisted.CauseSyncOutcomeId, Is.Null);
             Assert.That(persisted.CauseMetaverseObjectId, Is.Null);
             Assert.That(persisted.CauseConnectedSystemObjectId, Is.Null);
+            Assert.That(persisted.CausePendingExportId, Is.Null);
             Assert.That(persisted.CauseDisplayName, Is.Null);
             Assert.That(persisted.ConnectedSystemId, Is.Null);
             Assert.That(persisted.ConnectedSystemName, Is.Null);

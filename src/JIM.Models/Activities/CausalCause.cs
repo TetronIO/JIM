@@ -43,6 +43,11 @@ public class CausalCause
     public Guid? ConnectedSystemObjectId { get; init; }
 
     /// <summary>
+    /// The Pending Export whose execution was the cause, where the cause is an export cycle.
+    /// </summary>
+    public Guid? PendingExportId { get; init; }
+
+    /// <summary>
     /// How the cause was named at the time, so a chain still reads sensibly after the cause is purged.
     /// </summary>
     public string? DisplayName { get; init; }
@@ -91,6 +96,7 @@ public class CausalCause
             CauseSyncOutcome = SyncOutcome,
             CauseMetaverseObjectId = MetaverseObjectId,
             CauseConnectedSystemObjectId = ConnectedSystemObjectId,
+            CausePendingExportId = PendingExportId,
             CauseDisplayName = DisplayName,
             EdgeType = edgeType,
             ReasonCode = ReasonCode,

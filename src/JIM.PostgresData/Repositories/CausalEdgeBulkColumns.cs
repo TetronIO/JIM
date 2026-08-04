@@ -23,7 +23,7 @@ internal static class CausalEdgeBulkColumns
         "Id",
         "EffectRunProfileExecutionItemId", "EffectSyncOutcomeId",
         "CauseRunProfileExecutionItemId", "CauseSyncOutcomeId",
-        "CauseMetaverseObjectId", "CauseConnectedSystemObjectId", "CauseDisplayName",
+        "CauseMetaverseObjectId", "CauseConnectedSystemObjectId", "CausePendingExportId", "CauseDisplayName",
         "EdgeType", "ReasonCode",
         "ConnectedSystemId", "ConnectedSystemName",
         "SyncRuleId", "SyncRuleName",

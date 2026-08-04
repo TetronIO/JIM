@@ -298,6 +298,92 @@ public class OptimisticExportApplyWorkflowTests
     }
 
     /// <summary>
+    /// Causal provenance (#1223): the confirming import's ExportConfirmed outcome must record which export
+    /// execution it confirms.
+    ///
+    /// This is the hop that cannot be reconstructed by joining. Reconciliation correlates a Pending Export to
+    /// an imported object by Connected System Object id alone, and an object cycles through export and import
+    /// repeatedly, so any later attempt to pair a confirmation with its export by object id can pick the wrong
+    /// cycle and attribute a confirmation to an export that did not produce it. The Pending Export row IS the
+    /// cycle, so the link has to be recorded while it is still known.
+    /// </summary>
+    [Test]
+    public async Task Workflow_ConfirmingImport_RecordsWhichExportItConfirmsAsync()
+    {
+        // Arrange: the same provisioning cycle as the first test in this fixture, which is proven to produce
+        // an ExportConfirmed outcome on the confirming import.
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            Type = TargetUserType,
+            TypeId = TargetUserType.Id,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            ExternalIdAttributeId = ObjectGuidAttr.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        var objectGuid = Guid.NewGuid();
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = ObjectGuidAttr.Id, Attribute = ObjectGuidAttr, GuidValue = objectGuid
+        });
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = DisplayNameAttr.Id, Attribute = DisplayNameAttr, StringValue = "Harry Moss",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        ActivitiesData = TestUtilities.GetActivityData(ConnectedSystemRunType.Export, 5);
+        InitialiseApplication();
+
+        var mockExportConnector = CreateSucceedingExportConnector();
+        await Jim.ExportExecution.ExecuteExportsAsync(TargetSystem, mockExportConnector.Object, SyncRunMode.PreviewAndSync);
+
+        // Act: the confirming import reports back exactly what was exported.
+        var importObject = BuildConfirmingImportObject(cso);
+        await RunConfirmingImportAsync(importObject);
+
+        // Read from the repository, not the item: every persistence path empties the buffer once written, so
+        // the store is where an edge ends up regardless of which path the confirming item took.
+        var edge = SyncRepo.CausalEdges.SingleOrDefault();
+
+        Assert.That(edge, Is.Not.Null,
+            "reconciliation correlates by Connected System Object id alone, so the export that caused this confirmation " +
+            "can only be identified while the Pending Export is still known");
+        Assert.Multiple(() =>
+        {
+            Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.ExportCausedImportConfirmation));
+            Assert.That(edge!.CausePendingExportId, Is.EqualTo(pendingExport.Id),
+                "the Pending Export IS the export cycle, so it is what distinguishes this confirmation from the next one");
+            Assert.That(edge!.CauseConnectedSystemObjectId, Is.EqualTo(cso.Id));
+            Assert.That(edge!.ConnectedSystemId, Is.EqualTo(TargetSystem.Id));
+            Assert.That(edge!.ConnectedSystemName, Is.EqualTo(TargetSystem.Name));
+            Assert.That(edge!.EffectSyncOutcome!.OutcomeType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed),
+                "the edge must name the confirmation outcome it explains, so a run confirming many exports keeps them apart");
+        });
+    }
+
+    /// <summary>
     /// Update cycle: a Normal CSO's Update export applies its attribute value in place. The
     /// confirming import's own diff finds nothing changed (no CsoUpdated outcome, no LastUpdated
     /// restamp); reconciliation, run internally by the same import as its confirming-import phase,

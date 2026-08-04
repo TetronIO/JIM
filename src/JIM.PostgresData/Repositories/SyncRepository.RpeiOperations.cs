@@ -484,8 +484,28 @@ public partial class SyncRepository
                     _context, ActivityStatCounterCalculator.CalculateOutcomeInsertDeltas(rpeis, newOutcomes));
             }
 
+            // Drain any causal edges buffered on these items (#1223). Confirming imports merge their outcomes
+            // onto already-persisted items through here rather than through either insert path, so an edge
+            // written at the export-confirmation seam reaches the database only if this path writes it. The
+            // items already have ids; the outcomes were assigned theirs above.
+            var edges = new List<CausalEdge>();
+            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+            {
+                foreach (var edge in rpei.CausalEdges)
+                    edge.ResolveTransientReferences(rpei.Id);
+
+                edges.AddRange(rpei.CausalEdges);
+            }
+
+            if (edges.Count > 0)
+                await BulkInsertCausalEdgesAsync(edges);
+
             if (transaction != null)
                 await transaction.CommitAsync();
+
+            // Emptied only once committed, so a rolled-back update leaves them to be retried.
+            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+                rpei.CausalEdges.Clear();
         }
         finally
         {
@@ -763,7 +783,7 @@ public partial class SyncRepository
         if (edges.Count == 0)
             return;
 
-        const int columnsPerRow = 15;
+        const int columnsPerRow = 16;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         // One builder reused across chunks rather than one per iteration; a deletion cascade can produce many.
@@ -780,7 +800,7 @@ public partial class SyncRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14}, @p{offset + 15})");
 
                 var edge = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = edge.Id });
@@ -790,14 +810,15 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseSyncOutcomeId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseMetaverseObjectId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseConnectedSystemObjectId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseDisplayName ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.EdgeType });
-                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.ReasonCode });
-                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.ConnectedSystemId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.ConnectedSystemName ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CausePendingExportId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseDisplayName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.EdgeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.ReasonCode });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.ConnectedSystemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.ConnectedSystemName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 15}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

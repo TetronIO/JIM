@@ -1695,7 +1695,22 @@ public class SyncRepository : ISyncRepository
         List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
     {
         foreach (var rpei in rpeis)
+        {
             _rpeis[rpei.Id] = rpei;
+
+            // Drain the causal edge buffer, matching the production path (#1223): confirming imports merge
+            // their outcomes through here, so an edge written at the export-confirmation seam reaches the
+            // store only if this path records it.
+            if (rpei.CausalEdges.Count == 0)
+                continue;
+
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            RecordCausalEdges(rpei.CausalEdges);
+            rpei.CausalEdges.Clear();
+        }
+
         return Task.CompletedTask;
     }
 
