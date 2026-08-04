@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Utility;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
@@ -15,6 +16,11 @@ namespace JIM.Worker.Tests.Repositories;
 /// or specific ones. The attribution is denormalised onto the Activity, so the filters are plain indexed
 /// predicates over ScheduledByScheduleId rather than a join through Schedule Executions (which a deleted
 /// Schedule would silently blank out, on a permanent audit record).
+///
+/// These cases originally covered the separate Worker Task query; they now run against the unified
+/// Activity query with the Worker Task preset supplied by the caller, so the behaviour stays pinned
+/// after the two queries were collapsed into one. <see cref="ActivityWorkerTaskPresetTests"/> covers the
+/// preset itself.
 /// </summary>
 [TestFixture]
 public class ActivityScheduleFilterTests
@@ -48,7 +54,7 @@ public class ActivityScheduleFilterTests
     }
 
     [Test]
-    public async Task GetWorkerTaskActivitiesAsync_InitiatedByScheduleTrue_ReturnsOnlyScheduledActivitiesAsync()
+    public async Task GetActivitiesAsync_InitiatedByScheduleTrue_ReturnsOnlyScheduledActivitiesAsync()
     {
         var nightly = NewActivity(NightlyScheduleId, "Nightly Sync");
         var hourly = NewActivity(HourlyScheduleId, "Hourly Import");
@@ -56,30 +62,28 @@ public class ActivityScheduleFilterTests
         _dbContext.Activities.AddRange(nightly, hourly, manual);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Activity.GetWorkerTaskActivitiesAsync(
-            page: 1, pageSize: 100, initiatedBySchedule: true);
+        var result = await QueryHistoryAsync(initiatedBySchedule: true);
 
         Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { nightly.Id, hourly.Id }),
             "only Activities a Schedule produced were requested");
     }
 
     [Test]
-    public async Task GetWorkerTaskActivitiesAsync_InitiatedByScheduleFalse_ReturnsOnlyUnscheduledActivitiesAsync()
+    public async Task GetActivitiesAsync_InitiatedByScheduleFalse_ReturnsOnlyUnscheduledActivitiesAsync()
     {
         var nightly = NewActivity(NightlyScheduleId, "Nightly Sync");
         var manual = NewActivity(null, null);
         _dbContext.Activities.AddRange(nightly, manual);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Activity.GetWorkerTaskActivitiesAsync(
-            page: 1, pageSize: 100, initiatedBySchedule: false);
+        var result = await QueryHistoryAsync(initiatedBySchedule: false);
 
         Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { manual.Id }),
             "only Activities no Schedule produced were requested");
     }
 
     [Test]
-    public async Task GetWorkerTaskActivitiesAsync_SingleScheduleFilter_ReturnsOnlyThatSchedulesActivitiesAsync()
+    public async Task GetActivitiesAsync_SingleScheduleFilter_ReturnsOnlyThatSchedulesActivitiesAsync()
     {
         var nightly = NewActivity(NightlyScheduleId, "Nightly Sync");
         var hourly = NewActivity(HourlyScheduleId, "Hourly Import");
@@ -87,15 +91,14 @@ public class ActivityScheduleFilterTests
         _dbContext.Activities.AddRange(nightly, hourly, manual);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Activity.GetWorkerTaskActivitiesAsync(
-            page: 1, pageSize: 100, scheduleFilter: [NightlyScheduleId]);
+        var result = await QueryHistoryAsync(scheduleFilter: [NightlyScheduleId]);
 
         Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { nightly.Id }),
             "only the nightly Schedule's Activities were requested");
     }
 
     [Test]
-    public async Task GetWorkerTaskActivitiesAsync_MultipleScheduleFilter_ReturnsActivitiesFromAnyOfThemAsync()
+    public async Task GetActivitiesAsync_MultipleScheduleFilter_ReturnsActivitiesFromAnyOfThemAsync()
     {
         var nightly = NewActivity(NightlyScheduleId, "Nightly Sync");
         var hourly = NewActivity(HourlyScheduleId, "Hourly Import");
@@ -104,37 +107,35 @@ public class ActivityScheduleFilterTests
         _dbContext.Activities.AddRange(nightly, hourly, weekly, manual);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Activity.GetWorkerTaskActivitiesAsync(
-            page: 1, pageSize: 100, scheduleFilter: [NightlyScheduleId, WeeklyScheduleId]);
+        var result = await QueryHistoryAsync(scheduleFilter: [NightlyScheduleId, WeeklyScheduleId]);
 
         Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { nightly.Id, weekly.Id }),
             "the Schedule filter is additive/OR within itself");
     }
 
     [Test]
-    public async Task GetWorkerTaskActivitiesAsync_NoScheduleFilters_ReturnsEveryWorkerTaskActivityAsync()
+    public async Task GetActivitiesAsync_NoScheduleFilters_ReturnsEveryWorkerTaskActivityAsync()
     {
         var nightly = NewActivity(NightlyScheduleId, "Nightly Sync");
         var manual = NewActivity(null, null);
         _dbContext.Activities.AddRange(nightly, manual);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Activity.GetWorkerTaskActivitiesAsync(page: 1, pageSize: 100);
+        var result = await QueryHistoryAsync();
 
         Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { nightly.Id, manual.Id }),
             "omitting the new filters must not change the existing unfiltered behaviour");
     }
 
     [Test]
-    public async Task GetWorkerTaskActivitiesAsync_EmptyScheduleFilter_ReturnsEveryWorkerTaskActivityAsync()
+    public async Task GetActivitiesAsync_EmptyScheduleFilter_ReturnsEveryWorkerTaskActivityAsync()
     {
         var nightly = NewActivity(NightlyScheduleId, "Nightly Sync");
         var manual = NewActivity(null, null);
         _dbContext.Activities.AddRange(nightly, manual);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _repository.Activity.GetWorkerTaskActivitiesAsync(
-            page: 1, pageSize: 100, scheduleFilter: []);
+        var result = await QueryHistoryAsync(scheduleFilter: []);
 
         Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { nightly.Id, manual.Id }),
             "an empty Schedule selection means no Schedule filtering, matching the sibling filters");
@@ -172,6 +173,24 @@ public class ActivityScheduleFilterTests
             "a renamed Schedule must yield one option, not two sharing an id (a MudSelect with duplicate ids misbehaves)");
         Assert.That(options.Schedules[0].Name, Is.EqualTo("Overnight Synchronisation"),
             "the most recently recorded name is the one an administrator recognises");
+    }
+
+    /// <summary>
+    /// Runs the unified Activity query the way Operations > History does: with the Worker Task preset
+    /// (top-level Run Profile executions and Connected System Execute/Clear/Delete operations) supplied
+    /// by the caller rather than baked into the query.
+    /// </summary>
+    private async Task<PagedResultSet<Activity>> QueryHistoryAsync(
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
+    {
+        return await _repository.Activity.GetActivitiesAsync(
+            page: 1,
+            pageSize: 100,
+            operationFilter: [ActivityTargetOperationType.Execute, ActivityTargetOperationType.Clear, ActivityTargetOperationType.Delete],
+            typeFilter: [ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetType.ConnectedSystem],
+            initiatedBySchedule: initiatedBySchedule,
+            scheduleFilter: scheduleFilter);
     }
 
     private static Activity NewActivity(Guid? scheduleId, string? scheduleName, int daysOld = 1) => new()

@@ -87,6 +87,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Deletion decisions are now explained from facts recorded at the moment of the decision: the Activity detail page shows the deletion rule, trigger mode, selected sources, triggering system and the date the deletion becomes due, as they were when the decision was made (staying accurate after the rules are edited), and the Pending Deletions page names which system's disconnection triggered each scheduled deletion. (#119)
 - 🔄 **Breaking:** a successful Schedule Execution's status is now `Complete`, not `Completed`, matching the word Activities already use for the same outcome. The REST API and PowerShell both send and accept only `Complete`; update any script that filters on `Completed`. (#1196)
 
+- ✨ The Activity history can now be filtered from automation as thoroughly as from the portal: `GET /api/v1/activities` and `Get-JIMActivity` gain filters for operation, outcome, status, initiator, created date range, Connected System, Run Profile and Schedule.
+- ✨ Those filters combine, so "which of last week's scheduled Full Imports against Contoso AD recorded errors?" is now one call rather than a sift through pages of Activities. The portal, REST API and PowerShell run the same query, so all three answer identically.
+
+#### Schedule Execution visibility (#1196)
+
+- ✨ The Schedules list now shows how each Schedule's last run *ended*, not just when it ran, naming the step a failed run stopped on. Expanding a Schedule lists its recent executions with their outcomes.
+- ✨ A new Schedule Execution view shows every step of a run with its outcome, how long it took, and a link straight to the Activity that produced it, so a failed overnight run no longer has to be pieced together from the Activity history.
+- 🖥️ An Activity that a Schedule produced now says so, linking back to the run it belonged to and the step within it.
+- ✨ The Activity history can now be filtered to work a Schedule produced, either any Schedule or particular ones, turning "last night failed" into "this step has been failing all week". The attribution lives on the Activity, so it survives the Schedule being deleted.
+
 ### Fixed
 
 - 🐛 An export now stops showing the Connector's step as running once the Connector has finished with it. The step was left lit until the run entered its next one, so the rail claimed objects were still being written while the run was finalising its results, and the Connector's step absorbed the time that finalising took; on a large export that made the step an administrator would look at first the one least worth trusting. Imports were corrected in the same way already. (#1214)

@@ -15,8 +15,13 @@ Retrieves activity history from JIM. Activities are created automatically whenev
 ### Syntax
 
 ```powershell
-# List recent activities (default)
+# List recent activities (default), optionally narrowed by any combination of filters
 Get-JIMActivity [-Search <string>] [-Page <int>] [-PageSize <int>]
+                [-Operation <string[]>] [-Outcome <string[]>] [-Status <string[]>]
+                [-InitiatedById <guid>] [-InitiatedBy <string>] [-HasChildActivities <bool>]
+                [-CreatedFrom <datetime>] [-CreatedTo <datetime>]
+                [-ConnectedSystem <string[]>] [-RunProfile <string[]>]
+                [-ScheduledOnly <bool>] [-ScheduleId <guid[]>]
 
 # Get a specific activity by ID
 Get-JIMActivity -Id <guid>
@@ -36,6 +41,18 @@ Get-JIMActivity -Id <guid> -Follow [-IntervalSeconds <int>] [-MaxPolls <int>]
 | `Search` | `string` | No (List set) | | Filters activities by target name or type. For example, searching for "Active Directory" returns activities related to that Connected System. |
 | `Page` | `int` | No (List set) | `1` | Page number for paginated results. |
 | `PageSize` | `int` | No (List set) | `20` | Number of activities per page. |
+| `Operation` | `string[]` | No (List set) | | Filters by the operation the Activity performed: `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`. Accepts several values. |
+| `Outcome` | `string[]` | No (List set) | | Filters to Activities that recorded at least one of the given outcomes: `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlows`, `Disconnected`, `DriftCorrections`, `Provisioned`, `Exported`, `Deprovisioned`, `Created`, `PendingExports`, `Errors`. Accepts several values. |
+| `Status` | `string[]` | No (List set) | | Filters by status: `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError`, `Cancelled`. Accepts several values. |
+| `InitiatedById` | `guid` | No (List set) | | Filters to the exact principal (Metaverse Object or API key) that initiated the Activity. |
+| `InitiatedBy` | `string` | No (List set) | | Filters by part of the initiator's recorded name, case-insensitively. Use `InitiatedById` to match an exact principal instead. |
+| `HasChildActivities` | `bool` | No (List set) | | `$true` returns only Activities that have child Activities, `$false` only those that have none. Omit to return both. |
+| `CreatedFrom` | `datetime` | No (List set) | | Only Activities created at or after this time. Converted to UTC before being sent. |
+| `CreatedTo` | `datetime` | No (List set) | | Only Activities created at or before this time. Converted to UTC before being sent. |
+| `ConnectedSystem` | `string[]` | No (List set) | | Filters by Connected System name (the Activity's target context). Exact match; accepts several values. |
+| `RunProfile` | `string[]` | No (List set) | | Filters by Run Profile name (the Activity's target name). Exact match; accepts several values. |
+| `ScheduledOnly` | `bool` | No (List set) | | `$true` returns only work a [Schedule](../configuration/schedules.md) produced, `$false` only work nobody scheduled. Omit to return both. |
+| `ScheduleId` | `guid[]` | No (List set) | | Filters to the Activities particular Schedules produced. Accepts several values. |
 | `ExecutionItems` | `switch` | Yes (ExecutionItems set) | | Retrieves the Run Profile execution items (RPEIs) associated with the activity, providing detailed per-object processing results. |
 | `Follow` | `switch` | Yes (Follow set) | | Follows the activity's live progress (like `tail -f`): renders a progress bar with the current phase, object counts, throughput and estimated time remaining until the activity completes. Press Ctrl+C to stop early. |
 | `IntervalSeconds` | `int` | No (Follow set) | `2` | Polling interval in seconds when following. Range 1-300. |
@@ -76,6 +93,26 @@ Get-JIMActivity -Search "Active Directory"
 
 ```powershell title="Search for activities by type"
 Get-JIMActivity -Search "FullImport"
+```
+
+```powershell title="Find the runs that failed"
+Get-JIMActivity -Status FailedWithError, CompleteWithError
+```
+
+```powershell title="Narrow to one Connected System and Run Profile"
+Get-JIMActivity -ConnectedSystem 'Contoso AD' -RunProfile 'Full Import' -Status FailedWithError
+```
+
+```powershell title="Has a Schedule been failing all week, or was last night a one-off?"
+Get-JIMActivity -ScheduledOnly $true -Outcome Errors -CreatedFrom (Get-Date).AddDays(-7)
+```
+
+```powershell title="The Activities a particular Schedule produced"
+Get-JIMSchedule -Name 'Nightly Sync' | ForEach-Object { Get-JIMActivity -ScheduleId $_.Id }
+```
+
+```powershell title="Review one person's recent activity"
+Get-JIMActivity -InitiatedBy 'alice' -CreatedFrom (Get-Date).AddDays(-30)
 ```
 
 ```powershell title="Get a specific activity by ID"

@@ -44,6 +44,32 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     /// authentication failure) for SIEM integration. An unparseable value returns 400.</param>
     /// <param name="initiatorType">Optional filter for initiator types (User, ApiKey, System, Anonymous; repeat the
     /// query parameter for multiple values; additive/OR within the filter). An unparseable value returns 400.</param>
+    /// <param name="operation">Optional filter for the operation the Activity performed (Create, Read, Update, Delete,
+    /// Clear, Execute, ImportHierarchy and so on; repeat the query parameter for multiple values; additive/OR within
+    /// the filter). An unparseable value returns 400.</param>
+    /// <param name="outcome">Optional filter for Activities that recorded at least one of the given outcomes (Added,
+    /// Updated, Deleted, Projected, Joined, AttributeFlows, Disconnected, DriftCorrections, Provisioned, Exported,
+    /// Deprovisioned, Created, PendingExports, Errors; repeat the query parameter for multiple values; additive/OR
+    /// within the filter). An unparseable value returns 400.</param>
+    /// <param name="status">Optional filter for Activity statuses (InProgress, Complete, CompleteWithWarning,
+    /// CompleteWithError, FailedWithError, Cancelled; repeat the query parameter for multiple values; additive/OR
+    /// within the filter). An unparseable value returns 400.</param>
+    /// <param name="initiatedById">Optional filter to the exact principal (Metaverse Object or API key) that
+    /// initiated the Activity. Use <c>initiatedBy</c> to match on the recorded name instead.</param>
+    /// <param name="hasChildActivities">Optional filter: <c>true</c> returns only Activities that have child
+    /// Activities, <c>false</c> only those that have none, omitted returns both.</param>
+    /// <param name="createdFrom">Optional inclusive lower bound on the Activity's creation time (UTC).</param>
+    /// <param name="createdTo">Optional inclusive upper bound on the Activity's creation time (UTC).</param>
+    /// <param name="connectedSystem">Optional filter for Connected System names, matched against the Activity's target
+    /// context (repeat the query parameter for multiple values; additive/OR within the filter). Exact match.</param>
+    /// <param name="runProfile">Optional filter for Run Profile names, matched against the Activity's target name
+    /// (repeat the query parameter for multiple values; additive/OR within the filter). Exact match.</param>
+    /// <param name="initiatedBy">Optional case-insensitive partial match on the initiator's recorded name. Distinct
+    /// from <c>initiatedById</c>, which matches an exact principal.</param>
+    /// <param name="scheduledOnly">Optional filter: <c>true</c> returns only Activities a Schedule produced,
+    /// <c>false</c> only those no Schedule produced, omitted returns both.</param>
+    /// <param name="scheduleId">Optional filter for the ids of the Schedules that produced the Activities (repeat the
+    /// query parameter for multiple values; additive/OR within the filter).</param>
     /// <returns>A paginated list of Activity headers.</returns>
     /// <response code="200">Returns the paginated list of Activities.</response>
     /// <response code="400">If a filter value cannot be parsed.</response>
@@ -56,7 +82,19 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         [FromQuery] PaginationRequest pagination,
         [FromQuery] string? search = null,
         [FromQuery] List<ActivityTargetType>? targetType = null,
-        [FromQuery] List<ActivityInitiatorType>? initiatorType = null)
+        [FromQuery] List<ActivityInitiatorType>? initiatorType = null,
+        [FromQuery] List<ActivityTargetOperationType>? operation = null,
+        [FromQuery] List<ActivityOutcomeType>? outcome = null,
+        [FromQuery] List<ActivityStatus>? status = null,
+        [FromQuery] Guid? initiatedById = null,
+        [FromQuery] bool? hasChildActivities = null,
+        [FromQuery] DateTime? createdFrom = null,
+        [FromQuery] DateTime? createdTo = null,
+        [FromQuery] List<string>? connectedSystem = null,
+        [FromQuery] List<string>? runProfile = null,
+        [FromQuery] string? initiatedBy = null,
+        [FromQuery] bool? scheduledOnly = null,
+        [FromQuery] List<Guid>? scheduleId = null)
     {
         _logger.LogDebug("Getting activities (Page: {Page}, PageSize: {PageSize}, Search: {Search})",
             pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
@@ -65,14 +103,27 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         var sortBy = MapSortBy(pagination.SortBy);
         var sortDescending = pagination.IsDescending;
 
+        // Every filter is optional and they combine with AND; an omitted or empty one filters nothing.
         var result = await _application.Activities.GetActivitiesAsync(
             page: pagination.Page,
             pageSize: pagination.PageSize,
             searchQuery: search,
             sortBy: sortBy,
             sortDescending: sortDescending,
+            initiatedById: initiatedById,
+            operationFilter: operation,
+            outcomeFilter: outcome,
             typeFilter: targetType,
-            initiatorTypeFilter: initiatorType);
+            statusFilter: status,
+            hasChildActivities: hasChildActivities,
+            initiatorTypeFilter: initiatorType,
+            createdFrom: createdFrom,
+            createdTo: createdTo,
+            connectedSystemFilter: connectedSystem,
+            runProfileFilter: runProfile,
+            initiatedByFilter: initiatedBy,
+            initiatedBySchedule: scheduledOnly,
+            scheduleFilter: scheduleId);
 
         var headers = result.Results.Select(a => ActivityHeader.FromEntity(a));
 

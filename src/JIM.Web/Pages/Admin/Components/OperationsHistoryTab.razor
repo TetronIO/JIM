@@ -834,6 +834,26 @@
 </div>
 
 @code {
+    @* ─── Worker Task preset ─── *@
+    @* This tab shows Worker Task Activities: the operations the worker service executes. There is one
+       Activity query; which Activities a caller wants is the caller's to say, so these two filters are
+       what make it the Operations history rather than the general Activities list. Run Profile executions
+       and Connected System operations, restricted to the operations the worker performs (Execute a Run
+       Profile, Clear a Connected System's objects, Delete a Connected System). Example Data Template and
+       History Retention Cleanup Activities are deliberately not included. *@
+    private static readonly ActivityTargetType[] WorkerTaskTargetTypes =
+    [
+        ActivityTargetType.ConnectedSystemRunProfile,
+        ActivityTargetType.ConnectedSystem
+    ];
+
+    private static readonly ActivityTargetOperationType[] WorkerTaskOperations =
+    [
+        ActivityTargetOperationType.Execute,
+        ActivityTargetOperationType.Clear,
+        ActivityTargetOperationType.Delete
+    ];
+
     private int _currentPage;
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
@@ -938,12 +958,20 @@
             var schedules = _filterSchedules.Any() ? _filterSchedules : null;
 
             using var refreshJim = JimFactory.Create();
-            var result = await refreshJim.Activities.GetWorkerTaskActivitiesAsync(
-                1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy,
-                _currentSortLabel, _currentSortDescending,
-                _filterHasChildren ? true : null,
-                _filterScheduledOnly ? true : null,
-                schedules);
+            var result = await refreshJim.Activities.GetActivitiesAsync(
+                page: 1,
+                pageSize: _rowsPerPage,
+                sortBy: _currentSortLabel,
+                sortDescending: _currentSortDescending,
+                operationFilter: WorkerTaskOperations,
+                typeFilter: WorkerTaskTargetTypes,
+                statusFilter: statuses,
+                hasChildActivities: _filterHasChildren ? true : null,
+                connectedSystemFilter: connectedSystems,
+                runProfileFilter: runProfiles,
+                initiatedByFilter: initiatedBy,
+                initiatedBySchedule: _filterScheduledOnly ? true : null,
+                scheduleFilter: schedules);
 
             var fingerprint = BuildFingerprint(result.Results);
             if (fingerprint != _lastDataFingerprint)
@@ -1022,18 +1050,20 @@
         var schedules = _filterSchedules.Any() ? _filterSchedules : null;
 
         using var jim = JimFactory.Create();
-        var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
-            _currentPage + 1,
-            _rowsPerPage,
-            connectedSystems,
-            runProfiles,
-            statuses,
-            initiatedBy,
-            _currentSortLabel,
-            _currentSortDescending,
-            _filterHasChildren ? true : null,
-            _filterScheduledOnly ? true : null,
-            schedules);
+        var result = await jim.Activities.GetActivitiesAsync(
+            page: _currentPage + 1,
+            pageSize: _rowsPerPage,
+            sortBy: _currentSortLabel,
+            sortDescending: _currentSortDescending,
+            operationFilter: WorkerTaskOperations,
+            typeFilter: WorkerTaskTargetTypes,
+            statusFilter: statuses,
+            hasChildActivities: _filterHasChildren ? true : null,
+            connectedSystemFilter: connectedSystems,
+            runProfileFilter: runProfiles,
+            initiatedByFilter: initiatedBy,
+            initiatedBySchedule: _filterScheduledOnly ? true : null,
+            scheduleFilter: schedules);
 
         _items = result.Results;
         _totalItems = result.TotalResults;

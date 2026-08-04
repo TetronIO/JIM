@@ -42,6 +42,12 @@ public interface IActivityRepository
     /// </summary>
     public Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds);
 
+    /// <summary>
+    /// Retrieves a page's worth of top-level Activities, i.e. those that do not have a parent Activity.
+    /// Every filter is optional and they combine with AND; the multi-valued ones are additive/OR within
+    /// themselves. Callers that want a subset of Activity kinds (Operations > History wants Worker Task
+    /// Activities) express it through <paramref name="typeFilter"/> and <paramref name="operationFilter"/>.
+    /// </summary>
     public Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page,
         int pageSize,
@@ -56,21 +62,17 @@ public interface IActivityRepository
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null);
-
-    public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page,
-        int pageSize,
+        DateTime? createdTo = null,
         IEnumerable<string>? connectedSystemFilter = null,
         IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
-        string? sortBy = null,
-        bool sortDescending = true,
-        bool? hasChildActivities = null,
         bool? initiatedBySchedule = null,
         IEnumerable<Guid>? scheduleFilter = null);
 
+    /// <summary>
+    /// The distinct Connected Systems, Run Profiles and Schedules present in the Worker Task Activity
+    /// history, for the Operations > History filter drop-downs.
+    /// </summary>
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
