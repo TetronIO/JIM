@@ -67,11 +67,16 @@ gh pr create --base feature/<feature> --title "fix: <desc>" --body "..."
 Code may only depend on its own layer or a lower one:
 
 - **Remaining feature work needs this layer's code** → continue in a new layer on top: `gh stack add` (or branch off this layer), and repeat this pattern.
-- **Remaining feature work is independent of this layer** → `git checkout feature/<feature>` and continue below. Any change to a lower layer breaks the stack's linearity; restack before merging with the web "Rebase stack" button, or locally:
+- **Remaining feature work is independent of this layer** → `git checkout feature/<feature>` and continue below. Anything that moves a lower layer (new commits, or merging `origin/main` into the bottom layer) leaves the layers above pointing at the old commit, so restack each of them onto its new base before merging:
   ```
-  gh stack rebase
-  gh stack push
+  # <old-base> is the commit the layer branched from, before the branch below moved.
+  # Read it off the layer's reflog, or note it before moving the lower branch.
+  git -c rebase.backend=apply rebase --onto feature/<branch-below> <old-base> feature/<layer>
+  git push --force-with-lease
   ```
+  **Do not use `gh stack rebase` here.** It rebases every branch in the chain, starting with the bottom layer onto `main`, which is exactly the per-commit conflict replay that CLAUDE.md's merge-don't-rebase rule exists to avoid; on a long-lived bottom layer it is a large, avoidable mess (stack #1211: conflicts in three files while replaying 53 commits, aborted with `gh stack rebase --abort`). Only the layer whose base actually moved needs rebasing. `-c rebase.backend=apply` sidesteps the merge backend's misleading "local changes would be overwritten by merge" on a clean tree.
+
+  Note that a merge commit on the **bottom** layer is fine and does not break the stack: linearity is required between layers, not between the bottom layer and `main`. Bring the bottom layer up to date with `git merge origin/main`, per CLAUDE.md → "Bringing a feature branch up to date with `main`".
 
 ## 6. Landing
 
