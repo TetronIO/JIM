@@ -5,6 +5,9 @@
 <!-- Strictly containers: Web Application, Worker Service, Scheduler Service, -->
 <!-- PostgreSQL and the PowerShell Module. In-process libraries (Application -->
 <!-- Layer, Connectors) are not containers; the Worker's annotation carries them. -->
+<!-- The boundary title is painted after the edges (SVG paints in document -->
+<!-- order) so the REST API spoke passes behind it, not through it; the -->
+<!-- knockout stroke on .jimdg-hub-title clears the gaps between glyphs. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
 <!-- Visual language: engineering/DESIGN.md > Diagrams. -->
@@ -67,7 +70,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 .jim-diagram .jimdg-flow          { stroke: var(--jimdg-flow); stroke-width: 2; }
 .jim-diagram .jimdg-flow-arrow    { fill: var(--jimdg-flow); }
 .jim-diagram text { text-anchor: middle; }
-.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text);
+                                   stroke: var(--jimdg-hub-fill); stroke-width: 5; stroke-linejoin: round;
+                                   paint-order: stroke fill; }
 .jim-diagram .jimdg-layer-title  { font-size: 14px; font-weight: 600; fill: var(--jimdg-layer-text); }
 .jim-diagram .jimdg-chip-label   { font-size: 13.5px; font-weight: 600; fill: var(--jimdg-chip-text); }
 .jim-diagram .jimdg-chip-sub     { font-size: 11px; fill: var(--jimdg-chip-text); opacity: 0.78; }
@@ -116,7 +121,6 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
   </g>
   <g id="jimdg-ct-boundary">
     <rect class="jimdg-hub" x="90" y="150" width="980" height="450" rx="8"/>
-    <text class="jimdg-hub-title" x="580" y="188">JIM</text>
   </g>
   <g id="jimdg-ct-containers">
     <rect class="jimdg-stage" x="140" y="225" width="220" height="80" rx="8"/>
@@ -161,6 +165,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <line class="jimdg-flow" x1="700" y1="470" x2="770" y2="470"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(780,470) rotate(0)"/>
     <text class="jimdg-flow-label" x="706" y="458">task queue</text>
+  </g>
+  <g id="jimdg-ct-boundary-title">
+    <text class="jimdg-hub-title" x="580" y="188">JIM</text>
   </g>
   <g id="jimdg-ct-links">
     <line class="jimdg-spoke" x1="480" y1="516" x2="120" y2="656"/>

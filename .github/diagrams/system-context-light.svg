@@ -65,7 +65,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 .jim-diagram .jimdg-flow          { stroke: var(--jimdg-flow); stroke-width: 2; }
 .jim-diagram .jimdg-flow-arrow    { fill: var(--jimdg-flow); }
 .jim-diagram text { text-anchor: middle; }
-.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text);
+                                   stroke: var(--jimdg-hub-fill); stroke-width: 5; stroke-linejoin: round;
+                                   paint-order: stroke fill; }
 .jim-diagram .jimdg-layer-title  { font-size: 14px; font-weight: 600; fill: var(--jimdg-layer-text); }
 .jim-diagram .jimdg-chip-label   { font-size: 13.5px; font-weight: 600; fill: var(--jimdg-chip-text); }
 .jim-diagram .jimdg-chip-sub     { font-size: 11px; fill: var(--jimdg-chip-text); opacity: 0.78; }
