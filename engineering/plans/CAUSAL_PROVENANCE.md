@@ -149,6 +149,15 @@ What remains is exactly the set that crosses a Run Profile Execution Item or Act
 | Grace-period deletion to its deprovisioning and recall | `Worker.PerformMetaverseObjectHousekeepingAsync` | Runs in a **different Activity** from the disconnect that scheduled it, so nothing links the two. Without this, grace-period deployments get no provenance at all |
 | Export execution to confirming import | `SyncImportTaskProcessor.ReconcilePendingExportsAsync` | Reconciliation correlates only by `ConnectedSystemObjectId`, and an object can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle |
 
+The first three are implemented. **The fourth costs materially more than the others and buys the least**, so it is worth pricing before starting rather than after:
+
+- It needs a **schema change**. What disambiguates one export cycle from the next is the Pending Export, and `CausalEdge` has no column for one. Adding `CausePendingExportId` pulls in a migration, the bulk column constants, the completeness test and a round-trip test, per the raw-SQL rules in `src/CLAUDE.md`.
+- It needs a **fourth persistence path** wired. Confirming imports merge outcomes onto already-persisted items via `BulkUpdateRpeiOutcomesAsync`, which is neither of the two paths in `BulkInsertRpeisAsync` nor the EF path.
+- Naming the causing item needs a **lookup per confirmed export** (export items carry `PendingExportId`, so the join is available but not free) on the import hot path, where a run confirms one export per changed object.
+- And Phase 1d **collapses confirming-import hops by default as low-signal**, so the payoff is a chain segment most readers never expand.
+
+The three cross-boundary seams that actually explain a cascade are done. Land this one only if the confirming hop earns its place in the UI; otherwise `PendingExportId` plus the reconciliation outcome already tell most of the story, and the cycle ambiguity affects only objects exported repeatedly between imports.
+
 Consequence for Phase 1d: the "Caused by" affordance has **two** sources, and must render them as one story. Same-item causes come from the outcome tree already on the page; cross-item causes come from edges. The cohort model applies to both.
 
 ### Phase 1c: Application read path

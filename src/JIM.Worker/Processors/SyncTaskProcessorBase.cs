@@ -3333,7 +3333,16 @@ public abstract class SyncTaskProcessorBase
                     .ToDictionary(
                         g => g.Key,
                         g => g.Select(c => c.ReferencedMetaverseObjectId).Distinct()
-                            .Select(BuildDeletionCause)
+                            .Select(id =>
+                            {
+                                deletionCandidatesByMvoId.TryGetValue(id, out var deletedMvo);
+                                mvoDeletedNodes.TryGetValue(id, out var node);
+                                return deletedMvo != null
+                                    ? BuildDeletionCause(deletedMvo, node.Rpei, node.Outcome)
+                                    : null;
+                            })
+                            .Where(cause => cause != null)
+                            .Select(cause => cause!)
                             .ToList());
 
                 foreach (var stagedPendingExport in recallResult.StagedPendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue))
@@ -3348,26 +3357,6 @@ public abstract class SyncTaskProcessorBase
                     StageDeferredRecallRpei(stagedPendingExport, displayName, causes);
                 }
 
-                CausalCause BuildDeletionCause(Guid deletedMvoId)
-                {
-                    deletionCandidatesByMvoId.TryGetValue(deletedMvoId, out var deletedMvo);
-                    mvoDeletedNodes.TryGetValue(deletedMvoId, out var node);
-                    return new CausalCause
-                    {
-                        RunProfileExecutionItem = node.Rpei,
-                        SyncOutcome = node.Outcome,
-                        MetaverseObjectId = deletedMvoId,
-                        // Name, not NameOrId: the id is already carried above, and NameOrId's fallback would
-                        // render the chain as "<guid> was deleted" for an unnamed object.
-                        DisplayName = deletedMvo?.Name,
-                        ReasonCode = _mvoDeletionReasonCodes.GetValueOrDefault(deletedMvoId, CausalReasonCode.NotSet),
-                        // The system whose disconnection triggered the Deletion Rule, set on both the immediate
-                        // and grace-period paths by MarkMvoForDeletionAsync. This is the attribution an
-                        // administrator cohorts on: "10 removed because Yellowstone APAC disconnected".
-                        ConnectedSystemId = deletedMvo?.DeletionTriggeredBySystemId,
-                        ConnectedSystemName = deletedMvo?.DeletionTriggeredBySystemName
-                    };
-                }
             }
         }
 
@@ -3470,6 +3459,7 @@ public abstract class SyncTaskProcessorBase
                 ObjectTypeSnapshot = snapshot?.TypeName
             };
 
+            ActivityRunProfileExecutionItemSyncOutcome? cascadeEffectOutcome = null;
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var cascadeOutcome = SyncOutcomeBuilder.AddRootOutcome(cascadeRpei,
@@ -3479,6 +3469,19 @@ public abstract class SyncTaskProcessorBase
                     detailCount: pendingExport.AttributeValueChanges.Count,
                     detailMessage: pendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
+                cascadeEffectOutcome = cascadeOutcome;
+            }
+
+            // This is the one deprovisioning case an outcome tree cannot explain, so it is the one that gets an
+            // edge (#1223). The nested branch above needs none: the export is already a child of the deletion
+            // outcome, so the tree states the cause, and an edge would duplicate a persisted link. This branch
+            // exists precisely because no deletion outcome could be found to parent onto, leaving an item that
+            // says an account is being deprovisioned and nothing about why.
+            if (deletedMvo != null)
+            {
+                cascadeRpei.CausalEdges.Add(
+                    BuildDeletionCause(deletedMvo, rpei: null, outcome: null)
+                        .ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedDeprovision, cascadeEffectOutcome));
             }
 
             _activity.RunProfileExecutionItems.Add(cascadeRpei);
@@ -3501,6 +3504,36 @@ public abstract class SyncTaskProcessorBase
     /// removals (delete-then-create merge), so re-staging the same CSO across pages must not accumulate
     /// duplicate RPEIs. Called once per staged Pending Export from <see cref="FlushPendingMvoDeletionsAsync"/>.
     /// </summary>
+    /// <summary>
+    /// Describes a Metaverse Object deletion as the cause of whatever it goes on to trigger (#1223), so an
+    /// effect recorded against a different object, or on an item with no deletion outcome to parent onto, can
+    /// still name the object whose deletion caused it.
+    /// </summary>
+    /// <param name="deletedMvo">The object being deleted.</param>
+    /// <param name="rpei">The execution item recording the deletion, where outcome tracking recorded one.</param>
+    /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where one was recorded.</param>
+    private CausalCause BuildDeletionCause(
+        MetaverseObject deletedMvo,
+        ActivityRunProfileExecutionItem? rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? outcome)
+    {
+        return new CausalCause
+        {
+            RunProfileExecutionItem = rpei,
+            SyncOutcome = outcome,
+            MetaverseObjectId = deletedMvo.Id,
+            // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
+            // "<guid> was deleted" for an unnamed object.
+            DisplayName = deletedMvo.Name,
+            ReasonCode = _mvoDeletionReasonCodes.GetValueOrDefault(deletedMvo.Id, CausalReasonCode.NotSet),
+            // The system whose disconnection triggered the Deletion Rule, set on both the immediate and
+            // grace-period paths by MarkMvoForDeletionAsync. This is the attribution an administrator cohorts
+            // on: "10 removed because Yellowstone APAC disconnected".
+            ConnectedSystemId = deletedMvo.DeletionTriggeredBySystemId,
+            ConnectedSystemName = deletedMvo.DeletionTriggeredBySystemName
+        };
+    }
+
     /// <summary>
     /// The <c>MvoDeleted</c> outcome nodes recorded for this page's deletions, keyed by the Metaverse Object
     /// each one deleted. Both deletion-triggering paths (obsoletion and out-of-scope disconnection) record one.
