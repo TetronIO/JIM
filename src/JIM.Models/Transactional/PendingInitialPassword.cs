@@ -27,6 +27,20 @@ namespace JIM.Models.Transactional;
 /// </summary>
 public class PendingInitialPassword
 {
+    /// <summary>
+    /// How long an account stays owed an initial password before JIM records an expiry and stops trying.
+    /// <para>
+    /// An initial password exists to get somebody into an account they have just been given. A week later that
+    /// purpose has passed: whoever the account was for has either been let in another way or is still waiting,
+    /// and either way what the account needs is a person looking at it rather than another automatic attempt.
+    /// </para>
+    /// <para>
+    /// Fixed rather than configurable for now. Password Synchronisation (#1119) introduces a per-Connected-System
+    /// time to live for its own queue, and this should adopt that setting rather than grow a second one first.
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan DefaultTimeToLive = TimeSpan.FromDays(7);
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>

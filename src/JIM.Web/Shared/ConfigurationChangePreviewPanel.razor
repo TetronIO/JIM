@@ -198,6 +198,14 @@
                                              Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)">
                                         @Helpers.GetOutcomeTypeDisplayName(context.TransitionType)
                                     </MudChip>
+                                    @* The pattern is what turns a transition into a sentence: "38,900 would have Email
+                                       changed" reads very differently from "38,900 would have their email domain changed".
+                                       Absent where no detector recognised the change, or where the group's deltas did not
+                                       all agree on one, and nothing is shown in its place. *@
+                                    @if (PreviewPatternKeys.GetDisplayName(context.PatternKey) is { Length: > 0 } patternName)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@patternName</MudText>
+                                    }
                                 </MudTd>
                                 <MudTd DataLabel="Population">
                                     @if (string.IsNullOrEmpty(DescribePopulation(context)))
@@ -300,7 +308,15 @@
                             <RowTemplate>
                                 <MudTd DataLabel="Object"><TextValueDisplay Value="@context.ObjectDisplayName" /></MudTd>
                                 <MudTd DataLabel="Type"><TextValueDisplay Value="@context.ObjectTypeName" /></MudTd>
-                                <MudTd DataLabel="Attribute"><TextValueDisplay Value="@context.AttributeName" /></MudTd>
+                                <MudTd DataLabel="Attribute">
+                                    <TextValueDisplay Value="@context.AttributeName" />
+                                    @* Per row as well as per group: a group that collapsed back to the attribute level
+                                       holds rows of several kinds, and this is where an administrator sees which is which. *@
+                                    @if (PreviewPatternKeys.GetDisplayName(context.PatternKey) is { Length: > 0 } deltaPatternName)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@deltaPatternName</MudText>
+                                    }
+                                </MudTd>
                                 <MudTd DataLabel="Current value"><TextValueDisplay Value="@context.OldValue" /></MudTd>
                                 <MudTd DataLabel="Proposed value"><TextValueDisplay Value="@context.NewValue" /></MudTd>
                             </RowTemplate>
