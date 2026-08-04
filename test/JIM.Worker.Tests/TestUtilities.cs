@@ -1184,7 +1184,7 @@ public static class TestUtilities
             Activity = activity,
             InitiatedByType = initiatedBy != null ? ActivityInitiatorType.User : ActivityInitiatorType.NotSet,
             InitiatedById = initiatedBy?.Id,
-            InitiatedByName = initiatedBy?.DisplayName
+            InitiatedByName = initiatedBy?.Name
         };
         return workerTask;
     }

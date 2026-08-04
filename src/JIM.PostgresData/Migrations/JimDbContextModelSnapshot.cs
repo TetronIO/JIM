@@ -2813,6 +2813,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ConnectedSystemObjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("DeletedConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("DeletedObjectDisplayName")
                         .HasColumnType("text");
 

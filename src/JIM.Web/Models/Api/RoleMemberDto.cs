@@ -33,7 +33,7 @@ public class RoleMemberDto
         return new RoleMemberDto
         {
             Id = entity.Id,
-            DisplayName = entity.DisplayName,
+            DisplayName = entity.Name,
             Type = new MetaverseObjectTypeDto
             {
                 Id = entity.Type?.Id ?? 0,

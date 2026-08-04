@@ -122,13 +122,7 @@ public class SyncServer : ISyncServer
             var attributesToCapture = finalAttributeValues ?? metaverseObject.AttributeValues.ToList();
             var mvoId = metaverseObject.Id;
 
-            var displayName = metaverseObject.DisplayName;
-            if (displayName == null && attributesToCapture.Count > 0)
-            {
-                var displayNameAttrValue = attributesToCapture.SingleOrDefault(
-                    av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-                displayName = displayNameAttrValue?.StringValue;
-            }
+            var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
             var change = new MetaverseObjectChange
             {
@@ -187,13 +181,7 @@ public class SyncServer : ISyncServer
             {
                 var attributesToCapture = finalAttributeValues;
 
-                var displayName = metaverseObject.DisplayName;
-                if (displayName == null && attributesToCapture.Count > 0)
-                {
-                    var displayNameAttrValue = attributesToCapture.SingleOrDefault(
-                        av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-                    displayName = displayNameAttrValue?.StringValue;
-                }
+                var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
                 var change = new MetaverseObjectChange
                 {

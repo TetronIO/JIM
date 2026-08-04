@@ -1,0 +1,224 @@
+@using JIM.Utilities
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality Timeline view: a vertical narrative of tone-coloured dots on indented rails.
+   The source row (the processed record and its Connected System) comes first, then each causality
+   event as a plain-language verb with the technical label demoted alongside (swapped when the
+   technical-names toggle is on), an optional contextual detail message, entity chips (each entity
+   named once), badges, action links and an inline attribute detail expander. Child events nest
+   through indented rail containers. *@
+
+<div class="tl">
+    @* ─── Source row: the record that was processed ─── *@
+    <div class="tl-row">
+        <div class="tl-rail">
+            <span class="tl-dot" style="--tone: var(--cz-secondary)">
+                <MudIcon Icon="@Icons.Material.Filled.Description" aria-hidden="true" />
+            </span>
+        </div>
+        <div class="tl-body">
+            <div class="tl-line"><span class="verb">Record processed</span></div>
+            <div class="tl-detail-line">
+                @if (!string.IsNullOrWhiteSpace(Model.Context.RunProfileName))
+                {
+                    <b>@Model.Context.RunProfileName</b>
+                }
+                @GetSourceDetailSuffix()
+            </div>
+            @{
+                var recordLabel = GetRecordLabel();
+                // The record's own Connected System (paired with the record chip below), not the
+                // run's system named in the sentence above them; the two diverge for cross-system
+                // cascades.
+                var systemName = Model.Context.CsoConnectedSystemName;
+            }
+            @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
+            {
+                <div class="evt-entities">
+                    @if (recordLabel != null)
+                    {
+                        <CausalityEntityChip Label="@recordLabel" Href="@GetRecordHref()"
+                                             Kind="CausalityEntityKind.Record"
+                                             SubLabel="@Model.Context.CsoObjectTypeName" />
+                    }
+                    @if (!string.IsNullOrWhiteSpace(systemName))
+                    {
+                        <CausalityEntityChip Label="@systemName" Href="@GetSystemHref()"
+                                             Kind="CausalityEntityKind.ConnectedSystem" />
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ─── Causality events, nested by rail indentation ─── *@
+    @foreach (var causalityEvent in Model.Roots)
+    {
+        @RenderEvent(causalityEvent, Model.Roots.Count + 1)
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The kinds rendered as entity chips; the remaining linked kinds render in the action links row.
+    /// </summary>
+    private static readonly CausalityEntityKind[] ChipKinds =
+    [
+        CausalityEntityKind.ConnectedSystem,
+        CausalityEntityKind.Record,
+        CausalityEntityKind.Identity,
+        CausalityEntityKind.SynchronisationRule
+    ];
+
+    /// <summary>
+    /// The causality model to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityModel Model { get; set; } = null!;
+
+    /// <summary>
+    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
+
+    /// <summary>
+    /// The event whose attribute detail is expanded inline; null when none. Two-way bindable so the
+    /// panel owns the state.
+    /// </summary>
+    [Parameter]
+    public CausalityEvent? ExpandedEvent { get; set; }
+
+    [Parameter]
+    public EventCallback<CausalityEvent?> ExpandedEventChanged { get; set; }
+
+    private RenderFragment RenderEvent(CausalityEvent causalityEvent, int siblingCount) => __builder =>
+    {
+        var expanded = ReferenceEquals(ExpandedEvent, causalityEvent);
+        var toneVar = CausalityToneCss.CssVar(causalityEvent.Tone);
+        var chipLinks = causalityEvent.Links.Where(l => ChipKinds.Contains(l.Kind)).ToList();
+        var actionLinks = causalityEvent.Links
+            .Where(l => !ChipKinds.Contains(l.Kind) && !string.IsNullOrEmpty(l.Href))
+            .ToList();
+
+        <div class="tl-row @(siblingCount == 1 ? "only-child" : null)">
+            <div class="tl-rail">
+                <span class="tl-dot" style="--tone: @toneVar">
+                    <MudIcon Icon="@causalityEvent.Icon" aria-hidden="true" />
+                </span>
+            </div>
+            @* has-children suppresses this row's own bottom padding: its children render inside this
+               body and the last of them already provides the trailing gap. *@
+            <div class="tl-body @(causalityEvent.Children.Count > 0 ? "has-children" : null)">
+                <div class="tl-line">
+                    <span class="verb">@(TechnicalNames ? causalityEvent.TechnicalLabel : causalityEvent.PlainLabel)</span>
+                    <span class="tech">@(TechnicalNames ? causalityEvent.PlainLabel : causalityEvent.TechnicalLabel)</span>
+                    @if (causalityEvent.Badge != null)
+                    {
+                        <span class="evt-badge" style="--tone: @toneVar">@causalityEvent.Badge</span>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(causalityEvent.DetailMessage))
+                {
+                    <div class="tl-detail-line">@causalityEvent.DetailMessage</div>
+                }
+                @if (chipLinks.Count > 0)
+                {
+                    <div class="evt-entities">
+                        @foreach (var link in chipLinks)
+                        {
+                            <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" />
+                        }
+                    </div>
+                }
+                @if (actionLinks.Count > 0)
+                {
+                    <div class="tl-links">
+                        @foreach (var link in actionLinks)
+                        {
+                            <a href="@link.Href">@link.Label <span aria-hidden="true">&rarr;</span></a>
+                        }
+                    </div>
+                }
+                @if (causalityEvent.AttributeRows.Count > 0)
+                {
+                    <button type="button" class="tl-expander @(expanded ? "open" : null)"
+                            aria-expanded="@(expanded ? "true" : "false")"
+                            @onclick="() => ToggleExpandedAsync(causalityEvent)">
+                        <span class="chev"><MudIcon Icon="@Icons.Material.Filled.ChevronRight" aria-hidden="true" /></span>
+                        @* A queued deprovision's rows identify the target rather than change it, so it says
+                           what they are instead of counting them; see CausalityEvent.AttributeRowsCaption. *@
+                        @(causalityEvent.AttributeRowsCaption
+                          ?? $"{causalityEvent.AttributeRows.Count} attribute{(causalityEvent.AttributeRows.Count == 1 ? "" : "s")}")
+                    </button>
+                    @if (expanded)
+                    {
+                        <div class="tl-inline-detail">
+                            @* An event with a rows caption is naming what its rows are rather than counting
+                               changes, so those rows carry no meaningful operation to show. *@
+                            <CausalityAttributeDetail Rows="causalityEvent.AttributeRows"
+                                                      ShowOperations="@(causalityEvent.AttributeRowsCaption == null)" />
+                        </div>
+                    }
+                }
+                @if (causalityEvent.Children.Count > 0)
+                {
+                    <div class="tl-children">
+                        @foreach (var child in causalityEvent.Children)
+                        {
+                            @RenderEvent(child, causalityEvent.Children.Count)
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    };
+
+    private string GetSourceDetailSuffix()
+    {
+        var profile = Model.Context.RunProfileName;
+        var system = Model.Context.ConnectedSystemName;
+        var hasProfile = !string.IsNullOrWhiteSpace(profile);
+        var hasSystem = !string.IsNullOrWhiteSpace(system);
+
+        if (hasProfile && hasSystem)
+            return $" on {system} picked up this record.";
+        if (hasProfile)
+            return " picked up this record.";
+        if (hasSystem)
+            return $"A run on {system} picked up this record.";
+        return "This record was picked up for processing.";
+    }
+
+    private Task ToggleExpandedAsync(CausalityEvent causalityEvent)
+    {
+        var newValue = ReferenceEquals(ExpandedEvent, causalityEvent) ? null : causalityEvent;
+        return ExpandedEventChanged.InvokeAsync(newValue);
+    }
+
+    private string? GetRecordLabel() => Model.Context.RecordLabel;
+
+    private string? GetRecordHref()
+    {
+        // The record's own Connected System, not the run's: a link built with the run's system id
+        // 404s when they diverge (ConnectedSystemObjectDetail looks the record up by both).
+        var context = Model.Context;
+        return context.CsoConnectedSystemId.HasValue && context.CsoId.HasValue
+            ? Utilities.GetConnectedSystemObjectHref(context.CsoConnectedSystemId.Value, context.CsoId.Value)
+            : null;
+    }
+
+    /// <summary>
+    /// Href for the Connected System chip paired with the record chip in the source row: the
+    /// record's own system (see <see cref="GetRecordHref"/>), not the run's.
+    /// </summary>
+    private string? GetSystemHref()
+    {
+        return Model.Context.CsoConnectedSystemId.HasValue
+            ? Utilities.GetConnectedSystemHref(Model.Context.CsoConnectedSystemId.Value)
+            : null;
+    }
+}
