@@ -1620,6 +1620,22 @@ public class SyncRepository : ISyncRepository
 
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
+
+            // Drain the causal edge buffer (#1223), matching the production flush: outcome ids exist only now,
+            // so the edge's transient outcome reference is resolved here, and the buffer is emptied once written
+            // so a later flush of the same RPEI cannot duplicate it.
+            if (rpei.CausalEdges.Count == 0)
+                continue;
+
+            foreach (var edge in rpei.CausalEdges)
+            {
+                edge.EffectRunProfileExecutionItemId = rpei.Id;
+                if (edge.EffectSyncOutcome != null)
+                    edge.EffectSyncOutcomeId = edge.EffectSyncOutcome.Id;
+            }
+
+            RecordCausalEdges(rpei.CausalEdges);
+            rpei.CausalEdges.Clear();
         }
         // When SimulateRawSqlPersistence is off (default), return false so the processor keeps
         // RPEIs in the activity's RunProfileExecutionItems collection for simpler test assertions.
@@ -1639,13 +1655,18 @@ public class SyncRepository : ISyncRepository
     /// </remarks>
     public Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
     {
+        RecordCausalEdges(edges);
+        return Task.CompletedTask;
+    }
+
+    private void RecordCausalEdges(List<CausalEdge> edges)
+    {
         foreach (var edge in edges)
         {
             if (edge.Id == Guid.Empty)
                 edge.Id = Guid.NewGuid();
             _causalEdges[edge.Id] = edge;
         }
-        return Task.CompletedTask;
     }
 
     /// <summary>

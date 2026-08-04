@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -135,6 +136,26 @@ public class ActivityRunProfileExecutionItem
     /// story of what happened when this CSO was processed.
     /// </summary>
     public List<ActivityRunProfileExecutionItemSyncOutcome> SyncOutcomes { get; set; } = [];
+
+    /// <summary>
+    /// Causal edges recorded against this item, naming what caused the changes it describes (#1223).
+    /// </summary>
+    /// <remarks>
+    /// This is a hand-off buffer to the flush, not a loaded collection. A cascade seam adds an edge here at the
+    /// moment it creates the effect, and the flush writes the edges in the same transaction as the item, then
+    /// empties the list. Two consequences follow, both deliberate. The seams stay declarative: they never need
+    /// to know which flush path a batch will take or where the transaction boundary is. And an RPEI object that
+    /// outlives its flush (confirming imports revisit them) carries no already-written edges, so a later flush
+    /// cannot duplicate them.
+    ///
+    /// Deliberately unmapped, rather than the inverse of the edge's own foreign key. EF must never load, track
+    /// or cascade through this list: it is a write-side queue whose contents are gone the moment they are
+    /// persisted, and a mapped collection navigation would additionally be walked by <c>DbSet.Add</c>, giving
+    /// the edges a second, untransacted insert path. Read paths query the edge table directly, since the whole
+    /// point of an edge is to reach records a single item cannot.
+    /// </remarks>
+    [NotMapped]
+    public List<CausalEdge> CausalEdges { get; set; } = [];
 
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {

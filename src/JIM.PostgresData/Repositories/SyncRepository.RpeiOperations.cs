@@ -53,6 +53,26 @@ public partial class SyncRepository
         // Flatten sync outcomes upfront (before any persistence) so we can count them.
         var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
 
+        // Causal edges buffered on the RPEIs by the cascade seams (#1223). Collected here, after the RPEI and
+        // outcome ids have been assigned, because a seam knows neither: an RPEI is created without an id and an
+        // outcome likewise, so the edge names its effect by reference and the flush resolves both. Doing it in
+        // one place covers both flush paths, mirroring how an outcome's own ConnectedSystemObjectChangeId is
+        // resolved below.
+        var allEdges = new List<CausalEdge>();
+        foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+        {
+            foreach (var edge in rpei.CausalEdges)
+            {
+                if (edge.Id == Guid.Empty)
+                    edge.Id = Guid.NewGuid();
+                edge.EffectRunProfileExecutionItemId = rpei.Id;
+                if (edge.EffectSyncOutcome != null)
+                    edge.EffectSyncOutcomeId = edge.EffectSyncOutcome.Id;
+            }
+
+            allEdges.AddRange(rpei.CausalEdges);
+        }
+
         // Persist CSO change records linked to sync outcomes (PendingExportCreated snapshots)
         // on the main EF connection — this is a small subset and needs EF AddRange.
         var outcomeCsoChanges = allOutcomes
@@ -120,7 +140,14 @@ public partial class SyncRepository
                     });
             }
 
-            // Step 4: Upsert the batch's stat counter deltas on the main EF connection. Not
+            // Step 4: Insert causal edges on the main EF connection. Their only foreign key is to the RPEIs,
+            // which step 1 has already committed, so the targets exist. Like the counter upsert below, this is
+            // not transactional with the COPY partitions; a crash between the two loses provenance for the
+            // batch, which degrades an explanation rather than corrupting synchronisation state.
+            if (allEdges.Count > 0)
+                await BulkInsertCausalEdgesAsync(allEdges);
+
+            // Step 5: Upsert the batch's stat counter deltas on the main EF connection. Not
             // transactional with the COPY partitions (which have already committed); a crash
             // between the two leaves advisory drift that completion-time finalisation reconciles.
             await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
@@ -148,6 +175,9 @@ public partial class SyncRepository
                 if (allOutcomes.Count > 0)
                     await BulkInsertSyncOutcomesRawAsync(allOutcomes);
 
+                if (allEdges.Count > 0)
+                    await BulkInsertCausalEdgesAsync(allEdges);
+
                 await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
 
                 if (transaction != null)
@@ -158,6 +188,15 @@ public partial class SyncRepository
                 if (transaction != null)
                     await transaction.DisposeAsync();
             }
+        }
+
+        // Empty the edge buffers now they are written, so a later flush of the same RPEI objects (confirming
+        // imports revisit them) cannot re-insert the same edges and fail on the primary key. Only reached on
+        // success: a throw above leaves the buffers intact, which is what a retry needs.
+        if (allEdges.Count > 0)
+        {
+            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+                rpei.CausalEdges.Clear();
         }
 
         _context.Database.SetCommandTimeout(previousTimeout);

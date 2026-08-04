@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace JIM.Models.Activities;
 
 /// <summary>
@@ -58,6 +60,19 @@ public class CausalEdge
     /// an item carrying more than one outcome.
     /// </summary>
     public Guid? EffectSyncOutcomeId { get; set; }
+
+    /// <summary>
+    /// Transient reference to the outcome this edge explains, set by the seam and resolved into
+    /// <see cref="EffectSyncOutcomeId"/> by the flush. Never persisted.
+    /// </summary>
+    /// <remarks>
+    /// A sync outcome has no id when it is created: ids are assigned when the batch is flushed. The seam
+    /// therefore cannot write <see cref="EffectSyncOutcomeId"/> itself, and has to name the outcome by
+    /// reference and let the flush resolve it, mirroring how the flush resolves an outcome's own
+    /// <c>ConnectedSystemObjectChangeId</c>. Leave null where the edge attaches to the item as a whole.
+    /// </remarks>
+    [NotMapped]
+    public ActivityRunProfileExecutionItemSyncOutcome? EffectSyncOutcome { get; set; }
 
     // ─── Cause side: snapshot scalars, no foreign key, resolved best-effort at read time ───
 
