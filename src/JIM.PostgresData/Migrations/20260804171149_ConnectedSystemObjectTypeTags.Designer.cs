@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260804171149_ConnectedSystemObjectTypeTags")]
+    partial class ConnectedSystemObjectTypeTags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -208,12 +211,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("ScheduledByScheduleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ScheduledByScheduleName")
-                        .HasColumnType("text");
-
                     b.Property<string>("SecurityEventReason")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -309,12 +306,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_Activities_MetaverseObjectId");
-
-                    b.HasIndex("ScheduleExecutionId")
-                        .HasDatabaseName("IX_Activities_ScheduleExecutionId");
-
-                    b.HasIndex("ScheduledByScheduleId")
-                        .HasDatabaseName("IX_Activities_ScheduledByScheduleId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -2162,8 +2153,7 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ScheduleId", "QueuedAt")
-                        .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
+                    b.HasIndex("ScheduleId");
 
                     b.HasIndex("Status", "QueuedAt")
                         .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");

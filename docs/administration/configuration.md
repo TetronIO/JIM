@@ -34,12 +34,21 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 
 | Variable                   | Description                                                                                                         | Default     | Example                    |
 |----------------------------|---------------------------------------------------------------------------------------------------------------------|-------------|----------------------------|
-| `JIM_DB_HOSTNAME`          | PostgreSQL server hostname. Use `jim.database` for the bundled container.                                           | `localhost` | `jim.database`             |
+| `JIM_DB_HOSTNAME`          | PostgreSQL server hostname. Use `jim.database` for the bundled container. Append `:port` for a server on a non-default port. | `localhost` | `jim.database`             |
 | `JIM_DB_NAME`              | Database name.                                                                                                      | `jim`       | `jim`                      |
 | `JIM_DB_USERNAME`          | Database username.                                                                                                  | `jim`       | `jim`                      |
 | `JIM_DB_PASSWORD`          | Database password. **Use a strong, unique value in production.**                                                    | *(none)*    | *(generate a strong password)* |
 | `JIM_DB_LOG_SENSITIVE_INFO` | When `true`, includes parameter values in database query logs. **Do not enable in production.**                    | `false`     | `false`                    |
 | `JIM_DB_LOG_MIN_DURATION`  | Slow query log threshold in milliseconds. Queries exceeding this duration are logged. Set to `-1` to disable, `0` to log all queries. | `1000`  | `500`                      |
+
+### Connecting to a non-default port
+
+PostgreSQL listens on port 5432 unless it has been configured otherwise, and that is what JIM assumes. There is no
+separate port variable: where your server listens elsewhere, give the port as part of the hostname.
+
+```bash
+JIM_DB_HOSTNAME=db.example.org:5433
+```
 
 ---
 
