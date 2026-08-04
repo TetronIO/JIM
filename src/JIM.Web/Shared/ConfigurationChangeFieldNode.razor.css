@@ -65,7 +65,7 @@
    card drops its bottom margin: the parent panel's own padding then closes the layout, keeping the gap beneath the
    final card equal to the gaps at its sides. */
 .fh-card {
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     padding: 0.55rem 0.75rem;
     margin: 1rem 0;
 }

@@ -21,7 +21,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<PrefilledFormValidator />` | Inside any `MudForm` prefilled with an existing entity, so validity-gated buttons enable on load | "Form action gating" below |
 | `<CollapsibleStackTrace StackTrace="@x" />` | Any place an error's stack trace is offered alongside its message | "Errors and stack traces" below |
 | `<SearchField @bind-Value="_searchString" />` | Every box that filters a list, table or dialog as the user types | "Search and filter boxes" below |
-| `<RunPhaseStepper Phases="@x" Message="@y" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
+| `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
+| `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 
 ## Form action gating and input immediacy
 
@@ -55,6 +56,19 @@ Three interaction rules that have repeatedly regressed (multiple times each on a
 **Scope: this is about live filtering, not about the word "Search".** A field that is one criterion among several in a form the user submits with a button (Deleted Objects' query forms, the Logs filter behind **Refresh**) is not a search box; nothing filters as it is typed, so `Immediate` there changes nothing and `SearchField` would be the wrong component. Those are ordinary `MudTextField`s and carry a `@* search-convention: exempt - <why> *@` comment directly above, so the reason travels with the markup.
 
 `SearchFieldConventionTests` (in `test/JIM.Web.Components.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
+
+## Live progress figures
+
+**A running Activity's numbers come from its counters, never from its message.** `Activity.Message` is narration: what the run is doing. The count, percentage, throughput and time remaining are derived from `ObjectsProcessed`/`ObjectsToProcess` and the `IActivityEtaTracker`, and `<RunProgressMetrics />` is the only thing that renders them.
+
+The rule exists because the alternative shipped: the worker built progress messages that carried the count, a rate and a time remaining, the panel printed the count and percentage underneath, and the portal's own tracker printed the rate and time remaining again. Five facts appeared in nine places, and the two estimators disagreed on screen (148 obj/s beside 145 obj/s) because they sampled over different windows.
+
+- Do not reintroduce numbers into a progress message on either side. A worker progress message that would only restate the counters should be `string.Empty`; the running step's name is the narration.
+- The Activity's message belongs under the step it describes, inside `<RunProgressMetrics />`, not above the rail: context first, then the detail within it. A message that merely repeats a running step's name is suppressed there, so do not hand-roll that check at a call site.
+- Two states have to say something rather than nothing, and both are easy to lose in a refactor: an unknown total (a paged import) reports what has been processed with no percentage or time remaining, and a counter that has reached its total while the step finishes reads "Finishing up". `RunProgressMetricsTests` pins both.
+- PowerShell's `Get-JIMActivityProgressDisplay` is the sibling surface and follows the same rule; keep the two in step.
+- **Every figure is scoped to the running step, and the readout must say so.** Each counting step resets `ObjectsToProcess`, and the ETA tracker discards its samples when that total changes, so the count, the percentage, the rate and the time remaining all describe one step. `<RunProgressMetrics />` names it ("Step 2 of 3: Processing Connected System Objects"), matching PowerShell's own phrasing. Naming rather than pointing ("the step running now") is deliberate: the stepper rail is `overflow-x: auto`, so on a long run in a narrow window the running step can be scrolled out of view while the readout is not.
+- **Read a run's steps through `RunPhaseReading` (JIM.Models), never by filtering `ParentKey == null` at the call site.** Three surfaces have to agree on what "step 2 of 3" means: the progress API, the stepper and this readout. In particular a Connector's step is never the answer to "which step is running" for the figures, because the counters belong to the JIM step hosting it.
 
 ## Row density (compact-row toggle)
 

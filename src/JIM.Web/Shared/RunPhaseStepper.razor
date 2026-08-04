@@ -33,34 +33,6 @@
             </ActionContent>
         </MudStepper>
 
-        @* The active step's detail: the Connector's own steps, and what is happening right now.
-           A horizontal rail has no room for either, so they sit beneath it. *@
-        @if (CurrentPhase != null)
-        {
-            <div class="jim-phase-h-detail">
-                @if (ConnectorSteps.Count > 0)
-                {
-                    <div class="jim-phase-h-substeps">
-                        @foreach (var child in ConnectorSteps)
-                        {
-                            <div class="jim-phase-substep jim-phase-substep--@StatusModifier(child.Status)">
-                                <MudIcon Icon="@StatusIcon(child)" Size="Size.Small" Class="jim-phase-substep-icon" />
-                                <MudText Typo="Typo.body2">@child.Name</MudText>
-                                @if (child.Duration is { } childDuration)
-                                {
-                                    <MudText Typo="Typo.body2" Class="jim-phase-step-duration">@childDuration.ToAbbreviatedString()</MudText>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-
-                @if (!string.IsNullOrWhiteSpace(Message))
-                {
-                    <MudText Typo="Typo.body2" Class="jim-phase-step-message">@Message</MudText>
-                }
-            </div>
-        }
     </div>
 }
 
@@ -73,12 +45,6 @@
     public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
 
     /// <summary>
-    /// The Activity's current message, shown beneath the rail while a step is running.
-    /// </summary>
-    [Parameter]
-    public string? Message { get; set; }
-
-    /// <summary>
     /// How far through its own work the running step is, 0 to 1, or null when the step counts
     /// nothing it can report. Fills the connector leaving the running step, so the rail reads as
     /// one progress bar across the whole run rather than a bar that restarts per step.
@@ -86,22 +52,9 @@
     [Parameter]
     public double? StepProgress { get; set; }
 
-    private List<ActivityPhase> TopLevelPhases => Phases.Where(p => p.ParentKey == null).OrderBy(p => p.Order).ToList();
+    private List<ActivityPhase> TopLevelPhases => RunPhaseReading.TopLevel(Phases).ToList();
 
-    /// <summary>
-    /// The most specific step running: a Connector's step in preference to the JIM step hosting it.
-    /// </summary>
-    private ActivityPhase? CurrentPhase => Phases
-        .Where(p => p.Status == ActivityPhaseStatus.Active)
-        .OrderByDescending(p => p.ParentKey != null)
-        .ThenByDescending(p => p.Order)
-        .FirstOrDefault();
-
-    private ActivityPhase? CurrentTopLevelPhase => TopLevelPhases.FirstOrDefault(p => p.Status == ActivityPhaseStatus.Active);
-
-    private List<ActivityPhase> ConnectorSteps => CurrentTopLevelPhase == null
-        ? []
-        : Phases.Where(p => p.ParentKey == CurrentTopLevelPhase.Key).OrderBy(p => p.Order).ToList();
+    private ActivityPhase? CurrentTopLevelPhase => RunPhaseReading.ActiveTopLevel(Phases);
 
     private int ActiveIndex
     {

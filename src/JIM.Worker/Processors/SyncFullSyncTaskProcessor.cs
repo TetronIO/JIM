@@ -324,12 +324,13 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // held in CLR fields — detaching does not null their populated navigation properties.
                 _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion
+                // Update progress with page completion. The call persists the Activity's counters,
+                // which is what the portal renders the count, rate and time remaining from; the
+                // message carries no numbers of its own, and the running step's name already says
+                // what is happening, so there is nothing left for it to add here.
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +
-                        throughput.FormatThroughput(_activity.ObjectsProcessed, totalObjectsToProcess);
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, message);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
                 }
 
                 LogPageMemoryDiagnostics(i, totalCsoPages);

@@ -2262,8 +2262,13 @@ public abstract class SyncTaskProcessorBase
             managedBytesAtStart / (1024.0 * 1024.0),
             workingSetBytesAtStart / (1024.0 * 1024.0));
 
-        await _phases.EnterAsync(RunPhaseKeys.SyncResolveCrossPageReferences,
-            $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
+        // The counting window moves to this step's own work. It follows the page loop, whose totals
+        // would otherwise still be showing: the step would report itself complete the moment it
+        // started, for however long it actually took.
+        _activity.ObjectsToProcess = totalCrossPagesToResolve;
+        _activity.ObjectsProcessed = 0;
+
+        await _phases.EnterAsync(RunPhaseKeys.SyncResolveCrossPageReferences);
 
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
         // These RPEIs were created during initial page processing (e.g., Projected, Joined) and
@@ -2331,8 +2336,9 @@ public abstract class SyncTaskProcessorBase
                 .Take(pageSize)
                 .ToList();
 
+            _activity.ObjectsProcessed = resolvedCount;
             await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - loading batch {batchIndex + 1} of {totalBatches}");
+                $"Loading batch {batchIndex + 1} of {totalBatches}");
 
             // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
             var csoIds = batch.Select(x => x.CsoId).ToList();
@@ -2565,8 +2571,8 @@ public abstract class SyncTaskProcessorBase
             _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
-                await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
+                _activity.ObjectsProcessed = resolvedCount;
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
 
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
                 // subsequent SaveChangesAsync calls (same pattern as per-page processing).
@@ -2880,6 +2886,17 @@ public abstract class SyncTaskProcessorBase
             if (flaggedIds.Count == 0)
                 break;
 
+            // Entered here rather than above the loop so a run with nothing flagged records the step
+            // skipped instead of entered-and-instantly-finished. The flagged set drains rather than
+            // being counted up front, so the counting window is left open-ended: the readout reports
+            // how many objects have been reviewed and runs its bar indeterminate.
+            if (totalProcessed == 0)
+            {
+                _activity.ObjectsToProcess = 0;
+                _activity.ObjectsProcessed = 0;
+                await _phases.EnterAsync(RunPhaseKeys.SyncReviewExportScope);
+            }
+
             var mvos = await _syncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(flaggedIds);
             foreach (var mvo in mvos)
             {
@@ -2910,6 +2927,7 @@ public abstract class SyncTaskProcessorBase
 
             _syncRepo.ClearChangeTracker();
             totalProcessed += mvos.Count;
+            _activity.ObjectsProcessed = totalProcessed;
 
             // Fewer than a full batch means the flagged set is drained.
             if (flaggedIds.Count < batchSize)

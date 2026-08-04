@@ -17,7 +17,8 @@ namespace JIM.Utilities;
 /// delegates typically write through a shared DbContext;</item>
 /// <item>a reporting failure is logged and swallowed rather than failing the synchronisation
 /// operation, because narration is cosmetic;</item>
-/// <item>blank messages are ignored, so a Connector cannot accidentally clear the Activity message.</item>
+/// <item>blank messages are ignored, so a Connector cannot accidentally clear the Activity message;</item>
+/// <item>object counts are reported on the same terms, because a lost figure is a cosmetic loss too.</item>
 /// </list>
 /// Cancellation is deliberately not swallowed: a cancelled run must keep unwinding.
 /// </remarks>
@@ -25,6 +26,8 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
 {
     private readonly Func<string, Task>? _report;
     private readonly Func<string, string?, Task>? _enterPhase;
+    private readonly Func<int, Task>? _reportExpectedObjectCount;
+    private readonly Func<int, Task>? _reportObjectsRead;
     private readonly SemaphoreSlim? _gate;
     private readonly bool _ownsGate;
     private readonly ILogger _logger;
@@ -46,13 +49,17 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
         Func<string, Task>? report,
         Func<string, string?, Task>? enterPhase = null,
         ILogger? logger = null,
-        SemaphoreSlim? sharedGate = null)
+        SemaphoreSlim? sharedGate = null,
+        Func<int, Task>? reportExpectedObjectCount = null,
+        Func<int, Task>? reportObjectsRead = null)
     {
         _report = report;
         _enterPhase = enterPhase;
+        _reportExpectedObjectCount = reportExpectedObjectCount;
+        _reportObjectsRead = reportObjectsRead;
         _logger = logger ?? Log.ForContext<ConnectorProgress>();
 
-        if (report == null && enterPhase == null)
+        if (report == null && enterPhase == null && reportExpectedObjectCount == null && reportObjectsRead == null)
             return;
 
         _gate = sharedGate ?? new SemaphoreSlim(1, 1);
@@ -86,6 +93,14 @@ public sealed class ConnectorProgress : IConnectorProgress, IDisposable
 
         return GuardAsync(() => _report(message));
     }
+
+    /// <inheritdoc />
+    public Task ReportExpectedObjectCountAsync(int objectCount) =>
+        _reportExpectedObjectCount == null ? Task.CompletedTask : GuardAsync(() => _reportExpectedObjectCount(objectCount));
+
+    /// <inheritdoc />
+    public Task ReportObjectsReadAsync(int objectCount) =>
+        _reportObjectsRead == null ? Task.CompletedTask : GuardAsync(() => _reportObjectsRead(objectCount));
 
     private async Task GuardAsync(Func<Task> emit)
     {
