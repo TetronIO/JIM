@@ -1,3 +1,4 @@
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
@@ -171,7 +172,7 @@ else
                 <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Status)" Class="ml-0">@GetTaskStatusDisplay(context)</MudChip>
             </MudTd>
             <MudTd DataLabel="Progress">
-                <WorkerTaskProgress Status="@context.Status" ObjectsToProcess="@context.ObjectsToProcess" ObjectsProcessed="@context.ObjectsProcessed" ProgressMessage="@context.ProgressMessage" />
+                <WorkerTaskProgress Status="@context.Status" ObjectsToProcess="@context.ObjectsToProcess" ObjectsProcessed="@context.ObjectsProcessed" ProgressMessage="@context.ProgressMessage" Steps="@context.Steps" />
             </MudTd>
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User)
@@ -525,6 +526,7 @@ else
                 ScheduleStepIndex = 1,
                 ObjectsToProcess = 12500, ObjectsProcessed = 8320,
                 ProgressMessage = "Importing users",
+                Steps = DemoImportSteps(RunPhaseKeys.ImportSave),
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
             new()
@@ -535,6 +537,7 @@ else
                 ScheduleStepIndex = 1,
                 ObjectsToProcess = 45000, ObjectsProcessed = 31200,
                 ProgressMessage = "Importing objects",
+                Steps = DemoImportSteps(RunPhaseKeys.ImportFetch),
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
             new()
@@ -603,8 +606,49 @@ else
                 Status = WorkerTaskStatus.Queued, Timestamp = now.AddSeconds(-30),
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.User,
                 InitiatedById = currentUserId, InitiatedByName = currentUserName
+            },
+
+            // Standalone task that is not a Run Profile execution, so it records no steps. Present
+            // deliberately: the demo has to show the queue degrading to a bare bar as well as
+            // drawing the rail, because that is the case a change to this cell is most likely to break.
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "Clear Connected System Objects", Type = "Clear Connected System Objects",
+                Status = WorkerTaskStatus.Processing, Timestamp = now.AddSeconds(-20),
+                ProgressMessage = "Deleting Connected System Objects",
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.User,
+                InitiatedById = currentUserId, InitiatedByName = currentUserName
             }
         };
+    }
+
+    /// <summary>
+    /// A Full Import's steps as the demo queue shows them, with <paramref name="activeKey"/> running,
+    /// everything before it done, and the connection step skipped so the rail's skipped state is
+    /// visible without having to contrive a run that skips something more obscure.
+    /// </summary>
+    private static RunPhaseSummary DemoImportSteps(string activeKey)
+    {
+        var declared = RunProfilePhaseCatalogue.GetPhases(ConnectedSystemRunType.FullImport);
+        var activeIndex = declared.ToList().FindIndex(p => p.Key == activeKey);
+
+        var phases = declared.Select((phase, index) => new ActivityPhase
+        {
+            Id = Guid.NewGuid(),
+            Key = phase.Key,
+            Name = phase.Name,
+            ParentKey = phase.ParentKey,
+            Order = index,
+            Status = phase.Key == RunPhaseKeys.ImportConnect
+                ? ActivityPhaseStatus.Skipped
+                : index < activeIndex
+                    ? ActivityPhaseStatus.Completed
+                    : index == activeIndex
+                        ? ActivityPhaseStatus.Active
+                        : ActivityPhaseStatus.Pending
+        }).ToList();
+
+        return RunPhaseSummary.From(phases)!;
     }
 
     private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)

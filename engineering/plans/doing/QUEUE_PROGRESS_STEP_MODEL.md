@@ -152,7 +152,7 @@ Prerequisite for everything else, and the issue calls it out explicitly.
 
 **Done when:** a queue header for a running import carries its steps and "step 6 of 8: Saving changes", and one for a task that is not a Run Profile execution carries null. ✅
 
-### Phase 3: The per-task Progress cell
+### Phase 3: The per-task Progress cell ✅
 
 - New `RunPhaseMicroRail.razor`, driven by `RunPhaseVisuals`.
 - `WorkerTaskProgress.razor`: accept the new parameters, render rail + bar + caption, fall through to today's markup when `Phases` is empty.
@@ -161,7 +161,16 @@ Prerequisite for everything else, and the issue calls it out explicitly.
 - **The caption replaces the worker's progress message.** A message that only restates the running step's name is noise, which is the rule `RunProgressMetrics` already follows on the Activity page. Worker-side messages that would only restate the step should be `string.Empty`.
 - Tests (bUnit, `test/JIM.Web.Tests/`): a task with phases renders a rail with one segment per phase and the running one marked; a task without phases renders today's bar and no rail; the caption names the step.
 
-**Done when:** the queue matches the approved mock-up, and `ExampleDataTemplateDetail.razor` is visually unchanged.
+**Done when:** the queue matches the approved mock-up, and `ExampleDataTemplateDetail.razor` is visually unchanged. ✅
+
+**Four things only the running page could tell us**, all found by driving `/admin/operations?d=true` on the full stack and measuring rather than eyeballing:
+
+1. **The caption was appending the worker's message**, producing "Step 5 of 7: Saving changes - 8,320 / 12,500 - Importing users": too long for the column and self-contradictory to skim. The implementation had suppressed the message only when it was *identical* to the step name, which is the case that matters least. With steps, the caption is now step and figures only; the narration belongs on the Activity the row already links to. The test that should have caught this was passing an identical message, so it was strengthened to use a different one.
+2. **The 7px alignment offset was a pixel out.** Derived from a nominal 20px text line; the rendered line box is slightly over. Measured, corrected to 8px, and a sibling rule added so a phase-less task's 4px bar (rather than the 6px rail) also lands on the line. All three row shapes now measure exactly 0px offset from the first text line's centre.
+3. **The pending segment failed WCAG 1.4.11 in dark mode.** `--mud-palette-lines-default` is the divider colour, tuned for hairlines: 1.45:1 against the dark table surface, where 3:1 is needed for meaningful non-text UI. How many segments are still grey is exactly what says how much of the run is left, so this is information, not decoration. `--mud-palette-text-disabled` only reached 2.24:1; `--mud-palette-text-secondary` fixed dark at 6.13:1 but hit 7.53:1 in light, out-weighing the green of a finished step and inverting the hierarchy. Resolved with one fixed neutral (`--jim-run-step-pending: #8a8a8a`), measured 3.45:1 light and 4.88:1 dark, recessive in both. A palette token that adapts per theme was the cause, so the fix deliberately does not use one.
+4. **The demo queue (`?d=true`) had no way to show any of this.** It now carries steps on its running rows, plus a task that records none, because degrading to a bare bar is the case a change to this cell is most likely to break and the demo has to show it.
+
+Deliberately no tooltips on the cell's rail: a segment is a few pixels wide, so eight of them are eight poor hover targets, and the approved mock-up has none. The labelled rail is one click away on the Activity.
 
 ### Phase 4: The Schedule Execution group header
 
