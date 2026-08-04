@@ -299,7 +299,9 @@ public class SchedulerServer
             ScheduleName = schedule.Name,
             Status = ScheduleExecutionStatus.InProgress,
             CurrentStepIndex = 0,
-            TotalSteps = schedule.Steps.Count,
+            // Step groups, not step rows: CurrentStepIndex advances one group at a time, and the two are
+            // read together as "step X of Y". Steps sharing a StepIndex are one position, not several.
+            TotalSteps = distinctStepIndices.Count,
             StartedAt = DateTime.UtcNow,
             InitiatedByType = initiatorType,
             InitiatedById = initiatorId,
