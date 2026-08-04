@@ -2431,12 +2431,6 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     /* One token drives the marker and the connector's alignment to its centre, so resizing the
        markers cannot leave the rail running through them off-centre. */
     --jim-phase-marker-size: 1.75rem;
-
-    /* Separates the rail from the readout of the running step beneath it. The rule sits here
-       rather than on the readout because the readout is shown for Activities with no rail at all,
-       where a line with nothing above it would be a divider dividing nothing. */
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
 .jim-phase-stepper-h .mud-stepper-nav {
@@ -2635,6 +2629,15 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
    Deliberately not uppercased, unlike the column labels below it: those are single words, whereas
    this carries a step's name, and upper-casing a sentence both slows it down and erases the Proper
    Case that distinguishes a JIM entity ("Connected System Objects") from an ordinary noun. */
+/* Separates the running step's readout from the rail above it. The divider belongs to the readout
+   rather than the rail because the rail outlives it: a finished run still shows its steps, and a
+   line drawn by the rail was left dividing nothing underneath every completed Activity. */
+.jim-run-progress--under-steps {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
 .jim-run-scope {
     color: var(--mud-palette-text-primary);
     letter-spacing: 0.02em;

@@ -214,7 +214,9 @@
 
             @if (_activity.Status == ActivityStatus.InProgress)
             {
-                <MudStack Spacing="2" Class="@(_phases.Count > 0 ? "mt-3" : "")">
+                @* The gap above the figures travels with them, so that a run with no steps to
+                   separate them from does not get one. *@
+                <MudStack Spacing="2">
                     @* Counts, rate and time remaining (issue #202), each stated once, under the
                        step they measure and the Activity's own narration of what it is doing
                        within it. *@

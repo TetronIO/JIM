@@ -125,6 +125,25 @@ public class RunProgressMetricsTests : JimComponentTestContext
     }
 
     [Test]
+    public void RunProgressMetrics_RunWithSteps_SeparatesItselfFromTheRailAboveIt()
+    {
+        var cut = Render<RunProgressMetrics>(p => p.Add(c => c.Phases, ImportFetching()));
+
+        Assert.That(cut.Find(".jim-run-progress").ClassList, Does.Contain("jim-run-progress--under-steps"));
+    }
+
+    [Test]
+    public void RunProgressMetrics_RunWithoutSteps_DrawsNoDividerAboveItself()
+    {
+        // Nothing is rendered above it, so a divider would be dividing nothing. The rail carried
+        // the line before this, which put the same empty divider under every finished run: the rail
+        // is shown once a run is over, and these figures are not.
+        var cut = RenderMetrics();
+
+        Assert.That(cut.Find(".jim-run-progress").ClassList, Does.Not.Contain("jim-run-progress--under-steps"));
+    }
+
+    [Test]
     public void RunProgressMetrics_FinishedSubStep_SetsItsDurationApartFromItsName()
     {
         // Both sat at the same weight with the same gap as the icon, so "Fetching objects 20 sec,

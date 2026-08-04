@@ -10,7 +10,10 @@
    message narrated them as well as reporting them. Labels make the units explicit and keep the
    columns in place as the digits change. *@
 
-<div class="jim-run-progress">
+@* The divider above these figures belongs to them rather than to the rail: the rail is shown for a
+   finished run too, and these figures are not, so a line drawn by the rail was left dividing
+   nothing on every completed Activity. *@
+<div class="jim-run-progress @(Phases.Count > 0 ? "jim-run-progress--under-steps" : "")">
     @* Every figure below is reset by each step that counts its own work, so the panel would
        otherwise read as an estimate for the whole run. Naming the step rather than pointing at it
        ("the step running now") matters because the rail above scrolls sideways, and on a long run
