@@ -194,15 +194,21 @@
                        stops its header row reading as more rows of the Schedules table. *@
                     <td colspan="8" class="pa-0">
                         <div class="pl-12 pr-4 py-3">
-                            @* Deliberately no TableDensityToggle: this is a short child listing inside another
-                               table's row, and a second density toggle on the same page would be confusing. *@
-                            <MudTable Items="@GetRecentExecutions(context.Id)" T="ScheduleExecution"
-                                      Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-                                      Outlined="true" Elevation="0"
-                                      Loading="@_loadingScheduleIds.Contains(context.Id)" LoadingProgressColor="Color.Primary">
+                            @* Nested container treatment: a bordered table inside an outlined MudPaper. site.css
+                               styles this automatically off the .mud-paper descendant selectors (recessed
+                               --jim-inner-surface header, paper-surface data rows, inner border colour), so the
+                               nesting is expressed by the structure rather than by a hand-picked tint. Canonical
+                               example: ThemePreview.razor > Nested Table. *@
+                            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+                                @* Deliberately no TableDensityToggle: this is a short child listing inside another
+                                   table's row, and a second density toggle on the same page would be confusing. *@
+                                <MudTable Items="@GetRecentExecutions(context.Id)" T="ScheduleExecution"
+                                          Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+                                          Outlined="true" Elevation="0"
+                                          Loading="@_loadingScheduleIds.Contains(context.Id)" LoadingProgressColor="Color.Primary">
                                 <ToolBarContent>
                                     @* The Schedule is named on the parent row directly above, so repeating it here is noise. *@
-                                    <MudText Typo="Typo.h6">Recent Schedule Executions</MudText>
+                                    <MudText Typo="Typo.subtitle2">Recent Schedule Executions</MudText>
                                 </ToolBarContent>
                                 <HeaderContent>
                                     <MudTh><MudText Typo="Typo.button">Started</MudText></MudTh>
@@ -267,7 +273,8 @@
                                 <NoRecordsContent>
                                     <MudText Typo="Typo.body1" Class="mud-text-secondary">This Schedule has not run yet.</MudText>
                                 </NoRecordsContent>
-                            </MudTable>
+                                </MudTable>
+                            </MudPaper>
                         </div>
                     </td>
                 </MudTr>
