@@ -177,6 +177,18 @@ public class BulkInsertColumnCompletenessTests
             RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdateExclusions);
     }
 
+    /// <summary>
+    /// Causal provenance (#1223). Causal edges are written on the deletion hot path, so a migration that adds a
+    /// column and leaves this list behind would default it for every edge in a cascade; the cause-side attribution
+    /// columns in particular are the whole value of the row, and a silently-null ConnectedSystemName or ReasonCode
+    /// would break cohort grouping rather than merely losing detail.
+    /// </summary>
+    [Test]
+    public void CausalEdgeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.CausalEdge), "CausalEdges", CausalEdgeBulkColumns.CausalEdges);
+    }
+
     [Test]
     public void ActivityPhaseBulkColumns_MatchMappedColumnsExactly()
     {

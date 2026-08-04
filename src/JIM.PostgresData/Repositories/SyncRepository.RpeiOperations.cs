@@ -721,6 +721,56 @@ public partial class SyncRepository
     /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>
+    /// <summary>
+    /// Bulk inserts causal edges (#1223) using parameterised multi-row INSERT, chunked to stay within the
+    /// PostgreSQL parameter limit. Edges are append-only, so there is no matching update path.
+    /// </summary>
+    public async Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
+    {
+        if (edges.Count == 0)
+            return;
+
+        const int columnsPerRow = 15;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+
+        // One builder reused across chunks rather than one per iteration; a deletion cascade can produce many.
+        var sql = new System.Text.StringBuilder();
+
+        foreach (var chunk in BulkSqlHelpers.ChunkList(edges, chunkSize))
+        {
+            sql.Clear();
+            // Parameter order below MUST match CausalEdgeBulkColumns.CausalEdges exactly.
+            sql.Append($@"INSERT INTO ""CausalEdges"" ({BulkSqlHelpers.ToQuotedList(CausalEdgeBulkColumns.CausalEdges)}) VALUES ");
+
+            var parameters = new List<NpgsqlParameter>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14})");
+
+                var edge = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = edge.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = edge.EffectRunProfileExecutionItemId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.EffectSyncOutcomeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseRunProfileExecutionItemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseSyncOutcomeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseMetaverseObjectId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseConnectedSystemObjectId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseDisplayName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.EdgeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.ReasonCode });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.ConnectedSystemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.ConnectedSystemName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
+            }
+
+            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         const int columnsPerRow = 15;

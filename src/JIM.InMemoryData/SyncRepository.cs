@@ -36,6 +36,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
+    private readonly Dictionary<Guid, CausalEdge> _causalEdges = new();
 
     /// <summary>
     /// When true, <see cref="BulkInsertRpeisAsync"/> returns true (simulating the production
@@ -1626,6 +1627,31 @@ public class SyncRepository : ISyncRepository
         // the production raw-SQL path and exposing cross-page lookup bugs.
         return Task.FromResult(SimulateRawSqlPersistence);
     }
+
+    /// <summary>
+    /// Records causal edges (#1223) in memory so worker tests can assert what a cascade attributed to what.
+    /// </summary>
+    /// <remarks>
+    /// The retention asymmetry the production path depends on (effect cascades, cause survives) cannot be
+    /// modelled here: this store enforces no foreign keys. That behaviour is covered by
+    /// <c>CausalEdgePersistenceDatabaseTests</c> against real PostgreSQL, and a test asserting it against this
+    /// implementation would prove nothing.
+    /// </remarks>
+    public Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges)
+    {
+        foreach (var edge in edges)
+        {
+            if (edge.Id == Guid.Empty)
+                edge.Id = Guid.NewGuid();
+            _causalEdges[edge.Id] = edge;
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The causal edges recorded so far, for test assertions.
+    /// </summary>
+    public IReadOnlyCollection<CausalEdge> CausalEdges => _causalEdges.Values;
 
     private static void AssignSyncOutcomeIds(
         List<ActivityRunProfileExecutionItemSyncOutcome> outcomes, Guid rpeiId, Guid? parentId)

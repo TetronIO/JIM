@@ -663,6 +663,18 @@ public interface ISyncRepository
     Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
+    /// Bulk inserts causal edges via chunked raw SQL, bypassing the EF change tracker (#1223).
+    /// </summary>
+    /// <remarks>
+    /// Call this from inside the transaction that persists the effects the edges describe, never on its own.
+    /// An edge that outlived a rolled-back flush would attribute a cause to an effect that never happened, and
+    /// an effect persisted without its edges would read as uncaused; joining the existing flush means a failure
+    /// here fails or retries with the RPEI batch exactly as a failure to persist the RPEIs themselves does, so
+    /// provenance adds no new failure mode to synchronisation.
+    /// </remarks>
+    Task BulkInsertCausalEdgesAsync(List<CausalEdge> edges);
+
+    /// <summary>
     /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
     /// and inserts any new SyncOutcomes added after initial persistence.
     /// Used by confirming imports to merge reconciliation outcomes onto existing RPEIs.
