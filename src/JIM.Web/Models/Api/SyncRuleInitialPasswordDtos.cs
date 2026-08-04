@@ -4,6 +4,7 @@
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -50,10 +51,39 @@ public class SyncRuleInitialPasswordResponse
     public bool EnableAccount { get; set; }
 
     /// <summary>
+    /// How many accounts this rule provisioned are waiting on a change to these settings, and what the target
+    /// said about each. Empty in the ordinary case.
+    /// <para>
+    /// Reported here rather than as its own endpoint because it is the same question as "what are these settings
+    /// doing": an administrator scripting a check across every rule wants the answer in the response they were
+    /// already fetching, not in a second call per rule.
+    /// </para>
+    /// </summary>
+    public List<InitialPasswordRejectionDto> ParkedReasons { get; set; } = [];
+
+    /// <summary>
+    /// The total across <see cref="ParkedReasons"/>, so a caller checking "does anything need me?" does not have
+    /// to sum the list itself.
+    /// </summary>
+    public int ParkedAccountCount { get; set; }
+
+    /// <summary>
+    /// How many accounts this rule provisioned were never given an initial password within its time to live.
+    /// <para>
+    /// Kept separate from the parked count deliberately: correcting these settings releases the parked accounts
+    /// and does nothing at all for the expired ones, which need a password by other means.
+    /// </para>
+    /// </summary>
+    public int ExpiredAccountCount { get; set; }
+
+    /// <summary>
     /// Builds the response from a Synchronisation Rule's configuration. A rule with none is reported as
     /// switched off with JIM's defaults, which is what it behaves as.
     /// </summary>
-    public static SyncRuleInitialPasswordResponse FromEntity(SyncRuleInitialPassword? entity)
+    public static SyncRuleInitialPasswordResponse FromEntity(
+        SyncRuleInitialPassword? entity,
+        IReadOnlyList<InitialPasswordRejection>? parkedReasons = null,
+        InitialPasswordAttention? attention = null)
     {
         entity ??= new SyncRuleInitialPassword();
 
@@ -63,9 +93,46 @@ public class SyncRuleInitialPasswordResponse
             Source = entity.Source,
             CustomPolicy = PasswordGenerationPolicyDto.FromEntity(entity.CustomPolicy),
             ExpiryBehaviour = entity.ExpiryBehaviour,
-            EnableAccount = entity.EnableAccount
+            EnableAccount = entity.EnableAccount,
+            ParkedReasons = parkedReasons?.Select(InitialPasswordRejectionDto.FromEntity).ToList() ?? [],
+            ParkedAccountCount = attention?.ParkedCount ?? 0,
+            ExpiredAccountCount = attention?.ExpiredCount ?? 0
         };
     }
+}
+
+/// <summary>
+/// One reason a target gave for refusing an initial password, and how many accounts it is holding up.
+/// </summary>
+public class InitialPasswordRejectionDto
+{
+    /// <summary>
+    /// What the target said, unaltered. Null where it refused without saying anything.
+    /// </summary>
+    public string? TargetMessage { get; set; }
+
+    /// <summary>
+    /// How JIM classified the refusal.
+    /// </summary>
+    public PasswordSetFailureReason? FailureReason { get; set; }
+
+    /// <summary>
+    /// How many accounts are parked on this reason.
+    /// </summary>
+    public int AccountCount { get; set; }
+
+    /// <summary>
+    /// The earliest attempt that produced this reason, in UTC.
+    /// </summary>
+    public DateTime? FirstSeenAt { get; set; }
+
+    public static InitialPasswordRejectionDto FromEntity(InitialPasswordRejection entity) => new()
+    {
+        TargetMessage = entity.TargetMessage,
+        FailureReason = entity.FailureReason,
+        AccountCount = entity.AccountCount,
+        FirstSeenAt = entity.FirstSeenAt
+    };
 }
 
 /// <summary>

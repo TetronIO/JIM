@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Logic;
 @using JIM.Models.Logic.DTOs
+@using JIM.Models.Transactional.DTOs
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IUserPreferenceService PreferenceService
@@ -110,6 +111,9 @@
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
+                <MudText Typo="Typo.button">Attention</MudText>
+            </MudTh>
+            <MudTh>
                 <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">
                     <MudText Typo="Typo.button">Status</MudText>
                 </MudTableSortLabel>
@@ -202,6 +206,10 @@
                     }
                 </div>
             </MudTd>
+            <MudTd DataLabel="Attention">
+                <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Id)"
+                                                   SubjectName="@context.Name" />
+            </MudTd>
             <MudTd DataLabel="Status">
                 @if (context.Enabled)
                 {
@@ -232,6 +240,7 @@
 
 @code {
     private IList<SyncRuleHeader>? _syncRuleHeaders;
+    private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
     private bool _canCreateSyncRules;
     private bool _dense;
 
@@ -270,7 +279,16 @@
             .GroupBy(h => h.ConnectedSystemId)
             .ToDictionary(g => g.Key, g => g.First().ConnectedSystemName);
         _connectedSystemFilterOptionIds = _connectedSystemNames.OrderBy(n => n.Value).Select(n => n.Key).ToList();
+
+        // One grouped count for the whole page rather than one query per row, which is the shape a per-row
+        // indicator turns into if each row asks for itself.
+        if (_syncRuleHeaders.Count > 0)
+            _initialPasswordAttention = await jim.InitialPasswords.GetAttentionBySyncRuleAsync(
+                _syncRuleHeaders.Select(r => r.Id).ToList());
     }
+
+    private InitialPasswordAttention? GetInitialPasswordAttention(int syncRuleId) =>
+        _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(syncRuleId, out var attention) ? attention : null;
 
     private string SearchString
     {

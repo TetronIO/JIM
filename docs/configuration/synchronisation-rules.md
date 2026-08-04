@@ -180,6 +180,14 @@ Saving an unrelated part of the same rule releases nothing. Those accounts were 
 
 The typical loop is therefore: read what the target said on the parked account, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
 
+### Where JIM tells you
+
+You do not have to go looking. Parked and expired accounts are reported in three places:
+
+- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the accounts parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
+- **The Initial Password section itself**<br /> The panel heading carries the parked count even while collapsed, and opening it shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and the panel confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
+- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
+
 ## Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.

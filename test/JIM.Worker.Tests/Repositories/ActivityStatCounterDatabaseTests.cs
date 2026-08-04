@@ -56,7 +56,12 @@ public class ActivityStatCounterDatabaseTests
         // those connections are built from the JIM_DB_* environment variables, not the test
         // context's connection string. Point them at the scratch database for the duration of
         // this fixture so the parallel path cannot write anywhere else.
-        SetDbEnvVar(Constants.Config.DatabaseHostname, host);
+        //
+        // There is no JIM_DB_* port variable: BuildConnectionString emits no Port, so Npgsql would
+        // default to 5432 and this fixture could only ever pass against a database on the default
+        // port. Npgsql accepts "host:port" in the Host field, so a non-default port is carried that
+        // way (matching how a deployment against a non-default port has to configure it).
+        SetDbEnvVar(Constants.Config.DatabaseHostname, port == "5432" ? host : $"{host}:{port}");
         SetDbEnvVar(Constants.Config.DatabaseName, dbName);
         SetDbEnvVar(Constants.Config.DatabaseUsername, user);
         SetDbEnvVar(Constants.Config.DatabasePassword, pass);

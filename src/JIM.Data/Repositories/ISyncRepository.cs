@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -578,6 +579,40 @@ public interface ISyncRepository
     /// </para>
     /// </summary>
     Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
+    /// Counts the accounts needing a person's attention over their initial password, by Synchronisation Rule.
+    /// <para>
+    /// One grouped count for every rule on the page rather than one query per row: this backs a list indicator,
+    /// which is exactly the shape that turns into N+1 queries if each row asks for itself.
+    /// </para>
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, so a caller
+    /// that renders nothing for a settled rule can do so by lookup failure alone.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// The Connected System counterpart of
+    /// <see cref="GetInitialPasswordAttentionBySyncRuleAsync"/>, for the Connected Systems list.
+    /// <para>
+    /// Counted against the record's own denormalised Connected System rather than through its Synchronisation
+    /// Rule, so an account whose rule has since been deleted is still counted against the system it lives in.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// The distinct reasons a target gave for refusing the initial passwords parked against a Synchronisation
+    /// Rule, each with how many accounts it is holding up, most accounts first.
+    /// <para>
+    /// Grouped rather than listed per account because the administrator reading this is fixing a setting: the
+    /// number of distinct reasons is the number of problems, and it is almost always very much smaller than the
+    /// number of accounts.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId);
 
     /// <summary>
     /// Bulk deletes Pending Exports.

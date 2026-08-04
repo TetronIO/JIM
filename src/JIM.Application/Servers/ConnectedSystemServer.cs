@@ -1634,6 +1634,8 @@ public class ConnectedSystemServer
                 result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
             }
 
+            MergeObjectTypeTags(connectedSystemObjectType, schemaObjectType);
+
             // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
             // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
             var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
@@ -1677,6 +1679,32 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes[0].Selected = true;
 
         return result;
+    }
+
+    /// <summary>
+    /// Applies the classification a Connector reported for an Object Type (structural, auxiliary, internal, and
+    /// whatever else it defines) to the persisted Object Type.
+    /// </summary>
+    /// <remarks>
+    /// Tags are connector-owned, so what the Connector reports now is the complete classification for this type:
+    /// the persisted set is replaced rather than added to, which is what makes a reclassification at the Connected
+    /// System (or a Connector that stops classifying) show up instead of accumulating contradictory tags. Rows whose
+    /// key and value are unchanged are reused so that a refresh does not churn the table, and repeated tags are
+    /// collapsed because the persisted tags are uniquely indexed per object type, key and value.
+    /// </remarks>
+    private static void MergeObjectTypeTags(ConnectedSystemObjectType connectedSystemObjectType, ConnectorSchemaObjectType schemaObjectType)
+    {
+        var existingTagsByClassification = connectedSystemObjectType.Tags
+            .GroupBy(t => (t.Key, t.Value))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        connectedSystemObjectType.Tags = schemaObjectType.Tags
+            .Select(t => (t.Key, t.Value))
+            .Distinct()
+            .Select(classification => existingTagsByClassification.TryGetValue(classification, out var existingTag)
+                ? existingTag
+                : new ConnectedSystemObjectTypeTag { Key = classification.Key, Value = classification.Value })
+            .ToList();
     }
 
     /// <summary>

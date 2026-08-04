@@ -7,6 +7,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
 using Serilog;
 
@@ -182,6 +183,44 @@ public class InitialPasswordDeliveryServer
                 "have been released and will be attempted again on its Connected System's next export run", released, syncRuleId);
 
         return released;
+    }
+
+    /// <summary>
+    /// How many accounts under each of these Synchronisation Rules are waiting on a person, for the indicator on
+    /// the Synchronisation Rules list.
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, so a list that
+    /// renders nothing for a settled rule can do so without asking twice.
+    /// </para>
+    /// </summary>
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        ArgumentNullException.ThrowIfNull(syncRuleIds);
+
+        return await _syncRepo.GetInitialPasswordAttentionBySyncRuleAsync(syncRuleIds);
+    }
+
+    /// <summary>
+    /// The Connected Systems counterpart of <see cref="GetAttentionBySyncRuleAsync"/>.
+    /// </summary>
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemIds);
+
+        return await _syncRepo.GetInitialPasswordAttentionByConnectedSystemAsync(connectedSystemIds);
+    }
+
+    /// <summary>
+    /// What the target said about the initial passwords parked against a Synchronisation Rule, grouped by reason
+    /// and with the biggest group first.
+    /// <para>
+    /// This is what an administrator acts on: the reason names the setting to change, and changing it is what
+    /// releases the accounts. Only parked records are reported, because saving releases only what is parked.
+    /// </para>
+    /// </summary>
+    public async Task<List<InitialPasswordRejection>> GetParkedReasonsAsync(int syncRuleId)
+    {
+        return await _syncRepo.GetParkedInitialPasswordReasonsAsync(syncRuleId);
     }
 
     /// <summary>

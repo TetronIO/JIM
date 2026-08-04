@@ -160,6 +160,66 @@ public class SyncRuleInitialPasswordComparisonTests
     }
 
     /// <summary>
+    /// The sibling guard for the snapshot the portal holds while an administrator edits: a setting the snapshot
+    /// forgets to copy reads as changed the moment the editor opens, so the panel would promise to release the
+    /// parked accounts on a save that changes nothing.
+    /// <para>
+    /// Every setting is first moved off its default, so a forgotten copy leaves that setting at its default on
+    /// the snapshot and the comparison catches it. A snapshot of a default-valued configuration would prove
+    /// nothing.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void SnapshotDeliverySettings_WithEverySettingMovedOffItsDefault_MatchesWhatItCopied()
+    {
+        var configuration = Configuration();
+
+        foreach (var property in typeof(SyncRuleInitialPassword)
+                     .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                     .Where(p => p.CanWrite && p.Name is not (nameof(SyncRuleInitialPassword.Id)
+                         or nameof(SyncRuleInitialPassword.SyncRule)
+                         or nameof(SyncRuleInitialPassword.SyncRuleId)
+                         or nameof(SyncRuleInitialPassword.CustomPolicy))))
+        {
+            property.SetValue(configuration, Different(property.GetValue(configuration), property.PropertyType));
+        }
+
+        foreach (var property in typeof(PasswordGenerationPolicy)
+                     .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                     .Where(p => p.CanWrite))
+        {
+            property.SetValue(configuration.CustomPolicy, Different(property.GetValue(configuration.CustomPolicy), property.PropertyType));
+        }
+
+        Assert.That(SyncRuleInitialPassword.WouldDeliverTheSameAs(configuration, configuration.SnapshotDeliverySettings()), Is.True,
+            "SnapshotDeliverySettings does not copy every setting WouldDeliverTheSameAs compares. The portal " +
+            "holds the snapshot as 'what was saved', so a missed setting makes an untouched rule look edited and " +
+            "promises a release that saving will not perform.");
+    }
+
+    /// <summary>
+    /// The snapshot exists to be compared against later, never to be written back. Carrying the identity would
+    /// make it look like a persistable row.
+    /// </summary>
+    [Test]
+    public void SnapshotDeliverySettings_DoesNotCarryTheIdentityOfWhatItCopied()
+    {
+        var configuration = Configuration();
+        configuration.Id = 12;
+        configuration.SyncRuleId = 34;
+
+        var snapshot = configuration.SnapshotDeliverySettings();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(snapshot.Id, Is.Zero);
+            Assert.That(snapshot.SyncRuleId, Is.Zero);
+            Assert.That(snapshot.CustomPolicy, Is.Not.SameAs(configuration.CustomPolicy),
+                "a shared policy instance would track the live edits it is supposed to be compared against");
+        });
+    }
+
+    /// <summary>
     /// Produces a value of the right type that differs from the one supplied, so the guard above can mutate a
     /// property without knowing anything about it.
     /// </summary>
