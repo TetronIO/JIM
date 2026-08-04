@@ -93,21 +93,28 @@ public class ActivityPhaseSet
 
         var phases = new List<ActivityPhase>();
         var applicable = RunProfilePhaseCatalogue.GetPhases(runType)
-            .Where(p => inapplicablePhaseKeys == null || !inapplicablePhaseKeys.Contains(p.Key));
+            .Where(p => inapplicablePhaseKeys == null || !inapplicablePhaseKeys.Contains(p.Key))
+            .ToList();
 
-        foreach (var declared in applicable)
+        foreach (var declared in applicable.Where(p => p.ParentKey == null))
         {
             phases.Add(NewPhase(activityId, declared.Key, declared.Name, parentKey: null, order: phases.Count));
 
-            if (!declared.HostsConnectorPhases)
-                continue;
+            if (declared.HostsConnectorPhases)
+            {
+                phases.AddRange(nested.Select(connectorPhase => NewPhase(
+                    activityId,
+                    ActivityPhase.QualifyConnectorKey(connectorPhase.Key),
+                    connectorPhase.Name,
+                    parentKey: declared.Key,
+                    order: 0)));
+            }
 
-            phases.AddRange(nested.Select(connectorPhase => NewPhase(
-                activityId,
-                ActivityPhase.QualifyConnectorKey(connectorPhase.Key),
-                connectorPhase.Name,
-                parentKey: declared.Key,
-                order: 0)));
+            // JIM's own nested steps come after the Connector's: the Connector produces the objects,
+            // and JIM's work inside the same step is what it then does with them.
+            phases.AddRange(applicable
+                .Where(p => p.ParentKey == declared.Key)
+                .Select(child => NewPhase(activityId, child.Key, child.Name, parentKey: declared.Key, order: 0)));
         }
 
         // Order is assigned after nesting so the numbers read straight down the stepper.
@@ -160,9 +167,12 @@ public class ActivityPhaseSet
                 }));
         }
 
-        // A Connector phase runs inside the JIM phase that called the Connector; that phase stays active.
+        // A Connector phase runs inside the JIM phase that called the Connector; that phase stays
+        // active. A host already closed out is reopened rather than left finished, because a step
+        // cannot be over while work is still happening inside it, and a rail showing nothing running
+        // during the longest part of a run is worse than one step's duration reading long.
         var parent = phase.ParentKey == null ? null : _phases.SingleOrDefault(p => p.Key == phase.ParentKey);
-        if (parent is { Status: ActivityPhaseStatus.Pending or ActivityPhaseStatus.Skipped })
+        if (parent is { Status: not ActivityPhaseStatus.Active })
         {
             parent.Status = ActivityPhaseStatus.Active;
             parent.Started ??= nowUtc;
@@ -182,6 +192,20 @@ public class ActivityPhaseSet
 
         return changed;
     }
+
+    /// <summary>
+    /// Completes whichever of the Connector's own phases is running, leaving the JIM phase that
+    /// called the Connector running. For the moment a Connector's call returns: its steps are only
+    /// true while it is working, and nothing else closes them until JIM enters its next phase,
+    /// which can be a long way off.
+    /// </summary>
+    /// <param name="nowUtc">The time the Connector finished.</param>
+    /// <returns>The phases whose recorded state changed, which is what needs persisting.</returns>
+    public IReadOnlyList<ActivityPhase> ExitConnectorPhases(DateTime nowUtc) =>
+        _phases
+            .Where(p => p.Status == ActivityPhaseStatus.Active && p.Key.StartsWith(ActivityPhase.ConnectorPhaseKeyPrefix, StringComparison.Ordinal))
+            .Select(p => Close(p, nowUtc, ActivityPhaseStatus.Completed))
+            .ToList();
 
     /// <summary>
     /// Closes the run out: whatever was running is completed (or failed), and anything never

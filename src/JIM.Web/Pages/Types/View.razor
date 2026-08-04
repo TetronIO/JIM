@@ -13,6 +13,7 @@
 @inject NavigationManager NavManager
 @inject IUserPreferenceService UserPreferences
 @inject IJSRuntime JsRuntime
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -31,6 +32,7 @@
     <Loaded>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseObjectType?.Name:</span> <span class="mud-primary-text">@_displayName</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
 
 @if (MetaverseObject != null)
 {
@@ -178,6 +180,38 @@
                 </MudGrid>
             </MudPaper>
         </MudTabPanel>
+
+        @* ─── Actions ─── *@
+        @* Things an administrator can do TO this person, as opposed to the tabs that report on them.        *@
+        @* Setting a password is a reset primitive and this page is visible to every signed-in user, so the  *@
+        @* whole tab carries an Administrator gate rather than inheriting the page's (issue #1172).          *@
+        <AuthorizeView Roles="Administrator" Context="actionsAuth">
+            <MudTabPanel Text="Actions" Icon="@Icons.Material.Filled.Bolt">
+                <MudPaper Class="pa-4 mt-6" Outlined="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="4" data-testid="jim-mvo-action-set-password">
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Color="Color.Primary" Class="mt-1" />
+                        <MudStack Spacing="1" Class="flex-grow-1">
+                            <MudText Typo="Typo.h6">Set Password</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Sets one password on some or all of this person's accounts, writing to each
+                                Connected System in turn. Nothing is staged and JIM stores nothing.
+                            </MudText>
+                            @if (_passwordCapableAccountCount == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="jim-mvo-action-set-password-unavailable">
+                                    Unavailable: none of this person's accounts are in a Connected System whose
+                                    Connector can set passwords.
+                                </MudText>
+                            }
+                        </MudStack>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                   Disabled="@(_passwordCapableAccountCount == 0)"
+                                   OnClick="OpenSetPasswordDialogAsync"
+                                   data-testid="jim-mvo-set-password">Set Password</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudTabPanel>
+        </AuthorizeView>
         </ChildContent>
     </NavigableMudTabs>
 }
@@ -185,6 +219,76 @@
 </LoadingGate>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = null!;
+
+    // How many of this person's accounts are in a Connected System whose Connector can set passwords. Read with
+    // the page so the action is either offered or not, rather than appearing and then turning out to be
+    // unavailable once the dialog is open.
+    private int _passwordCapableAccountCount;
+
+    /// <summary>
+    /// Opens the set-password dialog over this person's accounts (issue #1172).
+    /// <para>
+    /// Nothing is preselected. Somebody resetting a forgotten password in one Connected System must not
+    /// silently reset the others; Select all is one click for the case where that is what is wanted.
+    /// </para>
+    /// </summary>
+    private async Task OpenSetPasswordDialogAsync()
+    {
+        if (MetaverseObject == null)
+            return;
+
+        using var jim = JimFactory.Create();
+        var accounts = await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id);
+
+        var parameters = new DialogParameters<SetPasswordDialog>
+        {
+            { x => x.Accounts, accounts },
+            { x => x.AllowSelection, true },
+            { x => x.Reconcile, ReconcilePasswordPolicies },
+            { x => x.GeneratePassword, GeneratePassword },
+            { x => x.SetPassword, SetPasswordOnAccountsAsync }
+        };
+
+        // The name only when there is one: an object with no display name would otherwise be titled with a
+        // dangling colon.
+        var title = string.IsNullOrWhiteSpace(_displayName) ? "Set Password" : $"Set Password: {_displayName}";
+        await DialogService.ShowAsync<SetPasswordDialog>(title, parameters,
+            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
+    /// <summary>
+    /// Works out one set of generator settings that satisfies every selected Connected System, so a password
+    /// generated for several accounts is not simply the first system's rules applied to all of them.
+    /// </summary>
+    private PasswordPolicyReconciliation ReconcilePasswordPolicies(IReadOnlyList<MetaverseObjectAccount> accounts)
+    {
+        using var jim = JimFactory.Create();
+        return jim.PasswordGenerator.Reconcile(accounts
+            .Select(a => new PasswordPolicyForSystem { ConnectedSystemName = a.ConnectedSystemName, Policy = a.DiscoveredPolicy })
+            .ToList());
+    }
+
+    private string GeneratePassword(PasswordGenerationPolicy policy)
+    {
+        using var jim = JimFactory.Create();
+        return jim.PasswordGenerator.Generate(policy);
+    }
+
+    private async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
+        IReadOnlyList<MetaverseObjectAccount> accounts,
+        string password,
+        PasswordSetOptions options,
+        IProgress<AccountPasswordSetOutcome> progress)
+    {
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+        return await jim.ConnectedSystems.SetPasswordOnAccountsAsync(
+            MetaverseObject!.Id, accounts, password, options, user, progress, CancellationToken.None);
+    }
+
     [Parameter]
     public string TypeNameUrlParam { get; set; } = null!;
     [Parameter]
@@ -257,6 +361,9 @@
         _changeCount = detailResult.ChangeCount;
 
         _displayName = MetaverseObject.NameOrId;
+
+        _passwordCapableAccountCount = (await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id))
+            .Count(account => account.ConnectorCanSetPasswords);
 
         if (detailResult.EarliestChangeInitiator != null)
         {

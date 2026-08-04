@@ -16,24 +16,58 @@ namespace JIM.Application.Servers.Preview;
 /// from the subset that was persisted. An administrator who is told 1,000 because that is how many rows fitted has
 /// been given a wrong number that looks like a right one.
 ///
+/// Grouping runs at two levels. The coarse level is the transition, object type, Connected System and attribute; the
+/// fine level is the distinct old-to-new value pair within it, which is what turns "38,900 would have Email changed"
+/// into "38,900 would have Email changed from @contoso.com to @fabrikam.com". Value pairs can produce one group per
+/// object, so they are named only while a group has at most <see cref="_maximumValuePairsPerGroup"/> of them; past
+/// that the split stops being a summary and the group collapses back to the attribute level. Collapsing changes how
+/// a population is described, never how many objects it holds.
+///
 /// Memory is bounded by the grouping dimensions rather than by the population: at most
-/// <see cref="_maximumDeltasPerGroup"/> deltas are held per group, and v1's dimensions (transition, object type,
-/// Connected System, attribute) cannot produce more than a handful of groups for any real surface. Grouping by
-/// distinct old-to-new value pairs, which can produce one group per object, arrives with the cardinality guard that
-/// makes it safe (plan Phase 4a) and not before.
+/// <see cref="_maximumDeltasPerGroup"/> deltas are held per coarse group, plus a small per-value-pair reserve
+/// bounded by the guard, and the coarse dimensions cannot produce more than a handful of groups for any real
+/// surface.
 /// </summary>
 public class PreviewSummariser
 {
-    private readonly int _maximumDeltasPerGroup;
+    /// <summary>
+    /// How many distinct old-to-new value pairs may be named within one coarse group before the split is abandoned.
+    /// Deliberately small: past ten rows a "summary" is a list, which is the wall of text grouping exists to prevent.
+    /// </summary>
+    public const int DefaultMaximumValuePairsPerGroup = 10;
+
+    /// <summary>
+    /// Delta rows held per value pair over and above the coarse group's kept rows, purely so that no value-pair
+    /// group can end up with an empty drill-down. See <see cref="BuildGroups"/> for when the reserve is used.
+    /// </summary>
+    public const int ValuePairExampleReserve = 10;
+
+    private readonly int? _maximumDeltasPerGroup;
+    private readonly int _maximumValuePairsPerGroup;
     private readonly Dictionary<GroupKey, GroupAccumulator> _groups = [];
 
-    public PreviewSummariser(int maximumDeltasPerGroup)
+    /// <param name="maximumDeltasPerGroup">
+    /// How many delta rows to keep per group, or null to keep every one. Null is the administrator's informed
+    /// choice on a large preview, made against a stated row count and storage cost; it is honoured literally,
+    /// because a "full data set" that quietly still capped would send them hunting through a drill-down for objects
+    /// it had dropped.
+    /// </param>
+    /// <param name="maximumValuePairsPerGroup">
+    /// The value-pair cardinality guard. Overridable for tests; production uses
+    /// <see cref="DefaultMaximumValuePairsPerGroup"/>.
+    /// </param>
+    public PreviewSummariser(int? maximumDeltasPerGroup, int maximumValuePairsPerGroup = DefaultMaximumValuePairsPerGroup)
     {
-        if (maximumDeltasPerGroup < 1)
+        if (maximumDeltasPerGroup is < 1)
             throw new ArgumentOutOfRangeException(nameof(maximumDeltasPerGroup), maximumDeltasPerGroup,
                 "A preview must keep at least one delta per group, or its summary can never be drilled into.");
 
+        if (maximumValuePairsPerGroup < 1)
+            throw new ArgumentOutOfRangeException(nameof(maximumValuePairsPerGroup), maximumValuePairsPerGroup,
+                "A group must be allowed to name at least one value pair, or no preview could ever describe a change by its values.");
+
         _maximumDeltasPerGroup = maximumDeltasPerGroup;
+        _maximumValuePairsPerGroup = maximumValuePairsPerGroup;
     }
 
     /// <summary>Every delta seen, including those not kept. The unit the Activity reports progress in.</summary>
@@ -59,14 +93,50 @@ public class PreviewSummariser
 
         // The count moves for every delta; the kept rows stop at the cap. That asymmetry is the point.
         accumulator.ObjectCount++;
-        if (accumulator.Kept.Count < _maximumDeltasPerGroup)
+        if (_maximumDeltasPerGroup is null || accumulator.Kept.Count < _maximumDeltasPerGroup)
             accumulator.Kept.Add(delta);
         else
             AnyGroupCapped = true;
+
+        AccumulateValuePair(accumulator, delta);
+    }
+
+    private void AccumulateValuePair(GroupAccumulator accumulator, PreviewDelta delta)
+    {
+        if (accumulator.ValuePairsExceededGuard)
+            return;
+
+        var pair = new ValuePairKey(delta.OldValue, delta.NewValue);
+        if (!accumulator.ValuePairs.TryGetValue(pair, out var pairAccumulator))
+        {
+            if (accumulator.ValuePairs.Count == _maximumValuePairsPerGroup)
+            {
+                // One pair too many. The decision is final for this group rather than re-evaluated later: a stream
+                // cannot un-see the pairs it has already produced, and holding them on the chance that no more
+                // arrive is exactly the unbounded memory the guard exists to prevent.
+                accumulator.ValuePairsExceededGuard = true;
+                accumulator.ValuePairs.Clear();
+                return;
+            }
+
+            pairAccumulator = new PairAccumulator();
+            accumulator.ValuePairs.Add(pair, pairAccumulator);
+        }
+
+        pairAccumulator.ObjectCount++;
+        if (pairAccumulator.Reserve.Count < ValuePairExampleReserve)
+            pairAccumulator.Reserve.Add(delta);
     }
 
     /// <summary>
     /// The summary groups, largest first, each carrying the delta rows kept for it.
+    ///
+    /// A coarse group whose value pairs stayed within the guard is emitted as one group per pair, and the rows kept
+    /// for the coarse group are partitioned between them by value. That keeps the number of persisted rows what it
+    /// would have been without the split, which matters because the storage estimate an administrator agreed to is
+    /// calculated in rows. Where the partition leaves a pair with nothing (an adapter that yields its deltas in
+    /// value order fills the coarse group's kept rows from the first pair alone), the pair's own reserve stands in,
+    /// so a group that can be seen can always be drilled into.
     /// </summary>
     /// <param name="activityId">The preview's Activity, which owns every row produced here.</param>
     /// <param name="connectedSystemNames">
@@ -81,19 +151,43 @@ public class PreviewSummariser
         return
         [
             .. _groups
+                .SelectMany(g => BuildCandidates(g.Key, g.Value))
                 // Deterministic beyond the obvious sort: two groups of equal size must land in the same order on
-                // every run, or the same preview re-read looks like a different one.
-                .OrderByDescending(g => g.Value.ObjectCount)
-                .ThenBy(g => g.Key.TransitionType)
-                .ThenBy(g => g.Key.ObjectTypeName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(g => g.Key.AttributeName, StringComparer.OrdinalIgnoreCase)
-                .Select(g => BuildGroup(activityId, g.Key, g.Value, connectedSystemNames))
+                // every run, or the same preview re-read looks like a different one. Values sort ordinally, because
+                // two values differing only in case are a real difference and must not tie.
+                .OrderByDescending(c => c.ObjectCount)
+                .ThenBy(c => c.Key.TransitionType)
+                .ThenBy(c => c.Key.ObjectTypeName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.Key.AttributeName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.OldValue, StringComparer.Ordinal)
+                .ThenBy(c => c.NewValue, StringComparer.Ordinal)
+                .Select(c => BuildGroup(activityId, c, connectedSystemNames))
         ];
     }
 
-    private ConfigurationChangePreviewGroup BuildGroup(Guid activityId, GroupKey key, GroupAccumulator accumulator,
+    private static IEnumerable<GroupCandidate> BuildCandidates(GroupKey key, GroupAccumulator accumulator)
+    {
+        if (accumulator.ValuePairsExceededGuard)
+            return [new GroupCandidate(key, null, null, accumulator.ObjectCount, accumulator.Kept)];
+
+        return accumulator.ValuePairs.Select(entry => BuildCandidate(key, accumulator, entry.Key, entry.Value));
+    }
+
+    private static GroupCandidate BuildCandidate(GroupKey key, GroupAccumulator accumulator, ValuePairKey pair,
+        PairAccumulator pairAccumulator)
+    {
+        var kept = accumulator.Kept
+            .Where(d => d.OldValue == pair.OldValue && d.NewValue == pair.NewValue)
+            .ToList();
+
+        return new GroupCandidate(key, pair.OldValue, pair.NewValue, pairAccumulator.ObjectCount,
+            kept.Count > 0 ? kept : pairAccumulator.Reserve);
+    }
+
+    private static ConfigurationChangePreviewGroup BuildGroup(Guid activityId, GroupCandidate candidate,
         IReadOnlyDictionary<int, string> connectedSystemNames)
     {
+        var key = candidate.Key;
         var group = new ConfigurationChangePreviewGroup
         {
             ActivityId = activityId,
@@ -105,13 +199,15 @@ public class PreviewSummariser
                 ? name
                 : null,
             AttributeName = key.AttributeName,
-            ObjectCount = accumulator.ObjectCount,
-            DeltasSampled = accumulator.ObjectCount > accumulator.Kept.Count
+            OldValue = candidate.OldValue,
+            NewValue = candidate.NewValue,
+            ObjectCount = candidate.ObjectCount,
+            DeltasSampled = candidate.ObjectCount > candidate.Kept.Count
         };
 
         // GroupId is left alone deliberately: the group has no id until it is inserted, and EF fills the foreign key
         // from this navigation when it saves the two together.
-        group.Deltas = [.. accumulator.Kept.Select(d => new ConfigurationChangePreviewDelta
+        group.Deltas = [.. candidate.Kept.Select(d => new ConfigurationChangePreviewDelta
         {
             ActivityId = activityId,
             TransitionType = d.TransitionType,
@@ -136,8 +232,8 @@ public class PreviewSummariser
         [.. _groups.Keys.Where(k => k.ConnectedSystemId.HasValue).Select(k => k.ConnectedSystemId!.Value).Distinct()];
 
     /// <summary>
-    /// v1's grouping dimensions. A dimension the adapter left null is part of the key as null, so "no attribute"
-    /// groups separately from "the Email attribute" rather than silently merging with it.
+    /// The coarse grouping dimensions. A dimension the adapter left null is part of the key as null, so "no
+    /// attribute" groups separately from "the Email attribute" rather than silently merging with it.
     /// </summary>
     private record GroupKey(
         ActivityRunProfileExecutionItemSyncOutcomeType TransitionType,
@@ -146,10 +242,32 @@ public class PreviewSummariser
         int? ConnectedSystemId,
         string? AttributeName);
 
+    /// <summary>
+    /// The fine grouping dimension. Compared ordinally (the record's default for strings), so a change that only
+    /// alters casing is a distinct pair rather than a group that appears to change nothing.
+    /// </summary>
+    private record ValuePairKey(string? OldValue, string? NewValue);
+
+    /// <summary>One group as it will be emitted, after the decision to split by value pair or not has been made.</summary>
+    private record GroupCandidate(GroupKey Key, string? OldValue, string? NewValue, int ObjectCount,
+        IReadOnlyList<PreviewDelta> Kept);
+
     private sealed class GroupAccumulator
     {
         public int ObjectCount { get; set; }
 
         public List<PreviewDelta> Kept { get; } = [];
+
+        public Dictionary<ValuePairKey, PairAccumulator> ValuePairs { get; } = [];
+
+        /// <summary>True once this group has seen more distinct value pairs than are worth naming.</summary>
+        public bool ValuePairsExceededGuard { get; set; }
+    }
+
+    private sealed class PairAccumulator
+    {
+        public int ObjectCount { get; set; }
+
+        public List<PreviewDelta> Reserve { get; } = [];
     }
 }

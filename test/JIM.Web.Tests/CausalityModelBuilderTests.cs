@@ -90,7 +90,8 @@ public class CausalityModelBuilderTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] = CausalityLane.Identity,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = CausalityLane.Identity,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = CausalityLane.Identity
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = CausalityLane.Identity,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = CausalityLane.Identity
         };
 
         Assert.That(expectedLanes.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

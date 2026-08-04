@@ -121,6 +121,17 @@ Describe 'Get-JIMActivityProgressDisplay' {
             $result.PercentComplete | Should -Be 29
         }
 
+        It 'Reports what has been processed when the run has no countable total' {
+            # A paged import never learns a total. The count used to reach the display only via the
+            # progress message; that message now narrates and leaves the numbers to the counters.
+            $snapshot = New-ProgressSnapshot -ObjectsProcessed 3500 -ObjectsToProcess 0
+
+            $result = Invoke-ProgressDisplay -Progress $snapshot -ElapsedSeconds 42
+
+            $result.Status | Should -BeLike '*3500 objects processed*'
+            $result.PercentComplete | Should -Be -1
+        }
+
         It 'Falls back to elapsed time when the run has no countable total' {
             $snapshot = New-ProgressSnapshot -ObjectsProcessed 0 -ObjectsToProcess 0
 

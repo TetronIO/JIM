@@ -405,7 +405,11 @@
         {
             MetaverseObjectDeletionRule.Manual => "Manual deletion only - objects are never automatically deleted",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => $"Delete when all connectors disconnect{gracePeriod}",
-            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => $"Delete when authoritative source disconnects{gracePeriod}",
+            // Include the trigger mode (#119) so the list reads the same as the detail page's radio options
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected =>
+                header.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+                    ? $"All sources disconnect: delete only once every selected authoritative source has disconnected{gracePeriod}"
+                    : $"Specific source(s) disconnect: delete when any one of the selected authoritative sources disconnects{gracePeriod}",
             _ => "Unknown deletion rule"
         };
     }

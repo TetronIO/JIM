@@ -118,8 +118,10 @@ public class ConfigurationChangePreviewServerTests
                 DefaultValue = threshold.ToString()
             });
 
-    private static ConfigurationChangePreviewRequest NewRequest() => new()
+    private static ConfigurationChangePreviewRequest NewRequest(
+        ConfigurationChangePreviewDeltaPersistence deltaPersistence = ConfigurationChangePreviewDeltaPersistence.Capped) => new()
     {
+        DeltaPersistence = deltaPersistence,
         Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
         TargetId = ObjectTypeId,
         TargetName = "User",
@@ -268,7 +270,7 @@ public class ConfigurationChangePreviewServerTests
     #region Stages 3 and 4: grouping, capping and progress
 
     [Test]
-    public async Task RunPreviewAsync_DeltaStream_GroupsExactlyByTransitionAndAttributeAsync()
+    public async Task RunPreviewAsync_DeltaStream_GroupsExactlyByTransitionAttributeAndValuePairAsync()
     {
         _adapter.Deltas.AddRange(
         [
@@ -281,9 +283,11 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
-        Assert.That(_persistedGroups, Has.Count.EqualTo(2));
+        // Three groups, not two: the two attribute-flow deltas carry different value pairs, and two pairs is well
+        // inside the cardinality guard, so each is named rather than merged into one "Email changed" row.
+        Assert.That(_persistedGroups, Has.Count.EqualTo(3));
         var scope = _persistedGroups.Single(g => g.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope);
-        var flow = _persistedGroups.Single(g => g.AttributeName == "Email");
+        var flow = _persistedGroups.Where(g => g.AttributeName == "Email").ToList();
         Assert.Multiple(() =>
         {
             Assert.That(scope.ObjectCount, Is.EqualTo(3));
@@ -291,7 +295,9 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(scope.DeltasSampled, Is.False);
             Assert.That(scope.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
             Assert.That(scope.MetaverseObjectTypeName, Is.EqualTo("User"));
-            Assert.That(flow.ObjectCount, Is.EqualTo(2));
+            Assert.That(scope.OldValue, Is.Null, "A transition with no attribute has no values to name.");
+            Assert.That(flow.Sum(g => g.ObjectCount), Is.EqualTo(2));
+            Assert.That(flow.Select(g => g.NewValue), Is.EquivalentTo(new[] { "Ada@new.example", "Grace@new.example" }));
             Assert.That(_persistedGroups[0].ObjectCount, Is.GreaterThanOrEqualTo(_persistedGroups[1].ObjectCount),
                 "The landing view reads largest group first; ordering it at write time keeps every reader consistent.");
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
@@ -320,6 +326,65 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(group.Deltas, Has.Count.EqualTo(ConfigurationChangePreviewServer.MaximumDeltasPerGroup));
             Assert.That(group.DeltasSampled, Is.True);
             Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
+        });
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_FullDataSetRequested_KeepsEveryDeltaAsync()
+    {
+        // The informed choice an administrator makes before a large preview runs has to actually change what is
+        // kept. A "keep the full data set" option that still capped would be worse than not offering the choice:
+        // they would go looking through a drill-down for objects it had silently dropped.
+        var overCap = ConfigurationChangePreviewServer.MaximumDeltasPerGroup + 5;
+        for (var i = 0; i < overCap; i++)
+            _adapter.Deltas.Add(OutOfScope($"User {i}"));
+
+        var server = NewServer();
+        var request = NewRequest(ConfigurationChangePreviewDeltaPersistence.Full);
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
+
+        var group = _persistedGroups.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(group.ObjectCount, Is.EqualTo(overCap));
+            Assert.That(group.Deltas, Has.Count.EqualTo(overCap), "nothing was capped, so nothing may be missing");
+            Assert.That(group.DeltasSampled, Is.False);
+            Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
+        });
+    }
+
+    [Test]
+    public async Task RunPreviewAsync_FullDataSetRequestedInAnotherProcess_IsHonouredFromThePreviewRowAsync()
+    {
+        // A preview dispatched to JIM.Worker is run from the persisted preview, so the choice has to survive on it
+        // rather than in the request object the portal happened to be holding. Re-running with a default request
+        // proves the row is what decides.
+        var overCap = ConfigurationChangePreviewServer.MaximumDeltasPerGroup + 5;
+        for (var i = 0; i < overCap; i++)
+            _adapter.Deltas.Add(OutOfScope($"User {i}"));
+
+        var server = NewServer();
+        var start = await server.StartPreviewAsync(NewRequest(ConfigurationChangePreviewDeltaPersistence.Full));
+        await server.RunPreviewAsync(start.ActivityId, NewRequest(), CancellationToken.None);
+
+        Assert.That(_persistedGroups.Single().Deltas, Has.Count.EqualTo(overCap));
+    }
+
+    [Test]
+    public async Task EstimatePreviewCostAsync_BeforeAnythingIsStarted_AnswersWithoutCreatingAnActivityAsync()
+    {
+        // The cap prompt has to know how big the answer would be *before* asking whether to keep all of it. An
+        // estimate that created an Activity would leave one behind every time an administrator declined.
+        _adapter.Estimate = new PreviewCostEstimate(120_000, 2);
+
+        var estimate = await NewServer().EstimatePreviewCostAsync(NewRequest());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(estimate.EstimatedDeltaRows, Is.EqualTo(240_000L));
+            Assert.That(_activity, Is.Null, "asking what a preview would cost is not asking for a preview");
+            Assert.That(_preview, Is.Null);
         });
     }
 

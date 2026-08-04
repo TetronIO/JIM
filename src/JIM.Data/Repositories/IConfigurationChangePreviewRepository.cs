@@ -46,5 +46,12 @@ public interface IConfigurationChangePreviewRepository
     /// A page of drill-down rows, optionally restricted to one summary group. Ordered deterministically so paging
     /// is stable: the same page shows the same rows on every request.
     /// </summary>
-    Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize);
+    /// <param name="search">
+    /// Optional case-insensitive text filter over the object's display name, the attribute, and the old and new
+    /// values. Applied in the query rather than to the page, because a group holds far more rows than any page: a
+    /// filter over an already-fetched page would search a fraction of the group and report the result as the whole
+    /// answer.
+    /// </param>
+    Task<PagedResultSet<ConfigurationChangePreviewDelta>> GetPreviewDeltasAsync(Guid activityId, Guid? groupId, int page, int pageSize,
+        string? search = null);
 }

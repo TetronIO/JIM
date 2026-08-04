@@ -105,6 +105,11 @@
             <MudText Typo="Typo.button">Status</MudText>
         </MudTh>
         <MudTh>
+            <MudTooltip Text="The Connected System whose disconnection triggered the scheduled deletion" Arrow="true" Placement="Placement.Top">
+                <MudText Typo="Typo.button">Triggered By</MudText>
+            </MudTooltip>
+        </MudTh>
+        <MudTh>
             <MudTableSortLabel SortLabel="disconnected" T="PendingDeletionItem" InitialDirection="SortDirection.Ascending">
                 <MudText Typo="Typo.button">Disconnected</MudText>
             </MudTableSortLabel>
@@ -145,22 +150,34 @@
                 </MudChip>
             }
         </MudTd>
+        <MudTd DataLabel="Triggered By">
+            @if (string.IsNullOrEmpty(context.TriggeredBySystemName))
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                @context.TriggeredBySystemName
+            }
+        </MudTd>
         <MudTd DataLabel="Disconnected">@context.LastConnectorDisconnectedDate.ToFriendlyDate()</MudTd>
         <MudTd DataLabel="Deletion Eligible">
             @if (context.DeletionEligibleDate.HasValue)
             {
                 if (context.DaysUntilDeletion.HasValue)
                 {
-                    if (context.DaysUntilDeletion.Value <= 0)
+                    var daysUntilDeletion = context.DaysUntilDeletion.Value;
+                    var deletionEligibleDate = context.DeletionEligibleDate.Value;
+                    if (daysUntilDeletion <= 0)
                     {
-                        <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")" Arrow="true" Placement="Placement.Top">
-                            <MudText Color="Color.Error">Overdue by @Math.Abs(context.DaysUntilDeletion.Value) days</MudText>
+                        <MudTooltip Text="@deletionEligibleDate.ToString("g")" Arrow="true" Placement="Placement.Top">
+                            <MudText Color="Color.Error">Overdue by @FormatDayCount(Math.Abs(daysUntilDeletion))</MudText>
                         </MudTooltip>
                     }
                     else
                     {
-                        <MudTooltip Text="@context.DeletionEligibleDate.Value.ToString("g")" Arrow="true" Placement="Placement.Top">
-                            <span>@context.DaysUntilDeletion days</span>
+                        <MudTooltip Text="@deletionEligibleDate.ToString("g")" Arrow="true" Placement="Placement.Top">
+                            <span>@FormatDayCount(daysUntilDeletion)</span>
                         </MudTooltip>
                     }
                 }
@@ -300,7 +317,8 @@
                     ? (int)Math.Ceiling((mvo.DeletionEligibleDate.Value - DateTime.UtcNow).TotalDays)
                     : (int?)null,
                 GracePeriod = mvo.Type?.DeletionGracePeriod,
-                ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0
+                ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0,
+                TriggeredBySystemName = mvo.DeletionTriggeredBySystemName
             }).ToList();
 
             return new TableData<PendingDeletionItem>
@@ -334,6 +352,14 @@
         return Utilities.GetMetaverseObjectHref(item.Id, item.TypePluralName);
     }
 
+    /// <summary>
+    /// Formats a day count with the correct singular or plural unit ("1 day", "3 days").
+    /// </summary>
+    private static string FormatDayCount(int days)
+    {
+        return days == 1 ? "1 day" : $"{days:N0} days";
+    }
+
     // Local display model
     private class PendingDeletionItem
     {
@@ -347,5 +373,11 @@
         public int? DaysUntilDeletion { get; set; }
         public TimeSpan? GracePeriod { get; set; }
         public int ConnectorCount { get; set; }
+
+        /// <summary>
+        /// The name of the Connected System whose disconnection triggered the scheduled deletion (#119).
+        /// Null for deletions scheduled before trigger recording shipped.
+        /// </summary>
+        public string? TriggeredBySystemName { get; set; }
     }
 }

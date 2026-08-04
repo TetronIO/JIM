@@ -85,7 +85,9 @@ public interface ISyncEngine
     /// </summary>
     /// <param name="mvo">The MVO to evaluate.</param>
     /// <param name="disconnectingSystemId">The ID of the Connected System whose CSO was disconnected.</param>
-    /// <param name="remainingCsoCount">The count of CSOs still joined to the MVO after disconnection.</param>
+    /// <param name="remainingConnectedSystemIds">The Connected System ID of each CSO still joined to the
+    /// MVO after disconnection: one entry per CSO, so a system with multiple joined CSOs appears once per
+    /// CSO. The remaining CSO count is derived from this collection's size.</param>
     /// <param name="disconnectingSystemName">
     /// The name of the disconnecting Connected System, used to make the human-readable deletion
     /// reason name the system rather than a bare id. When null, the reason falls back to the id.
@@ -94,8 +96,22 @@ public interface ISyncEngine
     MvoDeletionDecision EvaluateMvoDeletionRule(
         MetaverseObject mvo,
         int disconnectingSystemId,
-        int remainingCsoCount,
+        IReadOnlyCollection<int> remainingConnectedSystemIds,
         string? disconnectingSystemName = null);
+
+    /// <summary>
+    /// Determines whether a system rejoining an MVO during its deletion grace period should cancel the
+    /// scheduled deletion. Pure decision only; the orchestrator clears the deletion markers.
+    /// The answer is mode-aware (#119): under WhenLastConnectorDisconnected any rejoin cancels; under
+    /// WhenAuthoritativeSourceDisconnected in Specific sources mode only the recorded triggering system's
+    /// rejoin cancels, while in All sources mode any listed source's rejoin cancels. MVOs marked before
+    /// the triggering system was recorded (null <see cref="MetaverseObject.DeletionTriggeredBySystemId"/>)
+    /// fall back to cancel-on-any-rejoin.
+    /// </summary>
+    /// <param name="mvo">The MVO with a scheduled deletion. Its Type must be loaded.</param>
+    /// <param name="rejoiningSystemId">The ID of the Connected System whose CSO has rejoined.</param>
+    /// <returns>True when the scheduled deletion should be cancelled.</returns>
+    bool ShouldCancelScheduledDeletion(MetaverseObject mvo, int rejoiningSystemId);
 
     /// <summary>
     /// Applies pending attribute value changes to a Metaverse Object.

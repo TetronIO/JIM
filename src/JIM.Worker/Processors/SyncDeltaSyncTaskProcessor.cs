@@ -253,12 +253,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // See SyncFullSyncTaskProcessor for detailed explanation.
                 _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion
+                // Update progress with page completion. The call persists the Activity's counters,
+                // which the portal renders the count, rate and time remaining from; see the same
+                // point in SyncFullSyncTaskProcessor for why the message itself stays empty.
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +
-                        throughput.FormatThroughput(_activity.ObjectsProcessed, totalObjectsToProcess);
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, message);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
                 }
 
                 LogPageMemoryDiagnostics(page, totalCsoPages);

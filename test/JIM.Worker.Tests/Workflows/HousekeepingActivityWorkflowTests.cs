@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -233,6 +234,53 @@ public class HousekeepingActivityWorkflowTests
             "The outcome must name the Connected System the account is being deleted from; the identity is named by the item it hangs off");
         Assert.That(activity.TotalPendingExports, Is.EqualTo(1),
             "TotalPendingExports must count the staged deprovisioning export");
+    }
+
+    /// <summary>
+    /// Decision-time policy snapshot carry-through (#119): when housekeeping deletes a Metaverse Object that
+    /// carries a DeletionPolicySnapshotJson captured at mark-time, the snapshot must be copied onto the
+    /// deletion record it writes, so the final record reflects the policy that scheduled the deletion, not
+    /// the configuration at execution time.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_MvoCarryingPolicySnapshot_CopiesSnapshotOntoDeletionRecordAsync()
+    {
+        // Arrange: an eligible Metaverse Object carrying the mark-time snapshot and triggering system fields.
+        var markTimeSnapshot = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            TriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            SelectedSourceSystemIds = [1],
+            SelectedSourceSystemNames = ["Source HR"],
+            GracePeriod = TimeSpan.FromMinutes(1),
+            TriggeringSystemId = 1,
+            TriggeringSystemName = "Source HR"
+        };
+        var scheduledMvo = CreateEligiblePersonMvo("Sana Scheduled");
+        scheduledMvo.DeletionTriggeredBySystemId = 1;
+        scheduledMvo.DeletionTriggeredBySystemName = "Source HR";
+        scheduledMvo.DeletionPolicySnapshotJson = markTimeSnapshot.ToJson();
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([scheduledMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        // Assert: the deletion record carries the mark-time snapshot verbatim.
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var deletionRpei = _persistedRpeis
+            .Where(r => r.ActivityId == activity.Id)
+            .Single(r => r.ObjectChangeType == ObjectChangeType.Deleted);
+        Assert.That(deletionRpei.DeletionPolicySnapshotJson, Is.EqualTo(scheduledMvo.DeletionPolicySnapshotJson),
+            "The housekeeping deletion record must carry the policy snapshot captured when the deletion was scheduled");
+
+        var carried = MvoDeletionPolicySnapshot.FromJson(deletionRpei.DeletionPolicySnapshotJson);
+        Assert.That(carried, Is.Not.Null, "The carried snapshot must remain deserialisable");
+        Assert.That(carried!.TriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
+        Assert.That(carried!.TriggeringSystemId, Is.EqualTo(1));
+        Assert.That(carried!.TriggeringSystemName, Is.EqualTo("Source HR"));
+        Assert.That(carried!.GracePeriod, Is.EqualTo(TimeSpan.FromMinutes(1)));
     }
 
     /// <summary>

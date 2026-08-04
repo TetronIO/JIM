@@ -68,3 +68,33 @@ public enum FineGrainedPolicySignal
     /// </summary>
     CouldNotDetermine = 2
 }
+
+/// <summary>
+/// Whether trying a password set again is worth anything, which is the most useful single thing to tell an
+/// administrator looking at a failure (issue #1172).
+/// </summary>
+public enum PasswordRetryVerdict
+{
+    /// <summary>
+    /// The Connected System read this password and refused it, so sending the same one again fails identically.
+    /// A different password may well be accepted.
+    /// </summary>
+    RetryWithADifferentPassword = 0,
+
+    /// <summary>
+    /// Nothing was established about the password. The same request is worth repeating once whatever went wrong
+    /// has stopped going wrong.
+    /// </summary>
+    RetryUnchanged = 1,
+
+    /// <summary>
+    /// Nothing changes until a person alters something outside JIM, most often granting a right. Retrying in
+    /// the meantime achieves nothing.
+    /// </summary>
+    NeedsSomebodyElse = 2,
+
+    /// <summary>
+    /// The Connected System will answer identically for ever, so no retry is offered at all.
+    /// </summary>
+    NeverHelps = 3
+}

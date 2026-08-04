@@ -585,6 +585,18 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets the in-app link for a Connected System Object activity target (a password set, for example), or null
+    /// when either identifier is unknown. Both are needed: the object's page is nested under its Connected System.
+    /// </summary>
+    public static string? GetConnectedSystemObjectActivityHref(int? connectedSystemId, Guid? connectedSystemObjectId)
+    {
+        if (!connectedSystemId.HasValue || !connectedSystemObjectId.HasValue)
+            return null;
+
+        return $"/admin/connected-systems/{connectedSystemId}/connector-space/{connectedSystemObjectId}";
+    }
+
+    /// <summary>
     /// Gets the in-app link for a Connected System activity target, or null when the system id is unknown.
     /// Operations whose subject lives on a specific tab deep-link there: schema imports to the Schema tab, hierarchy
     /// imports to the Partitions &amp; Containers tab.

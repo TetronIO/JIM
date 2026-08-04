@@ -86,7 +86,9 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] =
             new OutcomeDisplay("Would become deletion eligible", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] =
-            new OutcomeDisplay("Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash)
+            new OutcomeDisplay("Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] =
+            new OutcomeDisplay("Deletion date would change", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar)
     };
 
     /// <summary>

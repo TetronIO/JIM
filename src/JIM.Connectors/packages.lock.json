@@ -112,6 +112,13 @@
           "Serilog": "[4.4.0, )"
         }
       },
+      "jim.scim": {
+        "type": "Project",
+        "dependencies": {
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )"
+        }
+      },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {

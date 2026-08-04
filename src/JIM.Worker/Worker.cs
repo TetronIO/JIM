@@ -794,7 +794,12 @@ public class Worker : BackgroundService
                         Id = Guid.NewGuid(),
                         ObjectChangeType = ObjectChangeType.Deleted,
                         DisplayNameSnapshot = mvo.Name,
-                        ObjectTypeSnapshot = mvo.Type?.Name
+                        ObjectTypeSnapshot = mvo.Type?.Name,
+                        // Decision-time policy snapshot carry-through (#119): the snapshot captured when
+                        // the deletion was scheduled rides on the MVO; copying it onto the final deletion
+                        // record keeps the record reflecting the policy that scheduled the deletion (and
+                        // its triggering system), not the configuration at execution time.
+                        DeletionPolicySnapshotJson = mvo.DeletionPolicySnapshotJson
                     };
                     var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)

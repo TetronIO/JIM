@@ -54,6 +54,23 @@ JIM automatically detects the directory type during schema discovery by inspecti
 - **Authentication types**<br /> Simple bind or NTLM authentication.
 - **Automatic retry**<br /> Configurable retry with exponential backoff for transient failures.
 
+### Directory Capabilities Card
+
+The Connected System's **Details** tab shows a **Directory Capabilities** card with the facts JIM has detected about the target directory:
+
+| Fact | Shown when |
+|------|------------|
+| Directory Type | Always, once detected (Active Directory, Samba AD, OpenLDAP, or Generic) |
+| Vendor | The directory reported one |
+| DNS Host Name | The directory reported one |
+| Paging | Always, once detected (Supported / Not Supported; Samba AD reports Not Supported, see [Supported Directories](#supported-directories)) |
+| Pinned Directory Server | A domain controller has been [pinned](#domain-controller-discovery-and-pinning) |
+| Invocation Id | JIM could read the pinned domain controller's invocationId |
+
+These are read from data JIM already captured during a previous connection; viewing the card never opens a new connection to the directory. Before the first successful connection, the card shows a hint rather than an error. It is read-only: there is nothing here to configure.
+
+Available to automation via `GET /connected-systems/{id}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
+
 ## Connection Settings
 
 ### Connectivity
@@ -61,10 +78,30 @@ JIM automatically detects the directory type during schema discovery by inspecti
 | Setting | Description | Default | Example |
 |---------|-------------|---------|---------|
 | Host | Hostname or IP address of the directory server. IP address is fastest. | *(required)* | `dc01.corp.local` |
-| Preferred Domain Controller | Applies to Active Directory and Samba AD. A specific domain controller FQDN to always connect to. When left blank, JIM automatically discovers and pins the domain controller it reaches via Host; see [Domain Controller Discovery and Pinning](#domain-controller-discovery-and-pinning) below. For LDAPS, use a name present in the domain controller's certificate. | *(blank; auto-discover)* | `dc01.corp.local` |
+| Preferred Domain Controller | Applies to Active Directory and Samba AD. A specific domain controller FQDN to always connect to. Use the **Discover...** action beside the field to list the forest's domain controllers rather than typing one blind; see [Discovering Domain Controllers](#discovering-domain-controllers) below. When left blank, JIM automatically discovers and pins the domain controller it reaches via Host; see [Domain Controller Discovery and Pinning](#domain-controller-discovery-and-pinning) below. For LDAPS, use a name present in the domain controller's certificate. | *(blank; auto-discover)* | `dc01.corp.local` |
 | Port | Port for the LDAP connection. Use 389 for LDAP or 636 for LDAPS. | `389` | `636` |
 | Use Secure Connection (LDAPS)? | Enable LDAPS (SSL/TLS) for encrypted communication. Certificate validation is always applied; see [Certificate validation](#certificate-validation). | `false` | `true` |
 | Connection Timeout | Time in seconds to wait before giving up on a connection attempt. | `10` | `30` |
+
+### Discovering Domain Controllers
+
+Administrators often do not know which domain controller to enter in Preferred Domain Controller. Rather than typing a hostname blind, use the **Discover...** action beside the field on the Connected System's settings page: it lists every domain controller in the forest, with the Active Directory Site each belongs to, and clicking one fills the field with your choice.
+
+Discovery only ever informs; it never writes to the setting on its own. Preferred Domain Controller remains ordinary free text throughout, and nothing changes until you click a discovered server (or type a value yourself) and save the Connected System's settings.
+
+The action is enabled once the connectivity settings above (Host, Port, Username, Password) are filled in; you do not need to have saved them first, so a system can be configured and its domain controllers discovered in one sitting. Discovery is only supported for Active Directory and Samba AD; for OpenLDAP or Generic directories, which have no concept of Sites, the dialog reports that discovery is not supported and you can simply type a hostname instead. Discovery works by querying the forest's `CN=Sites,CN=Configuration` hierarchy, so it uses the same credentials already configured for this Connected System and needs no extra directory permissions or DNS lookups. If the directory cannot be reached, or the credentials are refused, the dialog shows the failure with a Retry action rather than crashing the page.
+
+The same discovery is available beyond the portal:
+
+```powershell title="PowerShell"
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 3
+```
+
+```http title="REST API"
+GET /api/v1/synchronisation/connected-systems/3/directory-servers
+```
+
+See [`Get-JIMConnectedSystemDirectoryServer`](../powershell/connected-systems.md#get-jimconnectedsystemdirectoryserver) in the PowerShell reference.
 
 ### Domain Controller Discovery and Pinning
 

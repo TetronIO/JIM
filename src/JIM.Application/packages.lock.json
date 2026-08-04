@@ -207,6 +207,7 @@
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
           "JIM.Models": "[0.14.0, )",
+          "JIM.Scim": "[0.14.0, )",
           "JIM.Utilities": "[0.14.0, )",
           "System.DirectoryServices.Protocols": "[10.0.10, )"
         }
@@ -222,6 +223,13 @@
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Serilog": "[4.4.0, )"
+        }
+      },
+      "jim.scim": {
+        "type": "Project",
+        "dependencies": {
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )"
         }
       },
       "jim.utilities": {

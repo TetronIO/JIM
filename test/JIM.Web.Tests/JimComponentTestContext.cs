@@ -20,7 +20,24 @@ public abstract class JimComponentTestContext : BunitContext
 {
     protected JimComponentTestContext()
     {
+        ConfigureAdditionalServices();
         Services.AddMudServices();
         JSInterop.Mode = JSRuntimeMode.Loose;
+    }
+
+    /// <summary>
+    /// Override to register test-specific services (e.g. a fake <c>IJimApplicationFactory</c>) on
+    /// <see cref="BunitContext.Services"/> before the base MudBlazor services are added.
+    /// <para>
+    /// This cannot be done from a derived fixture's <c>[SetUp]</c>: bUnit locks the service provider against
+    /// further registration once a service has been resolved from it, and <c>AddMudServices()</c> /
+    /// <c>JSInterop.Mode</c> below both do so as part of this base constructor, which always runs before
+    /// <c>[SetUp]</c>. Because this runs from within the base constructor, it executes before the derived
+    /// class's own field initializers, so build whatever is registered here entirely inside the override
+    /// rather than relying on derived-class fields.
+    /// </para>
+    /// </summary>
+    protected virtual void ConfigureAdditionalServices()
+    {
     }
 }

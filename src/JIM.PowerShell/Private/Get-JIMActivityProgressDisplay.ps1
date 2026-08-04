@@ -67,6 +67,10 @@ function Get-JIMActivityProgressDisplay {
             $percent = [Math]::Max(0, [Math]::Min(100, [int](($objectsProcessed / $objectsToProcess) * 100)))
         }
         $statusText += " - $objectsProcessed of $objectsToProcess objects"
+    } elseif ($objectsProcessed -gt 0) {
+        # A paged import never learns a total, so there is no percentage to show; what has arrived
+        # so far is still worth reporting, and the progress message no longer carries it.
+        $statusText += " - $objectsProcessed objects processed"
     } elseif ($ElapsedSeconds -ge 0) {
         $statusText += " - Elapsed: ${ElapsedSeconds}s"
     }

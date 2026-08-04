@@ -48,6 +48,7 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, "Would leave scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Would become deletion eligible", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Deletion date would change", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
         (ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "Deprovision queued", "CSO Pending Delete", CausalityTone.Error, Icons.Material.Filled.AutoDelete)
     ];
 

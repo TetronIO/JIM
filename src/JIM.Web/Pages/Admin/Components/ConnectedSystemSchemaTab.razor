@@ -91,6 +91,19 @@
                 </MudAlert>
             }
 
+            @if (result.DiscoveryWarnings.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                    <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. Review them so a missing attribute can be traced to the Connected System rather than JIM.
+                    <ul class="mt-1 mb-0">
+                        @foreach (var warning in result.DiscoveryWarnings)
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </MudAlert>
+            }
+
             @if (!result.HasChanges)
             {
                 <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>

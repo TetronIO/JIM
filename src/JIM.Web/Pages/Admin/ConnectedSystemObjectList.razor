@@ -18,13 +18,13 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
+<PageTitle>Connector Space: @_connectedSystemHeader?.Name</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector Space:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @if (_showIntro)
 {
     <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
-        This is the connector space for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
+        The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
     </MudAlert>
 }
 

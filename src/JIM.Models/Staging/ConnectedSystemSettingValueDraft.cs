@@ -14,7 +14,10 @@ namespace JIM.Models.Staging;
 /// <para>
 /// This does not widen what an administrator can reach: saving a Connected System already opens a connection to
 /// whatever address its settings name, so the same role can already make JIM connect anywhere. Drafts are never
-/// persisted, and never applied to encrypted settings.
+/// persisted. A plain <see cref="StringValue"/> draft is never applied to an encrypted setting; a credential
+/// only travels via the explicit <see cref="StringEncryptedValue"/> channel, and only flows that genuinely
+/// need to authenticate (Discover Domain Controllers) supply it. The certificate read/trust actions never do:
+/// nothing needed to work out where a system connects is a secret.
 /// </para>
 /// </remarks>
 public class ConnectedSystemSettingValueDraft
@@ -25,6 +28,13 @@ public class ConnectedSystemSettingValueDraft
     public int SettingId { get; set; }
 
     public string? StringValue { get; set; }
+
+    /// <summary>
+    /// An unsaved value for an encrypted setting (a credential), supplied only by flows that must
+    /// authenticate with what the administrator has typed, e.g. discovering domain controllers on a
+    /// Connected System whose settings have never been saved. Ignored for non-encrypted settings.
+    /// </summary>
+    public string? StringEncryptedValue { get; set; }
 
     public int? IntValue { get; set; }
 

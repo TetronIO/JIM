@@ -23,6 +23,14 @@ public static class RunPhaseKeys
     /// <summary>Fetching objects from the Connected System, and processing each page as it arrives. Hosts the Connector's own phases.</summary>
     public const string ImportFetch = "import.fetch";
 
+    /// <summary>
+    /// Matching the objects a page delivered against the Connected System Objects already held.
+    /// Nested inside <see cref="ImportFetch"/> rather than following it, because a Connector that
+    /// returns a page at a time alternates between the two, and a top-level step that un-ticked
+    /// once per page would read as the run going backwards.
+    /// </summary>
+    public const string ImportProcess = "import.process";
+
     /// <summary>Working out which Connected System Objects are absent from the source and marking them deleted. Full Imports only.</summary>
     public const string ImportDeletions = "import.deletions";
 
@@ -49,6 +57,9 @@ public static class RunPhaseKeys
     /// <summary>Resolving references whose target object was only created on a later page of the run.</summary>
     public const string SyncResolveCrossPageReferences = "sync.crosspagereferences";
 
+    /// <summary>Re-evaluating export scope for Metaverse Objects whose scope drifted with the clock rather than with a data change (#892).</summary>
+    public const string SyncReviewExportScope = "sync.scopereview";
+
     // ─── Export ───
 
     /// <summary>Loading Pending Exports and counting the work before the Connector is called.</summary>
@@ -57,6 +68,15 @@ public static class RunPhaseKeys
     /// <summary>Writing changes to the Connected System. Hosts the Connector's own phases.</summary>
     public const string ExportExecute = "export.execute";
 
+    /// <summary>The export's second pass: re-resolving references whose target did not exist during the first pass, and writing what that makes exportable.</summary>
+    public const string ExportDeferred = "export.deferred";
+
     /// <summary>Resolving references recorded in export change history once every exported object exists.</summary>
     public const string ExportResolveReferences = "export.references";
+
+    /// <summary>Bringing containers the export created into JIM's picture of the Connected System, and selecting them.</summary>
+    public const string ExportSelectNewContainers = "export.containers";
+
+    /// <summary>Giving the accounts this export provisioned the initial passwords they are owed, and retrying any still outstanding.</summary>
+    public const string ExportDeliverInitialPasswords = "export.passwords";
 }

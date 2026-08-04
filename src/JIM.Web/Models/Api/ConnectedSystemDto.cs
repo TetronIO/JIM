@@ -360,3 +360,23 @@ public class ConnectedSystemContainerDto
         };
     }
 }
+
+/// <summary>
+/// API representation of a ConnectorCapability: a human-readable fact the Connector detected about the
+/// target system (e.g. an LDAP directory's type, vendor, or paging support), for the "Directory Capabilities"
+/// card on the Connected System details page.
+/// </summary>
+public class ConnectorCapabilityDto
+{
+    public string Name { get; set; } = null!;
+    public string Value { get; set; } = null!;
+
+    public static ConnectorCapabilityDto FromEntity(ConnectorCapability entity)
+    {
+        return new ConnectorCapabilityDto
+        {
+            Name = entity.Name,
+            Value = entity.Value
+        };
+    }
+}
