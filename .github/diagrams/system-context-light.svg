@@ -97,7 +97,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 @media (prefers-reduced-motion: reduce) { .jimdg-packet { display: none; } }
 </style>
   <title id="jimdg-sc-title">JIM System Context</title>
-  <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An OIDC Identity Provider authenticates sign-in. JIM synchronises with Directory Services over LDAP and LDAPS, imports from HR systems via CSV, and reads and writes file systems. Enterprise database connectivity over SQL and cloud application provisioning over SCIM 2.0 are planned.</desc>
+  <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An OIDC Identity Provider authenticates sign-in. JIM synchronises with Directory Services over LDAP and LDAPS, imports from HR systems via CSV, reads and writes file systems, and synchronises with cloud applications over SCIM 2.0. Enterprise database connectivity over SQL is planned.</desc>
   <g id="jimdg-sc-people">
     <rect class="jimdg-stage" x="150" y="36" width="220" height="64" rx="8"/>
     <circle class="jimdg-person-glyph" cx="170" cy="57" r="6"/>
@@ -131,9 +131,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <rect class="jimdg-system-planned" x="705" y="520" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name-planned" x="805" y="548">Enterprise Databases</text>
     <text class="jimdg-system-sub-planned" x="805" y="569">SQL (planned)</text>
-    <rect class="jimdg-system-planned" x="930" y="520" width="200" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="1030" y="548">Cloud Applications</text>
-    <text class="jimdg-system-sub-planned" x="1030" y="569">SCIM 2.0 (planned)</text>
+    <rect class="jimdg-system" x="930" y="520" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="1030" y="548">Cloud Applications</text>
+    <text class="jimdg-system-sub" x="1030" y="569">SCIM 2.0</text>
   </g>
   <g id="jimdg-sc-edges">
     <line class="jimdg-spoke" x1="260" y1="100" x2="491.4" y2="235"/>
@@ -160,9 +160,10 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(805,520) rotate(40.3)"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(640,380) rotate(220.3)"/>
     <text class="jimdg-spoke-label jimdg-anchor-end" x="688" y="430">SQL</text>
-    <line class="jimdg-spoke-planned" x1="700" y1="380" x2="1020.8" y2="516.1"/>
-    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(1030,520) rotate(23)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="900" y="470">provisions · SCIM 2.0</text>
+    <line class="jimdg-spoke" x1="709.2" y1="383.9" x2="1020.8" y2="516.1"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(1030,520) rotate(23)"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,380) rotate(203)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="870" y="474">SCIM 2.0</text>
   </g>
   <g id="jimdg-sc-packets">
     <circle class="jimdg-packet" r="4.5">

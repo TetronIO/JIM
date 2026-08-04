@@ -12,7 +12,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 500" role="img" aria-labelledby="jimdg-cc-title jimdg-cc-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-cc-title">Inside the Connectors library</title>
-  <desc id="jimdg-cc-desc">The JIM.Worker import and export processors invoke the connectors in the JIM.Connectors library. The LDAP Connector reads and writes Directory Services over LDAP and LDAPS; the File Connector reads and writes CSV and flat files, including HR exports. A Database Connector for SQL systems and a SCIM 2.0 Connector for cloud applications are planned.</desc>
+  <desc id="jimdg-cc-desc">The JIM.Worker import and export processors invoke the connectors in the JIM.Connectors library. The LDAP Connector reads and writes Directory Services over LDAP and LDAPS; the File Connector reads and writes CSV and flat files, including HR exports; the SCIM 2.0 Connector reads and writes cloud applications that publish a SCIM 2.0 service provider interface. A Database Connector for SQL systems is planned.</desc>
   <g id="jimdg-cc-worker">
     <rect class="jimdg-stage" x="430" y="20" width="300" height="64" rx="8"/>
     <text class="jimdg-stage-label" x="580" y="46">JIM.Worker</text>
@@ -32,9 +32,9 @@
     <rect class="jimdg-chip-planned" x="620" y="220" width="210" height="70" rx="8"/>
     <text class="jimdg-chip-label-planned" x="725" y="250">Database Connector</text>
     <text class="jimdg-chip-sub-planned" x="725" y="270">SQL (planned)</text>
-    <rect class="jimdg-chip-planned" x="865" y="220" width="210" height="70" rx="8"/>
-    <text class="jimdg-chip-label-planned" x="970" y="250">SCIM 2.0 Connector</text>
-    <text class="jimdg-chip-sub-planned" x="970" y="270">SCIM 2.0 (planned)</text>
+    <rect class="jimdg-chip" x="865" y="220" width="210" height="70" rx="8"/>
+    <text class="jimdg-chip-label" x="970" y="250">SCIM 2.0 Connector</text>
+    <text class="jimdg-chip-sub" x="970" y="270">SCIM 2.0 · HTTPS</text>
   </g>
   <g id="jimdg-cc-systems">
     <rect class="jimdg-system" x="125" y="410" width="220" height="64" rx="8"/>
@@ -46,9 +46,9 @@
     <rect class="jimdg-system-planned" x="615" y="410" width="220" height="64" rx="8"/>
     <text class="jimdg-system-name-planned" x="725" y="438">Enterprise Databases</text>
     <text class="jimdg-system-sub-planned" x="725" y="459">SQL (planned)</text>
-    <rect class="jimdg-system-planned" x="860" y="410" width="220" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="970" y="438">Cloud Applications</text>
-    <text class="jimdg-system-sub-planned" x="970" y="459">SCIM 2.0 (planned)</text>
+    <rect class="jimdg-system" x="860" y="410" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="970" y="438">Cloud Applications</text>
+    <text class="jimdg-system-sub" x="970" y="459">SCIM 2.0 service providers</text>
   </g>
   <g id="jimdg-cc-edges">
     <line class="jimdg-flow" x1="580" y1="84" x2="244.3" y2="216.3"/>
@@ -57,8 +57,8 @@
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(465,220) rotate(130.2)"/>
     <line class="jimdg-spoke-planned" x1="580" y1="84" x2="688.5" y2="212.4"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(695,220) rotate(49.8)"/>
-    <line class="jimdg-spoke-planned" x1="580" y1="84" x2="915.7" y2="216.3"/>
-    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(925,220) rotate(21.5)"/>
+    <line class="jimdg-flow" x1="580" y1="84" x2="915.7" y2="216.3"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(925,220) rotate(21.5)"/>
     <line class="jimdg-spoke" x1="235" y1="300" x2="235" y2="400"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(235,290) rotate(-90)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(235,410) rotate(90)"/>
@@ -67,8 +67,9 @@
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(480,410) rotate(90)"/>
     <line class="jimdg-spoke-planned" x1="725" y1="290" x2="725" y2="400"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(725,410) rotate(90)"/>
-    <line class="jimdg-spoke-planned" x1="970" y1="290" x2="970" y2="400"/>
-    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(970,410) rotate(90)"/>
+    <line class="jimdg-spoke" x1="970" y1="300" x2="970" y2="400"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(970,290) rotate(-90)"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(970,410) rotate(90)"/>
   </g>
   <g id="jimdg-cc-packets">
     <circle class="jimdg-packet" r="4.5">
@@ -86,6 +87,10 @@
     <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="2.4s" begin="-1.6s" repeatCount="indefinite" path="M580,86 L470,212"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="-1.7s" repeatCount="indefinite" path="M970,302 L970,398"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="-1.7s" repeatCount="indefinite"/>
     </circle>
   </g>
 </svg>
