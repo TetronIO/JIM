@@ -208,6 +208,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ScheduledByScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScheduledByScheduleName")
+                        .HasColumnType("text");
+
                     b.Property<string>("SecurityEventReason")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -303,6 +309,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
+                    b.HasIndex("ScheduleExecutionId")
+                        .HasDatabaseName("IX_Activities_ScheduleExecutionId");
+
+                    b.HasIndex("ScheduledByScheduleId")
+                        .HasDatabaseName("IX_Activities_ScheduledByScheduleId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -2150,7 +2162,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ScheduleId");
+                    b.HasIndex("ScheduleId", "QueuedAt")
+                        .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
 
                     b.HasIndex("Status", "QueuedAt")
                         .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");

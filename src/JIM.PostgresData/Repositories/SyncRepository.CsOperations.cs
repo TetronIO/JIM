@@ -813,6 +813,45 @@ public partial class SyncRepository
             """DELETE FROM "PendingInitialPasswords" WHERE "Id" = ANY({0})""", idList);
     }
 
+    public async Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        // A targeted status mark rather than a write of the entity, so it is deliberately not driven from
+        // PendingInitialPasswordBulkColumns: the three columns here are exactly the ones a release changes, and
+        // a future column must not be swept into it by being added to that list.
+        //
+        // The WHERE clause carries the Parked filter rather than the caller doing it: a record awaiting retry is
+        // already going to be tried, and an expired one has outlived the purpose it was created for, so neither
+        // should be disturbed by an administrator saving a rule.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}, "FailureReason" = NULL, "TargetMessage" = NULL
+            WHERE "SyncRuleId" = {1} AND "Status" = {2}
+            """,
+            (int)PendingInitialPasswordStatus.Pending,
+            syncRuleId,
+            (int)PendingInitialPasswordStatus.Parked);
+    }
+
+    public async Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        // A targeted status mark, deliberately not driven from PendingInitialPasswordBulkColumns for the same
+        // reason as the release above: these are exactly the columns an expiry changes.
+        //
+        // The reason and attempt count are left as they are. They say why the account never got its password,
+        // which is the whole value of recording the expiry rather than deleting the row.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}
+            WHERE "ConnectedSystemId" = {1} AND "ExpiresAt" IS NOT NULL AND "ExpiresAt" < {2}
+              AND "Status" <> {0}
+            """,
+            (int)PendingInitialPasswordStatus.Expired,
+            connectedSystemId,
+            asOf);
+    }
+
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var pendingExportsList = pendingExports.ToList();

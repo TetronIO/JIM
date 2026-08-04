@@ -4786,6 +4786,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
     }
 
+    public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
+    {
+        // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in
+        // the identity map alongside the one hanging off the rule the caller is about to save.
+        return await Repository.Database.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .SingleOrDefaultAsync(ip => ip.SyncRuleId == syncRuleId);
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         // AsTracking() is essential here even though the DbContext default is NoTracking:

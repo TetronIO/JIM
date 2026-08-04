@@ -52,8 +52,8 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     {
         _logger.LogTrace("Requested schedules page {Page}, size {PageSize}, search '{Search}'", page, pageSize, LogSanitiser.Sanitise(search));
 
-        var result = await _application.Scheduler.GetSchedulesAsync(page, pageSize, search, sortBy, sortDescending);
-        var dtos = result.Results.Select(ScheduleDto.FromEntity).ToList();
+        var result = await _application.Scheduler.GetScheduleHeadersAsync(page, pageSize, search, sortBy, sortDescending);
+        var dtos = result.Results.Select(ScheduleDto.FromHeader).ToList();
 
         return Ok(PaginatedResponse<ScheduleDto>.Create(dtos, result.TotalResults, result.CurrentPage, result.PageSize));
     }

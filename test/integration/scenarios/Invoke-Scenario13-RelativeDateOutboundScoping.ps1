@@ -242,7 +242,7 @@ function Invoke-Reconciler {
     $maxWait = 120; $elapsed = 0
     while ($elapsed -lt $maxWait) {
         $sv = (Get-JIMScheduleExecution -Id $reconExec.id).status
-        $isTerminal = $sv -eq "Completed" -or $sv -eq "Failed" -or $sv -eq "Cancelled"
+        $isTerminal = $sv -eq "Complete" -or $sv -eq "Failed" -or $sv -eq "Cancelled"
         if (($sv -is [int] -or $sv -is [long]) -and $sv -ge 2) { $isTerminal = $true }
         if ($isTerminal) { break }
         Start-Sleep -Seconds 3; $elapsed += 3

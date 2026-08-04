@@ -545,6 +545,41 @@ public interface ISyncRepository
     Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// Returns every parked initial-password record for a Synchronisation Rule to the outstanding state, so the
+    /// next delivery pass attempts it again, and returns how many were released.
+    /// <para>
+    /// Parking stops the retry loop on purpose, which is only safe because this exists: the administrator
+    /// changing the configuration the target objected to is the event that makes another attempt worth making.
+    /// Records in any other state are left alone, because a record awaiting retry is already going to be tried
+    /// and an expired one has outlived the purpose it was created for.
+    /// </para>
+    /// <para>
+    /// The target's reason goes with the release. It described a configuration that no longer exists, so
+    /// keeping it would have the portal report a complaint an administrator has already acted on. The attempt
+    /// count survives: those attempts really were made, and a release is not another one.
+    /// </para>
+    /// </summary>
+    Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId);
+
+    /// <summary>
+    /// Marks every initial-password record on a Connected System whose time to live has passed as expired, and
+    /// returns how many were expired.
+    /// <para>
+    /// Expiry is recorded, never a deletion. An account that quietly stopped being owed a password, with nothing
+    /// left to say so, is the silent loss this whole feature is built to avoid: nobody would learn that it was
+    /// provisioned without a working password.
+    /// </para>
+    /// <para>
+    /// Covers records awaiting retry and parked records alike. Parking waits for an administrator, and one who
+    /// never comes is exactly what an expiry is for; leaving those parked for ever would hold a permanent
+    /// needs-attention marker over work nobody is going to do. A record with no expiry never expires, so rows
+    /// staged before initial passwords carried a time to live are left alone rather than being given one
+    /// retrospectively.
+    /// </para>
+    /// </summary>
+    Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>

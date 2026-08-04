@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -41,7 +42,7 @@ public class SchedulingRepository : ISchedulingRepository
             .ToListAsync();
     }
 
-    public async Task<PagedResultSet<Schedule>> GetSchedulesAsync(
+    public async Task<PagedResultSet<ScheduleHeader>> GetScheduleHeadersAsync(
         int page,
         int pageSize,
         string? searchQuery = null,
@@ -57,9 +58,9 @@ public class SchedulingRepository : ISchedulingRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        var query = Repository.Database.Schedules
-            .Include(s => s.Steps)
-            .AsQueryable();
+        // Deliberately no Include of Steps: the header carries a count, so a page of up to 100 Schedules no longer
+        // materialises every step row just to display "6 steps".
+        var query = Repository.Database.Schedules.AsQueryable();
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -92,9 +93,48 @@ public class SchedulingRepository : ISchedulingRepository
 
         var totalCount = await query.CountAsync();
         var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
 
-        var pagedResultSet = new PagedResultSet<Schedule>
+        // The most recent execution is projected via correlated subqueries over the Schedule's executions, ordered by
+        // QueuedAt. EF Core renders each of these as a scalar subquery inside the single SELECT that fetches the page
+        // ("... ORDER BY s1.QueuedAt DESC LIMIT 1"), so the whole page costs one round trip no matter how many
+        // Schedules are on it; this must never become a per-row query. The composite
+        // IX_ScheduleExecutions_ScheduleId_QueuedAt index turns each subquery into a backward index scan with a
+        // LIMIT 1, rather than a sort over every execution the Schedule has ever had. Verified against a real
+        // PostgreSQL by ScheduleHeaderQueryDatabaseTests, which counts the commands the provider actually executes.
+        var results = await query
+            .Skip(offset)
+            .Take(pageSize)
+            .Select(s => new ScheduleHeader
+            {
+                Id = s.Id,
+                Name = s.Name,
+                Description = s.Description,
+                BuiltIn = s.BuiltIn,
+                IsEnabled = s.IsEnabled,
+                TriggerType = s.TriggerType,
+                PatternType = s.PatternType,
+                CronExpression = s.CronExpression,
+                DaysOfWeek = s.DaysOfWeek,
+                RunTimes = s.RunTimes,
+                IntervalValue = s.IntervalValue,
+                IntervalUnit = s.IntervalUnit,
+                IntervalWindowStart = s.IntervalWindowStart,
+                IntervalWindowEnd = s.IntervalWindowEnd,
+                NextRunTime = s.NextRunTime,
+                LastRunTime = s.LastRunTime,
+                Created = s.Created,
+                LastUpdated = s.LastUpdated,
+                StepCount = s.Steps.Count,
+                LastExecutionId = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (Guid?)e.Id).FirstOrDefault(),
+                LastExecutionStatus = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (ScheduleExecutionStatus?)e.Status).FirstOrDefault(),
+                LastExecutionCurrentStepIndex = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (int?)e.CurrentStepIndex).FirstOrDefault(),
+                LastExecutionTotalSteps = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => (int?)e.TotalSteps).FirstOrDefault(),
+                LastExecutionCompletedAt = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.CompletedAt).FirstOrDefault(),
+                LastExecutionErrorMessage = s.Executions.OrderByDescending(e => e.QueuedAt).Select(e => e.ErrorMessage).FirstOrDefault()
+            })
+            .ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<ScheduleHeader>
         {
             PageSize = pageSize,
             TotalResults = totalCount,
@@ -303,7 +343,7 @@ public class SchedulingRepository : ISchedulingRepository
     {
         return await Repository.Database.ScheduleExecutions
             .Where(e => e.ScheduleId == scheduleId &&
-                        e.Status == ScheduleExecutionStatus.Completed &&
+                        e.Status == ScheduleExecutionStatus.Complete &&
                         e.StartedAt < beforeStartedAt)
             .OrderByDescending(e => e.StartedAt)
             .FirstOrDefaultAsync();
