@@ -8,46 +8,37 @@ namespace JIM.Models.Activities;
 /// cause and the effect. Persisted by ordinal and therefore append-only; see
 /// <c>CausalEdgeTypeOrdinalTests</c>.
 /// <para>
-/// Every seam the PRD enumerates has a member here from the outset, because the taxonomy is
-/// structural and known, even though the worker only writes some of them until later phases land.
-/// Note the deliberate absence of a "Pending Export queued caused it to be exported" member:
-/// <see cref="ActivityRunProfileExecutionItem.PendingExportId"/> already expresses that hop, and
-/// duplicating an existing link as an edge is exactly what the PRD forbids.
+/// Only hops that cross a Run Profile Execution Item or Activity boundary appear here. A sync outcome
+/// tree is itself a causal structure, parenting each consequence under the event that caused it, so a
+/// hop within one item needs no edge and must not get one: duplicating a link that is already
+/// persisted is exactly what the PRD forbids where it rejects the queueing-to-executing hop
+/// (<see cref="ActivityRunProfileExecutionItem.PendingExportId"/> already expresses it). Scope loss to
+/// disconnect, disconnect to Deletion Rule firing, and the nested case of deletion to deprovisioning
+/// all fail that test and are deliberately absent.
 /// </para>
 /// </summary>
 public enum CausalEdgeType
 {
     /// <summary>
-    /// A Connected System Object leaving a Synchronisation Rule's scoping criteria caused it to be
-    /// disconnected from its Metaverse Object.
-    /// </summary>
-    ScopeLossCausedDisconnect = 0,
-
-    /// <summary>
-    /// A disconnect (or the last qualifying disconnect) caused the Metaverse Object Type's Deletion
-    /// Rule to fire, deleting or scheduling deletion of the Metaverse Object.
-    /// </summary>
-    DisconnectCausedMetaverseObjectDeletion = 1,
-
-    /// <summary>
     /// A Metaverse Object deletion caused a delete-type Pending Export to be staged against one of
-    /// the object's own provisioned Connected System Objects.
+    /// the object's own provisioned Connected System Objects, in the case where the export could not
+    /// be recorded under the deletion's own outcome and became a standalone item of its own.
     /// </summary>
-    MetaverseObjectDeletionCausedDeprovision = 2,
+    MetaverseObjectDeletionCausedDeprovision = 0,
 
     /// <summary>
     /// A Metaverse Object deletion caused reference recall to stage a Pending Export removing a
     /// reference to it from another object. This is the seam the PRD's worked example turns on, and
     /// the only one where cause and effect sit on two entirely different objects.
     /// </summary>
-    MetaverseObjectDeletionCausedReferenceRemoval = 3,
+    MetaverseObjectDeletionCausedReferenceRemoval = 1,
 
     /// <summary>
     /// An executed export caused the confirming outcome recorded on the next import. This hop needs
     /// an edge because reconciliation correlates only by Connected System Object id, and an object
     /// can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle.
     /// </summary>
-    ExportCausedImportConfirmation = 4
+    ExportCausedImportConfirmation = 2
 }
 
 /// <summary>
@@ -77,16 +68,10 @@ public enum CausalReasonCode
     NotSet = 0,
 
     /// <summary>
-    /// The Connected System Object no longer satisfied its inbound Synchronisation Rule's scoping
-    /// criteria.
-    /// </summary>
-    LeftSynchronisationRuleScope = 1,
-
-    /// <summary>
     /// Deletion Rule "when last connector disconnects": the final joined Connected System Object was
     /// disconnected.
     /// </summary>
-    LastConnectorDisconnected = 2,
+    LastConnectorDisconnected = 1,
 
     /// <summary>
     /// Deletion Rule "when authoritative source disconnects", but no authoritative sources were
@@ -94,17 +79,17 @@ public enum CausalReasonCode
     /// <see cref="LastConnectorDisconnected"/> because the fallback signals a misconfiguration an
     /// administrator investigating a deletion cascade will want to see.
     /// </summary>
-    LastConnectorDisconnectedNoSourcesConfigured = 3,
+    LastConnectorDisconnectedNoSourcesConfigured = 2,
 
     /// <summary>
     /// Deletion Rule "when authoritative source disconnects" in All Sources mode: the last
     /// authoritative source disconnected and none remain connected.
     /// </summary>
-    AllAuthoritativeSourcesDisconnected = 4,
+    AllAuthoritativeSourcesDisconnected = 3,
 
     /// <summary>
     /// Deletion Rule "when authoritative source disconnects" in Specific Sources mode: a listed
     /// authoritative source disconnected.
     /// </summary>
-    AuthoritativeSourceDisconnected = 5
+    AuthoritativeSourceDisconnected = 4
 }

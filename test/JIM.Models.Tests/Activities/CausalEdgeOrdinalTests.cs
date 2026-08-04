@@ -27,11 +27,9 @@ public class CausalEdgeOrdinalTests
     /// </summary>
     private static readonly Dictionary<CausalEdgeType, int> ExpectedEdgeTypeOrdinals = new()
     {
-        [CausalEdgeType.ScopeLossCausedDisconnect] = 0,
-        [CausalEdgeType.DisconnectCausedMetaverseObjectDeletion] = 1,
-        [CausalEdgeType.MetaverseObjectDeletionCausedDeprovision] = 2,
-        [CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval] = 3,
-        [CausalEdgeType.ExportCausedImportConfirmation] = 4
+        [CausalEdgeType.MetaverseObjectDeletionCausedDeprovision] = 0,
+        [CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval] = 1,
+        [CausalEdgeType.ExportCausedImportConfirmation] = 2
     };
 
     /// <summary>
@@ -40,11 +38,10 @@ public class CausalEdgeOrdinalTests
     private static readonly Dictionary<CausalReasonCode, int> ExpectedReasonCodeOrdinals = new()
     {
         [CausalReasonCode.NotSet] = 0,
-        [CausalReasonCode.LeftSynchronisationRuleScope] = 1,
-        [CausalReasonCode.LastConnectorDisconnected] = 2,
-        [CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured] = 3,
-        [CausalReasonCode.AllAuthoritativeSourcesDisconnected] = 4,
-        [CausalReasonCode.AuthoritativeSourceDisconnected] = 5
+        [CausalReasonCode.LastConnectorDisconnected] = 1,
+        [CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured] = 2,
+        [CausalReasonCode.AllAuthoritativeSourcesDisconnected] = 3,
+        [CausalReasonCode.AuthoritativeSourceDisconnected] = 4
     };
 
     [Test]

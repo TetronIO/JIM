@@ -152,7 +152,7 @@ public class CausalEdgePersistenceDatabaseTests
         {
             Id = Guid.NewGuid(),
             EffectRunProfileExecutionItemId = effectRpeiId,
-            EdgeType = CausalEdgeType.ScopeLossCausedDisconnect,
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
             ReasonCode = CausalReasonCode.NotSet
         };
 
@@ -246,7 +246,7 @@ public class CausalEdgePersistenceDatabaseTests
             EffectRunProfileExecutionItemId = effectRpeiId,
             CauseRunProfileExecutionItemId = causeRpeiId,
             CauseDisplayName = "Tina Adams (S8-99)",
-            EdgeType = CausalEdgeType.DisconnectCausedMetaverseObjectDeletion,
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
             ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected
         };
 

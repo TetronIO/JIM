@@ -122,20 +122,30 @@ Edge writes join the existing RPEI flush transaction, never a new one, so an edg
 
 2. **The RPEI flush has two paths, and both need the edge insert.** A small batch takes a single-connection transactional path; a large batch takes a parallel COPY path whose partitions have already committed by the time stat counters are written ("Not transactional with the COPY partitions"). Wiring only the small-batch path would silently drop every edge on exactly the large cascades this feature exists to explain, and no test that runs under the batch threshold would notice. Cover both, and add a test that crosses the threshold.
 
-Given both, edges are passed explicitly into `BulkInsertRpeisAsync` alongside the RPEIs rather than being accumulated in repository state, so the flush owns the ordering and the transaction and the seams stay declarative.
+Given both, edges are buffered on the Run Profile Execution Item they explain (`ActivityRunProfileExecutionItem.CausalEdges`, deliberately `[NotMapped]`) and drained by `BulkInsertRpeisAsync`, so the flush owns the ordering and the transaction and the seams stay declarative. The buffer beat passing edges as a separate parameter on two counts: a seam already holds the item it is recording against, so nothing has to be threaded from the seam down to the page flush; and an edge physically cannot reach a flush that would ignore it. Being unmapped is load-bearing rather than incidental: a mapped collection navigation would be walked by `DbSet.Add`, giving edges a second, untransacted insert path. The flush empties the buffer once written, so an RPEI object that outlives its flush (confirming imports revisit them) cannot re-insert the same edges.
 
-| Seam | Where |
+#### Which hops earn an edge
+
+An edge is only worth writing where the link **cannot** be read off what is already persisted. A sync outcome tree is itself a causal structure: `SyncOutcomeBuilder` parents each consequence under the event that caused it, within one item. Writing an edge alongside a parent/child pair that already says the same thing costs rows on the deletion hot path and makes the Phase 1d affordance restate what the tree above it is already showing.
+
+This is the same test the PRD applies when it rejects the queueing-to-executing hop ("`ActivityRunProfileExecutionItem.PendingExportId` already expresses it"), applied consistently. Three hops from this plan's first draft fail it and are **dropped**:
+
+| Dropped hop | Already expressed by |
 |---|---|
-| Scope loss to disconnect | `SyncTaskProcessorBase`, the `DisconnectedOutOfScope` path |
-| Disconnect to Deletion Rule firing | `SyncTaskProcessorBase.ProcessMvoDeletionRuleAsync` |
-| Metaverse Object deletion to deprovisioning Pending Exports | `SyncTaskProcessorBase.FlushPendingMvoDeletionsAsync` |
-| Metaverse Object deletion to reference recall (synchronous, zero grace period) | `SyncTaskProcessorBase.FlushPendingMvoDeletionsAsync` |
-| Metaverse Object deletion to reference recall (deferred, grace period expiry) | `Worker.PerformMetaverseObjectHousekeepingAsync` |
-| Export execution to confirming import | `SyncImportTaskProcessor.ReconcilePendingExportsAsync` |
+| Scope loss to disconnect | The `DisconnectedOutOfScope` outcome, which carries `SyncRuleId` / `SyncRuleName`: the scoping rule IS the cause |
+| Disconnect to Deletion Rule firing (immediate) | `MvoDeleted` is already a child of the `Disconnected` root in one outcome tree |
+| Metaverse Object deletion to deprovisioning Pending Export (nested case) | `ReportDeletionCascadeExportsAsync` already parents the `PendingExportCreated` outcome under `MvoDeleted` |
 
-The reference-recall seam has **two** entry points that both need capture; they stage through the same evaluation but run at different times from different call sites, and covering only one leaves grace-period deployments with no provenance at all.
+What remains is exactly the set that crosses a Run Profile Execution Item or Activity boundary, which is where a tree structurally cannot reach:
 
-The queueing-to-executing hop is **not** an edge: `ActivityRunProfileExecutionItem.PendingExportId` already expresses it and the PRD forbids duplicating it. The executing-to-confirming hop **is** an edge, because reconciliation correlates only by `ConnectedSystemObjectId` and an object can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle.
+| Seam | Where | Why the tree cannot express it |
+|---|---|---|
+| Metaverse Object deletion to reference recall | `SyncTaskProcessorBase.FlushDeferredRecallRpeisAsync` | The effect is an item for a **different object** (the referencing group), staged in `_deferredRecallRpeisByCsoId`, which keys on the referencing Connected System Object alone and carries no trace of the deleted members. The headline cohort case: many deleted members across many pages collapse into one group item |
+| Metaverse Object deletion to deprovisioning Pending Export (standalone fallback) | `SyncTaskProcessorBase.ReportDeletionCascadeExportsAsync` | The fallback builds a **separate** item when no `MvoDeleted` node can be found to parent onto, leaving the export with no recorded cause |
+| Grace-period deletion to its deprovisioning and recall | `Worker.PerformMetaverseObjectHousekeepingAsync` | Runs in a **different Activity** from the disconnect that scheduled it, so nothing links the two. Without this, grace-period deployments get no provenance at all |
+| Export execution to confirming import | `SyncImportTaskProcessor.ReconcilePendingExportsAsync` | Reconciliation correlates only by `ConnectedSystemObjectId`, and an object can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle |
+
+Consequence for Phase 1d: the "Caused by" affordance has **two** sources, and must render them as one story. Same-item causes come from the outcome tree already on the page; cross-item causes come from edges. The cohort model applies to both.
 
 ### Phase 1c: Application read path
 

@@ -114,7 +114,7 @@ public class SyncRepositoryActivityRpeiTests
         rpei.SyncOutcomes.Add(outcome);
         rpei.CausalEdges.Add(new CausalEdge
         {
-            EdgeType = CausalEdgeType.DisconnectCausedMetaverseObjectDeletion,
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
             ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
             EffectSyncOutcome = outcome
         });

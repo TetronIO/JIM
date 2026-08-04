@@ -179,7 +179,7 @@ public class CausalEdgeFlushDatabaseTests
     {
         return new CausalEdge
         {
-            EdgeType = CausalEdgeType.DisconnectCausedMetaverseObjectDeletion,
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
             ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
             CauseDisplayName = "Tina Adams (S8-99)",
             ConnectedSystemId = 7,
