@@ -113,6 +113,20 @@ public class ScheduleExecutionDetailDto : ScheduleExecutionDto
     public List<ScheduleExecutionStepDto> Steps { get; set; } = new();
 
     /// <summary>
+    /// How far through the Schedule this execution has got (#1162): the step group it has reached, and
+    /// each group's outcome, including each concurrent task's own outcome where a group runs several.
+    /// Null where the execution recorded no steps.
+    /// </summary>
+    /// <remarks>
+    /// Additional to <see cref="Steps"/>, not a replacement for it, and answering a different question.
+    /// <see cref="Steps"/> is one entry per Schedule Step row, naming it and carrying its timings,
+    /// errors and Activity id; this is one entry per step *group*, which is the unit the execution
+    /// advances through and the unit the portal draws. Both come from the same records; this one comes
+    /// through the same reader the portal uses, so the two surfaces cannot disagree on "step 2 of 5".
+    /// </remarks>
+    public ScheduleExecutionProgress? Progress { get; set; }
+
+    /// <summary>
     /// Creates a detail DTO from a ScheduleExecution entity.
     /// </summary>
     public static new ScheduleExecutionDetailDto FromEntity(ScheduleExecution execution)

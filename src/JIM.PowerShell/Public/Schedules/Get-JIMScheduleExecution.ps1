@@ -118,7 +118,7 @@ function Get-JIMScheduleExecution {
             Write-Verbose "Getting Schedule Execution by ID: $Id"
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$Id"
-                $result
+                Add-JIMScheduleExecutionStepDisplay -Execution $result
             }
             catch {
                 Write-Error "Failed to get Schedule Execution: $_"
@@ -135,7 +135,7 @@ function Get-JIMScheduleExecution {
                 }
 
                 foreach ($execution in $results) {
-                    $execution
+                    Add-JIMScheduleExecutionStepDisplay -Execution $execution
                 }
             }
             catch {
@@ -185,7 +185,7 @@ function Get-JIMScheduleExecution {
                 } while ($response.items -and $response.items.Count -eq $pageSize)
 
                 foreach ($execution in $allExecutions) {
-                    $execution
+                    Add-JIMScheduleExecutionStepDisplay -Execution $execution
                 }
             }
             catch {
