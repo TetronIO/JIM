@@ -125,6 +125,24 @@ public class RunProgressMetricsTests : JimComponentTestContext
     }
 
     [Test]
+    public void RunProgressMetrics_FinishedSubStep_SetsItsDurationApartFromItsName()
+    {
+        // Both sat at the same weight with the same gap as the icon, so "Fetching objects 20 sec,
+        // 990 ms" read as one phrase. A separator divides them without depending on the colour
+        // step, which a screenshot or a colour-blind reader may not have.
+        var phases = ImportFetching();
+        var connectorStep = phases.Single(p => p.Key == ActivityPhase.QualifyConnectorKey("read"));
+        connectorStep.Status = ActivityPhaseStatus.Completed;
+        connectorStep.Started = new DateTime(2026, 8, 3, 9, 0, 0, DateTimeKind.Utc);
+        connectorStep.Ended = connectorStep.Started.Value.AddSeconds(21);
+
+        var cut = Render<RunProgressMetrics>(p => p.Add(c => c.Phases, phases));
+
+        Assert.That(cut.Find(".jim-run-substep-separator").TextContent.Trim(), Is.EqualTo("·"));
+        Assert.That(cut.Find(".jim-run-substep-duration").TextContent.Trim(), Is.EqualTo("21 sec"));
+    }
+
+    [Test]
     public void RunProgressMetrics_MessageRepeatingTheRunningStepsName_IsNotShown()
     {
         // The message earns its line by saying something the step's name does not already say.

@@ -30,8 +30,14 @@
                 <div class="jim-run-substep jim-run-substep--@StatusModifier(subStep.Status)">
                     <MudIcon Icon="@StatusIcon(subStep)" Size="Size.Small" Class="jim-run-substep-icon" />
                     <MudText Typo="Typo.body2">@subStep.Name</MudText>
+                    @* Separated rather than left to the colour alone: at the same weight and size as
+                       the step's name, "Fetching objects 20 sec, 990 ms" read as one phrase. The
+                       separator is markup rather than generated content so it is not lost to a
+                       stylesheet that failed to load, and is hidden from screen readers, which
+                       announce the two as separate elements anyway. *@
                     @if (subStep.Duration is { } subStepDuration)
                     {
+                        <span class="jim-run-substep-separator" aria-hidden="true">·</span>
                         <MudText Typo="Typo.body2" Class="jim-run-substep-duration">@subStepDuration.ToAbbreviatedString()</MudText>
                     }
                 </div>

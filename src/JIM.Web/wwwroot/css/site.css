@@ -2370,9 +2370,20 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 /* ─── Run phase step shared styling (#454) ───
    Used by the phase stepper on the Activity detail page, and by the readout beneath it: a step's
    duration, and the steps shown inside the one running. */
-.jim-phase-step-duration,
-.jim-run-substep-duration {
+.jim-phase-step-duration {
     color: var(--mud-palette-text-secondary);
+}
+
+/* A step's own name and its duration sit inline in the readout, so the figure is separated from
+   the name, dimmed, and set in tabular numerals: at the same weight it read as part of the name,
+   and proportional digits made the row jitter as the durations changed. */
+.jim-run-substep-separator,
+.jim-run-substep-duration {
+    color: var(--mud-palette-text-disabled);
+}
+
+.jim-run-substep-duration {
+    font-variant-numeric: tabular-nums;
 }
 
 .jim-run-substep {
