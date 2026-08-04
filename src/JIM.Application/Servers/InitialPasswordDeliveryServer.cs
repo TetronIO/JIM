@@ -70,6 +70,15 @@ public class InitialPasswordDeliveryServer
 
         var result = new InitialPasswordRunResult();
 
+        // Before anything is fetched, so an account whose time ran out is not attempted one last time on its way
+        // out, and so a parked record whose administrator never came stops holding a needs-attention marker over
+        // work nobody is going to do.
+        result.ExpiredCount = await _syncRepo.ExpireInitialPasswordsAsync(connectedSystem.Id, DateTime.UtcNow);
+        if (result.ExpiredCount > 0)
+            Log.Warning("DeliverOutstandingAsync: {Count} accounts on {SystemName} were provisioned but never got an initial password " +
+                "within its time to live, and have been recorded as expired",
+                result.ExpiredCount, LogSanitiser.Sanitise(connectedSystem.Name));
+
         var outstanding = await _syncRepo.GetOutstandingInitialPasswordsAsync(connectedSystem.Id, MaximumAccountsPerPass);
         if (outstanding.Count == 0)
             return result;
@@ -140,9 +149,9 @@ public class InitialPasswordDeliveryServer
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information("DeliverOutstandingAsync: Initial passwords for {SystemName}: {Attempted} attempted, {Delivered} delivered, " +
-            "{Retrying} to retry, {Parked} parked for an administrator, {NoLongerApplicable} no longer applicable",
+            "{Retrying} to retry, {Parked} parked for an administrator, {NoLongerApplicable} no longer applicable, {Expired} expired",
             LogSanitiser.Sanitise(connectedSystem.Name), result.AttemptedCount, result.DeliveredCount,
-            result.RetryingCount, result.ParkedCount, result.NoLongerApplicableCount);
+            result.RetryingCount, result.ParkedCount, result.NoLongerApplicableCount, result.ExpiredCount);
 
         return result;
     }

@@ -562,6 +562,24 @@ public interface ISyncRepository
     Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId);
 
     /// <summary>
+    /// Marks every initial-password record on a Connected System whose time to live has passed as expired, and
+    /// returns how many were expired.
+    /// <para>
+    /// Expiry is recorded, never a deletion. An account that quietly stopped being owed a password, with nothing
+    /// left to say so, is the silent loss this whole feature is built to avoid: nobody would learn that it was
+    /// provisioned without a working password.
+    /// </para>
+    /// <para>
+    /// Covers records awaiting retry and parked records alike. Parking waits for an administrator, and one who
+    /// never comes is exactly what an expiry is for; leaving those parked for ever would hold a permanent
+    /// needs-attention marker over work nobody is going to do. A record with no expiry never expires, so rows
+    /// staged before initial passwords carried a time to live are left alone rather than being given one
+    /// retrospectively.
+    /// </para>
+    /// </summary>
+    Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>

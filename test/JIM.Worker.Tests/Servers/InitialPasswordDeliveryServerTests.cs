@@ -303,6 +303,99 @@ public class InitialPasswordDeliveryServerTests
         Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().ConnectedSystemId, Is.EqualTo(99));
     }
 
+    #region Time-to-live expiry
+
+    /// <summary>
+    /// An initial password exists to get somebody into an account they have just been given. Weeks later that
+    /// purpose has passed, and another automatic attempt is not what the account needs; a person is.
+    /// </summary>
+    [Test]
+    public async Task DeliverOutstandingAsync_WithARecordPastItsExpiry_ExpiresItInsteadOfAttemptingItAsync()
+    {
+        await StageOutstandingAsync(expiresAt: DateTime.UtcNow.AddDays(-1));
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        var stored = _syncRepo.PendingInitialPasswords.Values.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.ExpiredCount, Is.EqualTo(1));
+            Assert.That(result.AttemptedCount, Is.Zero, "an expired record must not be attempted");
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Expired));
+        });
+    }
+
+    /// <summary>
+    /// Recorded, not removed. An account that quietly stopped being owed a password, with nothing left to say
+    /// so, is exactly the silent loss the rest of this feature is built to avoid: nobody would ever learn that
+    /// it was provisioned without a working password.
+    /// </summary>
+    [Test]
+    public async Task DeliverOutstandingAsync_WithARecordPastItsExpiry_KeepsTheEvidenceAsync()
+    {
+        await StageOutstandingAsync(expiresAt: DateTime.UtcNow.AddDays(-1));
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        Assert.That(_syncRepo.PendingInitialPasswords.Values.Count(), Is.EqualTo(1),
+            "the expired record is the only trace that this account never got its password");
+    }
+
+    /// <summary>
+    /// Parked records expire too. Parking waits for an administrator, and one who never comes is exactly the
+    /// case an expiry is for; leaving it parked for ever would hold a permanent needs-attention marker for work
+    /// nobody is going to do.
+    /// </summary>
+    [Test]
+    public async Task DeliverOutstandingAsync_WithAParkedRecordPastItsExpiry_ExpiresItAsync()
+    {
+        await StageOutstandingAsync();
+        var refusing = MockConnector(PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused."));
+        await _server.DeliverOutstandingAsync(_connectedSystem, refusing.Object, CancellationToken.None);
+        _syncRepo.PendingInitialPasswords.Values.Single().ExpiresAt = DateTime.UtcNow.AddDays(-1);
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, refusing.Object, CancellationToken.None);
+
+        Assert.That(result.ExpiredCount, Is.EqualTo(1));
+        Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().Status,
+            Is.EqualTo(PendingInitialPasswordStatus.Expired));
+    }
+
+    /// <summary>
+    /// A record still within its time to live is ordinary outstanding work and must be attempted as usual.
+    /// </summary>
+    [Test]
+    public async Task DeliverOutstandingAsync_WithARecordWithinItsExpiry_AttemptsItAsync()
+    {
+        await StageOutstandingAsync(expiresAt: DateTime.UtcNow.AddDays(1));
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        Assert.That(result.ExpiredCount, Is.Zero);
+        Assert.That(result.DeliveredCount, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// A record with no expiry never expires. Rows staged before initial passwords carried a time to live have
+    /// no value here, and inventing one for them would expire work an administrator is still waiting on.
+    /// </summary>
+    [Test]
+    public async Task DeliverOutstandingAsync_WithARecordThatHasNoExpiry_AttemptsItAsync()
+    {
+        await StageOutstandingAsync(expiresAt: null);
+        var connector = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
+
+        Assert.That(result.ExpiredCount, Is.Zero);
+        Assert.That(result.DeliveredCount, Is.EqualTo(1));
+    }
+
+    #endregion
+
     #region Releasing parked work
 
     /// <summary>
@@ -404,7 +497,7 @@ public class InitialPasswordDeliveryServerTests
     /// <summary>
     /// Stages one account as owed an initial password, and returns the account.
     /// </summary>
-    private async Task<ConnectedSystemObject> StageOutstandingAsync(int connectedSystemId = ConnectedSystemId)
+    private async Task<ConnectedSystemObject> StageOutstandingAsync(int connectedSystemId = ConnectedSystemId, DateTime? expiresAt = null)
     {
         var cso = new ConnectedSystemObject
         {
@@ -420,7 +513,8 @@ public class InitialPasswordDeliveryServerTests
                 ConnectedSystemObjectId = cso.Id,
                 ConnectedSystemId = connectedSystemId,
                 SyncRuleId = SyncRuleId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = expiresAt
             }
         ]);
 

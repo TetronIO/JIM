@@ -833,6 +833,25 @@ public partial class SyncRepository
             (int)PendingInitialPasswordStatus.Parked);
     }
 
+    public async Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        // A targeted status mark, deliberately not driven from PendingInitialPasswordBulkColumns for the same
+        // reason as the release above: these are exactly the columns an expiry changes.
+        //
+        // The reason and attempt count are left as they are. They say why the account never got its password,
+        // which is the whole value of recording the expiry rather than deleting the row.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}
+            WHERE "ConnectedSystemId" = {1} AND "ExpiresAt" IS NOT NULL AND "ExpiresAt" < {2}
+              AND "Status" <> {0}
+            """,
+            (int)PendingInitialPasswordStatus.Expired,
+            connectedSystemId,
+            asOf);
+    }
+
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var pendingExportsList = pendingExports.ToList();
