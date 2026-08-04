@@ -32,12 +32,14 @@ public class ScheduleExecutionDto
     public ScheduleExecutionStatus Status { get; set; }
 
     /// <summary>
-    /// The current step being executed (0-based).
+    /// The current step group being executed (0-based). Schedule Steps that run concurrently share an
+    /// index and are one position here, not several.
     /// </summary>
     public int CurrentStepIndex { get; set; }
 
     /// <summary>
-    /// The total number of steps in the schedule.
+    /// The number of step groups in the Schedule, counting the same thing as
+    /// <see cref="CurrentStepIndex"/> so that the two can be read together as "step X of Y".
     /// </summary>
     public int TotalSteps { get; set; }
 
