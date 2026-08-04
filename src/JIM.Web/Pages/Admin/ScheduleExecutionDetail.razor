@@ -1,0 +1,427 @@
+@page "/admin/operations/schedule-executions/{Id:guid}"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
+@using JIM.Models.Scheduling
+@using JIM.Models.Scheduling.DTOs
+@using JIM.Utilities
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IUserPreferenceService PreferenceService
+@implements IDisposable
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<PageTitle>Schedule Execution@(_detail != null ? $": {_detail.Execution.ScheduleName}" : "")</PageTitle>
+<MudText Typo="Typo.h3">
+    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />
+    <span>Schedule Execution:</span> <span class="mud-primary-text">@(_detail?.Execution.ScheduleName ?? "Not Found")</span>
+</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+@if (_detail != null)
+{
+    @* ─── Summary ─── *@
+    <MudPaper Outlined="true" Class="pa-4 mt-2">
+        <div class="d-flex justify-space-between align-center flex-wrap gap-2">
+            <div class="d-flex align-center flex-wrap gap-2">
+                <MudChip T="string" Variant="Variant.Text" Class="ml-0"
+                         Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(_detail.Execution.Status)">
+                    @_detail.Execution.Status.ToString().SplitOnCapitalLetters()
+                </MudChip>
+                @if (_detail.Execution.TotalSteps > 0)
+                {
+                    <MudText Class="mud-text-secondary">
+                        Step @(Math.Min(_detail.Execution.CurrentStepIndex + 1, _detail.Execution.TotalSteps)) of @_detail.Execution.TotalSteps
+                    </MudText>
+                }
+            </div>
+            @if (CanCancel(_detail.Execution.Status))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Cancel" OnClick="HandleCancelExecutionAsync">
+                    Cancel Execution
+                </MudButton>
+            }
+        </div>
+
+        <MudGrid Spacing="4" Class="mt-1">
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Schedule:</MudText><br />
+                <MudLink Href="/admin/operations?t=schedules">@_detail.Execution.ScheduleName</MudLink>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Queued:</MudText><br />
+                <MudTooltip Text="@_detail.Execution.QueuedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    <span>@_detail.Execution.QueuedAt.ToLocalTime().ToRelativeTime()</span>
+                </MudTooltip>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Started:</MudText><br />
+                @if (_detail.Execution.StartedAt.HasValue)
+                {
+                    var startedAt = _detail.Execution.StartedAt.Value;
+                    <MudTooltip Text="@startedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <span>@startedAt.ToLocalTime().ToRelativeTime()</span>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Completed:</MudText><br />
+                @if (_detail.Execution.CompletedAt.HasValue)
+                {
+                    var completedAt = _detail.Execution.CompletedAt.Value;
+                    <MudTooltip Text="@completedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <span>@completedAt.ToLocalTime().ToRelativeTime()</span>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Duration:</MudText><br />
+                @{ var duration = GetExecutionDuration(_detail.Execution); }
+                @if (duration.HasValue)
+                {
+                    var durationValue = duration.Value;
+                    <span>@durationValue.ToAbbreviatedString(int.MaxValue)</span>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText><br />
+                <div class="d-flex align-center">
+                    @if (_detail.Execution.InitiatedByType == ActivityInitiatorType.System)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" />
+                        <span>@(_detail.Execution.InitiatedByName ?? "Scheduler")</span>
+                    }
+                    else
+                    {
+                        @if (_detail.Execution.InitiatedByType == ActivityInitiatorType.User)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" />
+                        }
+                        else if (_detail.Execution.InitiatedByType == ActivityInitiatorType.ApiKey)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" />
+                        }
+                        <AuditPrincipalLink PrincipalType="_detail.Execution.InitiatedByType"
+                                            PrincipalId="_detail.Execution.InitiatedById"
+                                            PrincipalName="@_detail.Execution.InitiatedByName" />
+                    }
+                </div>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @* ─── Failure ─── *@
+    @if (_detail.Execution.Status == ScheduleExecutionStatus.Failed)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-6">
+            <MudText Typo="Typo.body1" Style="white-space: pre-wrap; word-break: break-word;">
+                @(string.IsNullOrWhiteSpace(_detail.Execution.ErrorMessage)
+                    ? "The execution failed. No error message was recorded; the step statuses below show where it stopped."
+                    : _detail.Execution.ErrorMessage)
+            </MudText>
+            <CollapsibleStackTrace StackTrace="@_detail.Execution.ErrorStackTrace" />
+        </MudAlert>
+    }
+
+    @* ─── Steps ─── *@
+    @* MudTable keys each row on its item internally, so the loop's own @key moves with the rows. *@
+    <MudTable Items="@_detail.Steps" T="ScheduleExecutionStepState"
+              Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm"
+              Class="@(_dense ? "mt-6 dense-body-only" : "mt-6")"
+              Outlined="true" Elevation="0">
+        <ToolBarContent>
+            <TableDensityToggle @bind-Dense="_dense" />
+            <MudText Class="mx-2 mud-text-disabled">|</MudText>
+            <MudText Typo="Typo.h6">Steps</MudText>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudText Typo="Typo.button">Step</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Duration</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Activity</MudText></MudTh>
+        </HeaderContent>
+        <RowTemplate Context="step">
+            <MudTd DataLabel="Step">
+                @* Steps sharing a step index run in parallel. The first of a group is Sequential and
+                   only its siblings are ParallelWithPrevious, so the group is detected by counting
+                   the steps at the index, never by testing one step's execution mode. *@
+                @if (IsParallelStep(step))
+                {
+                    <MudTooltip Text="Parallel step; runs concurrently with the other steps at this position" Arrow="true" Placement="Placement.Top">
+                        <div class="d-flex align-center gap-1">
+                            <span>@(step.StepIndex + 1)</span>
+                            <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Parallel</MudText>
+                        </div>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <span>@(step.StepIndex + 1)</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Name">
+                <span>@GetStepName(step)</span>
+                @if (!string.IsNullOrWhiteSpace(step.ErrorMessage))
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Error" Style="white-space: pre-wrap; word-break: break-word;">
+                        @step.ErrorMessage
+                    </MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Connected System">
+                @if (step.ConnectedSystemId.HasValue && !string.IsNullOrEmpty(step.ConnectedSystemName))
+                {
+                    var connectedSystemId = step.ConnectedSystemId.Value;
+                    <MudLink Href="@($"/admin/connected-systems/{connectedSystemId}/")">@step.ConnectedSystemName</MudLink>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <div class="d-flex align-center">
+                    <MudChip T="string" Variant="Variant.Text" Class="ml-0"
+                             Color="Helpers.GetScheduleExecutionStepMudBlazorColorForStatus(step.Status)">
+                        @step.Status.ToDisplayString()
+                    </MudChip>
+                    @if (step.ContinueOnFailure && IsFailedStep(step.Status))
+                    {
+                        <MudTooltip Text="This step was configured to let the execution continue after a failure" Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.SkipNext" Class="mud-text-secondary" />
+                        </MudTooltip>
+                    }
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Duration">
+                @if (step.Duration.HasValue)
+                {
+                    var stepDuration = step.Duration.Value;
+                    <span>@stepDuration.ToAbbreviatedString(int.MaxValue)</span>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudTd>
+            <MudTd DataLabel="Activity">
+                @if (step.ActivityId.HasValue)
+                {
+                    var activityId = step.ActivityId.Value;
+                    <MudLink Href="@($"/activity/{activityId}")">View Activity</MudLink>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1">
+                This execution has no steps to show. Its Schedule has been deleted, so the step definitions are no longer available.
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+else if (_notFound)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2">Schedule Execution not found.</MudAlert>
+    <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="/admin/operations?t=schedules" Class="mt-4">
+        Back to Operations
+    </MudButton>
+}
+else
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    // The page's own generated class is also named ScheduleExecutionDetail, so the DTO needs qualifying here.
+    private JIM.Models.Scheduling.DTOs.ScheduleExecutionDetail? _detail;
+    private bool _notFound;
+    private bool _dense;
+    private List<BreadcrumbItem> _breadcrumbs = BuildBreadcrumbs("Schedule Execution");
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        // Live refresh while the execution is still moving: an administrator watching a run should see it advance
+        // without reloading the page. The loop ends the moment the execution reaches a terminal status, so a
+        // finished execution costs nothing to look at.
+        if (_detail == null || !IsInFlight(_detail.Execution.Status))
+            return;
+
+        var token = _pollingCancellationTokenSource.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), token);
+                    await LoadAsync();
+                    await InvokeAsync(StateHasChanged);
+
+                    if (_detail == null || !IsInFlight(_detail.Execution.Status))
+                        break;
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Ignore errors during polling, will retry on next interval
+                }
+            }
+        }, token);
+    }
+
+    /// <summary>
+    /// Loads the saved row-density preference on first render so the Steps table paints at the user's chosen
+    /// density immediately. GetTableDenseAsync swallows the "JS interop not ready" case internally.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dense = await PreferenceService.GetTableDenseAsync() == true;
+            StateHasChanged();
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        _pollingCancellationTokenSource.Cancel();
+    }
+
+    /// <summary>
+    /// Loads the execution and rebuilds the breadcrumb trail so the last crumb carries the Schedule's real name.
+    /// Serves the initial load, the polling loop and the refresh after a cancellation; overlapping invocations are
+    /// skipped via a non-blocking semaphore.
+    /// </summary>
+    private async Task LoadAsync()
+    {
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            _detail = await jim.Scheduler.GetScheduleExecutionDetailAsync(Id);
+            _notFound = _detail == null;
+            _breadcrumbs = BuildBreadcrumbs(_detail?.Execution.ScheduleName ?? "Not Found");
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    private static List<BreadcrumbItem> BuildBreadcrumbs(string executionName) =>
+    [
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Administration", href: "/admin"),
+        new("Operations", href: "/admin/operations?t=schedules"),
+        new(executionName, href: null, disabled: true)
+    ];
+
+    private async Task HandleCancelExecutionAsync()
+    {
+        if (_detail == null)
+            return;
+
+        var scheduleName = _detail.Execution.ScheduleName;
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Cancel Schedule Execution",
+            $"Are you sure you want to cancel '{scheduleName}'? All tasks will be cancelled immediately, including any that are currently processing.",
+            yesText: "Cancel Execution",
+            cancelText: "Keep Running");
+
+        if (confirmed != true)
+            return;
+
+        using (var jim = JimFactory.Create())
+        {
+            var cancelled = await jim.Scheduler.CancelScheduleExecutionAsync(Id);
+            if (cancelled)
+                Snackbar.Add("Schedule execution cancelled.", Severity.Success);
+            else
+                Snackbar.Add("Could not cancel the execution; it may have already completed.", Severity.Warning);
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// Whether the execution can still be cancelled, and so whether the cancel action is offered.
+    /// </summary>
+    private static bool CanCancel(ScheduleExecutionStatus status) => IsInFlight(status);
+
+    /// <summary>
+    /// Whether the execution is still moving, and so whether the page needs to keep refreshing itself.
+    /// </summary>
+    private static bool IsInFlight(ScheduleExecutionStatus status) =>
+        status is ScheduleExecutionStatus.Queued or ScheduleExecutionStatus.InProgress or ScheduleExecutionStatus.Paused;
+
+    private static bool IsFailedStep(ScheduleExecutionStepStatus status) =>
+        status is ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError;
+
+    /// <summary>
+    /// How long the execution has taken: the elapsed time so far while it is still running, and the total once it
+    /// has finished. Null until it has started.
+    /// </summary>
+    private static TimeSpan? GetExecutionDuration(ScheduleExecution execution)
+    {
+        if (!execution.StartedAt.HasValue)
+            return null;
+
+        var startedAt = execution.StartedAt.Value;
+        return execution.CompletedAt.HasValue ? execution.CompletedAt.Value - startedAt : DateTime.UtcNow - startedAt;
+    }
+
+    /// <summary>
+    /// The label for a step. Run Profile steps deliberately store no name of their own, so the Run Profile's name is
+    /// what identifies them; everything else falls back to the step's stored name.
+    /// </summary>
+    private static string GetStepName(ScheduleExecutionStepState step) =>
+        string.IsNullOrWhiteSpace(step.RunProfileName) ? step.Name : step.RunProfileName;
+
+    /// <summary>
+    /// Whether the step belongs to a parallel group. Determined by counting the steps sharing its index: the first
+    /// step of a group is Sequential and only its siblings are ParallelWithPrevious, so testing a single step's
+    /// execution mode would leave the group's first step looking sequential.
+    /// </summary>
+    private bool IsParallelStep(ScheduleExecutionStepState step) =>
+        _detail != null && _detail.Steps.Count(s => s.StepIndex == step.StepIndex) > 1;
+}

@@ -18,4 +18,10 @@ public class ActivityFilterOptions
     /// Distinct Run Profile names (from TargetName).
     /// </summary>
     public List<string> RunProfiles { get; set; } = [];
+
+    /// <summary>
+    /// Distinct Schedules that produced activities (from the denormalised ScheduledByScheduleId/Name columns),
+    /// one option per Schedule id carrying its most recently recorded name.
+    /// </summary>
+    public List<ScheduleFilterOption> Schedules { get; set; } = [];
 }
