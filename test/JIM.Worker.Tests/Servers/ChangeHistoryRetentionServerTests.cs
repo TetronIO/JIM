@@ -73,6 +73,31 @@ public class ChangeHistoryRetentionServerTests
     }
 
     [Test]
+    public async Task DeleteExpiredChangeHistoryAsync_ClearsPreviewResultsBeforeTheActivitiesTheyHangOffAsync()
+    {
+        // Preview results cascade from their Activity, so deleting the Activity would remove them anyway. The
+        // problem is volume: the batch limit bounds Activities, and one preview Activity can own hundreds of
+        // thousands of delta rows, so a hundred of them cascade in a single transaction. Clearing the results
+        // first, bounded by the same limit, keeps each statement the size the limit was chosen for.
+        var generalCutoff = DateTime.UtcNow.AddDays(-90);
+        var sequence = new List<string>();
+        _changeHistoryRepo.Setup(r => r.DeleteExpiredPreviewsAsync(generalCutoff, 100))
+            .Callback(() => sequence.Add("previews")).ReturnsAsync(6);
+        _changeHistoryRepo.Setup(r => r.DeleteExpiredActivitiesAsync(generalCutoff, 100))
+            .Callback(() => sequence.Add("activities")).ReturnsAsync(3);
+
+        var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(
+            generalCutoff, DateTime.UtcNow.AddDays(-3650), DateTime.UtcNow.AddDays(-365), 100);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.PreviewsDeleted, Is.EqualTo(6),
+                "housekeeping that removes preview data without reporting it leaves nobody able to explain the storage drop");
+            Assert.That(sequence, Is.EqualTo(new[] { "previews", "activities" }));
+        });
+    }
+
+    [Test]
     public async Task GetSecurityEventRetentionPeriodAsync_NoSettingStored_DefaultsToOneYearAsync()
     {
         _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.SecurityEventRetentionPeriod))

@@ -7,43 +7,83 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
-    <MudStack Row Spacing="2" Class="mb-4">
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Default"
-                   Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Storage"
-                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/connector-space")">
-            Connector Space
-        </MudButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="@(PendingExportCount > 0 ? Color.Warning : Color.Default)"
-                   Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Outbox"
-                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/pending-exports")">
-            Pending Export @(PendingExportCount > 0 ? $"({PendingExportCount.ToString("N0")})" : "")
-        </MudButton>
-    </MudStack>
     <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
         <PrefilledFormValidator />
         <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
         <MudTextField T="string" Label="Name" @bind-Value="ConnectedSystem.Name" Required="true" RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5" />
         <MudTextField T="string" Label="Description" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
     </MudForm>
+    @* mt-3 (+ the input control's own 4px bottom margin) gives a 16px gap, matching the panel's pa-4 padding below the button so it sits symmetrically inside the panel *@
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-3" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
 </MudPaper>
-<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
+
+@* ─── Directory Capabilities (hidden entirely when the Connector cannot detect capabilities) ─── *@
+@if (_capabilities != null)
+{
+<MudPaper Outlined="true" Class="pa-4 mt-6">
+    <MudText Typo="Typo.h6">Directory Capabilities</MudText>
+    <MudText Typo="Typo.body1" Class="mt-2">
+        Facts the Connector detected about the target system during a previous connection, shown here for
+        reference only. Read-only: nothing here can be changed, and reading it never opens a new connection.
+    </MudText>
+
+    @if (_capabilities.Count > 0)
+    {
+        <MudSimpleTable Class="mt-4" Dense="true" Hover="false" Striped="true" Elevation="0">
+            <tbody>
+                @foreach (var capability in _capabilities)
+                {
+                    @* width: 1% + nowrap shrinks the label column to its content, keeping values beside their labels *@
+                    <tr>
+                        <td style="width: 1%; white-space: nowrap; padding-right: 2rem;">@capability.Name</td>
+                        <td>@capability.Value</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            <MudText>
+                JIM has not detected any capabilities for this Connected System yet. These are read from the
+                target system during a connection, so they will appear here once one has completed successfully.
+            </MudText>
+        </MudAlert>
+    }
+</MudPaper>
+}
 
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
-
-    [Parameter, EditorRequired]
-    public int PendingExportCount { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private bool IsDetailsFormValid { get; set; }
     private string[] DetailsFormErrors { get; set; } = [];
+    // Null means the Connector does not support capability detection and the card is hidden; an empty list
+    // means it does but nothing has been detected yet, rendered as a hint.
+    private List<ConnectorCapability>? _capabilities;
+    private int _capabilitiesLoadedForConnectedSystemId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ConnectedSystem.Id <= 0)
+        {
+            _capabilities = null;
+            return;
+        }
+
+        // OnParametersSetAsync fires on every parent re-render; only reload when the Connected System changes.
+        if (ConnectedSystem.Id == _capabilitiesLoadedForConnectedSystemId)
+            return;
+
+        using var jim = JimFactory.Create();
+        _capabilities = await jim.ConnectedSystems.GetConnectedSystemDetectedCapabilitiesAsync(ConnectedSystem.Id);
+        _capabilitiesLoadedForConnectedSystemId = ConnectedSystem.Id;
+    }
 
     private async Task HandleValidDetailsSubmitAsync()
     {

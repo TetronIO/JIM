@@ -590,10 +590,18 @@ public class SyncRepository : ISyncRepository
         return result;
     }
 
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    public Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
-        var count = _csosByMvo.TryGetValue(metaverseObjectId, out var ids) ? ids.Count : 0;
-        return Task.FromResult(count);
+        if (!_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
+            return Task.FromResult(new List<int>());
+
+        // One entry per joined CSO, duplicates preserved: mirrors the production row-per-CSO SELECT.
+        var systemIds = csoIds
+            .Select(csoId => _csos.TryGetValue(csoId, out var cso) ? cso : null)
+            .Where(cso => cso != null)
+            .Select(cso => cso!.ConnectedSystemId)
+            .ToList();
+        return Task.FromResult(systemIds);
     }
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
@@ -1777,6 +1785,9 @@ public class SyncRepository : ISyncRepository
         _connectedSystems[connectedSystem.Id] = connectedSystem;
         return Task.CompletedTask;
     }
+
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        => Task.FromResult(_connectedSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Name));
 
     #endregion
 

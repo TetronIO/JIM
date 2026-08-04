@@ -88,6 +88,15 @@ public static class ConfigurationChangeConsequences
                 "This changes which Connected System disconnections trigger deletion. Metaverse Objects already " +
                 "disconnected from a newly added trigger system become eligible for deletion immediately.",
 
+            (ConfigurationSnapshotService.MetaverseObjectTypeObjectType, "deletionTriggerMode") =>
+                newValue == nameof(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect)
+                    ? "This takes effect immediately: any one selected source disconnecting is now enough to delete a " +
+                      "Metaverse Object of this type. Objects already disconnected from a single selected source, but " +
+                      "still connected to others, become eligible for deletion without any further change being made to them."
+                    : "This takes effect immediately: a Metaverse Object of this type is now deleted only once every " +
+                      "selected source has disconnected. Objects awaiting deletion that still hold a connection to any " +
+                      "selected source stop being eligible.",
+
             // One entry within that list. An addition has no old value; a removal has no new one.
             (ConfigurationSnapshotService.MetaverseObjectTypeObjectType, "connectedSystemId") =>
                 string.IsNullOrEmpty(oldValue)

@@ -153,8 +153,12 @@ public partial class SyncEngine : ISyncEngine
     public MvoDeletionDecision EvaluateMvoDeletionRule(
         MetaverseObject mvo,
         int disconnectingSystemId,
-        int remainingCsoCount)
+        IReadOnlyCollection<int> remainingConnectedSystemIds)
     {
+        // One entry per remaining joined CSO, so the count is CSO-level; duplicates per system are
+        // deliberate (a system with two joined CSOs contributes two entries).
+        var remainingCsoCount = remainingConnectedSystemIds.Count;
+
         if (mvo.Type == null)
         {
             Log.Warning("EvaluateMvoDeletionRule: MVO {MvoId} has no Type set. Cannot determine deletion rule.", mvo.Id);
@@ -194,22 +198,104 @@ public partial class SyncEngine : ISyncEngine
                     return MvoDeletionDecision.NotDeleted($"{remainingCsoCount} remaining connector(s), no authoritative sources configured");
                 }
 
-                if (triggerIds.Contains(disconnectingSystemId))
+                if (!triggerIds.Contains(disconnectingSystemId))
                 {
-                    Log.Information("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId}. " +
-                        "Triggering deletion even though {Count} connector(s) remain.",
-                        disconnectingSystemId, mvo.Id, remainingCsoCount);
-                    return EvaluateGracePeriod(mvo, $"authoritative source (system ID {disconnectingSystemId}) disconnected");
+                    // Common to both trigger modes: a system that is not a listed source never triggers deletion.
+                    Log.Verbose("EvaluateMvoDeletionRule: System ID {SystemId} disconnected from MVO {MvoId} but is not an authoritative source. " +
+                        "Authoritative sources: [{AuthSources}]. Not marking for deletion.",
+                        disconnectingSystemId, mvo.Id, string.Join(", ", triggerIds));
+                    return MvoDeletionDecision.NotDeleted($"System {disconnectingSystemId} is not an authoritative source");
                 }
 
-                Log.Verbose("EvaluateMvoDeletionRule: System ID {SystemId} disconnected from MVO {MvoId} but is not an authoritative source. " +
-                    "Authoritative sources: [{AuthSources}]. Not marking for deletion.",
-                    disconnectingSystemId, mvo.Id, string.Join(", ", triggerIds));
-                return MvoDeletionDecision.NotDeleted($"System {disconnectingSystemId} is not an authoritative source");
+                if (mvo.Type.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect)
+                {
+                    // All sources mode: only trigger once no listed source retains a joined CSO.
+                    // A remaining CSO from the disconnecting system itself counts too (its id is still in
+                    // the remaining list), so a system with a second joined CSO does not trigger deletion.
+                    var remainingSourceCount = remainingConnectedSystemIds.Where(triggerIds.Contains).Distinct().Count();
+                    if (remainingSourceCount > 0)
+                    {
+                        Log.Verbose("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId}, " +
+                            "but {RemainingSourceCount} of {SourceCount} authoritative source(s) remain connected (All sources mode). Not marking for deletion.",
+                            disconnectingSystemId, mvo.Id, remainingSourceCount, triggerIds.Count);
+                        return MvoDeletionDecision.NotDeleted(
+                            $"All sources mode: {remainingSourceCount} of {triggerIds.Count} sources {(remainingSourceCount == 1 ? "remains" : "remain")} connected");
+                    }
+
+                    Log.Information("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId} and no " +
+                        "authoritative sources remain connected (All sources mode). Triggering deletion even though {Count} connector(s) remain.",
+                        disconnectingSystemId, mvo.Id, remainingCsoCount);
+                    return EvaluateGracePeriod(mvo,
+                        $"All sources mode: authoritative source (system ID {disconnectingSystemId}) disconnected and no sources remain connected");
+                }
+
+                // Specific sources mode: any listed source disconnecting triggers deletion (pre-#119 behaviour).
+                Log.Information("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId} (Specific sources mode). " +
+                    "Triggering deletion even though {Count} connector(s) remain.",
+                    disconnectingSystemId, mvo.Id, remainingCsoCount);
+                return EvaluateGracePeriod(mvo, $"Specific sources mode: authoritative source (system ID {disconnectingSystemId}) disconnected");
 
             default:
                 Log.Warning("EvaluateMvoDeletionRule: Unknown DeletionRule {Rule} for MVO {MvoId}.", mvo.Type.DeletionRule, mvo.Id);
                 return MvoDeletionDecision.NotDeleted($"Unknown DeletionRule {mvo.Type.DeletionRule}");
+        }
+    }
+
+    /// <inheritdoc />
+    public bool ShouldCancelScheduledDeletion(MetaverseObject mvo, int rejoiningSystemId)
+    {
+        if (mvo.Type == null)
+        {
+            // Consistent with EvaluateMvoDeletionRule's null-Type handling: warn and take the safe path.
+            // Cancelling on any rejoin matches the pre-#119 behaviour and errs away from deleting data.
+            Log.Warning("ShouldCancelScheduledDeletion: MVO {MvoId} has no Type set. Cannot determine deletion rule; cancelling the scheduled deletion on rejoin.", mvo.Id);
+            return true;
+        }
+
+        switch (mvo.Type.DeletionRule)
+        {
+            case MetaverseObjectDeletionRule.Manual:
+                // A Manual-rule MVO should never carry a disconnection-scheduled deletion; if one exists
+                // the state is inconsistent (for example the rule changed after scheduling), and
+                // cancelling on rejoin clears it, matching the pre-#119 cancel-on-any-rejoin behaviour.
+                Log.Verbose("ShouldCancelScheduledDeletion: MVO {MvoId} has DeletionRule=Manual. Cancelling the scheduled deletion on rejoin.", mvo.Id);
+                return true;
+
+            case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                // A connector now exists, so the "no connectors remain" condition no longer holds.
+                return true;
+
+            case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                var triggerIds = mvo.Type.DeletionTriggerConnectedSystemIds;
+                if (triggerIds == null || triggerIds.Count == 0)
+                {
+                    // With no sources configured, scheduling fell back to WhenLastConnectorDisconnected
+                    // semantics, so cancellation follows the same any-rejoin rule.
+                    return true;
+                }
+
+                if (mvo.DeletionTriggeredBySystemId == null)
+                {
+                    // Rows marked before the triggering system was recorded (pre-#119): fall back to the
+                    // pre-existing cancel-on-any-rejoin behaviour rather than stranding a scheduled deletion.
+                    Log.Information("ShouldCancelScheduledDeletion: MVO {MvoId} has no recorded DeletionTriggeredBySystemId (marked pre-upgrade). " +
+                        "Falling back to cancel-on-any-rejoin.", mvo.Id);
+                    return true;
+                }
+
+                if (mvo.Type.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect)
+                {
+                    // All sources mode: any listed source rejoining falsifies the "all sources gone" condition.
+                    return triggerIds.Contains(rejoiningSystemId);
+                }
+
+                // Specific sources mode: only undoing the disconnection that caused the scheduling cancels.
+                return rejoiningSystemId == mvo.DeletionTriggeredBySystemId;
+
+            default:
+                Log.Warning("ShouldCancelScheduledDeletion: Unknown DeletionRule {Rule} for MVO {MvoId}. Cancelling the scheduled deletion on rejoin.",
+                    mvo.Type.DeletionRule, mvo.Id);
+                return true;
         }
     }
 

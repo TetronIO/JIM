@@ -1,0 +1,75 @@
+@using JIM.Models.Core
+@using JIM.Models.Sync
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    The explanation for a disconnection that did NOT trigger Metaverse Object deletion, rendered from the
+    decision-time policy snapshot (#119). Renders inline so a host alert can lead with its own headline
+    ("The Metaverse Object was not deleted.") and follow with this recorded reasoning, in the trigger
+    mode vocabulary, without any current-configuration caveat.
+*@
+
+@switch (Snapshot.DeletionRule)
+{
+    case MetaverseObjectDeletionRule.Manual:
+        @RulePrefix<text> was set to <strong>manual deletion only</strong>; automatic deletion was disabled.</text>
+        break;
+
+    case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+        @RulePrefix<text> required <strong>all connectors</strong> to be disconnected; other Connected System Objects remained connected.</text>
+        break;
+
+    case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+        @if (TriggeringSystemWasNotASource)
+        {
+            <text><strong>@Snapshot.TriggeringSystemName</strong> was not configured as an authoritative source, so its disconnection did not trigger deletion.</text>
+        }
+        else if (Snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+                 && Snapshot.RemainingConnectedSourceSystemNames.Count > 0)
+        {
+            <text>The trigger mode was <strong>All sources disconnect</strong>: <strong>@Snapshot.TriggeringSystemName</strong> disconnected,
+                but @Snapshot.RemainingConnectedSourceSystemIds.Count of @Snapshot.SelectedSourceSystemIds.Count selected sources remained
+                connected (<strong>@string.Join(", ", Snapshot.RemainingConnectedSourceSystemNames)</strong>).</text>
+        }
+        else
+        {
+            @RulePrefix<text> required an authoritative source to disconnect; the recorded conditions did not trigger deletion.</text>
+        }
+        break;
+}
+<text> This explanation reflects the deletion policy recorded when this Activity ran.</text>
+
+@code {
+    /// <summary>
+    /// The decision-time deletion policy snapshot to explain.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public MvoDeletionPolicySnapshot Snapshot { get; set; } = null!;
+
+    /// <summary>
+    /// The Metaverse Object Type's singular name, when known, e.g. "Person".
+    /// </summary>
+    [Parameter]
+    public string? ObjectTypeName { get; set; }
+
+    private bool TriggeringSystemWasNotASource =>
+        Snapshot.TriggeringSystemId is { } triggeringSystemId
+        && !Snapshot.SelectedSourceSystemIds.Contains(triggeringSystemId);
+
+    /// <summary>
+    /// "The deletion rule for Person objects" when the type name is known, otherwise "The deletion rule".
+    /// </summary>
+    private RenderFragment RulePrefix => __builder =>
+    {
+        if (!string.IsNullOrEmpty(ObjectTypeName))
+        {
+            <text>The deletion rule for <strong>@ObjectTypeName</strong> objects</text>
+        }
+        else
+        {
+            <text>The deletion rule</text>
+        }
+    };
+}

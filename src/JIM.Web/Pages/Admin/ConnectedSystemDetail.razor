@@ -24,6 +24,31 @@
     }
 </div>
 
+@* ─── Data views (the Connected System's data, as distinct from the configuration tabs below) ─── *@
+@if (_connectedSystem != null)
+{
+    @* mt-2 combines with the breadcrumbs' own 16px padding for the 24px section gap; mb-6 because the
+       following block's mt-2 alone collapses to 8px, same reasoning as the drift notice below. *@
+    <MudStack Row Spacing="3" Class="mt-2 mb-6">
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Storage"
+                   DropShadow="false"
+                   Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space")">
+            Connector Space
+            <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
+        </MudButton>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Outbox"
+                   DropShadow="false"
+                   Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports")">
+            Pending Exports
+            <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
+        </MudButton>
+    </MudStack>
+}
+
 @* ─── Configuration drift notice ─── *@
 @if (_drift is { HasPendingChanges: true })
 {
@@ -68,7 +93,7 @@ else if (_drift is { TrackingDisabled: true })
     <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true">
 
         <MudTabPanel Text="Details">
-            <ConnectedSystemDetailsTab ConnectedSystem="_connectedSystem" PendingExportCount="_pendingExportCount" />
+            <ConnectedSystemDetailsTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
         <MudTabPanel Text="Settings">
@@ -123,6 +148,7 @@ else if (_drift is { TrackingDisabled: true })
     private string? _partitionsAndHierarchiesText;
     private string? _partitionAndHierarchyText;
     private int _pendingExportCount;
+    private int _connectedSystemObjectCount;
     private int _changeCount;
     private ConfigurationDriftStatus? _drift;
     private List<BreadcrumbItem> _breadcrumbs = null!;
@@ -172,6 +198,7 @@ else if (_drift is { TrackingDisabled: true })
         }
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
+        _connectedSystemObjectCount = await jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(Id);
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
         _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();

@@ -249,6 +249,7 @@ That is why containers are the one place where a key's class depends on *how* it
 | `builtIn` | C | System flag; not administrator-editable. |
 | `icon` | C | Portal display only. |
 | `deletionRule` | **A** | Governs when a Metaverse Object is deleted; changing it makes objects deletion-eligible immediately (#827 gap G5). |
+| `deletionTriggerMode` | **A** | Switching between all-sources and specific-sources semantics changes which disconnections trigger deletion (#119). |
 | `deletionGracePeriod` | **A** | Shortening the period brings forward deletions that were pending (#827 gap G5). |
 | `deletionTriggerConnectedSystemIds` | **A** | Changes which system disconnections trigger deletion (#827 gap G5). |
 | `connectedSystemId` | **A** | One Connected System within that list; adding a trigger makes objects already disconnected from it deletion-eligible immediately (#827 gap G5). |
@@ -276,6 +277,8 @@ The Service Setting snapshot's structural nodes are Class C (see the object-type
 |---|---|---|
 | `PartitionValidationMode` | B | Switching Error to Warning lets a Run Profile whose partition is missing proceed and import zero objects, which a full import then treats as everything having disappeared. |
 | `SyncPageSize` | C | Throughput only. |
+| `ConfigurationChangePreviewWorkerThreshold` | C | Decides where a preview is evaluated (in-process or JIM.Worker), never what it reports. |
+| `ConfigurationChangePreviewFullDataSetPromptThreshold` | C | Decides when a preview asks before capping its drill-down rows. Summary counts are exact whatever the answer. |
 | `VerboseNoChangeRecording` | C | Recording verbosity; no outcome change. |
 | `MaintenanceMode` | C | Blocks operations from starting; does not change their outcome. |
 | `HistoryRetentionPeriod` | C | Retention of records, not synchronisation behaviour. |

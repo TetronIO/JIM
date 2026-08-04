@@ -2688,6 +2688,215 @@ public class FullSyncTests
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected LastConnectorDisconnectedDate to be cleared when connector reconnected.");
     }
 
+    /// <summary>
+    /// Specific sources mode (#119): the recorded triggering system rejoining during the grace period must
+    /// cancel the scheduled deletion, clearing every deletion marker (disconnection date, initiator,
+    /// triggering system, and policy snapshot).
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_SpecificMode_TriggeringSystemRejoins_ClearsAllMarkersAsync()
+    {
+        // System 1 (the syncing system) is the recorded trigger; systems 1 and 2 are both listed sources.
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerConnectedSystemIds: [1, 2],
+            deletionTriggeredBySystemId: 1,
+            deletionTriggeredBySystemName: "Dummy Source System");
+
+        await RunFullSyncForRejoinAsync(mvo);
+
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null,
+            "The triggering system rejoining must cancel the scheduled deletion (Specific mode)");
+        Assert.That(mvo.DeletionTriggeredBySystemId, Is.Null, "Cancellation must clear the triggering system id");
+        Assert.That(mvo.DeletionTriggeredBySystemName, Is.Null, "Cancellation must clear the triggering system name");
+        Assert.That(mvo.DeletionPolicySnapshotJson, Is.Null, "Cancellation must clear the policy snapshot");
+        Assert.That(mvo.DeletionInitiatedByType, Is.EqualTo(ActivityInitiatorType.NotSet),
+            "Cancellation must clear the deletion initiator type");
+        Assert.That(mvo.DeletionInitiatedById, Is.Null, "Cancellation must clear the deletion initiator id");
+        Assert.That(mvo.DeletionInitiatedByName, Is.Null, "Cancellation must clear the deletion initiator name");
+    }
+
+    /// <summary>
+    /// Specific sources mode (#119): a DIFFERENT listed source rejoining must NOT cancel the scheduled
+    /// deletion; the disconnection that caused the scheduling has not been undone.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_SpecificMode_DifferentListedSourceRejoins_RetainsMarkersAsync()
+    {
+        // System 2 is the recorded trigger; the rejoin comes from system 1, which is listed but did not trigger.
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerConnectedSystemIds: [1, 2],
+            deletionTriggeredBySystemId: 2,
+            deletionTriggeredBySystemName: "Dummy Target System");
+
+        await RunFullSyncForRejoinAsync(mvo);
+
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null,
+            "A different listed source rejoining must not cancel a Specific mode scheduled deletion");
+        Assert.That(mvo.DeletionTriggeredBySystemId, Is.EqualTo(2), "The triggering system must remain recorded");
+        Assert.That(mvo.DeletionTriggeredBySystemName, Is.EqualTo("Dummy Target System"));
+        Assert.That(mvo.DeletionPolicySnapshotJson, Is.Not.Null, "The policy snapshot must be retained");
+    }
+
+    /// <summary>
+    /// Specific sources mode (#119): a system that is not a listed source rejoining must NOT cancel the
+    /// scheduled deletion.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_SpecificMode_UnlistedSystemRejoins_RetainsMarkersAsync()
+    {
+        // Only system 2 is a listed source; the rejoin comes from system 1, which is not listed.
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerConnectedSystemIds: [2],
+            deletionTriggeredBySystemId: 2,
+            deletionTriggeredBySystemName: "Dummy Target System");
+
+        await RunFullSyncForRejoinAsync(mvo);
+
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null,
+            "An unlisted system rejoining must not cancel a scheduled deletion");
+        Assert.That(mvo.DeletionTriggeredBySystemId, Is.EqualTo(2), "The triggering system must remain recorded");
+        Assert.That(mvo.DeletionPolicySnapshotJson, Is.Not.Null, "The policy snapshot must be retained");
+    }
+
+    /// <summary>
+    /// All sources mode (#119): any listed source rejoining falsifies the "all sources gone" condition and
+    /// must cancel the scheduled deletion, even when a different source's disconnection completed the trigger.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_AllMode_AnyListedSourceRejoins_ClearsMarkersAsync()
+    {
+        // System 2's disconnection completed the All mode trigger; system 1 (also listed) rejoins.
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.AllSourcesDisconnect,
+            triggerConnectedSystemIds: [1, 2],
+            deletionTriggeredBySystemId: 2,
+            deletionTriggeredBySystemName: "Dummy Target System");
+
+        await RunFullSyncForRejoinAsync(mvo);
+
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null,
+            "Any listed source rejoining must cancel an All mode scheduled deletion");
+        Assert.That(mvo.DeletionTriggeredBySystemId, Is.Null, "Cancellation must clear the triggering system id");
+        Assert.That(mvo.DeletionTriggeredBySystemName, Is.Null, "Cancellation must clear the triggering system name");
+        Assert.That(mvo.DeletionPolicySnapshotJson, Is.Null, "Cancellation must clear the policy snapshot");
+    }
+
+    /// <summary>
+    /// Null-trigger fallback (#119): a row scheduled before the triggering system was recorded (no
+    /// DeletionTriggeredBySystemId) must fall back to the pre-existing cancel-on-any-rejoin behaviour
+    /// rather than stranding the scheduled deletion.
+    /// </summary>
+    [Test]
+    public async Task ScheduledDeletionCancellation_NullTriggeringSystem_AnyRejoinClearsMarkersAsync()
+    {
+        // No triggering system recorded (pre-upgrade row); the rejoin comes from unlisted system 1.
+        var mvo = ArrangeScheduledDeletionRejoinScenario(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerConnectedSystemIds: [2],
+            deletionTriggeredBySystemId: null);
+
+        await RunFullSyncForRejoinAsync(mvo);
+
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null,
+            "With no recorded triggering system, any rejoin must cancel the scheduled deletion (fallback)");
+        Assert.That(mvo.DeletionPolicySnapshotJson, Is.Null, "Cancellation must clear the policy snapshot");
+    }
+
+    /// <summary>
+    /// Arranges the rejoin scenario shared by the mode-aware cancellation tests: an MVO scheduled for
+    /// deletion (all deletion markers set) under WhenAuthoritativeSourceDisconnected with the given trigger
+    /// configuration, plus an unjoined CSO in system 1 whose Object Matching Rule will rejoin it to the MVO
+    /// when the Full Synchronisation runs.
+    /// </summary>
+    private MetaverseObject ArrangeScheduledDeletionRejoinScenario(
+        AuthoritativeSourceTriggerMode triggerMode,
+        List<int> triggerConnectedSystemIds,
+        int? deletionTriggeredBySystemId,
+        string? deletionTriggeredBySystemName = null)
+    {
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        mvoType.DeletionGracePeriod = TimeSpan.FromDays(30);
+        mvoType.DeletionTriggerMode = triggerMode;
+        mvoType.DeletionTriggerConnectedSystemIds = triggerConnectedSystemIds;
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvoType;
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1);
+        mvo.DeletionInitiatedByType = ActivityInitiatorType.System;
+        mvo.DeletionInitiatedByName = "System";
+        mvo.DeletionTriggeredBySystemId = deletionTriggeredBySystemId;
+        mvo.DeletionTriggeredBySystemName = deletionTriggeredBySystemName;
+        mvo.DeletionPolicySnapshotJson = @"{""deletionRule"":""WhenAuthoritativeSourceDisconnected""}";
+        mvo.ConnectedSystemObjects.Clear();
+
+        // CSO that will join to the MVO (not yet joined)
+        var cso = ConnectedSystemObjectsData[0];
+        cso.MetaverseObject = null;
+        cso.MetaverseObjectId = null;
+        cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+
+        // Synchronisation Rule with an Object Matching Rule matching the CSO's HR_ID to the MVO's HR ID.
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.Direction = SyncRuleDirection.Import;
+        importSyncRule.Enabled = true;
+        importSyncRule.MetaverseObjectTypeId = mvoType.Id;
+        importSyncRule.MetaverseObjectType = mvoType;
+
+        var mvoHrIdAttr = mvoType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.HrId);
+        var csoHrIdValue = cso.AttributeValues.Single(av => av.AttributeId == (int)MockSourceSystemAttributeNames.HR_ID).GuidValue;
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = mvoHrIdAttr,
+            AttributeId = mvoHrIdAttr.Id,
+            GuidValue = csoHrIdValue
+        });
+
+        var csotAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+            .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID);
+        importSyncRule.ObjectMatchingRules.Clear();
+        var objectMatchingRule = new ObjectMatchingRule
+        {
+            Id = 100,
+            SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
+            TargetMetaverseAttribute = mvoHrIdAttr,
+            TargetMetaverseAttributeId = mvoHrIdAttr.Id
+        };
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 100,
+            Order = 1,
+            ConnectedSystemAttribute = csotAttr,
+            ConnectedSystemAttributeId = csotAttr.Id
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        return mvo;
+    }
+
+    /// <summary>
+    /// Runs a Full Synchronisation on system 1 for the rejoin scenario and asserts the join was established,
+    /// so the cancellation assertions that follow are exercising a real rejoin.
+    /// </summary>
+    private async Task RunFullSyncForRejoinAsync(MetaverseObject mvo)
+    {
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        var cso = ConnectedSystemObjectsData[0];
+        Assert.That(cso.MetaverseObject, Is.EqualTo(mvo), "Expected the CSO to rejoin the MVO before asserting cancellation behaviour");
+    }
+
     #endregion
 
     #region Provisioning Flow Import Reconciliation Tests

@@ -27,6 +27,13 @@ public class ChangeHistoryServer
         public int CsoChangesDeleted { get; set; }
         public int MvoChangesDeleted { get; set; }
         public int ActivitiesDeleted { get; set; }
+
+        /// <summary>
+        /// Configuration change previews whose results were cleared (#827). Reported separately because it is the
+        /// number that explains a storage drop: one preview can own hundreds of thousands of object-level rows, so
+        /// counting it inside <see cref="ActivitiesDeleted"/> would understate what a pass actually removed.
+        /// </summary>
+        public int PreviewsDeleted { get; set; }
         public int ConfigurationChangeActivitiesDeleted { get; set; }
         public int SecurityEventActivitiesDeleted { get; set; }
         public DateTime? OldestRecordDeleted { get; set; }
@@ -368,6 +375,12 @@ public class ChangeHistoryServer
             Log.Information("ChangeHistoryCleanup: Deleting expired MVO changes (older than {OlderThan})", olderThan);
             result.MvoChangesDeleted = await _application.Repository.ChangeHistory.DeleteExpiredMvoChangesAsync(olderThan, maxRecordsPerType);
 
+            // Clear expired preview results ahead of the Activities they hang off (#827). They would cascade with the
+            // Activity anyway; doing it here bounds the volume, because the batch limit counts Activities and one
+            // preview Activity can own hundreds of thousands of delta rows.
+            Log.Information("ChangeHistoryCleanup: Clearing expired configuration change preview results (older than {OlderThan})", olderThan);
+            result.PreviewsDeleted = await _application.Repository.ChangeHistory.DeleteExpiredPreviewsAsync(olderThan, maxRecordsPerType);
+
             // Delete Activities (spares configuration-change and security event Activities; they have their own cutoffs below)
             Log.Information("ChangeHistoryCleanup: Deleting expired activities (older than {OlderThan})", olderThan);
             result.ActivitiesDeleted = await _application.Repository.ChangeHistory.DeleteExpiredActivitiesAsync(olderThan, maxRecordsPerType);
@@ -399,8 +412,8 @@ public class ChangeHistoryServer
 
             await _application.Activities.CompleteActivityAsync(activity);
 
-            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities deleted",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
+            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities deleted",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
 
             return result;
         }

@@ -31,6 +31,10 @@ This two-stage approach gives you:
 - **Comparison**<br /> JIM can detect what has changed between imports.
 - **Rollback potential**<br /> The metaverse is only updated in the sync phase.
 
+### Opening the Connector Space
+
+A Connected System's page carries two buttons above its tabs, each showing how much is there: **Connector Space** opens the Connected System Objects staged for this system, and **Pending Exports** opens the changes waiting to be written back to it. Both sit above the tabs rather than on one of them, so they are reachable from wherever you are on the page; the Pending Exports count is highlighted whenever changes are waiting.
+
 ### Connected System Objects (CSOs)
 
 A **CSO** is JIM's local representation of an object in an external system. Each CSO holds:
@@ -110,7 +114,7 @@ Where a Connected System can accept passwords, its Schema tab carries a Password
 
 ### Discovered password policy
 
-During schema discovery JIM reads the target's password policy and records it, so that configuring a generated password does not mean retyping rules the system already publishes. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
+JIM reads the target's password policy whenever it retrieves or refreshes the Connected System's schema, and records it, so that configuring a generated password does not mean retyping rules the system already publishes. If a policy is missing, **Refresh Schema** on the Schema tab reads it again. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
 
 **A discovered policy is a floor, not a guarantee.** Two things routinely make the real rule stricter than the published one:
 
@@ -140,6 +144,58 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 !!! note "The reset rights check needs somewhere to look"
     Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
+
+### Setting the password on one account
+
+Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. This writes the password straight to the Connected System: it is not staged as a Pending Export, not retried, and not stored anywhere in JIM.
+
+Use it for the account whose provisioning password was refused, the person who never received theirs, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
+
+The dialog is built around one rule: **the password is masked from the moment it is generated, and copying it does not require showing it.**
+
+- **Generate** produces a password satisfying the discovered policy, and puts it straight behind a mask.
+- **Copy** works while the value is masked, so handing a password to the person who needs it never means putting it on a screen somebody else can read.
+- **Reveal** is the secondary action, for reading a password aloud or checking a transcription. It hides itself again after thirty seconds.
+- You can type your own password instead of generating one.
+
+Choose what happens to the password once it is set (requiring a change at the next sign-in is the default, and the right one for a password somebody else chose), and whether to enable the account at the same time. Leaving the enable switch off leaves the account's enabled state exactly as it was, which is what a reset on a working account should do.
+
+A Connected System that refuses the password says why, and the dialog stays open carrying its own words so you can try another one. Every attempt is recorded as an Activity against the object, whether it succeeded or not; the Activity records that a password was set, never the password.
+
+!!! warning "This is a password-reset primitive"
+    Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
+
+!!! note "Copying and your operating system's clipboard"
+    Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
+
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, with one difference: you supply the password there rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one.
+
+### One password across several Connected Systems
+
+A person often has accounts in more than one place, and conveying a different password for each is both more work and worse for them: four different passwords on a first morning end up on a sticky note. Open a person from the portal and the same **Set Password** action appears there, listing every account they have whose Connector can set a password.
+
+Choose some or all of them and JIM sets one password across them, writing to each Connected System in turn. **Nothing is selected by default**, so resetting a forgotten password in one system never silently resets the others.
+
+The password is generated to satisfy the strictest of the selected systems' rules: the longest minimum length any of them demands, and the character categories all of them count. A category only one system recognises cannot help satisfy another system's complexity rule, so JIM counts only what they have in common. Where a selected system has never published a policy, JIM says so rather than assuming it will accept anything.
+
+Progress runs left to right along the same stepped rail a Run Profile execution uses, one step per Connected System.
+
+!!! warning "There is no transaction across Connected Systems"
+    Each write is independent. A run routinely ends with some accounts changed and others not, which leaves the person with a different password in the systems that refused it. JIM says which, in as many words, and offers to retry only the accounts that failed, reusing the password already in hand.
+
+    Where a system refused the **password itself**, retrying it unchanged will fail identically. The guidance on that result offers a fresh password for every account instead, including the ones that already succeeded, because replacing it only where it failed would leave the person with two.
+
+Each account's failure carries guidance you can open, specific to what went wrong: a refused password and an unreachable directory need opposite responses, and the guidance says which of the two you have and whether retrying is worth anything at all.
+
+Every account gets its own Activity, grouped under one parent so the whole action is findable afterwards. Setting a password on a single account records no parent, because a group of one says nothing.
+
+For automation, `Set-JIMMetaverseObjectPassword` does the same thing over the per-account REST endpoint. You must name the Connected Systems, or pass `-AllAccounts`; there is no default, for the same reason the portal preselects nothing.
+
+## Directory Capabilities
+
+The Details tab carries a Directory Capabilities card: read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing the card never opens a new connection. Before the first successful connection, the card shows a hint rather than an error.
+
+Today only the [JIM LDAP Connector](../connectors/jim-ldap-connector.md#directory-capabilities-card) detects and surfaces capabilities (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect capabilities, the card is not shown at all.
 
 ## Pending Exports
 

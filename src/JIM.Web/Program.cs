@@ -151,6 +151,11 @@ try
         var jim = new JimApplication(repo, syncRepository: syncRepo);
         // Inject credential protection service for connector password encryption/decryption
         jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
+
+        // Let small configuration change previews (#827) run in this process rather than waiting for JIM.Worker to
+        // poll for them. Same injection point and reasoning as the line above: the implementation is a JIM.Web
+        // concern the application layer declares but cannot construct.
+        jim.ConfigurationChangePreviews.BackgroundRunner = sp.GetService<IConfigurationChangePreviewBackgroundRunner>();
         return jim;
     });
     builder.Services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
@@ -553,6 +558,12 @@ try
     // User preferences service for storing UI settings in browser localStorage
     builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 
+    // Configuration change previews (#827): surfaces start a preview through the starter rather than the
+    // application layer directly, so the informed-choice prompt for a large data set is applied in one place
+    // instead of remembered per surface. Scoped, because showing a dialog belongs to a user's circuit.
+    builder.Services.AddScoped<IPreviewDataSetSizePrompt, PreviewDataSetSizePrompt>();
+    builder.Services.AddScoped<IConfigurationChangePreviewStarter, ConfigurationChangePreviewStarter>();
+
     // Real-time UI notifications (issue #307): a background service listens for PostgreSQL NOTIFY events
     // on a dedicated non-pooled connection and fans them out to the in-process relay (consumed by Blazor
     // Server components) and the SignalR hub (for non-Blazor consumers). The listener connection string is
@@ -563,6 +574,12 @@ try
     builder.Services.AddSingleton<IDatabaseNotificationListener>(_ =>
         new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
     builder.Services.AddHostedService<NotificationListenerService>();
+
+    // One instance serving both roles: the hosted service that drains the queue, and the runner the application
+    // layer hands previews to. Registering it twice would give the enqueuing half a consumer that never runs.
+    builder.Services.AddSingleton<ConfigurationChangePreviewBackgroundRunner>();
+    builder.Services.AddSingleton<IConfigurationChangePreviewBackgroundRunner>(sp => sp.GetRequiredService<ConfigurationChangePreviewBackgroundRunner>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<ConfigurationChangePreviewBackgroundRunner>());
 
     // Live run-profile progress (issue #202): one shared ETA tracker so the progress API endpoint
     // and the Activity detail page derive their throughput estimates from the same sample history.

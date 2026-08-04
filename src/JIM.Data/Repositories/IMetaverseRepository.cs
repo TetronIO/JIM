@@ -271,23 +271,40 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100);
 
     /// <summary>
-    /// Gets MVOs that will become orphaned when the specified Connected System is deleted.
-    /// An MVO is considered orphaned if it:
-    /// - Has DeletionRule = WhenLastConnectorDisconnected
-    /// - Has Origin = Projected (not internal)
-    /// - Is ONLY connected to the specified Connected System (no other connectors)
+    /// Gets MVOs whose deletion rule is triggered by deleting the specified Connected System.
+    /// An MVO qualifies when it is Projected (not internal), is not already pending deletion, and either:
+    /// - Has DeletionRule = WhenLastConnectorDisconnected and is ONLY connected to the specified system, or
+    /// - Has DeletionRule = WhenAuthoritativeSourceDisconnected, the specified system is a listed source, and
+    ///   the configured trigger mode is satisfied (#119): Specific mode triggers on any listed source's
+    ///   removal; All mode triggers only when no OTHER listed source still holds a joined CSO. An empty
+    ///   source list falls back to WhenLastConnectorDisconnected semantics, matching the sync engine.
+    /// Shares its predicate with <see cref="GetMvosOrphanedByConnectedSystemDeletionCountAsync"/> so the
+    /// deletion preview always agrees with what execution marks.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System being deleted.</param>
     /// <returns>List of MVOs that will become orphaned.</returns>
     public Task<List<MetaverseObject>> GetMvosOrphanedByConnectedSystemDeletionAsync(int connectedSystemId);
 
     /// <summary>
-    /// Marks MVOs as disconnected by setting their LastConnectorDisconnectedDate.
+    /// Counts the MVOs <see cref="GetMvosOrphanedByConnectedSystemDeletionAsync"/> would return, using the
+    /// same mode-aware predicate, for the Connected System deletion preview (#119).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being deleted.</param>
+    /// <returns>The number of MVOs that will be marked for deletion.</returns>
+    public Task<int> GetMvosOrphanedByConnectedSystemDeletionCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Marks MVOs as disconnected by setting their LastConnectorDisconnectedDate, recording the deleted
+    /// Connected System as the deletion trigger and persisting the decision-time policy snapshot (#119).
     /// Used when a Connected System is deleted to prepare orphaned MVOs for housekeeping deletion.
+    /// MVOs already pending deletion are skipped so an earlier decision's markers are never overwritten.
     /// </summary>
     /// <param name="mvoIds">The IDs of the MVOs to mark as disconnected.</param>
+    /// <param name="deletionTriggeredBySystemId">The Connected System whose deletion triggered the marking.</param>
+    /// <param name="deletionTriggeredBySystemName">The display name of that system; the name snapshot survives the system's deletion.</param>
+    /// <param name="deletionPolicySnapshotJson">The serialised decision-time MvoDeletionPolicySnapshot, or null when the policy facts could not be determined.</param>
     /// <returns>The number of MVOs updated.</returns>
-    public Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds);
+    public Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds, int deletionTriggeredBySystemId, string deletionTriggeredBySystemName, string? deletionPolicySnapshotJson);
 
     /// <summary>
     /// Gets MVOs that are pending deletion (have LastConnectorDisconnectedDate set but haven't been deleted yet).
@@ -308,6 +325,22 @@ public interface IMetaverseRepository
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>
     /// <returns>The count of MVOs pending deletion.</returns>
     public Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null);
+
+    /// <summary>
+    /// How many Metaverse Objects of a type carry a disconnection mark, and are therefore the population a change
+    /// to that type's deletion settings could affect (#1114). Objects without a mark cannot become eligible under
+    /// any settings, so this is the whole population, not a subset of it.
+    /// </summary>
+    public Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Streams the marked Metaverse Objects of a type, reduced to the facts a deletion-settings preview needs.
+    ///
+    /// Streamed rather than paged because the read must be a single consistent pass: paging a set that the
+    /// synchronisation engine is concurrently marking and clearing would let an object be counted twice or skipped,
+    /// and a preview of deletions that miscounts is worse than no preview.
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId);
 
     /// <summary>
     /// Creates a MetaverseObjectChange record directly in the database.

@@ -219,10 +219,12 @@ public interface ISyncRepository
     Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
-    /// Gets the count of CSOs joined to a specific MVO across all Connected Systems.
-    /// Used to determine whether an MVO should be deleted when its last CSO is disconnected.
+    /// Gets the Connected System ID of each CSO joined to a specific MVO across all Connected Systems:
+    /// one entry per CSO, duplicates preserved when a system holds multiple joined CSOs.
+    /// Used by the MVO deletion rule evaluation to determine both how many connectors remain and which
+    /// systems they belong to after a disconnection (#119). Replaces the previous count-only query.
     /// </summary>
-    Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
+    Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
     /// Gets the count of CSOs joined to a specific MVO within a single Connected System.
@@ -756,6 +758,13 @@ public interface ISyncRepository
     /// Updates a Connected System's fields (e.g., LastSyncCompletedAt watermark).
     /// </summary>
     Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Gets the id-to-display-name map of every Connected System. Used to resolve source system names
+    /// for decision-time deletion policy snapshots (#119): a tiny table fetched at most once per run
+    /// profile execution and cached by the caller, never per Metaverse Object.
+    /// </summary>
+    Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
 
     #endregion
 
