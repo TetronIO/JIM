@@ -1428,7 +1428,8 @@ public class ExportExecutionServer
                     ConnectedSystemId = pe.ConnectedSystemId,
                     SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
                     Status = PendingInitialPasswordStatus.Pending,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.Add(PendingInitialPassword.DefaultTimeToLive)
                 })
                 .ToList();
 

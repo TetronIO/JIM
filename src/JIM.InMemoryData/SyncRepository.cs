@@ -1415,6 +1415,36 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        var expiring = _pendingInitialPasswords.Values
+            .Where(p => p.ConnectedSystemId == connectedSystemId &&
+                        p.ExpiresAt.HasValue && p.ExpiresAt.Value < asOf &&
+                        p.Status != PendingInitialPasswordStatus.Expired)
+            .ToList();
+
+        foreach (var pending in expiring)
+            pending.Status = PendingInitialPasswordStatus.Expired;
+
+        return Task.FromResult(expiring.Count);
+    }
+
+    public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        var parked = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .ToList();
+
+        foreach (var pending in parked)
+        {
+            pending.Status = PendingInitialPasswordStatus.Pending;
+            pending.FailureReason = null;
+            pending.TargetMessage = null;
+        }
+
+        return Task.FromResult(parked.Count);
+    }
+
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)
