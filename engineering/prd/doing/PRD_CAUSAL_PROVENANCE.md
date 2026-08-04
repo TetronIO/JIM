@@ -1,13 +1,14 @@
 # Causal Provenance: Full-Graph Understanding
 
-- **Status:** Planned
+- **Status:** Doing (planning complete; Phase 1 implementation not yet started)
 - **Created:** 2026-07-28
 - **Author:** JayVDZ (drafted with Claude Code)
-- **Issue:** Not yet created.
+- **Issue:** [#1223](https://github.com/TetronIO/JIM/issues/1223)
+- **Plan:** [CAUSAL_PROVENANCE.md](../../plans/CAUSAL_PROVENANCE.md)
 
 ## Problem Statement
 
-The Activity and Run Profile Execution Item (RPEI) pages, including the Causality views introduced by the in-flight [Causality Visualisation Redesign](doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087), show **what happened to one object in one run**. They cannot show **why it happened** (the upward chain of causes) or **what it went on to cause** (the downward chain of consequences). An administrator investigating a change hits a dead end at the edge of the current RPEI.
+The Activity and Run Profile Execution Item (RPEI) pages, including the Causality views introduced by the in-flight [Causality Visualisation Redesign](PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087), show **what happened to one object in one run**. They cannot show **why it happened** (the upward chain of causes) or **what it went on to cause** (the downward chain of consequences). An administrator investigating a change hits a dead end at the edge of the current RPEI.
 
 This PRD is about the **data model and provenance capture** that is missing underneath the visualisation, not about redesigning the views again. #1087 owns presentation (summary sentences, Flow/Timeline/Graph toggles, plain-language labels) for a single RPEI's own outcome tree; this PRD owns linking RPEIs, and the Metaverse Objects and Connected System Objects they describe, **to each other** across Activities, so #1087's surface (and its successors) has a graph to render instead of an island.
 
@@ -174,9 +175,9 @@ Phase 0's correctness fixes matter to this PRD even though they are out of scope
 ## Dependencies
 
 - **Phase 0** (done): the Causality panel's Connected System naming and reference-recall attribution correctness fixes have landed. An upward chain is only as trustworthy as the per-hop attribution it stitches together; building Phase 1 on top of known-wrong naming would have propagated the bug into every chain that passes through it. This dependency is satisfied and no longer blocks Phase 1.
-- **[Causality Visualisation Redesign](doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087)**: Phase 1/2's UI affordances attach to that redesign's Causality panel. The edge-capture and data-model half of Phase 1 has no such dependency and can proceed in parallel; only the UI slice needs #1087's surface to be stable.
-- **[RPEI Outcome Graph](../plans/done/RPEI_OUTCOME_GRAPH.md) (#363, Done)**: the existing single-RPEI `ActivityRunProfileExecutionItemSyncOutcome` tree this PRD extends into a cross-RPEI graph. This PRD is the natural sequel to that one: same causal-chain philosophy, one RPEI wide there, arbitrarily many RPEIs wide here.
-- **[Synchronisation Rule Causality Tracking](../plans/SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Planned)**: an adjacent but orthogonal axis, per-attribute Synchronisation Rule attribution within a single change, rather than cross-object causal chains. Not a blocking dependency.
+- **[Causality Visualisation Redesign](PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087)**: Phase 1/2's UI affordances attach to that redesign's Causality panel. The edge-capture and data-model half of Phase 1 has no such dependency and can proceed in parallel; only the UI slice needs #1087's surface to be stable.
+- **[RPEI Outcome Graph](../../plans/done/RPEI_OUTCOME_GRAPH.md) (#363, Done)**: the existing single-RPEI `ActivityRunProfileExecutionItemSyncOutcome` tree this PRD extends into a cross-RPEI graph. This PRD is the natural sequel to that one: same causal-chain philosophy, one RPEI wide there, arbitrarily many RPEIs wide here.
+- **[Synchronisation Rule Causality Tracking](../../plans/SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Planned)**: an adjacent but orthogonal axis, per-attribute Synchronisation Rule attribution within a single change, rather than cross-object causal chains. Not a blocking dependency.
 - The existing free links this PRD must reuse rather than duplicate: `ActivityRunProfileExecutionItem.PendingExportId`, and Connected System Object / Metaverse Object ids.
 
 ## Rejected Alternatives
