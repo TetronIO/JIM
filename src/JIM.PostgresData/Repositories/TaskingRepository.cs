@@ -370,9 +370,26 @@ public class TaskingRepository : ITaskingRepository
     }
 
     #region private methods
-    private static async Task<string> GetWorkerHeaderNameAsync(WorkerTask workerTask)
+    /// <summary>
+    /// What a Worker Task is called in the queue, derived from whatever it is a task to do.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reads through the repository's own context. It used to open a <see cref="JimDbContext"/> of
+    /// its own, once per Worker Task: an extra pooled connection for every row in the queue, on a
+    /// read that re-runs on every progress notification, and configured from environment variables
+    /// rather than from whatever the caller was working against.
+    /// </para>
+    /// <para>
+    /// Every lookup tolerates its subject having been deleted. A queue row whose configuration has
+    /// gone is not an error state; it is the ordinary consequence of deleting a Connected System
+    /// while one of its tasks is still queued, and the queue is exactly where an administrator
+    /// would go to find out about it.
+    /// </para>
+    /// </remarks>
+    private async Task<string> GetWorkerHeaderNameAsync(WorkerTask workerTask)
     {
-        await using var db = new JimDbContext();
+        var db = Repository.Database;
         switch (workerTask)
         {
             case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
@@ -388,12 +405,20 @@ public class TaskingRepository : ITaskingRepository
                 return runProfilePart != null ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}" : "Run Profile not found!";
             }
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
-                // use the name of the Connected System
-                return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
+            {
+                // Named the same way a delete task for a missing system already is, so an orphaned
+                // clear task reads alike. Single() here threw instead, and because the read builds
+                // the whole list before returning, one orphaned row took out every other row with
+                // it, including the ones needed to work out what had happened.
+                var systemToClear = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId);
+                return systemToClear?.Name ?? $"Connected System {clearConnectedSystemObjectsTask.ConnectedSystemId}";
+            }
             case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
-                // use the name of the Connected System (may be null if already deleted)
-                var systemToDelete = db.ConnectedSystems.SingleOrDefault(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
+            {
+                // The Connected System may be null: this is the task that deletes it.
+                var systemToDelete = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
                 return systemToDelete?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}";
+            }
             case TemporalScopeReconciliationWorkerTask:
                 // the sweep carries no per-instance configuration, so the feature name is the display name
                 return "Temporal Scope Reconciliation";
