@@ -1,0 +1,276 @@
+@using JIM.Models.Activities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* ─── Live progress metrics for a run ───
+   The bar carries the proportion, the percentage rides beside it, and the numbers behind it sit
+   underneath as a labelled readout. Every fact appears exactly once: this replaced a panel that
+   printed the count, rate and time remaining two or three times each, because the Activity's
+   message narrated them as well as reporting them. Labels make the units explicit and keep the
+   columns in place as the digits change. *@
+
+@* The divider above these figures belongs to them rather than to the rail: the rail is shown for a
+   finished run too, and these figures are not, so a line drawn by the rail was left dividing
+   nothing on every completed Activity. *@
+<div class="jim-run-progress @(Phases.Count > 0 ? "jim-run-progress--under-steps" : "")">
+    @* Every figure below is reset by each step that counts its own work, so the panel would
+       otherwise read as an estimate for the whole run. Naming the step rather than pointing at it
+       ("the step running now") matters because the rail above scrolls sideways, and on a long run
+       in a narrow window the running step can be off screen while this readout is not. *@
+    @if (StepScope is { } scope)
+    {
+        <MudText Typo="Typo.caption" Class="jim-run-scope">@scope</MudText>
+    }
+
+    @* The steps within that step, and then what is happening inside them, so each reads after the
+       thing it belongs to. Both sat above the rail, which put the narrower thing first. *@
+    @if (SubSteps.Count > 0)
+    {
+        <div class="jim-run-substeps">
+            @foreach (var subStep in SubSteps)
+            {
+                <div class="jim-run-substep jim-run-substep--@StatusModifier(subStep.Status)">
+                    <MudIcon Icon="@StatusIcon(subStep)" Size="Size.Small" Class="jim-run-substep-icon" />
+                    <MudText Typo="Typo.body2">@subStep.Name</MudText>
+                    @* Separated rather than left to the colour alone: at the same weight and size as
+                       the step's name, "Fetching objects 20 sec, 990 ms" read as one phrase. The
+                       separator is markup rather than generated content so it is not lost to a
+                       stylesheet that failed to load, and is hidden from screen readers, which
+                       announce the two as separate elements anyway. *@
+                    @if (subStep.Duration is { } subStepDuration)
+                    {
+                        <span class="jim-run-substep-separator" aria-hidden="true">·</span>
+                        <MudText Typo="Typo.body2" Class="jim-run-substep-duration">@subStepDuration.ToAbbreviatedString()</MudText>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (MessageWorthShowing is { } message)
+    {
+        <MudText Typo="Typo.caption" Class="jim-run-message">@message</MudText>
+    }
+
+    <div class="jim-run-bar-row">
+        @if (IsIndeterminate)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" Class="jim-run-bar" />
+        }
+        else
+        {
+            <MudProgressLinear Value="@PercentComplete" Color="Color.Primary" Rounded="true" Size="Size.Large" Class="jim-run-bar" />
+            <MudText Typo="Typo.body1" Class="jim-run-percent">@PercentComplete.ToString("F1")%</MudText>
+        }
+    </div>
+
+    <div class="jim-run-metrics">
+        <div class="jim-run-metric">
+            <MudText Typo="Typo.caption" Class="jim-run-metric-label">Processed</MudText>
+            <MudText Typo="Typo.body1" Class="jim-run-metric-value">@ProcessedText</MudText>
+        </div>
+
+        <div class="jim-run-metric">
+            <MudText Typo="Typo.caption" Class="jim-run-metric-label">Rate</MudText>
+            <MudText Typo="Typo.body1" Class="jim-run-metric-value">
+                @if (RateText is { } rate)
+                {
+                    @rate
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudText>
+        </div>
+
+        @* Nothing can be said about time remaining without a total to work towards. *@
+        @if (!IsIndeterminate)
+        {
+            <div class="jim-run-metric">
+                <MudText Typo="Typo.caption" Class="jim-run-metric-label">Remaining</MudText>
+                <MudText Typo="Typo.body1" Class="jim-run-metric-value">
+                    @if (RemainingText is { } remaining)
+                    {
+                        @remaining
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </MudText>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// Objects processed so far within the current counting window.
+    /// </summary>
+    [Parameter]
+    public int ObjectsProcessed { get; set; }
+
+    /// <summary>
+    /// Total objects expected within the current counting window; 0 means the total is not known,
+    /// which is the normal case for a paged import.
+    /// </summary>
+    [Parameter]
+    public int ObjectsToProcess { get; set; }
+
+    /// <summary>
+    /// Objects processed per second over the recent sample window, or null when no rate is
+    /// available yet. Zero means the counter has stopped advancing.
+    /// </summary>
+    [Parameter]
+    public double? ObjectsPerSecond { get; set; }
+
+    /// <summary>
+    /// Estimated seconds until the current counting window completes, or null when no estimate is
+    /// available.
+    /// </summary>
+    [Parameter]
+    public double? EstimatedSecondsRemaining { get; set; }
+
+    /// <summary>
+    /// The run's steps, used to name the one these figures measure. Empty for Activities that are
+    /// not Run Profile executions and for runs that predate step recording, where the scope line
+    /// is omitted rather than left blank.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
+
+    /// <summary>
+    /// The Activity's message: what the run is doing inside the step it has reached. Null when the
+    /// run is not in flight.
+    /// </summary>
+    [Parameter]
+    public string? Message { get; set; }
+
+    /// <summary>
+    /// The message, unless it only repeats a step name the run is already showing. It earns its
+    /// line by saying something the rail and the scope line do not.
+    /// </summary>
+    private string? MessageWorthShowing
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Message))
+                return null;
+
+            var message = Message.Trim();
+            var repeatsAStepName = Phases
+                .Where(p => p.Status == ActivityPhaseStatus.Active)
+                .Any(p => string.Equals(message, p.Name, StringComparison.OrdinalIgnoreCase));
+
+            return repeatsAStepName ? null : message;
+        }
+    }
+
+    /// <summary>
+    /// "Step 2 of 3: Importing objects", matching what PowerShell's live progress already prints,
+    /// so the surfaces do not describe the same run differently. The word "Step" is what scopes the
+    /// figures; the position answers the run-level question they deliberately cannot.
+    /// </summary>
+    private string? StepScope
+    {
+        get
+        {
+            var step = RunPhaseReading.ActiveTopLevel(Phases);
+            if (step == null)
+                return null;
+
+            var position = RunPhaseReading.PositionOf(Phases, step);
+            var total = RunPhaseReading.TopLevel(Phases).Count;
+
+            return position.HasValue && total > 0
+                ? $"Step {position} of {total}: {step.Name}"
+                : step.Name;
+        }
+    }
+
+    /// <summary>
+    /// The steps inside the one running: the Connector's own, and JIM's where a step alternates
+    /// with the Connector's work. Empty once the run has moved past a step that had any.
+    /// </summary>
+    private List<ActivityPhase> SubSteps
+    {
+        get
+        {
+            var step = RunPhaseReading.ActiveTopLevel(Phases);
+            return step == null
+                ? []
+                : Phases.Where(p => p.ParentKey == step.Key).OrderBy(p => p.Order).ToList();
+        }
+    }
+
+    private static string StatusModifier(ActivityPhaseStatus status) => status switch
+    {
+        ActivityPhaseStatus.Active => "active",
+        ActivityPhaseStatus.Completed => "completed",
+        ActivityPhaseStatus.Skipped => "skipped",
+        ActivityPhaseStatus.Failed => "failed",
+        _ => "pending"
+    };
+
+    /// <summary>
+    /// A finished step shows the outcome; every other state shows what the step is for, matching
+    /// the rail above so the two read as one thing.
+    /// </summary>
+    private static string StatusIcon(ActivityPhase phase) => phase.Status switch
+    {
+        ActivityPhaseStatus.Completed => Icons.Material.Filled.Check,
+        ActivityPhaseStatus.Skipped => Icons.Material.Filled.Remove,
+        ActivityPhaseStatus.Failed => Icons.Material.Filled.PriorityHigh,
+        _ => RunPhaseIcons.ForPhase(phase.Key)
+    };
+
+    private bool IsIndeterminate => ObjectsToProcess <= 0;
+
+    /// <summary>
+    /// Truncated to the tenth rather than rounded, so the only thing that reads as 100% is a step
+    /// that has genuinely finished. Rounding put "100.0%" on screen beside a time remaining for as
+    /// long as the last handful of objects took, which is the one figure that must not overstate
+    /// itself.
+    /// </summary>
+    private double PercentComplete => IsIndeterminate
+        ? 0d
+        : Math.Floor(Math.Clamp((double)ObjectsProcessed / ObjectsToProcess * 100d, 0d, 100d) * 10d) / 10d;
+
+    /// <summary>
+    /// A rate of zero once the run is under way means samples exist but the counter has not moved,
+    /// which is the run tidying up rather than the run having stopped. Saying so beats an empty
+    /// cell or a fabricated estimate, and it is what the worker's own tracker used to report inside
+    /// the progress message. Before the first object is processed the rate is legitimately zero,
+    /// and that is a run yet to get going, not a stalled one.
+    /// </summary>
+    private bool IsStalled => ObjectsPerSecond is <= 0 && ObjectsProcessed > 0;
+
+    private string ProcessedText => IsIndeterminate
+        ? ObjectsProcessed.ToString("N0")
+        : $"{ObjectsProcessed:N0} / {ObjectsToProcess:N0}";
+
+    /// <summary>
+    /// No rate at all rather than a rate of none: "0.0 /sec" reads as a measurement, and a counter
+    /// that has not moved has nothing to measure. What that means for the estimate is said by
+    /// <see cref="RemainingText"/> instead.
+    /// </summary>
+    private string? RateText => ObjectsPerSecond is { } rate && rate > 0
+        ? $"{(rate >= 10 ? rate.ToString("N0") : rate.ToString("N1"))} /sec"
+        : null;
+
+    private string? RemainingText
+    {
+        get
+        {
+            if (IsStalled)
+                return "Finishing up";
+
+            if (EstimatedSecondsRemaining is not { } seconds)
+                return null;
+
+            return $"~{TimeSpan.FromSeconds(Math.Round(seconds)).ToAbbreviatedString()}";
+        }
+    }
+}

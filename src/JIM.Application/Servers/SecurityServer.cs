@@ -137,7 +137,7 @@ public class SecurityServer
     private async Task AddObjectToRoleCoreAsync(MetaverseObject metaverseObject, string roleName, string? changeReason,
         Func<Activity, Task> createActivityAsync)
     {
-        var memberName = metaverseObject.DisplayName ?? $"Unknown (ID: {metaverseObject.Id})";
+        var memberName = metaverseObject.NameOrId;
 
         var activity = new Activity
         {
@@ -284,7 +284,7 @@ public class SecurityServer
     private async Task<string> ResolveMemberNameAsync(Guid objectId)
     {
         var member = await Application.Metaverse.GetMetaverseObjectAsync(objectId);
-        return member?.DisplayName ?? $"Unknown (ID: {objectId})";
+        return member?.NameOrId ?? $"Unknown (ID: {objectId})";
     }
 
     /// <summary>

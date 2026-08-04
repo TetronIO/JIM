@@ -126,52 +126,119 @@ public class LdapConnectorDomainControllerPinningTests
 
     #region ResolvePinnedDirectoryServerForImport
 
+    /// <summary>
+    /// Reachable candidates are probed once and pinned. The probe exists because a domain controller's
+    /// advertised dnsHostName is not guaranteed to resolve from JIM's host: split-horizon DNS, a directory
+    /// reached through an alias or an address, and a DMZ deployment all produce one that does not. Pinning
+    /// such a name was unrecoverable, because clearing the pin on failure only led to the same unreachable
+    /// name being rediscovered and re-pinned on the next run.
+    /// </summary>
     [Test]
-    public void ResolvePinnedDirectoryServerForImport_AdFamilyNoPreferredSetting_PinsToDnsHostName()
+    public void ResolvePinnedDirectoryServerForImport_DiscoveredServerIsReachable_PinsIt()
     {
-        var result = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test");
+        var probed = new List<string>();
 
-        Assert.That(result, Is.EqualTo("dc1.jim.test"));
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
+            connectedServer: "host.jim.test", canConnectTo: server => { probed.Add(server); return true; },
+            logger: Logger);
+
+        Assert.That(decision.PinnedServer, Is.EqualTo("dc1.jim.test"));
+        Assert.That(decision.WarningMessage, Is.Null);
+        Assert.That(probed, Is.EqualTo(new[] { "dc1.jim.test" }));
+    }
+
+    [Test]
+    public void ResolvePinnedDirectoryServerForImport_DiscoveredServerIsUnreachable_DoesNotPinAndWarns()
+    {
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
+            connectedServer: "host.jim.test", canConnectTo: _ => false, logger: Logger);
+
+        Assert.That(decision.PinnedServer, Is.Null,
+            "Pinning a name JIM cannot reach fails every subsequent run and never self-heals");
+        Assert.That(decision.WarningMessage, Does.Contain("dc1.jim.test"),
+            "The warning must name the unreachable domain controller, or nobody can fix the DNS behind it");
+        Assert.That(decision.WarningMessage, Does.Contain("host.jim.test"),
+            "and must say what JIM fell back to");
+    }
+
+    /// <summary>
+    /// The connection this rootDSE came from was opened through the candidate itself, which is proof enough;
+    /// probing it again would add a bind to every run for an answer already known. This is the steady state
+    /// once a pin exists, so it is the case that must not cost anything.
+    /// </summary>
+    [Test]
+    public void ResolvePinnedDirectoryServerForImport_DiscoveredServerIsTheOneAlreadyConnectedThrough_PinsWithoutProbing()
+    {
+        var probed = new List<string>();
+
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: "dc1.jim.test",
+            connectedServer: "DC1.JIM.TEST", canConnectTo: server => { probed.Add(server); return true; },
+            logger: Logger);
+
+        Assert.That(decision.PinnedServer, Is.EqualTo("dc1.jim.test"));
+        Assert.That(probed, Is.Empty, "Host names are case-insensitive, so this is the same server");
     }
 
     [TestCase("")]
     [TestCase("   ")]
     public void ResolvePinnedDirectoryServerForImport_AdFamilyBlankPreferredSetting_PinsToDnsHostName(string blankPreferredSetting)
     {
-        var result = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: blankPreferredSetting, dnsHostName: "dc1.jim.test");
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: true, preferredDomainController: blankPreferredSetting, dnsHostName: "dc1.jim.test",
+            connectedServer: "host.jim.test", canConnectTo: _ => true, logger: Logger);
 
-        Assert.That(result, Is.EqualTo("dc1.jim.test"));
+        Assert.That(decision.PinnedServer, Is.EqualTo("dc1.jim.test"));
     }
 
     [Test]
-    public void ResolvePinnedDirectoryServerForImport_AdFamilyWithPreferredSettingConfigured_ClearsPin()
+    public void ResolvePinnedDirectoryServerForImport_AdFamilyWithPreferredSettingConfigured_ClearsPinWithoutProbing()
     {
         // The setting owns DC selection; a stale pin from a previous configuration must not survive.
-        var result = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: true, preferredDomainController: "preferred-dc.jim.test", dnsHostName: "dc1.jim.test");
+        var probed = new List<string>();
 
-        Assert.That(result, Is.Null);
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: true, preferredDomainController: "preferred-dc.jim.test", dnsHostName: "dc1.jim.test",
+            connectedServer: "preferred-dc.jim.test", canConnectTo: server => { probed.Add(server); return true; },
+            logger: Logger);
+
+        Assert.That(decision.PinnedServer, Is.Null);
+        Assert.That(decision.WarningMessage, Is.Null);
+        Assert.That(probed, Is.Empty, "Nothing is being pinned, so there is nothing to validate");
     }
 
     [Test]
-    public void ResolvePinnedDirectoryServerForImport_NonAdFamilyNoPreferredSetting_NeverPins()
+    public void ResolvePinnedDirectoryServerForImport_NonAdFamily_NeverPinsAndNeverProbes()
     {
         // OpenLDAP/Generic: pinning is meaningless, regardless of the setting.
-        var result = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: false, preferredDomainController: null, dnsHostName: "ldap1.jim.test");
+        var probed = new List<string>();
 
-        Assert.That(result, Is.Null);
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: false, preferredDomainController: null, dnsHostName: "ldap1.jim.test",
+            connectedServer: "host.jim.test", canConnectTo: server => { probed.Add(server); return true; },
+            logger: Logger);
+
+        Assert.That(decision.PinnedServer, Is.Null);
+        Assert.That(decision.WarningMessage, Is.Null);
+        Assert.That(probed, Is.Empty);
     }
 
     [Test]
-    public void ResolvePinnedDirectoryServerForImport_NonAdFamilyWithPreferredSettingConfigured_NeverPins()
+    public void ResolvePinnedDirectoryServerForImport_NoDnsHostNameAdvertised_NeverPinsAndNeverProbes()
     {
-        var result = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            useUsnDeltaImport: false, preferredDomainController: "preferred.jim.test", dnsHostName: "ldap1.jim.test");
+        var probed = new List<string>();
 
-        Assert.That(result, Is.Null);
+        var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            useUsnDeltaImport: true, preferredDomainController: null, dnsHostName: null,
+            connectedServer: "host.jim.test", canConnectTo: server => { probed.Add(server); return true; },
+            logger: Logger);
+
+        Assert.That(decision.PinnedServer, Is.Null);
+        Assert.That(decision.WarningMessage, Is.Null,
+            "A directory that advertises no dnsHostName is not a misconfiguration to warn an administrator about");
+        Assert.That(probed, Is.Empty);
     }
 
     #endregion

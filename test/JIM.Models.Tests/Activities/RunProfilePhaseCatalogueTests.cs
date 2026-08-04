@@ -91,6 +91,67 @@ public class RunProfilePhaseCatalogueTests
                 $"{runType} does not call a Connector, so it must not declare a host phase.");
     }
 
+    /// <summary>
+    /// An export's rail showed three steps while the run narrated work belonging to none of them:
+    /// giving provisioned accounts their initial passwords, and selecting containers the export had
+    /// just created. Both do real work against the Connected System after the objects are written,
+    /// and the first writes its own message, so the message changed while the rail stood still.
+    /// </summary>
+    [Test]
+    public void GetPhases_Export_DeclaresTheWorkThatFollowsWritingTheObjects()
+    {
+        var keys = RunProfilePhaseCatalogue.GetPhases(ConnectedSystemRunType.Export).Select(p => p.Key).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeferred),
+                "An export's second pass re-resolves references that did not exist yet and writes what it can; at scale that pass is most of the run.");
+            Assert.That(keys, Does.Contain(RunPhaseKeys.ExportSelectNewContainers),
+                "An export that creates containers then goes and selects them; that is Connected System work with no step of its own.");
+            Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeliverInitialPasswords),
+                "Initial password delivery opens its own connection and narrates its own outcome, so it needs a step to narrate into.");
+        });
+    }
+
+    [Test]
+    public void GetPhases_Export_OrdersTheStepsAsTheRunPerformsThem()
+    {
+        var keys = RunProfilePhaseCatalogue.GetPhases(ConnectedSystemRunType.Export).Select(p => p.Key).ToList();
+
+        Assert.That(keys, Is.EqualTo(new[]
+        {
+            RunPhaseKeys.ExportPrepare,
+            RunPhaseKeys.ExportExecute,
+            RunPhaseKeys.ExportDeferred,
+            RunPhaseKeys.ExportResolveReferences,
+            RunPhaseKeys.ExportSelectNewContainers,
+            RunPhaseKeys.ExportDeliverInitialPasswords
+        }));
+    }
+
+    /// <summary>
+    /// The Outbound Temporal Scope Reconciler's apply step (#892) runs at the end of a
+    /// synchronisation, re-evaluating export scope for Metaverse Objects whose scope drifted with
+    /// the clock. It batches through the flagged set and writes Pending Exports, so at scale it is
+    /// time an administrator can watch pass with no step accounting for it.
+    /// </summary>
+    [Test]
+    public void GetPhases_Synchronisation_DeclaresTheScopeReviewThatFollowsProcessing()
+    {
+        ConnectedSystemRunType[] syncRunTypes =
+        [
+            ConnectedSystemRunType.FullSynchronisation,
+            ConnectedSystemRunType.DeltaSynchronisation
+        ];
+
+        foreach (var runType in syncRunTypes)
+        {
+            var keys = RunProfilePhaseCatalogue.GetPhases(runType).Select(p => p.Key).ToList();
+            Assert.That(keys, Does.Contain(RunPhaseKeys.SyncReviewExportScope), $"{runType} performs the scope review but declares no step for it.");
+            Assert.That(keys.Last(), Is.EqualTo(RunPhaseKeys.SyncReviewExportScope), $"{runType} performs the scope review last, after cross-page references are resolved.");
+        }
+    }
+
     [Test]
     public void GetPhases_EveryDeclaredPhase_HasAKeyAndName()
     {

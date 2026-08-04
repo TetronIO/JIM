@@ -31,7 +31,7 @@
                 @if (context.ReferenceValue != null)
                 {
                     <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
-                        @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                        @(context.ReferenceValue.NameOrId ?? context.ReferenceValue.Id.ToString())
                     </MudLink>
                 }
                 else

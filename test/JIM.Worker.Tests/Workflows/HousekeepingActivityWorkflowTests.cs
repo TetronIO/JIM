@@ -195,7 +195,7 @@ public class HousekeepingActivityWorkflowTests
     /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
     /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
     /// That export deprovisions a real account, so it must be recorded on the housekeeping Activity as a consequence
-    /// of the deletion: a PendingExportCreated outcome nested beneath the deleted object's MvoDeleted outcome, not
+    /// of the deletion: a DeprovisionQueued outcome nested beneath the deleted object's MvoDeleted outcome, not
     /// left visible only in the service log.
     /// </summary>
     [Test]
@@ -227,7 +227,8 @@ public class HousekeepingActivityWorkflowTests
         var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
         Assert.That(cascadeOutcome, Is.Not.Null,
             "The staged delete Pending Export must be recorded as a consequence of the Metaverse Object deletion");
-        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
+            "A staged Delete Pending Export is a queued deprovision, not an attribute update");
         Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
         Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
             "The outcome must name the Connected System the account is being deleted from; the identity is named by the item it hangs off");

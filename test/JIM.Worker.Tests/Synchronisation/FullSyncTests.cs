@@ -3344,6 +3344,15 @@ public class FullSyncTests
         var csoBDisplayName = csoBMvo!.AttributeValues
             .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.DisplayName);
         Assert.That(csoBDisplayName?.StringValue, Is.EqualTo("The Manager"));
+
+        // Cross-page resolution is its own step with its own, much smaller, amount of work, so the
+        // Activity's counting window has to move to it. Left on the page loop's totals the step
+        // would report itself finished the moment it started, and the progress readout would show
+        // 100% and a time remaining of nothing for however long the pass actually took.
+        Assert.That(activity.ObjectsToProcess, Is.EqualTo(1),
+            "The counting window should describe the cross-page pass (one CSO to resolve), not the page loop it followed.");
+        Assert.That(activity.ObjectsProcessed, Is.EqualTo(1),
+            "Every CSO needing cross-page resolution was resolved, so the window should read as complete.");
     }
 
     /// <summary>

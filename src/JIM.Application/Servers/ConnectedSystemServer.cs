@@ -1074,7 +1074,7 @@ public class ConnectedSystemServer
     public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
+            connectedSystemId, initiatedBy?.NameOrId ?? "System", deleteChangeHistory);
 
         // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
@@ -1105,7 +1105,7 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
@@ -1123,7 +1123,7 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
@@ -2013,7 +2013,7 @@ public class ConnectedSystemServer
                     ConnectedSystemObjectId = cso.Id,
                     ConnectedSystemId = cso.ConnectedSystemId,
                     ConnectedSystemName = system.Name,
-                    AccountIdentifier = cso.DisplayNameOrId ?? cso.Id.ToString(),
+                    AccountIdentifier = cso.NameOrId ?? cso.Id.ToString(),
                     ConnectorCanSetPasswords = system.ExpiryBehaviours.Count > 0,
                     SupportedExpiryBehaviours = system.ExpiryBehaviours,
                     DiscoveredPolicy = system.Policy,
@@ -2184,7 +2184,7 @@ public class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = connectedSystemObject.DisplayNameOrId ?? connectedSystemObjectId.ToString(),
+            TargetName = connectedSystemObject.NameOrId ?? connectedSystemObjectId.ToString(),
             TargetType = ActivityTargetType.ConnectedSystemObject,
             TargetOperationType = ActivityTargetOperationType.SetPassword,
             ConnectedSystemId = connectedSystemId,
@@ -3523,10 +3523,9 @@ public class ConnectedSystemServer
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
         var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName();
-        // Get the displayName attribute value directly (don't use DisplayNameOrId which falls back to External ID)
-        var displayNameAttr = connectedSystemObject.AttributeValues
-            .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
-        var displayName = displayNameAttr?.StringValue;
+        // Name only, never NameOrId: the external id is captured separately just above, and letting it
+        // stand in for the name would persist the same value into both snapshot fields.
+        var displayName = connectedSystemObject.Name;
 
         // Snapshot all attribute values BEFORE deletion for change tracking.
         // Attribute values are cascade-deleted with the CSO, so we must capture them now.
@@ -3562,6 +3561,9 @@ public class ConnectedSystemServer
             // Use string fields to preserve the values for UI display:
             DeletedObjectExternalId = externalIdDisplayValue,
             DeletedObjectDisplayName = displayName,
+            // The id survives here as a plain column; ConnectedSystemObjectId is a foreign key and is nulled
+            // with the object, so this is the only way back to this record from a reference to what was deleted.
+            DeletedConnectedSystemObjectId = connectedSystemObject.Id,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             // Copy initiator info from the Activity for audit trail (if Activity is loaded)
             InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -3606,13 +3608,11 @@ public class ConnectedSystemServer
         // Capture external ID, display name, and all attribute values before deletion.
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
-        // Get displayName attribute directly (don't use DisplayNameOrId which falls back to External ID).
+        // Name only, never NameOrId: the external id is captured separately alongside it.
         var deletedObjectInfo = connectedSystemObjects
             .Select(cso => (
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.AttributeValues
-                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue,
+                DisplayName: cso.Name,
                 FinalAttributeValues: cso.AttributeValues
                     .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
                     .ToList()))
@@ -3642,6 +3642,7 @@ public class ConnectedSystemServer
                     // Use string fields to preserve the values for UI display:
                     DeletedObjectExternalId = externalId,
                     DeletedObjectDisplayName = displayName,
+                    DeletedConnectedSystemObjectId = cso.Id,
                     ActivityRunProfileExecutionItem = executionItem,
                     // Copy initiator info from the Activity for audit trail (if Activity is loaded)
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -4293,12 +4294,11 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != rpeis.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
+        // Name only, never NameOrId: the external id is captured separately alongside it.
         var deletedObjectInfo = connectedSystemObjects
             .Select(cso => (
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.AttributeValues
-                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue,
+                DisplayName: cso.Name,
                 FinalAttributeValues: cso.AttributeValues
                     .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
                     .ToList()))
@@ -4320,6 +4320,7 @@ public class ConnectedSystemServer
                     DeletedObjectType = cso.Type,
                     DeletedObjectExternalId = externalId,
                     DeletedObjectDisplayName = displayName,
+                    DeletedConnectedSystemObjectId = cso.Id,
                     ActivityRunProfileExecutionItem = executionItem,
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
                     InitiatedById = executionItem.Activity?.InitiatedById,
@@ -5979,6 +5980,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so anything holding historical ids (a causality record naming the Pending
+    /// Export an event created) needs this to tell a live row from one that has since been run.
+    /// </summary>
+    /// <param name="pendingExportIds">The ids to test. An empty list returns an empty result without querying.</param>
+    public async Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetExistingPendingExportIdsAsync(pendingExportIds);
+    }
+
+    /// <summary>
     /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>
@@ -6120,6 +6132,18 @@ public class ConnectedSystemServer
     public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
+    }
+
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. Backs the Deleted Objects page's deep link, reached from a causality view that holds the
+    /// deleted record's id rather than its change record's.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    public async Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeAsync(deletedConnectedSystemObjectId);
     }
     #endregion
 

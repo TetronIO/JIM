@@ -32,25 +32,27 @@
                 @if (context.ReferenceValue != null)
                 {
                     <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                        @context.ReferenceValue.DisplayNameOrId
+                        @context.ReferenceValue.NameOrId
                     </MudLink>
                 }
                 else if (context.UnresolvedReferenceValue != null)
                 {
                     <span class="jim-attr-unresolved">
                         <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
-                        <span class="mud-text-secondary">@context.UnresolvedReferenceValue</span>
+                        <span class="mud-text-secondary jim-text-code">@context.UnresolvedReferenceValue</span>
                     </span>
                 }
                 else
                 {
-                    @(context.ToStringNoName())
+                    <span class="jim-text-code">@(context.ToStringNoName())</span>
                 }
             </MudTd>
             <MudTd DataLabel="Type">
                 @if (context.ReferenceValue != null)
                 {
-                    @context.ReferenceValue.Type.Name
+                    <MudLink Href="@Utilities.GetConnectedSystemSchemaHref(context.ReferenceValue.ConnectedSystemId, context.ReferenceValue.Type.Name)">
+                        @context.ReferenceValue.Type.Name
+                    </MudLink>
                 }
             </MudTd>
             <MudTd DataLabel="Secondary ID">

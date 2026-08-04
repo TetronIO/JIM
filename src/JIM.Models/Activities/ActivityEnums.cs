@@ -112,7 +112,23 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// or cancel a deletion already scheduled". A grace period edited from 30 days to 7 deletes nobody today and
     /// changes the fate of everyone already waiting.
     /// </summary>
-    WouldChangeDeletionEligibleDate
+    WouldChangeDeletionEligibleDate,
+
+    /// <summary>
+    /// A Pending Export whose change type is Delete was staged during synchronisation: the object is queued to be
+    /// removed from the target Connected System on its next export run. The delete-flavoured sibling of
+    /// <see cref="PendingExportCreated"/>, which covers every other change type.
+    ///
+    /// The distinction exists because a delete Pending Export carries the Connected System Object's secondary
+    /// external ID (the DN, for LDAP) as an attribute value change, so the connector can still resolve the target
+    /// after the object is disconnected from its Metaverse Object and possibly housekept away. Reported as a plain
+    /// Pending Export, that payload read as "one attribute set" and a deprovisioning cascade was indistinguishable
+    /// from an attribute update.
+    ///
+    /// Counts towards an Activity's Pending Export totals exactly as <see cref="PendingExportCreated"/> does; it
+    /// is one, and only its intent differs.
+    /// </summary>
+    DeprovisionQueued
 }
 
 /// <summary>

@@ -153,11 +153,18 @@ public partial class SyncEngine : ISyncEngine
     public MvoDeletionDecision EvaluateMvoDeletionRule(
         MetaverseObject mvo,
         int disconnectingSystemId,
-        IReadOnlyCollection<int> remainingConnectedSystemIds)
+        IReadOnlyCollection<int> remainingConnectedSystemIds,
+        string? disconnectingSystemName = null)
     {
         // One entry per remaining joined CSO, so the count is CSO-level; duplicates per system are
         // deliberate (a system with two joined CSOs contributes two entries).
         var remainingCsoCount = remainingConnectedSystemIds.Count;
+
+        // Prefer the system name in human-readable reasons; fall back to the id when the caller did
+        // not resolve a name (keeps the reason meaningful without a database lookup here).
+        var systemLabel = string.IsNullOrWhiteSpace(disconnectingSystemName)
+            ? $"system ID {disconnectingSystemId}"
+            : $"'{disconnectingSystemName}'";
 
         if (mvo.Type == null)
         {
@@ -204,7 +211,7 @@ public partial class SyncEngine : ISyncEngine
                     Log.Verbose("EvaluateMvoDeletionRule: System ID {SystemId} disconnected from MVO {MvoId} but is not an authoritative source. " +
                         "Authoritative sources: [{AuthSources}]. Not marking for deletion.",
                         disconnectingSystemId, mvo.Id, string.Join(", ", triggerIds));
-                    return MvoDeletionDecision.NotDeleted($"System {disconnectingSystemId} is not an authoritative source");
+                    return MvoDeletionDecision.NotDeleted($"System {systemLabel} is not an authoritative source");
                 }
 
                 if (mvo.Type.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect)
@@ -226,14 +233,14 @@ public partial class SyncEngine : ISyncEngine
                         "authoritative sources remain connected (All sources mode). Triggering deletion even though {Count} connector(s) remain.",
                         disconnectingSystemId, mvo.Id, remainingCsoCount);
                     return EvaluateGracePeriod(mvo,
-                        $"All sources mode: authoritative source (system ID {disconnectingSystemId}) disconnected and no sources remain connected");
+                        $"All sources mode: authoritative source {systemLabel} disconnected and no sources remain connected");
                 }
 
                 // Specific sources mode: any listed source disconnecting triggers deletion (pre-#119 behaviour).
                 Log.Information("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId} (Specific sources mode). " +
                     "Triggering deletion even though {Count} connector(s) remain.",
                     disconnectingSystemId, mvo.Id, remainingCsoCount);
-                return EvaluateGracePeriod(mvo, $"Specific sources mode: authoritative source (system ID {disconnectingSystemId}) disconnected");
+                return EvaluateGracePeriod(mvo, $"Specific sources mode: authoritative source {systemLabel} disconnected");
 
             default:
                 Log.Warning("EvaluateMvoDeletionRule: Unknown DeletionRule {Rule} for MVO {MvoId}.", mvo.Type.DeletionRule, mvo.Id);
@@ -319,9 +326,7 @@ public partial class SyncEngine : ISyncEngine
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
         // This cached column enables efficient sorting at scale without correlated subqueries.
-        var displayNameAv = mvo.AttributeValues
-            .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-        mvo.CachedDisplayName = displayNameAv?.StringValue;
+        mvo.CachedDisplayName = ObjectNaming.MetaverseNameFrom(mvo.AttributeValues);
 
         Log.Verbose("ApplyPendingAttributeChanges: Applied {AddCount} additions and {RemoveCount} removals to MVO {MvoId}",
             addCount, removeCount, mvo.Id);
