@@ -32,6 +32,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 - No Oracle Wallet authentication in the first release (file-based wallet distribution; revisit with a File-type setting when demanded).
 - No SQL query editor with syntax highlighting, and no query-result preview UI in the first release; configuration is via settings fields.
 - No arbitrary-SQL scheduled jobs; that capability already exists as the Scheduler's SQL Script step and is unrelated to synchronisation.
+- No bulk-load export path (SqlBulkCopy, Oracle array binding) in the first release. Deferred 2026-08-02, not rejected: bringing a new system online can require a full load of identities, where bulk primitives materially cut export time; but they trade away per-object transactions (requirement 14) and per-object error isolation (requirement 18), so any future implementation must be a per-Connected System opt-in the administrator consciously accepts. Re-evaluate once initial-load timings from real deployments exist; tracked alongside the stored-procedure and parallel-export fast-follows.
 
 ## User Stories
 
@@ -55,7 +56,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 **Schema discovery**
 
 5. `IConnectorSchema.GetSchemaAsync` must enumerate tables and views (with schema qualification) and their columns, mapping SQL types to JIM attribute types per the type-mapping table below.
-6. Object type configuration must support: a primary table or view per object type, an anchor (external ID) column or column set, an optional admin-supplied `SELECT` statement in place of a table/view, and zero or more related tables for multi-valued attributes (each with a join condition to the parent anchor).
+6. Object type configuration must support: a primary table or view per object type, an anchor (external ID) column or column set, an optional admin-supplied `SELECT` statement in place of a table/view, and zero or more related tables for multi-valued attributes (each with a join condition to the parent anchor). Where the database declares genuine foreign-key constraints whose referenced table and column match a configured object type's anchor, schema discovery must surface them as pre-populated Reference suggestions for the administrator to confirm; explicit configuration remains the source of truth, since views carry no foreign-key metadata and soft references (an unconstrained manager column) are the common identity case (decided 2026-08-02).
 7. Multi-valued related tables must surface their value column as a multi-valued attribute of the parent object type in the discovered schema.
 
 **Type mapping**
@@ -105,7 +106,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 **Progress reporting**
 
-21. Long-running operations must narrate their sub-phases via the callback pattern delivered by prerequisite #637 ("Executing query", "Reading rows", "Writing rows"), so operators can distinguish a healthy long-running query from a stuck one.
+21. The connector must declare its steps up-front via `IConnectorPhases` (rendered as sub-steps within the run's Connector step) and narrate them during execution via `IConnectorProgress` ("Executing query", "Reading rows", "Writing rows"), so operators can distinguish a healthy long-running query from a stuck one and see what work remains. Because a database can state result-set sizes cheaply, imports must additionally report the run's expected object count (`ReportExpectedObjectCountAsync`) so the Activity shows a real percentage and time remaining, and report objects read mid-call wherever a single call drains more than one internal page. (Updated 2026-08-02: the step model delivered by #1161 and #1212 supersedes #637's original callback design, which this requirement previously referenced.)
 
 ### Non-Functional Requirements
 
@@ -131,6 +132,8 @@ Integration coverage must be a **provider × capability matrix**, not a single h
 | Reference export | Anchor values written for reference attributes |
 | Type-mapping round-trip | Each mapped SQL type imports and exports losslessly, including zoneless DateTime interpretation and exact-numeric Decimal round-trip |
 | Configuration validation | Save-time connectivity test passes/fails correctly (wrong credentials, unreachable host) |
+
+Test strategy (decided 2026-08-02): the dedicated matrix scenario above is the connector's correctness gate; cross-technology regression breadth comes from the road-mapped Multi-Source Aggregation scenario (database sources feeding the metaverse alongside directory and file systems), not from retrofitting databases into existing scenarios, whose container weight would tax every run for marginal signal. If general-JIM regressions still slip past both, parameterising Scenario 1's HR source (CSV vs SQL) is the one retrofit worth considering.
 
 The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 500,000-row scale import.
 
