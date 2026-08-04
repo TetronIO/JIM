@@ -323,7 +323,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             DeltaPersistence = request.DeltaPersistence,
             InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
             InitiatedById = apiKey?.Id ?? user?.Id,
-            InitiatedByName = apiKey?.Name ?? user?.DisplayName
+            InitiatedByName = apiKey?.Name ?? user?.Name
         };
 
         var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
