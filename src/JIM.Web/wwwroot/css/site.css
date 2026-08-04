@@ -3,11 +3,14 @@
 :root {
     --jim-instance-bar-height: 28px;
 
-    /* The corner radius of every container element: papers, tables, alerts and expansion panels,
-       plus anything hand-built that joins one of them into a single box. Held as a token because
-       the alternative is what it replaced: a bar hard-coded to 4px sitting on top of a paper the
-       container rule below had already moved to 8px, so the box was rounder at the bottom than
-       the top. Deliberately not --mud-default-borderradius, which also drives buttons and inputs. */
+    /* The corner radius of every container element: papers, tables, alerts, expansion panels, code
+       blocks and cards, plus anything hand-built that joins one of them into a single box. This is
+       the only place the figure appears; nothing else should write a container radius as a literal.
+       Held as a token because the alternative is what it replaced: a status bar hard-coded to 4px
+       sitting on top of a paper the container rule had already moved to 8px, so the box was rounder
+       at the bottom than at the top, and the two literals were written months apart with nothing
+       tying them together. Deliberately not --mud-default-borderradius, which is smaller because it
+       also drives buttons, inputs and other interactive controls. */
     --jim-container-radius: 8px;
 }
 
@@ -268,7 +271,7 @@ html[lang] .mud-table-outlined {
 /* JIM styled expansion panels - use .jim-expansion-panel class on MudExpansionPanels */
 .jim-expansion-panel {
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
     overflow: hidden;
 }
 
@@ -521,13 +524,13 @@ html[lang] .mud-paper .mud-card::after {
 /* Match the tabs container radius to our 8px standard and clip child content so
    the first/last tab's active highlight doesn't overflow the rounded corners. */
 .mud-tabs-rounded {
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
 }
 
 /* Ensure the rounded outlined tabbar uses our 8px radius on all corners and clips
    child content so tab highlights respect the rounded shape. */
 html[lang] .mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined {
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
     overflow: hidden;
 }
 
@@ -624,7 +627,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--mud-palette-text-primary);
     background: var(--jim-inner-surface, var(--mud-palette-background));
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow-x: auto;
     white-space: pre;
 }
@@ -1223,7 +1226,7 @@ html[lang] .mud-alert-filled-normal {
 /* Dialog/Modal background - use lighter surface colour where defined for better elevation */
 html[lang] .mud-dialog {
     background-color: var(--jim-dialog-surface, var(--mud-palette-surface)) !important;
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
 }
 
 /* Dialog inner elements - slightly lighter backgrounds for nested content */
@@ -1347,7 +1350,7 @@ html[lang] .jim-schema-change-table td {
 .jim-log-panel .mud-expand-panels {
     margin: 0 !important;
     border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
 }
 
 .jim-log-panel .mud-expand-panel {
@@ -1395,7 +1398,7 @@ html[lang] .jim-schema-change-table td {
 .jim-activity-panel .mud-expand-panels {
     margin: 0 !important;
     border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
 }
 
 .jim-activity-panel .mud-expand-panel {
@@ -1428,7 +1431,7 @@ html[lang] .jim-schema-change-table td {
     margin: 0;
     padding: 12px;
     background: var(--jim-inner-surface, var(--mud-palette-background));
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-word;
@@ -1505,7 +1508,7 @@ html[lang] .jim-schema-change-table td {
 
 /* CSO Attribute Table Styles */
 .jim-attribute-table {
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow: hidden;
 }
 
@@ -1674,7 +1677,7 @@ html[lang] .jim-schema-change-table td {
 .jim-reconnect-content {
     background-color: var(--mud-palette-surface);
     color: var(--mud-palette-text-primary);
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     padding: 32px 48px;
     text-align: center;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -1841,7 +1844,7 @@ html[lang] .jim-schema-change-table td {
 
 /* Schedule Step Block Styles */
 .jim-step-block {
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow: hidden;
     margin-bottom: 8px;
 }
