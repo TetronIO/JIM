@@ -56,8 +56,20 @@ internal sealed record SqlConnectionSettings
 
     internal int? ConnectionTimeoutSeconds { get; init; }
 
+    /// <summary>
+    /// A file holding the one server certificate this connection may accept in addition to whatever the
+    /// operating system's bundle already vouches for. Null on every ordinary connection.
+    /// <para>
+    /// Set only after a TLS connection has been refused, and only for a certificate JIM's own
+    /// certificate store vouches for, so it can never widen trust beyond what an administrator added in
+    /// Admin &gt; Certificates. Honoured only by providers declaring
+    /// <see cref="ISqlProvider.SupportsPinnedServerCertificate"/>.
+    /// </para>
+    /// </summary>
+    internal string? PinnedServerCertificatePath { get; init; }
+
     public override string ToString()
     {
-        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), UseTls = {UseTls}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds} }}";
+        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), UseTls = {UseTls}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, PinnedServerCertificatePath = {PinnedServerCertificatePath} }}";
     }
 }

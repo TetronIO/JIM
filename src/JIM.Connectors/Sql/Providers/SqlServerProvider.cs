@@ -15,6 +15,12 @@ namespace JIM.Connectors.Sql.Providers;
 /// </summary>
 internal class SqlServerProvider : SqlProviderBase
 {
+    /// <summary>
+    /// The port a default instance listens on. Encryption changes nothing here: SQL Server negotiates
+    /// TLS over the same port rather than offering a second one.
+    /// </summary>
+    private const int DefaultPort = 1433;
+
     public override SqlDatabaseType DatabaseType => SqlDatabaseType.SqlServer;
 
     public override string DisplayName => "Microsoft SQL Server";
@@ -22,6 +28,17 @@ internal class SqlServerProvider : SqlProviderBase
     public override string ParameterPrefix => "@";
 
     public override string ConnectivityTestCommandText => "SELECT 1";
+
+    public override int GetDefaultPort(bool useTls) => DefaultPort;
+
+    /// <summary>
+    /// <c>Microsoft.Data.SqlClient</c> takes a path to a certificate file and accepts the server's
+    /// certificate when it is an exact match for it, which is the only mechanism it offers for trusting
+    /// a certificate the operating system's bundle does not already vouch for. There is no validation
+    /// callback to install, and <c>TrustServerCertificate</c> is never an acceptable substitute: it
+    /// accepts whatever is presented, now and in future.
+    /// </summary>
+    public override bool SupportsPinnedServerCertificate => true;
 
     public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.ResultSet;
 
@@ -85,6 +102,13 @@ internal class SqlServerProvider : SqlProviderBase
 
         if (settings.ConnectionTimeoutSeconds.HasValue)
             builder.ConnectTimeout = settings.ConnectionTimeoutSeconds.Value;
+
+        // The one certificate this connection may accept on top of the operating system's own anchors,
+        // supplied only after an ordinary attempt was refused and only for a certificate the JIM
+        // certificate store vouches for. SqlClient matches it exactly, so a server that later presents
+        // a different certificate is refused again rather than silently trusted.
+        if (!string.IsNullOrEmpty(settings.PinnedServerCertificatePath))
+            builder.ServerCertificate = settings.PinnedServerCertificatePath;
 
         return builder.ConnectionString;
     }

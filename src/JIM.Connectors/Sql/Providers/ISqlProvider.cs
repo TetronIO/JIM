@@ -80,6 +80,30 @@ internal interface ISqlProvider
     /// </summary>
     string ConnectivityTestCommandText { get; }
 
+    /// <summary>
+    /// The listener port this dialect uses when an administrator leaves the port unset. Encrypted and
+    /// unencrypted transports do not always share one, so the answer depends on which is in use.
+    /// </summary>
+    int GetDefaultPort(bool useTls);
+
+    /// <summary>
+    /// What this dialect calls its encrypted transport, for the wording an administrator is shown when
+    /// a server's certificate is refused ("TLS", "TCPS").
+    /// </summary>
+    string SecureTransportName { get; }
+
+    /// <summary>
+    /// Whether this dialect's driver can be told to accept one specific server certificate, supplied as
+    /// a file through <see cref="SqlConnectionSettings.PinnedServerCertificatePath"/>.
+    /// <para>
+    /// That mechanism is how a certificate an administrator added in Admin &gt; Certificates becomes an
+    /// additional trust anchor: the operating system's own bundle is always tried first, and only a
+    /// certificate JIM's certificate store vouches for is ever pinned. A driver that offers no such
+    /// mechanism returns false, and its connections validate against the operating system bundle alone.
+    /// </para>
+    /// </summary>
+    bool SupportsPinnedServerCertificate { get; }
+
     #endregion
 
     #region Identifiers

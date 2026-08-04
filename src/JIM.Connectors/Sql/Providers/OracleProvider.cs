@@ -44,6 +44,26 @@ internal class OracleProvider : SqlProviderBase
     /// </summary>
     public override string ConnectivityTestCommandText => "SELECT 1 FROM DUAL";
 
+    public override int GetDefaultPort(bool useTls) => useTls ? DefaultTlsPort : DefaultPort;
+
+    /// <summary>
+    /// TCPS is what Oracle's own documentation and an Oracle administrator call the encrypted transport,
+    /// so it is the term JIM uses when reporting a refused certificate on one.
+    /// </summary>
+    public override string SecureTransportName => "TCPS";
+
+    /// <summary>
+    /// False, and this is a genuine limitation rather than a decision. ODP.NET exposes no server
+    /// certificate validation callback and no per-connection trust anchor: its only trust configuration
+    /// is an Oracle wallet (<c>WalletLocation</c>), or the Microsoft Certificate Store on Windows, and a
+    /// wallet can only be created with Oracle's own native tooling, which JIM neither ships nor can
+    /// generate from managed code. A TCPS connection therefore validates against the operating system's
+    /// bundle alone; a certificate added in Admin &gt; Certificates cannot be handed to the driver.
+    /// JIM still reports exactly which certificate was refused and why, so the administrator knows what
+    /// to install in the JIM container's own trust store or in a wallet.
+    /// </summary>
+    public override bool SupportsPinnedServerCertificate => false;
+
     public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.OutputParameter;
 
     protected override char OpenQuote => '"';
@@ -144,7 +164,7 @@ internal class OracleProvider : SqlProviderBase
     private string BuildConnectDescriptor(SqlConnectionSettings settings)
     {
         var protocol = settings.UseTls ? "TCPS" : "TCP";
-        var port = settings.Port ?? (settings.UseTls ? DefaultTlsPort : DefaultPort);
+        var port = settings.Port ?? GetDefaultPort(settings.UseTls);
 
         string connectData;
         if (!string.IsNullOrWhiteSpace(settings.ServiceName))

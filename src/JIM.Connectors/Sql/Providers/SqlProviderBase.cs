@@ -40,6 +40,20 @@ internal abstract class SqlProviderBase : ISqlProvider
 
     public abstract string ConnectivityTestCommandText { get; }
 
+    public abstract int GetDefaultPort(bool useTls);
+
+    /// <summary>
+    /// "TLS" is what most dialects call it; a dialect with its own name for the encrypted transport
+    /// overrides this so an administrator reads the term their own documentation uses.
+    /// </summary>
+    public virtual string SecureTransportName => "TLS";
+
+    /// <summary>
+    /// Off unless a dialect's driver genuinely offers the mechanism. Answering true without one would
+    /// have JIM prepare a certificate the driver then ignores, and report trust it does not have.
+    /// </summary>
+    public virtual bool SupportsPinnedServerCertificate => false;
+
     public abstract SqlGeneratedKeyRetrieval GeneratedKeyRetrieval { get; }
 
     public abstract string TablesCommandText { get; }
