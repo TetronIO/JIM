@@ -1,8 +1,8 @@
 # Queue Progress: Uplift to the Step Model
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 underway)
 - **Issue:** [#1162](https://github.com/TetronIO/JIM/issues/1162)
-- **Builds on:** [#454](https://github.com/TetronIO/JIM/issues/454) (Run Profile phases), design note [`engineering/notes/RUN_PROFILE_PHASES.md`](../notes/RUN_PROFILE_PHASES.md)
+- **Builds on:** [#454](https://github.com/TetronIO/JIM/issues/454) (Run Profile phases), design note [`engineering/notes/RUN_PROFILE_PHASES.md`](../../notes/RUN_PROFILE_PHASES.md)
 
 ## Overview
 
@@ -120,15 +120,19 @@ The three scalars are derived server-side from `RunPhaseReading.ActiveTopLevel` 
 
 ## Implementation Phases
 
-### Phase 1: Extract the status-to-appearance rules
+### Phase 1: Extract the status-to-appearance rules ✅
 
 Prerequisite for everything else, and the issue calls it out explicitly.
 
-- Create `JIM.Web/Shared/RunPhaseVisuals.cs`: `ConnectorFill`, `StatusModifier`, `StatusIcon`, `OutcomeTooltip` lifted verbatim from `RunPhaseStepper.razor`.
+- Create `JIM.Web/Shared/RunPhaseVisuals.cs`: `HasRun`, `StatusModifier`, `StatusIcon`, `FillPercent`, `OutcomeTooltip`, lifted from `RunPhaseStepper.razor`.
 - Rewrite `RunPhaseStepper.razor` to call it. No visual change; the Activity page must render identically.
-- Tests (`test/JIM.Web.Tests/`): a table-driven test over every `ActivityPhaseStatus` asserting modifier, icon and fill. Red-first by writing the test against the new class before it exists.
+- Tests (`test/JIM.Web.Tests/RunPhaseVisualsTests.cs`): a table-driven test over every `ActivityPhaseStatus` asserting modifier, icon and fill. Red-first by writing the test against the new class before it exists.
 
-**Done when:** the Activity page is pixel-identical and `RunPhaseStepper.razor` contains no status-to-appearance logic.
+**A second copy already existed.** `RunProgressMetrics.razor` carried its own `StatusModifier` and `StatusIcon`, added when the readout beneath the rail needed to draw the steps inside the running step. The two had not drifted yet, but the readout's `StatusIcon` had already dropped the null-phase arm, so they were no longer the same function. Both now call `RunPhaseVisuals`, which makes the queue rail the third consumer rather than the second and moves the extraction from "worth doing" to "should have happened at #454".
+
+`SetPasswordDialog.razor`'s rail is deliberately left alone: it shares the phase stepper's *CSS* for its markers, but its states are password-set outcomes rather than `ActivityPhaseStatus`, so it is not a consumer of these rules.
+
+**Done when:** the Activity page is pixel-identical and no Razor component contains status-to-appearance logic. ✅
 
 ### Phase 2: Carry the steps to the queue
 
