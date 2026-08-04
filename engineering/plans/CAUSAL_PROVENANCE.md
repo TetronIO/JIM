@@ -140,12 +140,19 @@ The queueing-to-executing hop is **not** an edge: `ActivityRunProfileExecutionIt
 
 ### Phase 1e: Metaverse Impact retirement
 
-The legacy no-snapshot fallback is already removed. The remaining pieces re-home here:
+**The section retires in Phase 1; it does not wait for Phase 2.** One of its pieces genuinely belongs to Phase 2, but keeping a titled section and its subtitle ("How the Metaverse Object Deletion Rule for these objects applies to this change") alive to host a single unrelated alert is worse than not having the section at all: the heading would promise a Deletion Rule explanation the content no longer delivers.
+
+The legacy no-snapshot fallback is already removed. The rest:
 
 - **"The Metaverse Object was not deleted"** has no outcome to hang off, because a Deletion Rule that evaluates and declines produces no event. Render it as a **synthetic Identity-lane card** built from `DeletionPolicySnapshotJson`, which is already on the item. Both the Flow and Graph views already build synthetic nodes (the "Source record" root in `CausalityFlowConnectorCalculator` and `CausalityGraphLayoutCalculator`), so this needs no new concept and writes no rows.
 - **`DeletionPolicySnapshotView`** becomes expandable detail on the deletion outcome rather than a separate section. The component and its bUnit tests are reused as-is.
-- **The import-context "what happens next" line** belongs with Phase 2's Consequences empty state, so the section cannot fully retire until Phase 2 lands. Keep it until then.
+- **The import-context "what happens next" line** moves to a plain page-level alert, outside any Deletion Rule framing. It is forward-looking rather than causal ("this will be disconnected on the next Synchronisation"), so its proper home is Phase 2's Consequences empty state; it sits at page level in the interim rather than holding a section open.
+- **The housekeeping-context alert is deleted outright.** Housekeeping has recorded Causality outcomes since #1044 (an `MvoDeleted` root plus one Pending Export child per deprovisioned account), so the alert restates what the panel above it already shows.
 - Correct the shipped "membership-removal" wording per the PRD's schema-derived wording requirement.
+
+### Phase ordering
+
+1a is first and has no dependencies. 1b and 1c both need 1a and can overlap each other. 1d needs 1c plus a stable #1087 surface. 1e needs 1d, because the synthetic card lands on the surface 1d builds. Only 1d and 1e carry the #1087 dependency, so the schema and worker halves can start immediately.
 
 ## Success Criteria
 
