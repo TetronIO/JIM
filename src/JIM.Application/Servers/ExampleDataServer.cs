@@ -598,9 +598,7 @@ public class ExampleDataServer
         // Populate CachedDisplayName from the generated attribute values
         foreach (var mvo in metaverseObjectsToCreate)
         {
-            var displayNameAv = mvo.AttributeValues
-                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-            mvo.CachedDisplayName = displayNameAv?.StringValue;
+            mvo.CachedDisplayName = ObjectNaming.MetaverseNameFrom(mvo.AttributeValues);
         }
 
         Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");

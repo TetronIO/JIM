@@ -171,9 +171,9 @@ public class ImportSubPhaseProgressTests : WorkflowTestBase
 
         public bool ReceivedProgressReporter { get; private set; }
 
-        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger) { }
+        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) { }
 
-        public void CloseImportConnection() { }
+        public string? CloseImportConnection() => null;
 
         public async Task<ConnectedSystemImportResult> ImportAsync(
             ConnectedSystem connectedSystem,

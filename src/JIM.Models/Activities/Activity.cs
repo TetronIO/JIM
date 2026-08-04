@@ -30,6 +30,18 @@ public class Activity
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
+    /// <summary>
+    /// When this Activity applied a configuration change that was previewed first, the preview's Activity. Null
+    /// means the change was applied without a preview, which is a legitimate choice and is recorded as such: an
+    /// auditor asking "did anyone look at what this would do before doing it?" gets an answer either way, and a
+    /// null that meant "unknown" would answer nothing.
+    ///
+    /// A plain column rather than a foreign key, matching <see cref="ParentActivityId"/>. A preview ages out under
+    /// retention long before the change it informed does, and a foreign key would either block that cleanup or null
+    /// this link; keeping the raw id preserves "this was previewed" even once the preview's own rows have gone.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>
@@ -302,6 +314,18 @@ public class Activity
     public int? ExampleDataTemplateId { get; set; }
 
     public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// If this activity records an operation against a single Connected System Object (a password set, for
+    /// example), that object's id is recorded here alongside <see cref="ConnectedSystemId"/>, which together are
+    /// what a deep-link to the object needs. Null for every other activity.
+    /// <para>
+    /// A plain scalar column with no foreign key or navigation, following the same precedent as the
+    /// configuration target columns below: the activity is the audit record and must outlive the object it
+    /// describes, including through a connector space clear.
+    /// </para>
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
 
     public int? SyncRuleId { get; set; }
 

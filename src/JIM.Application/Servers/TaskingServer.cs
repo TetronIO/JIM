@@ -26,6 +26,14 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetWorkerTaskAsync(id);
         }
 
+        /// <summary>
+        /// The worker task tracking a given Activity, or null when none is queued or processing for it.
+        /// </summary>
+        public async Task<WorkerTask?> GetWorkerTaskByActivityIdAsync(Guid activityId)
+        {
+            return await Application.Repository.Tasking.GetWorkerTaskByActivityIdAsync(activityId);
+        }
+
         public async Task<List<WorkerTask>> GetWorkerTasksAsync()
         {
             return await Application.Repository.Tasking.GetWorkerTasksAsync();
@@ -157,6 +165,15 @@ namespace JIM.Application.Servers
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
+            }
+            else if (workerTask is ConfigurationChangePreviewWorkerTask)
+            {
+                // The only task type that does NOT create its Activity. A preview's Activity already exists,
+                // because stage 1 validation ran in the request path and recorded its findings against it; making
+                // a second one here would split one preview across two Activities, and leave the panel watching
+                // the wrong one.
+                if (workerTask.Activity == null)
+                    return WorkerTaskCreationResult.Failed("A configuration change preview task must carry the Activity its preview was started under.");
             }
             else if (workerTask is TemporalScopeReconciliationWorkerTask)
             {

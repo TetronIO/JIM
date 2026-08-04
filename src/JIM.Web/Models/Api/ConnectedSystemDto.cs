@@ -205,13 +205,13 @@ public class ConnectedSystemObjectDetailDto
             Status = entity.Status,
             JoinType = entity.JoinType,
             DateJoined = entity.DateJoined,
-            DisplayName = entity.DisplayNameOrId,
+            DisplayName = entity.NameOrId,
             ConnectedSystemId = entity.ConnectedSystemId,
             ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
             TypeId = entity.TypeId,
             TypeName = entity.Type?.Name ?? string.Empty,
             MetaverseObjectId = entity.MetaverseObjectId,
-            MetaverseObjectDisplayName = entity.MetaverseObject?.DisplayName,
+            MetaverseObjectDisplayName = entity.MetaverseObject?.Name,
             AttributeValues = entity.AttributeValues
                 .Select(ConnectedSystemObjectAttributeValueDto.FromEntity)
                 .ToList()
@@ -357,6 +357,26 @@ public class ConnectedSystemContainerDto
             ChildContainers = entity.ChildContainers
                 .Select(FromEntity)
                 .ToList()
+        };
+    }
+}
+
+/// <summary>
+/// API representation of a ConnectorCapability: a human-readable fact the Connector detected about the
+/// target system (e.g. an LDAP directory's type, vendor, or paging support), for the "Directory Capabilities"
+/// card on the Connected System details page.
+/// </summary>
+public class ConnectorCapabilityDto
+{
+    public string Name { get; set; } = null!;
+    public string Value { get; set; } = null!;
+
+    public static ConnectorCapabilityDto FromEntity(ConnectorCapability entity)
+    {
+        return new ConnectorCapabilityDto
+        {
+            Name = entity.Name,
+            Value = entity.Value
         };
     }
 }

@@ -620,6 +620,7 @@ public class ConfigurationSnapshotService
         Add(children, "builtIn", Render(objectType.BuiltIn), "Built-in");
         Add(children, "icon", objectType.Icon, "Icon");
         AddEnum(children, "deletionRule", objectType.DeletionRule, "Deletion rule");
+        AddEnum(children, "deletionTriggerMode", objectType.DeletionTriggerMode, "Deletion trigger mode");
         Add(children, "deletionGracePeriod", Render(objectType.DeletionGracePeriod), "Deletion grace period");
         children.Add(BuildDeletionTriggerSystems(objectType.DeletionTriggerConnectedSystemIds));
         children.Add(BuildAttributeAssociations(objectType.Attributes));
@@ -838,7 +839,7 @@ public class ConfigurationSnapshotService
         var items = new List<ConfigurationSnapshotNode>();
         foreach (var member in (members ?? []).OrderBy(m => m.Id))
         {
-            var node = ConfigurationSnapshotNode.Scalar("memberId", member.Id.ToString("D"), "Member", member.DisplayName);
+            var node = ConfigurationSnapshotNode.Scalar("memberId", member.Id.ToString("D"), "Member", member.Name);
             node.ItemGuidId = member.Id;
             items.Add(node);
         }

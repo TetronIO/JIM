@@ -170,7 +170,7 @@
             await jim.System.ResetSystemAsync(
                 ActivityInitiatorType.User,
                 user.Id,
-                user.DisplayName,
+                user.NameOrId,
                 _includeAdministrators,
                 acknowledgeAdministratorLockout: _acknowledgeLockout);
 

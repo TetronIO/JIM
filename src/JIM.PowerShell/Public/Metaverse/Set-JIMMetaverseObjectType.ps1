@@ -47,12 +47,27 @@ function Set-JIMMetaverseObjectType {
     .PARAMETER DeletionTriggerConnectedSystemIds
         Array of Connected System IDs that are authoritative sources for deletion.
         Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
-        When set, the MVO is deleted if ANY of these systems disconnect.
+        How they trigger deletion is governed by -DeletionTriggerMode.
         Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
+
+    .PARAMETER DeletionTriggerMode
+        For the WhenAuthoritativeSourceDisconnected deletion rule, controls how the
+        selected authoritative sources trigger deletion.
+        - AllSourcesDisconnect: the Metaverse Object is deleted only once no selected
+          source retains a joined Connected System Object.
+        - SpecificSourcesDisconnect: the Metaverse Object is deleted when any one of the
+          selected sources disconnects, even if others remain connected.
+        When omitted, the stored mode is left unchanged.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the object's
         configuration change history.
+
+    .PARAMETER PreviewActivityId
+        The Configuration Change Preview read before making this change, if any. Pass the ActivityId
+        returned by New-JIMConfigurationChangePreview and the update's own Activity records the link, so
+        the audit answers not only what changed but what the caller was told it would do. Optional: a
+        preview is an affordance, not a precondition.
 
     .PARAMETER PassThru
         If specified, returns the updated Object Type object.
@@ -86,6 +101,13 @@ function Set-JIMMetaverseObjectType {
         Configure deletion to trigger when HR system (ID 1) or AD system (ID 2) disconnects.
 
     .EXAMPLE
+        Set-JIMMetaverseObjectType -Id 1 -DeletionTriggerConnectedSystemIds 1,2 -DeletionTriggerMode AllSourcesDisconnect
+
+        Configure deletion to trigger only once both HR systems (IDs 1 and 2) have
+        disconnected; while either retains a joined Connected System Object, the
+        Metaverse Object is kept.
+
+    .EXAMPLE
         Set-JIMMetaverseObjectType -Id 5 -NewName 'Gadget' -PluralName 'Gadgets' -Icon 'Devices'
 
         Renames a custom Object Type and sets its UI icon.
@@ -95,10 +117,17 @@ function Set-JIMMetaverseObjectType {
 
         Clears the Object Type's icon (passing '' is equivalent).
 
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
+        Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
+
+        Applies the change that was previewed, recording which preview informed it.
+
     .LINK
         Get-JIMMetaverseObjectType
         Remove-JIMMetaverseObjectType
         Get-JIMMetaverseObject
+        New-JIMConfigurationChangePreview
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
@@ -135,8 +164,15 @@ function Set-JIMMetaverseObjectType {
         [int[]]$DeletionTriggerConnectedSystemIds,
 
         [Parameter()]
+        [ValidateSet('AllSourcesDisconnect', 'SpecificSourcesDisconnect')]
+        [string]$DeletionTriggerMode,
+
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
+
+        [Parameter()]
+        [guid]$PreviewActivityId,
 
         [switch]$PassThru
     )
@@ -195,6 +231,13 @@ function Set-JIMMetaverseObjectType {
             $body.deletionTriggerConnectedSystemIds = $DeletionTriggerConnectedSystemIds
         }
 
+        if ($PSBoundParameters.ContainsKey('DeletionTriggerMode')) {
+            # Enum sent as its string name; -DeletionTriggerMode's ValidateSet equals the
+            # AuthoritativeSourceTriggerMode member names. Only sent when bound, so an
+            # omitted parameter leaves the stored mode unchanged.
+            $body.deletionTriggerMode = $DeletionTriggerMode
+        }
+
         if ($body.Count -eq 0) {
             Write-Warning "No updates specified."
             return
@@ -202,6 +245,12 @@ function Set-JIMMetaverseObjectType {
 
         if ($ChangeReason) {
             $body.changeReason = $ChangeReason
+        }
+
+        # Set after the "no updates specified" guard above deliberately: a preview link on its own is not
+        # a change, and recording one against an update that changes nothing would be a false audit entry.
+        if ($PSBoundParameters.ContainsKey('PreviewActivityId')) {
+            $body.previewActivityId = $PreviewActivityId
         }
 
         $displayName = $Name ?? "ID $Id"

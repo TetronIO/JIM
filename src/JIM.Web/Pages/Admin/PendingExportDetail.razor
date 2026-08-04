@@ -34,7 +34,7 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudSimpleTable Hover="true" Dense="true" Elevation="0">
+                    <MudSimpleTable Hover="true" Dense="true" Elevation="0" Class="jim-detail-table">
                         <tbody>
                             <tr>
                                 <td><strong>ID</strong></td>
@@ -99,7 +99,7 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudSimpleTable Hover="true" Dense="true" Elevation="0">
+                    <MudSimpleTable Hover="true" Dense="true" Elevation="0" Class="jim-detail-table">
                         <tbody>
                             <tr>
                                 <td><strong>Target CSO</strong></td>
@@ -215,120 +215,125 @@
         }
 
         <MudItem xs="12">
-            <MudCard Outlined="true" Elevation="0">
-                <MudCardHeader>
-                    <CardHeaderContent>
+            @if (_pendingExport.AttributeValueChanges.Count > 0)
+            {
+                <MudTable Items="@GetGroupedChanges()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
+                          Filter="new Func<AttributeChangeGroup, bool>(FilterFunc)"
+                          Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")" Breakpoint="Breakpoint.None">
+                    <ToolBarContent>
+                        <TableDensityToggle @bind-Dense="_dense" />
+                        <MudText Class="mx-2 mud-text-disabled">|</MudText>
                         <MudText Typo="Typo.h6">Attribute Changes (@_attributeChangeTotalCounts.Values.Sum().ToString("N0"))</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    @if (_pendingExport.AttributeValueChanges.Count > 0)
-                    {
-                        <MudTable Items="@GetGroupedChanges()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
-                                  Filter="new Func<AttributeChangeGroup, bool>(FilterFunc)"
-                                  Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")" Breakpoint="Breakpoint.None">
-                            <ToolBarContent>
-                                <TableDensityToggle @bind-Dense="_dense" />
-                                <MudSpacer />
-                                <SearchField @bind-Value="_searchString"
-                                             Placeholder="Search attribute name or value"
-                                             Class="mt-0" />
-                            </ToolBarContent>
-                            <HeaderContent>
-                                <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                                <MudTh Class="jim-attr-header-value"><MudText Typo="Typo.button">Value</MudText></MudTh>
-                            </HeaderContent>
-                            <RowTemplate>
-                                <MudTd DataLabel="Attribute" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
-                                </MudTd>
-                                <MudTd DataLabel="Change Type" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
-                                    @if (context.Values.Count == 1)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.Values[0].ChangeType)">
-                                            @context.Values[0].ChangeType
-                                        </MudChip>
-                                    }
-                                    else
-                                    {
-                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values.Count changes</MudText>
-                                    }
-                                </MudTd>
-                                <MudTd DataLabel="Status" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
-                                    @if (context.Values.Count == 1)
-                                    {
-                                        <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Values[0].Status)">
-                                            @context.Values[0].Status.ToString().SplitOnCapitalLetters()
-                                        </MudChip>
-                                    }
-                                </MudTd>
-                                <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                                    @if (context.Values.Count == 1)
-                                    {
-                                        @GetAttributeValue(context.Values[0])
-                                    }
-                                    else if (context.TotalCount <= MvaInlineThreshold)
-                                    {
-                                        <div class="jim-attr-expanded">
-                                            @foreach (var val in context.Values)
-                                            {
-                                                <div class="jim-attr-expanded-item">
-                                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(val.ChangeType)">
-                                                        @val.ChangeType
-                                                    </MudChip>
-                                                    @GetAttributeValue(val)
-                                                </div>
-                                            }
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <div class="jim-attr-expanded">
-                                            @foreach (var val in context.Values.Take(MvaInlineThreshold))
-                                            {
-                                                <div class="jim-attr-expanded-item">
-                                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(val.ChangeType)">
-                                                        @val.ChangeType
-                                                    </MudChip>
-                                                    @GetAttributeValue(val)
-                                                </div>
-                                            }
-                                            <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
-                                                OnClick="@(() => OpenMvaDialogAsync(context.AttributeName, context.TotalCount))">
-                                                +@(context.TotalCount - MvaInlineThreshold) more
-                                            </MudButton>
-                                        </div>
-                                    }
-                                </MudTd>
-                            </RowTemplate>
-                            <NoRecordsContent>
-                                <MudText>No attribute changes.</MudText>
-                            </NoRecordsContent>
-                        </MudTable>
-                    }
-                    else
-                    {
-                        <MudText Class="mud-text-secondary">
-                            @if (_pendingExport.ChangeType == PendingExportChangeType.Delete)
+                        <MudSpacer />
+                        <SearchField @bind-Value="_searchString"
+                                     Placeholder="Search attribute name or value"
+                                     Class="mt-0" />
+                    </ToolBarContent>
+                    <HeaderContent>
+                        <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+                        <MudTh Class="jim-attr-header-value"><MudText Typo="Typo.button">Value</MudText></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Attribute" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Change Type" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
+                            @if (context.Values.Count == 1)
                             {
-                                <text>No attribute changes (object will be deleted).</text>
+                                <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.Values[0].ChangeType)">
+                                    @context.Values[0].ChangeType
+                                </MudChip>
                             }
                             else
                             {
-                                <text>No attribute changes recorded.</text>
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values.Count changes</MudText>
                             }
-                        </MudText>
-                    }
-                </MudCardContent>
-            </MudCard>
+                        </MudTd>
+                        <MudTd DataLabel="Status" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")">
+                            @if (context.Values.Count == 1)
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Values[0].Status)">
+                                    @context.Values[0].Status.ToString().SplitOnCapitalLetters()
+                                </MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                            @if (context.Values.Count == 1)
+                            {
+                                @GetAttributeValue(context.Values[0])
+                            }
+                            else if (context.TotalCount <= MvaInlineThreshold)
+                            {
+                                <div class="jim-attr-expanded">
+                                    @foreach (var val in context.Values)
+                                    {
+                                        <div class="jim-attr-expanded-item">
+                                            <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(val.ChangeType)">
+                                                @val.ChangeType
+                                            </MudChip>
+                                            @GetAttributeValue(val)
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="jim-attr-expanded">
+                                    @foreach (var val in context.Values.Take(MvaInlineThreshold))
+                                    {
+                                        <div class="jim-attr-expanded-item">
+                                            <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(val.ChangeType)">
+                                                @val.ChangeType
+                                            </MudChip>
+                                            @GetAttributeValue(val)
+                                        </div>
+                                    }
+                                    <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                        OnClick="@(() => OpenMvaDialogAsync(context.AttributeName, context.TotalCount))">
+                                        +@(context.TotalCount - MvaInlineThreshold) more
+                                    </MudButton>
+                                </div>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText>No attribute changes.</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            }
+            else
+            {
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Attribute Changes (0)</MudText>
+                    <MudText Class="mud-text-secondary">
+                        @if (_pendingExport.ChangeType == PendingExportChangeType.Delete)
+                        {
+                            <text>No attribute changes (object will be deleted).</text>
+                        }
+                        else
+                        {
+                            <text>No attribute changes recorded.</text>
+                        }
+                    </MudText>
+                </MudPaper>
+            }
         </MudItem>
     </MudGrid>
 }
 else if (_notFound)
 {
-    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Pending Export not found.</MudAlert>
+    @* A Pending Export is deleted the moment it is exported, so a link to one is only good while it
+       is still queued. Saying "not found" implies something is wrong; almost always nothing is, the
+       change simply reached its Connected System. Name the likely reasons rather than leave the
+       reader wondering whether they have hit a bug. *@
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        This Pending Export is no longer queued. It has either been exported to the Connected System,
+        or been superseded by a later change to the same Connected System Object. Pending Exports are
+        removed once they are no longer waiting to be applied, so links to an individual one stop
+        resolving after its export runs.
+    </MudAlert>
     <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
         Back to List
@@ -417,7 +422,7 @@ else
         if (_pendingExport?.ConnectedSystemObject == null)
             return "Unknown";
 
-        return _pendingExport.ConnectedSystemObject.DisplayNameOrId
+        return _pendingExport.ConnectedSystemObject.NameOrId
             ?? _pendingExport.ConnectedSystemObject.Id.ToString();
     }
 
@@ -427,7 +432,7 @@ else
             return _pendingExport?.SourceMetaverseObjectId?.ToString() ?? "Unknown";
 
         // Use the built-in DisplayName property which looks up the displayname attribute
-        return _pendingExport.SourceMetaverseObject.DisplayName
+        return _pendingExport.SourceMetaverseObject.NameOrId
             ?? _pendingExport.SourceMetaverseObject.Id.ToString();
     }
 

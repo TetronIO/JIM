@@ -579,7 +579,7 @@ public class CertificateServer : ICertificateProvider
             return (null, null, ServerCertificateReadOutcome.ConnectedSystemNotFound, $"Connected System {connectedSystemId} was not found.");
 
         if (draftSettingValues is { Count: > 0 })
-            ApplyDraftSettingValues(connectedSystem, draftSettingValues);
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
 
         var connectorName = connectedSystem.ConnectorDefinition?.Name;
         if (string.IsNullOrEmpty(connectorName))
@@ -606,34 +606,6 @@ public class CertificateServer : ICertificateProvider
             return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectedSystem.Name}' Connected System is not configured to make an encrypted connection, so there is no server certificate to look at.");
 
         return (connectedSystem, endpoint, ServerCertificateReadOutcome.Read, null);
-    }
-
-    /// <summary>
-    /// Overlays settings an administrator has entered but not saved onto the loaded Connected System, so the
-    /// certificate they are shown belongs to the endpoint on their screen rather than the one last saved.
-    /// </summary>
-    /// <remarks>
-    /// Encrypted settings are deliberately skipped. Nothing needed to work out where a system connects is a secret,
-    /// and applying a draft secret here would put a plaintext credential on an instance JIM has no reason to hold
-    /// one on.
-    /// </remarks>
-    private static void ApplyDraftSettingValues(ConnectedSystem connectedSystem, IReadOnlyCollection<ConnectedSystemSettingValueDraft> draftSettingValues)
-    {
-        var draftsBySettingId = draftSettingValues.ToDictionary(d => d.SettingId);
-
-        foreach (var settingValue in connectedSystem.SettingValues
-            .Where(sv => sv.Setting?.Type != ConnectedSystemSettingType.StringEncrypted &&
-                         sv.Setting != null && draftsBySettingId.ContainsKey(sv.Setting.Id)))
-        {
-            var draft = draftsBySettingId[settingValue.Setting.Id];
-
-            if (draft.StringValue != null)
-                settingValue.StringValue = draft.StringValue;
-            if (draft.IntValue.HasValue)
-                settingValue.IntValue = draft.IntValue.Value;
-            if (draft.CheckboxValue.HasValue)
-                settingValue.CheckboxValue = draft.CheckboxValue.Value;
-        }
     }
 
     /// <summary>

@@ -58,8 +58,13 @@ services:
       - samba-primary-etc:/usr/local/samba/etc
       - jim-connector-files-volume:/connector-files
     hostname: dc1
+    # The DC's own name must resolve on jim-network, because that is the name it advertises as its
+    # dNSHostName and carries in its TLS certificate. JIM's domain controller pinning connects to it
+    # directly after discovering it, and Docker's DNS otherwise knows only the service name.
     networks:
-      - jim-network
+      jim-network:
+        aliases:
+          - dc1.panoply.local
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1"]
       interval: 10s
@@ -106,8 +111,13 @@ services:
       - samba-source-private:/usr/local/samba/private
       - samba-source-etc:/usr/local/samba/etc
     hostname: dc1-source
+    # The DC's own name must resolve on jim-network, because that is the name it advertises as its
+    # dNSHostName and carries in its TLS certificate. JIM's domain controller pinning connects to it
+    # directly after discovering it, and Docker's DNS otherwise knows only the service name.
     networks:
-      - jim-network
+      jim-network:
+        aliases:
+          - dc1-source.resurgam.local
     profiles:
       - scenario2
       - scenario8
@@ -154,8 +164,13 @@ services:
       - samba-target-private:/usr/local/samba/private
       - samba-target-etc:/usr/local/samba/etc
     hostname: dc1-target
+    # The DC's own name must resolve on jim-network, because that is the name it advertises as its
+    # dNSHostName and carries in its TLS certificate. JIM's domain controller pinning connects to it
+    # directly after discovering it, and Docker's DNS otherwise knows only the service name.
     networks:
-      - jim-network
+      jim-network:
+        aliases:
+          - dc1-target.gentian.local
     profiles:
       - scenario2
       - scenario8
@@ -241,6 +256,54 @@ services:
 
   # OpenLDAP with two suffixes for multi-partition testing (Issue #72, Phase 1b)
   # Suffixes: dc=yellowstone,dc=local and dc=glitterband,dc=local
+  # SCIM 2.0 test service provider for the SCIM Connector scenario.
+  #
+  # Serves the same MockScimProvider the unit suite drives in process, over HTTPS from a self-signed
+  # certificate it generates at every start. HTTPS rather than plain HTTP because JIM refuses cleartext
+  # to anything but a loopback address, and jim.worker reaches this container by hostname; the scenario
+  # adds the certificate to JIM's Trusted Certificates, so the run also exercises the trust path a
+  # customer with an internal certificate authority takes.
+  scim-provider:
+    image: ${SCIM_PROVIDER_IMAGE:-jim-scim-test-provider:local}
+    build:
+      context: ../../..
+      dockerfile: test/integration/docker/scim/Dockerfile
+      # Build-environment passthroughs, all empty/default outside constrained networks: an extra CA for
+      # TLS-inspecting proxies, standard proxy variables, and host networking where the proxy listens on
+      # the host's loopback (JIM_BUILD_NETWORK=host).
+      network: ${JIM_BUILD_NETWORK:-default}
+      args:
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+        HTTP_PROXY: ${JIM_BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${JIM_BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${JIM_BUILD_NO_PROXY:-}
+    container_name: scim-provider
+    environment:
+      # Must match the container name: the certificate is issued for this, and the scenario connects
+      # with Full Validation on, so a name mismatch would fail the connection rather than be ignored.
+      - SCIM_HOSTNAME=scim-provider
+      - SCIM_PORT=5300
+      - SCIM_USER_COUNT=${SCIM_USER_COUNT:-25}
+      - SCIM_GROUP_COUNT=${SCIM_GROUP_COUNT:-2}
+      - SCIM_SUPPORTS_BULK=${SCIM_SUPPORTS_BULK:-true}
+      - SCIM_BULK_MAX_OPERATIONS=${SCIM_BULK_MAX_OPERATIONS:-0}
+      - SCIM_SUPPORTS_PATCH=${SCIM_SUPPORTS_PATCH:-true}
+      - SCIM_PUBLISHES_SCHEMAS=${SCIM_PUBLISHES_SCHEMAS:-true}
+      - SCIM_CERTIFICATE_PATH=/certificates/scim-provider.pem
+    # No ports published: internal to the Docker network, like the directory containers.
+    volumes:
+      - scim-provider-certificates:/certificates
+    networks:
+      - jim-network
+    profiles:
+      - scim
+    healthcheck:
+      test: ["CMD", "dotnet", "--info"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
   openldap-primary:
     image: ${OPENLDAP_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-openldap:primary}
     build:
@@ -336,6 +399,8 @@ volumes:
   jim-connector-files-volume:
     name: jim-connector-files-volume
     external: true
+  scim-provider-certificates:
+    name: jim-integration-scim-provider-certificates
   openldap-primary-data:
     name: jim-integration-openldap-primary-data
   sqlserver-data:

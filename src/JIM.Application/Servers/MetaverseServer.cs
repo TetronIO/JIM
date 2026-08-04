@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
@@ -119,7 +120,12 @@ public class MetaverseServer
     /// <param name="objectType">The object type to update.</param>
     /// <param name="initiatedBy">The Metaverse Object that initiated the update (may be null for system-initiated).</param>
     /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview the administrator read before making this change, if any (#827). Recorded on
+    /// the Activity so the audit answers not only what changed but what the person making it was told it would do.
+    /// </param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -130,7 +136,8 @@ public class MetaverseServer
         {
             TargetName = objectType.Name,
             TargetType = ActivityTargetType.MetaverseObjectType,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -147,7 +154,12 @@ public class MetaverseServer
     /// <param name="objectType">The object type to update.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
     /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview the caller read before making this change, if any (#827). Recorded on the
+    /// Activity so the audit answers not only what changed but what the caller was told it would do.
+    /// </param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -158,7 +170,8 @@ public class MetaverseServer
         {
             TargetName = objectType.Name,
             TargetType = ActivityTargetType.MetaverseObjectType,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -1216,17 +1229,16 @@ public class MetaverseServer
                 changeInitiatorType);
         }
 
-        // Keep the denormalised CachedDisplayName in sync if DisplayName was affected.
-        // Callers apply additions/removals to AttributeValues before calling this method,
+        // Keep the denormalised CachedDisplayName in sync if any naming attribute was affected. It must
+        // track every tier of ObjectNaming.MetaverseNameAttributes, not just Display Name: the Metaverse
+        // list and its ORDER BY read this column without materialising attribute values, so a narrower
+        // gate leaves a Group named only by its Common Name sorting and rendering as though it had no
+        // name at all. Callers apply additions/removals to AttributeValues before calling this method,
         // so re-deriving from the current collection handles SET, UPDATE, and DELETE cases.
-        var displayNameChanged = (additions?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false)
-            || (removals?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false);
-        if (displayNameChanged)
-        {
-            metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
-                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
-                ?.StringValue;
-        }
+        var nameAttributeChanged = (additions?.Any(av => ObjectNaming.IsMetaverseNameAttribute(av.Attribute?.Name)) ?? false)
+            || (removals?.Any(av => ObjectNaming.IsMetaverseNameAttribute(av.Attribute?.Name)) ?? false);
+        if (nameAttributeChanged)
+            metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
     }
@@ -1325,9 +1337,7 @@ public class MetaverseServer
         }
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
-        metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
-            .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
-            ?.StringValue;
+        metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
@@ -1393,15 +1403,9 @@ public class MetaverseServer
             // Capture the MVO ID before deletion — EF Core may clear the Id property after SaveChangesAsync.
             var mvoId = metaverseObject.Id;
 
-            // Resolve display name: prefer the MVO's current DisplayName (computed from AttributeValues),
-            // but if attributes were already recalled (sync processor path), derive it from the snapshot.
-            var displayName = metaverseObject.DisplayName;
-            if (displayName == null && attributesToCapture.Count > 0)
-            {
-                var displayNameAttrValue = attributesToCapture.SingleOrDefault(
-                    av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-                displayName = displayNameAttrValue?.StringValue;
-            }
+            // Resolve the name: prefer the MVO's own resolution (computed from AttributeValues), but if
+            // attributes were already recalled (sync processor path), derive it from the snapshot.
+            var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
             // Create a deletion change record.
             // IMPORTANT: Do NOT set the MetaverseObject navigation property! Setting it causes EF Core
@@ -1575,8 +1579,11 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted.
-    /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period.
+    /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted,
+    /// applying the same mode-aware trigger semantics as the sync engine's disconnect evaluation (#119).
+    /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period, and
+    /// records the deleted system as the deletion trigger plus a decision-time policy snapshot on each
+    /// marked MVO, consistent with the worker path's MarkMvoForDeletionAsync.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System being deleted.</param>
     /// <returns>The number of MVOs marked for deletion.</returns>
@@ -1595,13 +1602,121 @@ public class MetaverseServer
 
         Log.Information("MarkOrphanedMvosForDeletionAsync: Found {Count} orphaned MVOs for Connected System {Id}", orphanedMvos.Count, connectedSystemId);
 
-        // Mark them as disconnected so housekeeping will delete them after the grace period
-        var mvoIds = orphanedMvos.Select(mvo => mvo.Id).ToList();
-        var markedCount = await Application.Repository.Metaverse.MarkMvosAsDisconnectedAsync(mvoIds);
+        // Resolve system names once for the event-time name snapshots; the map survives the deletion of
+        // the system itself on the stored records.
+        var systemNamesById = await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync();
+        var deletedSystemName = ResolveConnectedSystemName(connectedSystemId, systemNamesById);
+
+        // Mark them as disconnected so housekeeping will delete them after the grace period. The policy
+        // facts (rule, mode, sources, grace period) are identical per object type, so one decision-time
+        // snapshot serves every MVO in a group; groups additionally split by which listed sources remain
+        // connected (only possible in Specific mode) so each snapshot's remaining-source facts are exact.
+        var markedCount = 0;
+        var groups = orphanedMvos
+            .GroupBy(mvo => new
+            {
+                TypeId = mvo.Type?.Id ?? 0,
+                RemainingSourcesKey = string.Join(",", GetRemainingConnectedSourceSystemIds(mvo, connectedSystemId))
+            });
+        foreach (var group in groups)
+        {
+            var groupTemplate = group.First();
+            var policySnapshotJson = BuildMvoDeletionPolicySnapshotJson(groupTemplate, connectedSystemId, deletedSystemName, systemNamesById);
+            var groupMvoIds = group.Select(mvo => mvo.Id).ToList();
+            markedCount += await Application.Repository.Metaverse.MarkMvosAsDisconnectedAsync(
+                groupMvoIds, connectedSystemId, deletedSystemName, policySnapshotJson);
+        }
 
         Log.Information("MarkOrphanedMvosForDeletionAsync: Marked {Count} MVOs for deletion for Connected System {Id}", markedCount, connectedSystemId);
 
         return markedCount;
+    }
+
+    /// <summary>
+    /// Builds the serialised decision-time deletion policy snapshot (#119) for an MVO marked because its
+    /// Connected System is being deleted, mirroring the worker path's snapshot content: the rule, trigger
+    /// mode, selected sources, grace period, the deleted system as the triggering system, and the listed
+    /// sources still holding a joined CSO after the deletion. Returns null when the MVO carries no Type
+    /// (the policy facts cannot be determined).
+    /// </summary>
+    private static string? BuildMvoDeletionPolicySnapshotJson(
+        MetaverseObject mvo,
+        int deletedSystemId,
+        string deletedSystemName,
+        IReadOnlyDictionary<int, string> systemNamesById)
+    {
+        var type = mvo.Type;
+        if (type == null)
+            return null;
+
+        var snapshot = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = type.DeletionRule,
+            TriggerMode = type.DeletionTriggerMode,
+            GracePeriod = type.DeletionGracePeriod,
+            TriggeringSystemId = deletedSystemId,
+            TriggeringSystemName = deletedSystemName,
+            // When the deletion becomes due, recorded rather than derived so it survives a later grace
+            // period change, matching the worker's disconnect path (#119).
+            DeletionEligibleDate = type.DeletionGracePeriod.HasValue && type.DeletionGracePeriod.Value > TimeSpan.Zero
+                ? DateTime.UtcNow.Add(type.DeletionGracePeriod.Value)
+                : null
+        };
+
+        foreach (var sourceSystemId in type.DeletionTriggerConnectedSystemIds ?? [])
+        {
+            snapshot.SelectedSourceSystemIds.Add(sourceSystemId);
+            snapshot.SelectedSourceSystemNames.Add(ResolveConnectedSystemName(sourceSystemId, systemNamesById));
+        }
+
+        foreach (var remainingSourceSystemId in GetRemainingConnectedSourceSystemIds(mvo, deletedSystemId))
+        {
+            snapshot.RemainingConnectedSourceSystemIds.Add(remainingSourceSystemId);
+            snapshot.RemainingConnectedSourceSystemNames.Add(ResolveConnectedSystemName(remainingSourceSystemId, systemNamesById));
+        }
+
+        return snapshot.ToJson();
+    }
+
+    /// <summary>
+    /// The listed authoritative sources that still hold a joined CSO to the MVO once the deleted system's
+    /// connections are gone, distinct and in stable order. Empty for All mode and
+    /// WhenLastConnectorDisconnected markings by construction; in Specific mode other listed sources may
+    /// legitimately remain connected.
+    /// </summary>
+    private static List<int> GetRemainingConnectedSourceSystemIds(MetaverseObject mvo, int deletedSystemId)
+    {
+        var triggerIds = mvo.Type?.DeletionTriggerConnectedSystemIds;
+        if (triggerIds == null || triggerIds.Count == 0)
+            return [];
+
+        return mvo.ConnectedSystemObjects
+            .Select(cso => cso.ConnectedSystemId)
+            .Where(id => id != deletedSystemId && triggerIds.Contains(id))
+            .Distinct()
+            .OrderBy(id => id)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Resolves a Connected System's display name from the pre-fetched name map, falling back to a stable
+    /// placeholder so marking never fails on a missing name.
+    /// </summary>
+    private static string ResolveConnectedSystemName(int connectedSystemId, IReadOnlyDictionary<int, string> systemNamesById)
+        => systemNamesById.TryGetValue(connectedSystemId, out var name)
+            ? name
+            : $"Connected System {connectedSystemId}";
+
+    /// <summary>
+    /// Counts the MVOs that <see cref="MarkOrphanedMvosForDeletionAsync"/> would mark for deletion if the
+    /// specified Connected System were deleted, using the same mode-aware predicate, for the Connected
+    /// System deletion preview (#119).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being considered for deletion.</param>
+    /// <returns>The number of MVOs that would be marked for deletion.</returns>
+    public async Task<int> GetMvosOrphanedByConnectedSystemDeletionCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.Metaverse.GetMvosOrphanedByConnectedSystemDeletionCountAsync(connectedSystemId);
     }
 
     /// <summary>
@@ -1628,6 +1743,23 @@ public class MetaverseServer
     public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+    }
+
+    /// <summary>
+    /// How many Metaverse Objects of a type a change to that type's deletion settings could affect (#1114): its
+    /// projected objects carrying a disconnection mark.
+    /// </summary>
+    public async Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectDeletionCandidateCountAsync(metaverseObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams those same objects, reduced to the facts a deletion-settings preview needs about each one.
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId)
+    {
+        return Application.Repository.Metaverse.StreamMetaverseObjectDeletionCandidates(metaverseObjectTypeId);
     }
 
     /// <summary>
@@ -1661,6 +1793,18 @@ public class MetaverseServer
     public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
+    }
+
+    /// <summary>
+    /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.
+    /// Backs the Deleted Objects page's deep link, which is reached from a causality view holding the
+    /// deleted Identity's id rather than its change record's.
+    /// </summary>
+    /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangeAsync(deletedMetaverseObjectId);
     }
     #endregion
 }

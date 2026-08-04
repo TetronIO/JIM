@@ -20,7 +20,8 @@ internal static class CsoChangeBulkColumns
     [
         "Id", "ActivityRunProfileExecutionItemId", "ConnectedSystemId", "ConnectedSystemObjectId",
         "ChangeTime", "ChangeType", "InitiatedByType", "InitiatedById", "InitiatedByName",
-        "DeletedObjectTypeId", "DeletedObjectExternalIdAttributeValueId", "DeletedObjectExternalId", "DeletedObjectDisplayName"
+        "DeletedObjectTypeId", "DeletedObjectExternalIdAttributeValueId", "DeletedObjectExternalId", "DeletedObjectDisplayName",
+        "DeletedConnectedSystemObjectId"
     ];
 
     /// <summary>

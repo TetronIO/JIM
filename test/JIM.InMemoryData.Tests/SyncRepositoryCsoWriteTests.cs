@@ -152,8 +152,8 @@ public class SyncRepositoryCsoWriteTests
         cso.JoinType = ConnectedSystemObjectJoinType.Joined;
         await _repo.UpdateConnectedSystemObjectJoinStatesAsync(new List<ConnectedSystemObject> { cso });
 
-        var count = await _repo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-        Assert.That(count, Is.EqualTo(1));
+        var joinedSystemIds = await _repo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
+        Assert.That(joinedSystemIds, Is.EqualTo(new[] { CsId }));
     }
 
     [Test]

@@ -200,8 +200,8 @@ public class ImportCancellationTests : WorkflowTestBase
             _onPageReturned = onPageReturned;
         }
 
-        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger) { }
-        public void CloseImportConnection() { }
+        public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) { }
+        public string? CloseImportConnection() => null;
 
         public Task<ConnectedSystemImportResult> ImportAsync(
             ConnectedSystem connectedSystem,

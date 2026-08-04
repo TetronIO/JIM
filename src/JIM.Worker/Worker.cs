@@ -16,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using JIM.Worker.Processors;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -516,6 +517,30 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case ConfigurationChangePreviewWorkerTask previewWorkerTask:
+                                {
+                                    Log.Information("ExecuteAsync: ConfigurationChangePreviewWorkerTask received for {Surface}, initiated by: {InitiatedBy}",
+                                        previewWorkerTask.Surface, LogSanitiser.Sanitise(previewWorkerTask.InitiatedByName) ?? "Unknown");
+
+                                    try
+                                    {
+                                        // The preview server owns every failure path here: it records the failure
+                                        // on the preview's stages and on the Activity, and never leaves a partial
+                                        // result looking complete. What reaches this catch is a failure to start
+                                        // at all, typically a proposal that cannot be reconstructed.
+                                        await ConfigurationChangePreviewTaskProcessor.ProcessAsync(taskJim, previewWorkerTask, cancellationTokenSource.Token);
+
+                                        Log.Information("ExecuteAsync: Configuration change preview for {Surface} finished in {ExecutionTime}",
+                                            previewWorkerTask.Surface, newWorkerTask.Activity.ExecutionTime);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst running a configuration change preview.");
+                                    }
+
+                                    break;
+                                }
                                 case TemporalScopeReconciliationWorkerTask:
                                 {
                                     Log.Information("ExecuteAsync: TemporalScopeReconciliationWorkerTask received, initiated by: {InitiatedBy}",
@@ -768,8 +793,13 @@ public class Worker : BackgroundService
                     {
                         Id = Guid.NewGuid(),
                         ObjectChangeType = ObjectChangeType.Deleted,
-                        DisplayNameSnapshot = mvo.DisplayName,
-                        ObjectTypeSnapshot = mvo.Type?.Name
+                        DisplayNameSnapshot = mvo.Name,
+                        ObjectTypeSnapshot = mvo.Type?.Name,
+                        // Decision-time policy snapshot carry-through (#119): the snapshot captured when
+                        // the deletion was scheduled rides on the MVO; copying it onto the final deletion
+                        // record keeps the record reflecting the policy that scheduled the deletion (and
+                        // its triggering system), not the configuration at execution time.
+                        DeletionPolicySnapshotJson = mvo.DeletionPolicySnapshotJson
                     };
                     var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -777,7 +807,7 @@ public class Worker : BackgroundService
                         var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
-                            targetEntityDescription: mvo.DisplayName);
+                            targetEntityDescription: mvo.NameOrId);
 
                         // Deletion cascade (#1044): record each delete Pending Exports this deletion staged as a
                         // consequence of it, so the item reads as action and consequences: MVO Deleted, then one
@@ -796,7 +826,7 @@ public class Worker : BackgroundService
                         // Outcome tracking is off, so there is no deletion outcome to hang the exports off. They
                         // are still staged work an administrator must see: record one execution item each.
                         executionItems.AddRange(reportableDeleteExports
-                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.DisplayName, mvo.Type?.Name,
+                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
                                 activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
                     }
@@ -816,7 +846,7 @@ public class Worker : BackgroundService
                         ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
                         ErrorMessage = ex.Message,
                         ErrorStackTrace = ex.StackTrace,
-                        DisplayNameSnapshot = mvo.DisplayName,
+                        DisplayNameSnapshot = mvo.Name,
                         ObjectTypeSnapshot = mvo.Type?.Name
                     });
                 }
@@ -936,13 +966,13 @@ public class Worker : BackgroundService
     {
         var outcome = parent == null
             ? SyncOutcomeBuilder.AddRootOutcome(executionItem,
-                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
                 detailMessage: pendingExport.ConnectedSystemId.ToString())
             : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
-                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                SyncOutcomeTypes.ForPendingExport(pendingExport),
                 targetEntityId: pendingExport.Id,
                 targetEntityDescription: displayNameSnapshot,
                 detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1119,7 +1149,7 @@ public class Worker : BackgroundService
             activity.TotalExported += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
             activity.TotalDeprovisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            activity.TotalPendingExports += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            activity.TotalPendingExports += allOutcomes.Count(o => SyncOutcomeTypes.IsPendingExport(o.OutcomeType));
             activity.TotalDriftCorrections += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
             activity.TotalProvisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
         }
@@ -1182,8 +1212,8 @@ public class Worker : BackgroundService
             activity.TotalExported = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
             activity.TotalDeprovisioned = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            // Pending Export stats from outcomes
-            activity.TotalPendingExports = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            // Pending Export stats from outcomes; a queued deprovision is a Pending Export too
+            activity.TotalPendingExports = allOutcomes.Count(o => SyncOutcomeTypes.IsPendingExport(o.OutcomeType));
 
             // Drift correction from outcomes
             activity.TotalDriftCorrections = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);

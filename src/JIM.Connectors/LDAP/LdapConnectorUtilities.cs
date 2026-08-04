@@ -2,10 +2,12 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
 internal static class LdapConnectorUtilities
@@ -451,7 +453,7 @@ internal static class LdapConnectorUtilities
     internal static LdapConnectorRootDse GetBasicRootDseInformation(LdapConnection connection, ILogger logger)
     {
         var request = new SearchRequest { Scope = SearchScope.Base };
-        request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass"]);
+        request.Attributes.AddRange(["supportedCapabilities", "vendorName", "structuralObjectClass", "DNSHostName"]);
 
         var response = (SearchResponse)connection.SendRequest(request);
 
@@ -466,13 +468,15 @@ internal static class LdapConnectorUtilities
         var capabilities = GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
         var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
         var structuralObjectClass = GetEntryAttributeStringValue(rootDseEntry, "structuralObjectClass");
+        var dnsHostName = GetEntryAttributeStringValue(rootDseEntry, "DNSHostName");
 
         var directoryType = DetectDirectoryType(capabilities, vendorName, structuralObjectClass);
 
         var rootDse = new LdapConnectorRootDse
         {
             DirectoryType = directoryType,
-            VendorName = vendorName
+            VendorName = vendorName,
+            DnsHostName = dnsHostName
         };
 
         logger.Debug("GetBasicRootDseInformation: DirectoryType={DirectoryType}, VendorName={VendorName}",
@@ -592,5 +596,402 @@ internal static class LdapConnectorUtilities
     internal static string GenerateAccesslogFallbackTimestamp()
     {
         return DateTime.UtcNow.ToString("yyyyMMddHHmmss.ffffffZ");
+    }
+
+    /// <summary>
+    /// Guards a USN-based delta import against silently running against a different domain controller
+    /// than the one that produced the persisted watermark. AD/Samba AD USNs are scoped to the issuing
+    /// DC's invocationId, so a DNS round-robin Host resolving to a different DC (or a DC restored from
+    /// backup, which is issued a new invocationId) would otherwise make the persisted
+    /// <see cref="LdapConnectorRootDse.HighestCommittedUsn"/> meaningless: subsequent USN comparisons
+    /// against the new DC can silently skip changes or re-import stale ones.
+    /// </summary>
+    /// <remarks>
+    /// Comparison order:
+    /// <list type="number">
+    ///   <item>Both runs' <see cref="LdapConnectorRootDse.InvocationId"/> are present: compare directly.
+    ///   A mismatch is conclusive (different DC, or the same DC restored from backup) and throws.</item>
+    ///   <item>Either invocationId is missing (a baseline persisted before this guard was added, or the
+    ///   current run's invocationId query failed, for example due to permissions): fall back to a
+    ///   case-insensitive comparison of <see cref="LdapConnectorRootDse.DnsHostName"/>. A mismatch throws.
+    ///   This catches the detectable subset of mismatches even when the stronger signal is unavailable;
+    ///   it cannot detect a restore of the same DC.</item>
+    ///   <item>Neither comparison is possible: proceed without failing the import, logging a warning that
+    ///   identity could not be verified. Missing data must never itself fail a delta import.</item>
+    /// </list>
+    /// </remarks>
+    /// <param name="previousRootDse">The RootDSE info persisted by the run that produced the current watermark.</param>
+    /// <param name="currentRootDse">The RootDSE info just queried on the connection about to perform the delta import.</param>
+    /// <param name="logger">Logger for diagnostics; identifiers sourced from the directory are sanitised before logging.</param>
+    /// <exception cref="CannotPerformDeltaImportException">The domain controller identity has changed between the two runs.</exception>
+    internal static void VerifyDomainControllerIdentity(LdapConnectorRootDse previousRootDse, LdapConnectorRootDse currentRootDse, ILogger logger)
+    {
+        var previousInvocationId = previousRootDse.InvocationId;
+        var currentInvocationId = currentRootDse.InvocationId;
+
+        if (previousInvocationId.HasValue && currentInvocationId.HasValue)
+        {
+            if (previousInvocationId.Value == currentInvocationId.Value)
+                return;
+
+            logger.Warning("VerifyDomainControllerIdentity: Domain controller invocationId mismatch. Previous: {PreviousInvocationId}, Current: {CurrentInvocationId}.",
+                previousInvocationId.Value, currentInvocationId.Value);
+
+            throw new CannotPerformDeltaImportException(
+                $"Delta import aborted: the domain controller's invocationId has changed since the watermark was recorded " +
+                $"(previous: {previousInvocationId.Value}, current: {currentInvocationId.Value}). This can happen when a domain " +
+                "name configured as Host resolves to a different domain controller (DNS round-robin), or the domain controller " +
+                "was restored from backup. Run a Full Import to re-establish the delta baseline.");
+        }
+
+        // The invocationId pair is incomplete (a baseline persisted before this guard was added, or the
+        // current run's invocationId query failed); fall back to comparing the DC hostnames. Weaker (it
+        // cannot detect a restore of the same DC) but catches the detectable subset of mismatches.
+        var previousHostname = previousRootDse.DnsHostName;
+        var currentHostname = currentRootDse.DnsHostName;
+
+        if (!string.IsNullOrEmpty(previousHostname) && !string.IsNullOrEmpty(currentHostname))
+        {
+            if (string.Equals(previousHostname, currentHostname, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            logger.Warning("VerifyDomainControllerIdentity: Domain controller hostname mismatch (invocationId not available for comparison). Previous: {PreviousHostname}, Current: {CurrentHostname}.",
+                LogSanitiser.Sanitise(previousHostname), LogSanitiser.Sanitise(currentHostname));
+
+            throw new CannotPerformDeltaImportException(
+                $"Delta import aborted: the domain controller hostname has changed since the watermark was recorded " +
+                $"(previous: {previousHostname}, current: {currentHostname}). This can happen when a domain name configured " +
+                "as Host resolves to a different domain controller (DNS round-robin). Run a Full Import to re-establish the delta baseline.");
+        }
+
+        logger.Warning("VerifyDomainControllerIdentity: Could not verify domain controller identity between the previous watermark and the current " +
+            "connection (no comparable invocationId or hostname pair was available). Proceeding without domain controller mismatch verification.");
+    }
+
+    /// <summary>
+    /// Guards an AD/Samba AD import against silently running against a Partition the connected domain
+    /// controller does not host. AD's crossRef-based partition discovery (CN=Partitions,
+    /// CN=Configuration) lists every domain in the forest, including domains the connected domain
+    /// controller does not hold a naming context for; a domain controller does not chase referrals, so an
+    /// import against a foreign partition would otherwise silently return zero objects, a fast/hard
+    /// failure over silent corruption is required (see Synchronisation Integrity, root CLAUDE.md).
+    /// </summary>
+    /// <remarks>
+    /// Applies only to AD-family directories (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>); the
+    /// standard RFC 4512 namingContexts partition discovery used for other directory types has no
+    /// equivalent forest-wide-visibility problem. When <paramref name="currentRootDse"/>'s
+    /// <see cref="LdapConnectorRootDse.NamingContexts"/> is null or empty (the rootDSE query did not
+    /// return the attribute, for example due to insufficient permissions), hosting cannot be verified: a
+    /// warning is logged and the import proceeds, because missing data must never itself fail an import.
+    /// Otherwise, every selected Partition whose DN is not present in <c>NamingContexts</c> (case-
+    /// insensitive ordinal comparison) is reported by name in a single exception, alongside the connected
+    /// server and guidance to use one Connected System per domain.
+    /// </remarks>
+    /// <param name="currentRootDse">The RootDSE info just queried on the connection about to perform the import.</param>
+    /// <param name="selectedPartitions">The Partitions the import is about to run against.</param>
+    /// <param name="logger">Logger for diagnostics; identifiers sourced from the directory are sanitised before logging.</param>
+    /// <exception cref="PartitionNotHostedException">One or more selected Partitions are not hosted by the connected domain controller.</exception>
+    internal static void VerifyPartitionsAreHostedByConnectedServer(
+        LdapConnectorRootDse currentRootDse,
+        IEnumerable<ConnectedSystemPartition> selectedPartitions,
+        ILogger logger)
+    {
+        if (!currentRootDse.UseUsnDeltaImport)
+            return;
+
+        if (currentRootDse.NamingContexts == null || currentRootDse.NamingContexts.Count == 0)
+        {
+            logger.Warning("VerifyPartitionsAreHostedByConnectedServer: The connected server did not return its hosted naming contexts. " +
+                "Partition hosting could not be verified. Proceeding without this check.");
+            return;
+        }
+
+        var hostedNamingContexts = currentRootDse.NamingContexts;
+        var unhostedPartitions = selectedPartitions
+            .Where(p => !hostedNamingContexts.Contains(p.ExternalId, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        if (unhostedPartitions.Count == 0)
+            return;
+
+        var partitionNames = string.Join(", ", unhostedPartitions.Select(p => p.Name));
+
+        logger.Warning("VerifyPartitionsAreHostedByConnectedServer: Selected Partition(s) not hosted by the connected server {Server}: {Partitions}.",
+            LogSanitiser.Sanitise(currentRootDse.DnsHostName), LogSanitiser.Sanitise(partitionNames));
+
+        throw new PartitionNotHostedException(
+            $"Import aborted: the following selected Partition(s) are not hosted by the connected domain controller " +
+            $"'{currentRootDse.DnsHostName}': {partitionNames}. A domain controller only holds its own domain's naming " +
+            "context and does not chase referrals to other domains in the forest, so an import against a Partition it " +
+            "does not host would otherwise silently return zero objects. A domain's objects must be managed through a " +
+            "Connected System whose Host targets that domain's own domain controllers (one Connected System per domain " +
+            "today).");
+    }
+
+    /// <summary>
+    /// Reads configurationNamingContext from the rootDSE, the DN of the Configuration partition
+    /// ("CN=Configuration,DC=..."), used to locate the CN=Sites subtree for domain controller discovery
+    /// (issue #1167).
+    /// </summary>
+    internal static string? GetConfigurationNamingContext(LdapConnection connection, ILogger logger)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("configurationNamingContext");
+        var response = (SearchResponse)connection.SendRequest(request);
+
+        if (response.ResultCode != ResultCode.Success)
+        {
+            logger.Warning("GetConfigurationNamingContext: No success. Result code: {ResultCode}", response.ResultCode);
+            return null;
+        }
+
+        if (response.Entries.Count == 0)
+        {
+            logger.Warning("GetConfigurationNamingContext: Didn't get any results!");
+            return null;
+        }
+
+        return GetEntryAttributeStringValue(response.Entries[0], "configurationNamingContext");
+    }
+
+    /// <summary>
+    /// Derives the Distinguished Name of the server object that owns an nTDSDSA (NTDS Settings) object, used
+    /// during domain controller discovery (issue #1167). An nTDSDSA object's DN takes the shape
+    /// "CN=NTDS Settings,CN=&lt;server&gt;,CN=Servers,CN=&lt;site&gt;,CN=Sites,CN=Configuration,..."; the
+    /// server object is its immediate parent.
+    /// </summary>
+    /// <param name="ntdsDsaDn">The Distinguished Name of an nTDSDSA object.</param>
+    /// <returns>The server object's Distinguished Name, or null if <paramref name="ntdsDsaDn"/> does not parse, or has no parent (a single-RDN DN, which an nTDSDSA object can never genuinely be).</returns>
+    internal static string? GetServerDnFromNtdsDsaDn(string ntdsDsaDn)
+    {
+        return LdapDistinguishedName.TryParse(ntdsDsaDn, out var parsed) ? parsed.Parent?.ToString() : null;
+    }
+
+    /// <summary>
+    /// Derives the Active Directory Site name an nTDSDSA object belongs to, used during domain controller
+    /// discovery (issue #1167). The Site name is the DN component three levels up from the nTDSDSA object:
+    /// "CN=NTDS Settings,CN=&lt;server&gt;,CN=Servers,CN=&lt;site&gt;,CN=Sites,...".
+    /// </summary>
+    /// <param name="ntdsDsaDn">The Distinguished Name of an nTDSDSA object.</param>
+    /// <returns>The Site name, or null if <paramref name="ntdsDsaDn"/> does not parse, or does not have at least four RDN components above the nTDSDSA object itself.</returns>
+    internal static string? GetSiteNameFromNtdsDsaDn(string ntdsDsaDn)
+    {
+        if (!LdapDistinguishedName.TryParse(ntdsDsaDn, out var parsed))
+            return null;
+
+        // parsed is "CN=NTDS Settings,...". Three levels up: Parent = server, Parent.Parent = CN=Servers,
+        // Parent.Parent.Parent = CN=<site>.
+        var siteRdn = parsed.Parent?.Parent?.Parent?.LeafRdn;
+        if (siteRdn == null || siteRdn.Components.Count == 0)
+            return null;
+
+        return siteRdn.Components[0].Value;
+    }
+
+    /// <summary>
+    /// Maps discovered nTDSDSA objects (paired with the dNSHostName read from each one's parent server object)
+    /// into the <see cref="ConnectorDirectoryServer"/> list JIM's Discover Domain Controllers action shows an
+    /// administrator (issue #1167). Kept independent of any live LDAP connection so the mapping is unit
+    /// testable: the only inputs are the nTDSDSA DN (Site is derived from it) and whatever dNSHostName value
+    /// (if any) was read for its server object.
+    /// </summary>
+    /// <param name="entries">Each nTDSDSA object's own DN, paired with the dNSHostName read from its parent server object (null when the server object had none, or could not be read).</param>
+    /// <param name="logger">Logger for a skipped-entry warning; DNs are sanitised before logging.</param>
+    /// <returns>One <see cref="ConnectorDirectoryServer"/> per entry with a usable dNSHostName, ordered by hostname. Entries with no dNSHostName are skipped: JIM has nothing to offer the administrator for a domain controller it cannot name.</returns>
+    internal static List<ConnectorDirectoryServer> MapNtdsDsaEntriesToDirectoryServers(
+        IEnumerable<(string NtdsDsaDn, string? DnsHostName)> entries,
+        ILogger logger)
+    {
+        // Materialised once: it is enumerated twice below (the warning pass, then the projection), and the
+        // parameter type is IEnumerable so a caller-supplied lazy sequence must not be evaluated twice over.
+        var entryList = entries.ToList();
+
+        foreach (var skipped in entryList.Where(e => string.IsNullOrEmpty(e.DnsHostName)))
+        {
+            logger.Warning("MapNtdsDsaEntriesToDirectoryServers: The server object for nTDSDSA object '{Dn}' has no dNSHostName. Skipping; JIM cannot offer a domain controller it cannot name.",
+                LogSanitiser.Sanitise(skipped.NtdsDsaDn));
+        }
+
+        return entryList
+            .Where(e => !string.IsNullOrEmpty(e.DnsHostName))
+            .Select(e => new ConnectorDirectoryServer
+            {
+                HostName = e.DnsHostName!,
+                Site = GetSiteNameFromNtdsDsaDn(e.NtdsDsaDn)
+            })
+            .OrderBy(s => s.HostName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Resolves which server a connection should be opened against, and why (issue #230 Phase 2). This
+    /// is the single point where the domain controller/directory server for a connection is decided, so
+    /// that the connection factory (and therefore every parallel connection in a run) resolves to the
+    /// same server.
+    /// </summary>
+    /// <remarks>
+    /// Priority order:
+    /// <list type="number">
+    ///   <item>A non-blank Preferred Domain Controller setting always wins: the administrator has
+    ///   explicitly chosen, so no other source is even consulted.</item>
+    ///   <item>Otherwise, a domain controller pinned in <paramref name="persistedConnectorData"/> from a
+    ///   previous connection is used. Malformed persisted data (an old format, or corruption) is
+    ///   tolerated: the specific exception is caught, a warning logged, and resolution falls through to
+    ///   Host exactly as if no pin existed - a deserialisation failure must never itself fail a
+    ///   connection attempt.</item>
+    ///   <item>Otherwise, the configured Host setting is used, as it always was before pinning existed.</item>
+    /// </list>
+    /// </remarks>
+    /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
+    /// <param name="persistedConnectorData">The persisted connector data replayed for this connection, or null.</param>
+    /// <param name="host">The configured Host setting value; the final fallback.</param>
+    /// <param name="logger">Logger for the resolution decision; server strings are sanitised before logging.</param>
+    /// <returns>The server to connect to, and which source it came from.</returns>
+    internal static (string Server, LdapServerResolutionSource Source) ResolveEffectiveServer(
+        string? preferredDomainController,
+        string? persistedConnectorData,
+        string host,
+        ILogger logger)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredDomainController))
+        {
+            logger.Information("ResolveEffectiveServer: Connecting via the configured Preferred Domain Controller {Server}.",
+                LogSanitiser.Sanitise(preferredDomainController));
+            return (preferredDomainController, LdapServerResolutionSource.PreferredSetting);
+        }
+
+        if (!string.IsNullOrEmpty(persistedConnectorData))
+        {
+            LdapConnectorRootDse? previousRootDse = null;
+            try
+            {
+                previousRootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+            }
+            catch (JsonException ex)
+            {
+                logger.Warning(ex, "ResolveEffectiveServer: Failed to deserialise persisted connector data while looking for a pinned domain controller. Falling back to the configured Host.");
+            }
+
+            if (!string.IsNullOrEmpty(previousRootDse?.PinnedDirectoryServer))
+            {
+                logger.Information("ResolveEffectiveServer: Connecting via the pinned domain controller {Server}.",
+                    LogSanitiser.Sanitise(previousRootDse.PinnedDirectoryServer));
+                return (previousRootDse.PinnedDirectoryServer, LdapServerResolutionSource.Pinned);
+            }
+        }
+
+        logger.Information("ResolveEffectiveServer: Connecting via the configured Host {Server}.", LogSanitiser.Sanitise(host));
+        return (host, LdapServerResolutionSource.Host);
+    }
+
+    /// <summary>
+    /// Decides the <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/> value a full or delta import
+    /// should persist this run (issue #230 Phase 2). Pinning only ever applies to AD-family directories
+    /// (USN-based delta import); non-AD-family directories never pin.
+    /// </summary>
+    /// <remarks>
+    /// When no Preferred Domain Controller is configured, this returns <paramref name="dnsHostName"/> -
+    /// the domain controller the current connection actually reached, whether resolved via Host (first
+    /// connection, or a prior pin was just invalidated) or via an existing pin. Because the connection
+    /// was opened via whichever server was resolved, returning that same server here both creates the pin
+    /// on a first-ever connection and self-heals/re-affirms it on every subsequent run.
+    /// <para>
+    /// When a Preferred Domain Controller IS configured, this returns null: the setting owns domain
+    /// controller selection, so a pin recorded under a previous configuration (or before the setting was
+    /// introduced) must not survive into the new baseline.
+    /// </para>
+    /// </remarks>
+    /// <param name="useUsnDeltaImport">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>).</param>
+    /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
+    /// <param name="dnsHostName">The dnsHostName of the domain controller this connection reached.</param>
+    /// <param name="connectedServer">The server this connection was actually opened against, so that a candidate
+    /// already proven reachable is not probed again.</param>
+    /// <param name="canConnectTo">Opens and closes a throwaway connection to the named server, returning whether
+    /// it succeeded. Invoked at most once, and only for a candidate that differs from <paramref name="connectedServer"/>.</param>
+    /// <param name="logger">Logger.</param>
+    /// <returns>The value to persist as <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/>, and a warning
+    /// to surface on the Activity when a discovered domain controller had to be rejected.</returns>
+    internal static PinnedDirectoryServerDecision ResolvePinnedDirectoryServerForImport(
+        bool useUsnDeltaImport,
+        string? preferredDomainController,
+        string? dnsHostName,
+        string connectedServer,
+        Func<string, bool> canConnectTo,
+        ILogger logger)
+    {
+        if (!useUsnDeltaImport || !string.IsNullOrWhiteSpace(preferredDomainController) || string.IsNullOrWhiteSpace(dnsHostName))
+            return new PinnedDirectoryServerDecision(null, null);
+
+        // The connection that answered this rootDSE query was opened against connectedServer, so a candidate
+        // equal to it is already proven; probing would add a bind per run for an answer we hold. This is the
+        // steady state once a pin exists, which is why it must cost nothing.
+        if (string.Equals(dnsHostName, connectedServer, StringComparison.OrdinalIgnoreCase))
+            return new PinnedDirectoryServerDecision(dnsHostName, null);
+
+        if (canConnectTo(dnsHostName))
+            return new PinnedDirectoryServerDecision(dnsHostName, null);
+
+        // Pinning a name JIM cannot reach is unrecoverable rather than merely wrong: the pin is cleared when the
+        // connection through it fails, and the next run rediscovers the same name from the same directory and
+        // pins it again, so every run through the pin fails forever. Falling back to Host keeps the system
+        // working on the connection that demonstrably does, and the warning is what gives an administrator the
+        // one fact they need: the directory advertises a name their JIM host cannot resolve.
+        var warning =
+            $"The directory advertises its domain controller as '{dnsHostName}', but JIM could not open a connection to " +
+            $"that name, so it has not been pinned; this run and subsequent runs continue via '{connectedServer}'. This " +
+            "usually means DNS on the JIM host does not resolve the domain controller's own name (split-horizon DNS, or a " +
+            "directory reached through an alias or address). Resolve the name from the JIM host, or set the Preferred " +
+            "Domain Controller setting on this Connected System to a name that resolves, to pin a domain controller and " +
+            "get consistent delta imports.";
+
+        logger.Warning("ResolvePinnedDirectoryServerForImport: The discovered domain controller {DiscoveredServer} could not be reached from JIM; not pinning it. Continuing via {ConnectedServer}.",
+            LogSanitiser.Sanitise(dnsHostName), LogSanitiser.Sanitise(connectedServer));
+
+        return new PinnedDirectoryServerDecision(null, warning);
+    }
+
+    /// <summary>
+    /// Updates only the <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/> field of persisted
+    /// connector data, leaving every other field (the USN/changelog/accesslog watermarks, invocationId,
+    /// directory type, vendor name) exactly as replayed (issue #230 Phase 2). Used by both the export-path
+    /// pin creation (<c>CloseExportConnection</c>) and the pin invalidation on a failed pinned connection
+    /// (<c>CloseImportConnection</c>/<c>CloseExportConnection</c>): the two callers differ only in whether
+    /// they pass a new pin or null.
+    /// </summary>
+    /// <remarks>
+    /// Preserving the watermark fields byte-for-byte in meaning is a correctness requirement: a regressed
+    /// watermark corrupts delta imports. Malformed or absent previous data is tolerated (the specific
+    /// deserialisation exception is caught and a warning logged) by starting from a minimal record that
+    /// carries only the pin and <paramref name="fallbackDirectoryType"/> - there is nothing else to
+    /// recover from data that could not be read.
+    /// </remarks>
+    /// <param name="persistedConnectorData">The persisted connector data to update, or null if none exists yet.</param>
+    /// <param name="newPinnedDirectoryServer">The new pin value; null clears the pin.</param>
+    /// <param name="fallbackDirectoryType">The directory type to record when no previous data can be recovered.</param>
+    /// <param name="logger">Logger for a deserialisation failure warning.</param>
+    /// <returns>The updated persisted connector data JSON.</returns>
+    internal static string MergePinnedDirectoryServerIntoPersistedData(
+        string? persistedConnectorData,
+        string? newPinnedDirectoryServer,
+        LdapDirectoryType fallbackDirectoryType,
+        ILogger logger)
+    {
+        LdapConnectorRootDse? rootDse = null;
+
+        if (!string.IsNullOrEmpty(persistedConnectorData))
+        {
+            try
+            {
+                rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+            }
+            catch (JsonException ex)
+            {
+                logger.Warning(ex, "MergePinnedDirectoryServerIntoPersistedData: Failed to deserialise persisted connector data. Replacing it with a minimal record carrying only the pin and directory type.");
+            }
+        }
+
+        rootDse ??= new LdapConnectorRootDse { DirectoryType = fallbackDirectoryType };
+        rootDse.PinnedDirectoryServer = newPinnedDirectoryServer;
+        return JsonSerializer.Serialize(rootDse);
     }
 }

@@ -29,6 +29,10 @@ public static class RunProfilePhaseCatalogue
     [
         new(RunPhaseKeys.ImportConnect, "Connecting to Connected System"),
         new(RunPhaseKeys.ImportFetch, "Importing objects", HostsConnectorPhases: true),
+        // Matching what arrived against the Connected System Objects already held. Nested rather
+        // than following, because a Connector that returns a page at a time alternates between
+        // fetching and this; see RunProfilePhase.ParentKey.
+        new(RunPhaseKeys.ImportProcess, "Processing imported objects", ParentKey: RunPhaseKeys.ImportFetch),
         new(RunPhaseKeys.ImportDeletions, "Processing deletions"),
         new(RunPhaseKeys.ImportResolveReferences, "Resolving references"),
         new(RunPhaseKeys.ImportSave, "Saving changes"),
@@ -40,14 +44,27 @@ public static class RunProfilePhaseCatalogue
     [
         new(RunPhaseKeys.SyncPrepare, "Preparing"),
         new(RunPhaseKeys.SyncProcessObjects, "Processing Connected System Objects"),
-        new(RunPhaseKeys.SyncResolveCrossPageReferences, "Resolving cross-page references")
+        new(RunPhaseKeys.SyncResolveCrossPageReferences, "Resolving cross-page references"),
+        // Only reached when the Temporal Scope Reconciler has flagged objects, so most runs record
+        // it skipped; that is the point of declaring it, because when it does run it batches
+        // through the flagged set and writes Pending Exports with nothing else accounting for it.
+        new(RunPhaseKeys.SyncReviewExportScope, "Reviewing export scope")
     ];
 
     private static readonly IReadOnlyList<RunProfilePhase> ExportPhases =
     [
         new(RunPhaseKeys.ExportPrepare, "Preparing export"),
         new(RunPhaseKeys.ExportExecute, "Exporting", HostsConnectorPhases: true),
-        new(RunPhaseKeys.ExportResolveReferences, "Resolving change history references")
+        // The second pass, reached only when the first left something referencing an object that
+        // did not exist yet. Most exports skip it, which is exactly what the skipped state is for;
+        // when it is reached it can be most of the run's wall-clock (#985).
+        new(RunPhaseKeys.ExportDeferred, "Exporting deferred changes"),
+        new(RunPhaseKeys.ExportResolveReferences, "Resolving change history references"),
+        // Both of these follow writing the objects and were previously invisible: the run went on
+        // working against the Connected System, and narrating what it was doing, while the rail
+        // still showed the export as the last thing that had happened.
+        new(RunPhaseKeys.ExportSelectNewContainers, "Selecting new containers"),
+        new(RunPhaseKeys.ExportDeliverInitialPasswords, "Delivering initial passwords")
     ];
 
     private static readonly IReadOnlyList<RunProfilePhase> NoPhases = [];

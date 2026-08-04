@@ -417,9 +417,16 @@ public class ExportExecutionServer
             // Open connection for the primary connector
             using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
             {
-                connector.OpenExportConnection(connectedSystem.SettingValues);
+                connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
             }
             Log.Debug("ExecuteUsingCallsWithBatchingAsync: Opened export connection for {SystemName}", connectedSystem.Name);
+
+            // Tracks whether the export phase below completed without throwing. Read from the
+            // finally block to decide whether a failure while persisting CloseExportConnection's
+            // return value may safely propagate on its own, or must be logged and swallowed so it
+            // does not replace/mask an export failure that is already unwinding through the same
+            // finally block (see the finally block below for the full rationale).
+            var exportPhaseSucceeded = false;
 
             try
             {
@@ -680,15 +687,45 @@ public class ExportExecutionServer
                     Log.Information("ExecuteUsingCallsWithBatchingAsync: Captured {Count} created container(s) for auto-selection",
                         containerCreator.CreatedContainerExternalIds.Count);
                 }
+
+                // Reached only if nothing above threw; used by the finally block below to tell a
+                // genuine export failure apart from a clean run.
+                exportPhaseSucceeded = true;
             }
             finally
             {
-                // Always close connection
+                string? closeReturn;
                 using (Diagnostics.Diagnostics.Connector.StartSpan("CloseExportConnection"))
                 {
-                    connector.CloseExportConnection();
+                    // Always close connection
+                    closeReturn = connector.CloseExportConnection();
                 }
                 Log.Debug("ExecuteUsingCallsWithBatchingAsync: Closed export connection for {SystemName}", connectedSystem.Name);
+
+                // Persist connector state the connector chose to override at close, e.g. because
+                // opening/using the connection invalidated a previously persisted pin (issue #230).
+                // Null (the overwhelmingly common case) means "nothing to override" and must not persist.
+                // Application.ConnectedSystems mirrors the accessor SyncServer itself uses
+                // (_jim.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync); no new
+                // dependency or layer widening is needed here.
+                if (closeReturn != null)
+                {
+                    try
+                    {
+                        await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                    }
+                    catch (Exception persistEx) when (!exportPhaseSucceeded)
+                    {
+                        // The export itself already failed and that exception is propagating out of
+                        // this finally block. A .NET finally block that itself throws replaces the
+                        // in-flight exception rather than chaining it, which would silently hide the
+                        // export's own failure behind an unrelated persistence error. Log and let the
+                        // original export failure continue to unwind instead.
+                        Log.Error(persistEx,
+                            "ExecuteUsingCallsWithBatchingAsync: Failed to persist connector data returned by CloseExportConnection while the export itself is failing for Connected System {ConnectedSystemId}. The export's own failure takes precedence and will propagate.",
+                            connectedSystem.Id);
+                    }
+                }
             }
         }
         catch (OperationCanceledException)
@@ -722,11 +759,18 @@ public class ExportExecutionServer
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
 
+        // This pass counts its own work: the deferred exports, each finished with once it has been
+        // written or confirmed still unwritable. Reporting the export's totals here left the pass
+        // reading as complete for the whole time it ran.
+        var passTotal = deferredExports.Count;
+
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.ResolvingReferences,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = result.SuccessCount,
+            PassTotal = passTotal,
+            PassProcessed = 0,
             Message = $"Resolving {deferredExports.Count} deferred exports"
         });
 
@@ -773,6 +817,11 @@ public class ExportExecutionServer
                     Phase = ExportPhase.ResolvingReferences,
                     TotalExports = result.TotalPendingExports,
                     ProcessedExports = result.SuccessCount + result.FailedCount,
+                    // Resolution classifies; it finishes with nothing. Counting it here would run the
+                    // window to full and then back down as the writing began, which the estimator
+                    // reads as a new phase and the administrator reads as progress being lost.
+                    PassTotal = passTotal,
+                    PassProcessed = 0,
                     Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
                 });
             }
@@ -819,11 +868,11 @@ public class ExportExecutionServer
                 var immediateProcessedCount = result.SuccessCount + result.FailedCount;
                 await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
                     cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                    processedExportsOffset: immediateProcessedCount);
+                    processedExportsOffset: immediateProcessedCount, passTotal: passTotal);
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback);
+                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal);
             }
         }
 
@@ -833,6 +882,8 @@ public class ExportExecutionServer
             var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
             var resolvedMvoIds = csoLookup.Keys.ToHashSet();
             var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
+
+            var markedDeferredCount = 0;
 
             Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references and will be deferred. " +
                 "{Resolved} resolved, {TotalDeferred} total deferred this cycle. " +
@@ -852,6 +903,23 @@ public class ExportExecutionServer
 
                 await MarkExportDeferredAsync(export);
                 result.DeferredCount++;
+
+                // Confirming an export still cannot be written finishes with it as surely as
+                // writing it does, so it counts towards this pass's own work. Throttled to keep the
+                // progress writes off the per-export path.
+                markedDeferredCount++;
+                if (markedDeferredCount % 50 == 0 || markedDeferredCount == stillUnresolvedExports.Count)
+                {
+                    await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                    {
+                        Phase = ExportPhase.ResolvingReferences,
+                        TotalExports = result.TotalPendingExports,
+                        ProcessedExports = result.SuccessCount + result.FailedCount,
+                        PassTotal = passTotal,
+                        PassProcessed = resolvedExports.Count + markedDeferredCount,
+                        Message = "Recording exports that are still waiting on their references"
+                    });
+                }
             }
         }
     }
@@ -862,12 +930,17 @@ public class ExportExecutionServer
     /// <summary>
     /// Processes deferred batches sequentially using the existing connector and DbContext.
     /// </summary>
+    /// <param name="passTotal">
+    /// How many deferred exports this pass covers, so its progress is reported against its own work
+    /// rather than the export's totals.
+    /// </param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
         List<List<PendingExport>> batches,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback)
+        Func<ExportProgressInfo, Task>? progressCallback,
+        int passTotal)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -881,6 +954,8 @@ public class ExportExecutionServer
             Phase = ExportPhase.Executing,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = immediateProcessedCount + processedCount,
+            PassTotal = passTotal,
+            PassProcessed = processedCount,
             Message = subPhase
         });
 
@@ -894,6 +969,8 @@ public class ExportExecutionServer
                 Phase = ExportPhase.Executing,
                 TotalExports = result.TotalPendingExports,
                 ProcessedExports = immediateProcessedCount + processedCount,
+                PassTotal = passTotal,
+                PassProcessed = processedCount,
                 CurrentBatchSize = batch.Count,
                 Message = "Exporting deferred"
             });
@@ -940,7 +1017,8 @@ public class ExportExecutionServer
         Func<ISyncRepositoryScope> repositoryFactory,
         string spanName,
         int processedExportsOffset = 0,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
+        int? passTotal = null)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
             batches.Count, options.MaxParallelism);
@@ -961,6 +1039,8 @@ public class ExportExecutionServer
             Phase = ExportPhase.Executing,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = processedExportsOffset + Volatile.Read(ref processedCount),
+            PassTotal = passTotal,
+            PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) : null,
             Message = subPhase
         }, progressSemaphore);
 
@@ -1008,8 +1088,15 @@ public class ExportExecutionServer
                     }
                     batchConnector = callsConnector;
                     PrepareConnectorForExport(batchConnector);
-                    batchConnector.OpenExportConnection(connectedSystem.SettingValues);
+                    batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
                 }
+
+                // Tracks whether this batch completed without throwing, mirroring the primary
+                // connector's exportPhaseSucceeded flag above: used by the finally block below to
+                // decide whether a persistence failure while handling CloseExportConnection's return
+                // value may propagate on its own, or must be logged and swallowed so it does not
+                // replace/mask a batch failure that is already unwinding through the same finally.
+                var batchExportSucceeded = false;
 
                 try
                 {
@@ -1070,8 +1157,10 @@ public class ExportExecutionServer
                                 Phase = ExportPhase.Executing,
                                 TotalExports = result.TotalPendingExports,
                                 ProcessedExports = processedExportsOffset + newProcessedCount,
+                                PassTotal = passTotal,
+                                PassProcessed = passTotal.HasValue ? newProcessedCount : null,
                                 CurrentBatchSize = batch.Count,
-                                Message = "Exporting"
+                                Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
                             });
                         }
                         finally
@@ -1079,14 +1168,46 @@ public class ExportExecutionServer
                             progressSemaphore.Release();
                         }
                     }
+
+                    // Reached only if nothing above threw; used by the finally block below to tell a
+                    // genuine batch failure apart from a clean run.
+                    batchExportSucceeded = true;
                 }
                 finally
                 {
                     // Close the batch connector (but not the primary - that's managed by the caller)
                     if (batchIndex != 0)
                     {
-                        batchConnector.CloseExportConnection();
-                        (batchConnector as IDisposable)?.Dispose();
+                        string? closeReturn;
+                        try
+                        {
+                            closeReturn = batchConnector.CloseExportConnection();
+                        }
+                        finally
+                        {
+                            (batchConnector as IDisposable)?.Dispose();
+                        }
+
+                        // Persist connector state the connector chose to override at close (issue
+                        // #230). Null (the overwhelmingly common case) means "nothing to override".
+                        if (closeReturn != null)
+                        {
+                            try
+                            {
+                                await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                            }
+                            catch (Exception persistEx) when (!batchExportSucceeded)
+                            {
+                                // The batch itself already failed and that exception is propagating out
+                                // of this finally block. A .NET finally block that itself throws
+                                // replaces the in-flight exception rather than chaining it, which would
+                                // silently hide the batch's own failure behind an unrelated persistence
+                                // error. Log and let the original batch failure continue to unwind.
+                                Log.Error(persistEx,
+                                    "ProcessBatchesInParallelAsync: Failed to persist connector data returned by CloseExportConnection while batch {BatchIndex} is failing for Connected System {ConnectedSystemId}. The batch's own failure takes precedence and will propagate.",
+                                    batchIndex, connectedSystem.Id);
+                            }
+                        }
                     }
                 }
             }

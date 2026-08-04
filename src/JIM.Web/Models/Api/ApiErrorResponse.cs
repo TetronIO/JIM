@@ -120,6 +120,19 @@ public class ApiErrorResponse
     }
 
     /// <summary>
+    /// Creates a bad-gateway error response, for a system JIM depends on failing rather than JIM or the request.
+    /// Paired with a 502, so the caller can tell "your request was wrong" from "the thing behind JIM was".
+    /// </summary>
+    public static ApiErrorResponse BadGateway(string message)
+    {
+        return new ApiErrorResponse
+        {
+            Code = ApiErrorCodes.BadGateway,
+            Message = message
+        };
+    }
+
+    /// <summary>
     /// Creates a too-many-requests (rate limited) error response.
     /// </summary>
     public static ApiErrorResponse TooManyRequests(string message)
@@ -145,5 +158,11 @@ public static class ApiErrorCodes
     public const string InternalError = "INTERNAL_ERROR";
     public const string BadRequest = "BAD_REQUEST";
     public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
+    /// <summary>
+    /// Something JIM depends on failed, rather than JIM or the request: a Connected System that could not be
+    /// reached, for example. Distinct from <see cref="BadRequest"/>, because the caller has nothing to fix and
+    /// repeating the same request is the right next move.
+    /// </summary>
+    public const string BadGateway = "BAD_GATEWAY";
     public const string TooManyRequests = "TOO_MANY_REQUESTS";
 }

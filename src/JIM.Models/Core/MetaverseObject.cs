@@ -56,6 +56,28 @@ public class MetaverseObject
     public string? DeletionInitiatedByName { get; set; }
 
     /// <summary>
+    /// The Connected System whose disconnection triggered the scheduled deletion (#119).
+    /// Set when a deletion is scheduled; cleared with the other deletion markers. Makes grace period
+    /// cancellation precise (only undoing the triggering disconnection cancels in Specific mode) and lets
+    /// the Pending Deletions page show what triggered each scheduled deletion.
+    /// </summary>
+    public int? DeletionTriggeredBySystemId { get; set; }
+
+    /// <summary>
+    /// The display name of the triggering Connected System at the time the deletion was scheduled.
+    /// The name snapshot survives deletion of the system itself (#119).
+    /// </summary>
+    public string? DeletionTriggeredBySystemName { get; set; }
+
+    /// <summary>
+    /// The decision-time deletion policy snapshot (a serialised <c>MvoDeletionPolicySnapshot</c>), captured
+    /// when the deletion is scheduled so housekeeping can carry it onto the final deletion record after the
+    /// grace period; the record then reflects the policy that scheduled the deletion, not the policy at
+    /// execution time (#119).
+    /// </summary>
+    public string? DeletionPolicySnapshotJson { get; set; }
+
+    /// <summary>
     /// How this MVO was created - determines deletion rule applicability.
     /// Projected MVOs are subject to automatic deletion rules.
     /// Internal MVOs (admin, service accounts) are protected from automatic deletion.
@@ -110,21 +132,33 @@ public class MetaverseObject
     /// </summary>
     public string? CachedDisplayName { get; set; }
 
+    /// <summary>
+    /// The object's name: the first present value from <see cref="ObjectNaming.MetaverseNameAttributes"/>,
+    /// falling back to <see cref="CachedDisplayName"/> when attribute values are not loaded (the
+    /// Metaverse list projects the cache without materialising them). Null when nothing resolves.
+    /// <para>
+    /// Use this when persisting a name alongside a separately persisted identifier, or feeding a
+    /// nullable API field. For anything a person reads on screen use <see cref="NameOrId"/>.
+    /// </para>
+    /// </summary>
     [NotMapped]
-    public string? DisplayName
+    public string? Name
     {
         get
         {
             if (AttributeValues.Count == 0)
                 return CachedDisplayName;
 
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-            if (av != null && !string.IsNullOrEmpty(av.StringValue))
-                return av.StringValue;
-
-            return CachedDisplayName;
+            return ObjectNaming.MetaverseNameFrom(AttributeValues) ?? CachedDisplayName;
         }
     }
+
+    /// <summary>
+    /// The best human-readable label for this object: its <see cref="Name"/>, else its id. Prefer this
+    /// for display; prefer <see cref="Name"/> when the identifier is already surfaced separately.
+    /// </summary>
+    [NotMapped]
+    public string NameOrId => ObjectNaming.FirstPresent(Name) ?? Id.ToString();
 
     /// <summary>
     /// Indicates if this MVO is pending deletion (has disconnection date and awaiting grace period expiry).
@@ -159,7 +193,7 @@ public class MetaverseObject
 
     public override string ToString()
     {
-        return $"{DisplayName} ({Id})";
+        return $"{Name} ({Id})";
     }
     #endregion
 }

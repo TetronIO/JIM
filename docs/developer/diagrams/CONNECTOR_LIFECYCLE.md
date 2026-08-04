@@ -34,10 +34,12 @@ flowchart TD
 
     MatchName -->|LdapConnectorName| CreateLdap[new LdapConnector]
     MatchName -->|FileConnectorName| CreateFile[new FileConnector]
+    MatchName -->|ScimClientConnectorName| CreateScim[new ScimConnector]
     MatchName -->|Unknown| ThrowError[throw NotSupportedException<br/>Activity fails with error]
 
     CreateLdap --> GetRunProfile[Resolve RunProfile<br/>from ConnectedSystem.RunProfiles]
     CreateFile --> GetRunProfile
+    CreateScim --> GetRunProfile
 
     GetRunProfile --> RouteByType{RunProfile<br/>RunType?}
     RouteByType -->|FullImport<br/>DeltaImport| ImportProcessor[SyncImportTaskProcessor<br/>ISyncServer + ISyncRepository]

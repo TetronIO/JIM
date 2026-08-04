@@ -246,6 +246,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
     /// <returns>Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so a caller holding historical ids needs this to tell live rows from gone
+    /// ones without materialising any of them.
+    /// </summary>
+    public Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds);
+
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>
@@ -457,13 +464,6 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Gets the count of Connected System Objects joined to a specific Metaverse Object.
-    /// Used to determine if an MVO has any remaining connectors before deletion.
-    /// </summary>
-    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
-
-    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>
@@ -634,6 +634,17 @@ public interface IConnectedSystemRepository
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
     Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
 
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. The inverse of the browsing lookups: a caller holding a reference to a deleted record (a
+    /// causality view naming the record a run deleted) knows that id and nothing about the change record.
+    /// The foreign key to the Connected System Object is nulled when the object goes, which is why
+    /// <see cref="ConnectedSystemObjectChange.DeletedConnectedSystemObjectId"/> exists and is matched here.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId);
+
     #region Synchronisation Rule Mappings
     /// <summary>
     /// Gets all mappings for a Synchronisation Rule.
@@ -698,6 +709,13 @@ public interface IConnectedSystemRepository
 
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
+
+    /// <summary>
+    /// Returns the display name of every Connected System keyed by id. A lightweight lookup for
+    /// event-time name snapshots (for example deletion policy snapshots, #119); the table is tiny, so a
+    /// single map read replaces per-system queries.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
@@ -900,6 +918,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
+    /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
+    /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
+    /// setting-value instances the in-memory system happened to carry (composed with a Setting navigation but no
+    /// FK scalar) were faithfully written back with SettingId 0, failing the export run on a foreign key
+    /// violation the moment a connector first returned close-time state. A watermark write must never be able
+    /// to touch configuration rows.
+    /// </summary>
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
 
     /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.

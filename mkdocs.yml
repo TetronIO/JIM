@@ -100,6 +100,7 @@ nav:
       - Attribute Priority: concepts/attribute-priority.md
       - Expressions: concepts/expressions.md
       - Case Sensitivity: concepts/case-sensitivity.md
+      - Object Naming: concepts/object-naming.md
   - Configuration:
       - configuration/index.md
       - Configuration Changes: configuration/configuration-changes.md
@@ -132,6 +133,7 @@ nav:
       - connectors/index.md
       - JIM File Connector: connectors/jim-file-connector.md
       - JIM LDAP Connector: connectors/jim-ldap-connector.md
+      - JIM SCIM 2.0 Client Connector: connectors/jim-scim-connector.md
   - API:
       - api/index.md
       - Authentication: api/authentication.md
@@ -152,6 +154,7 @@ nav:
       - Service Settings: powershell/service-settings.md
       - Security: powershell/security.md
       - History: powershell/history.md
+      - Configuration Change Previews: powershell/previews.md
       - Example Data: powershell/example-data.md
       - Expressions: powershell/expressions.md
       - Worker Tasks: powershell/worker-tasks.md

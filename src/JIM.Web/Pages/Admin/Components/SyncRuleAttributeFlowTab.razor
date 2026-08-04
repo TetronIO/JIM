@@ -153,40 +153,42 @@
                 </MudTd>
                 <MudTd><MudText Class="mud-text-secondary">→</MudText></MudTd>
                 <MudTd DataLabel="Target">
-                    @if (SyncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
-                    {
-                        <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Size="Size.Medium">
-                                <AvatarContent>
-                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                </AvatarContent>
-                                <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
-                            </MudChip>
-                        </MudTooltip>
-                    }
-                    else if (SyncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
-                    {
-                        <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Size="Size.Medium">
-                                <AvatarContent>
-                                    <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                </AvatarContent>
-                                <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
-                            </MudChip>
-                        </MudTooltip>
-                        @if (context.InitialExportOnly)
+                    <div class="d-flex align-center flex-wrap">
+                        @if (SyncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
                         {
-                            <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                            <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Medium">
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
+                                </MudChip>
                             </MudTooltip>
                         }
-                    }
-                    @if (MappingIsMvaToSva(context))
-                    {
-                        <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
-                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="ml-2" />
-                        </MudTooltip>
-                    }
+                        else if (SyncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
+                        {
+                            <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Medium">
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
+                                </MudChip>
+                            </MudTooltip>
+                            @if (context.InitialExportOnly)
+                            {
+                                <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                                </MudTooltip>
+                            }
+                        }
+                        @if (MappingIsMvaToSva(context))
+                        {
+                            <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
+                                <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="ml-2 jim-mva-sva-indicator" />
+                            </MudTooltip>
+                        }
+                    </div>
                 </MudTd>
                 <MudTd DataLabel="Created">
                     <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -235,7 +237,7 @@
                             @if (MappingIsMvaToSva(attributeFlowRule))
                             {
                                 <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
-                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+                                    <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="jim-mva-sva-indicator" />
                                 </MudTooltip>
                             }
                         </MudStack>
