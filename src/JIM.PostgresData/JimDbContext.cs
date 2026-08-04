@@ -33,6 +33,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectChangeAttributeValue> ConnectedSystemObjectChangeAttributeValues { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemObjectTypeTag> ConnectedSystemObjectTypeTags { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
@@ -304,6 +305,26 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
+
+        // Classification tags have no meaning without the object type they classify, so they go with it. The unique
+        // index enforces the same rule schema import applies in memory: a type is classified a given way once.
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasMany(csot => csot.Tags)
+            .WithOne(tag => tag.ConnectedSystemObjectType)
+            .HasForeignKey(tag => tag.ConnectedSystemObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
+            .HasIndex(tag => new { tag.ConnectedSystemObjectTypeId, tag.Key, tag.Value })
+            .IsUnique();
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
+            .Property(tag => tag.Key)
+            .HasMaxLength(64);
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
+            .Property(tag => tag.Value)
+            .HasMaxLength(256);
 
         // A Connected System has at most one discovered password policy. Every other child of a Connected System
         // is a collection, so this one-to-one has to be declared explicitly: EF cannot infer which end is the

@@ -18,6 +18,13 @@ public class ConnectedSystemObjectType
     public List<ConnectedSystemObjectTypeAttribute> Attributes { get; set; } = new();
 
     /// <summary>
+    /// Connector-supplied classification for this object type, i.e. whether it is a structural or auxiliary class.
+    /// Populated during schema import and replaced on refresh. An empty collection means unclassified, which
+    /// consumers must treat as "show it, do not group it". See <see cref="ObjectTypeTags"/>.
+    /// </summary>
+    public List<ConnectedSystemObjectTypeTag> Tags { get; set; } = new();
+
+    /// <summary>
     /// Whether an administrator has selected this object type to be managed by JIM.
     /// </summary>
     public bool Selected { get; set; }
