@@ -14,13 +14,13 @@
 @if (_execution is { } execution)
 {
     var href = $"/admin/operations/schedule-executions/{execution.Id}";
-    var contextText = BuildContextText(execution);
     var statusText = execution.Status.ToString().SplitOnCapitalLetters();
     var statusColour = Helpers.GetScheduleExecutionMudBlazorColorForStatus(execution.Status);
 
     if (Compact)
     {
         @* Panel-section treatment, matching the sibling sections of the Operations History side panel. *@
+        var contextText = BuildCompactContextText(execution);
         <MudPaper Elevation="0" Class="@CompactClass" Outlined="true">
             <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Schedule</MudText>
             <div class="d-flex align-center flex-wrap gap-2">
@@ -33,15 +33,38 @@
     else
     {
         @* Page-width treatment: a panel matching the detail page's other panels, so the context reads as another
-           section of the page rather than a notice dropped on top of it. *@
+           section of the page rather than a notice dropped on top of it. Laid out as labelled fields, one per
+           line, matching the Summary panel it sits directly beneath; every value is labelled, and the status
+           chip especially so, because the Activity carries a status chip of its own and an unlabelled second
+           chip describing the whole run reads as a contradiction. *@
         <MudPaper Outlined="true" Class="@PanelClass">
             <MudText Typo="Typo.h5" Class="mb-4">Part of a Schedule</MudText>
-            <div class="d-flex align-center flex-wrap gap-2">
-                <MudIcon Icon="@Icons.Material.Filled.Schedule" />
-                <span>@contextText</span>
-                <MudChip T="string" Variant="Variant.Text" Class="ml-0" Color="@statusColour">@statusText</MudChip>
-                <MudLink Href="@href">View Schedule Execution</MudLink>
-            </div>
+            <MudGrid Spacing="4">
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Schedule:</MudText><br />
+                    <MudLink Href="@href">@execution.ScheduleName</MudLink>
+                </MudItem>
+
+                @* Omitted entirely rather than rendered empty when the Activity carries no step index, or the
+                   execution records no steps to count it against. *@
+                @if (ScheduleStepIndex.HasValue && execution.TotalSteps > 0)
+                {
+                    var stepIndex = ScheduleStepIndex.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Step:</MudText>
+                        @* ScheduleStepIndex is stored 0-based and read 1-based. *@
+                        <MudText>@(stepIndex + 1) of @execution.TotalSteps</MudText>
+                    </MudItem>
+                }
+
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Schedule Execution:</MudText>
+                    <div class="d-flex align-center flex-wrap gap-2">
+                        <MudChip T="string" Variant="Variant.Text" Class="ml-0" Color="@statusColour">@statusText</MudChip>
+                        <MudLink Href="@href">View Schedule Execution</MudLink>
+                    </div>
+                </MudItem>
+            </MudGrid>
         </MudPaper>
     }
 }
@@ -104,20 +127,18 @@
     }
 
     /// <summary>
-    /// Builds the sentence naming the Schedule and the step. The non-compact panel is already headed "Part of a
-    /// Schedule", so the "Part of" prefix is carried by the heading there and only prepended in the compact
-    /// treatment, which has no such heading.
+    /// Builds the single sentence naming the Schedule and the step for the compact treatment, which has no
+    /// heading of its own and so carries the "Part of" prefix inline. The page-width treatment lays the same
+    /// facts out as labelled fields under its own heading, and does not use this.
     /// </summary>
-    private string BuildContextText(ScheduleExecution execution)
+    private string BuildCompactContextText(ScheduleExecution execution)
     {
-        var prefix = Compact ? "Part of " : string.Empty;
-
         if (ScheduleStepIndex.HasValue && execution.TotalSteps > 0)
         {
             var stepIndex = ScheduleStepIndex.Value;
-            return $"{prefix}{execution.ScheduleName}, step {stepIndex + 1} of {execution.TotalSteps}";
+            return $"Part of {execution.ScheduleName}, step {stepIndex + 1} of {execution.TotalSteps}";
         }
 
-        return $"{prefix}{execution.ScheduleName}";
+        return $"Part of {execution.ScheduleName}";
     }
 }

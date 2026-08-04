@@ -189,98 +189,84 @@
             {
                 <MudTr>
                     @* The executions belong to the Schedule above them, so they are inset rather than laid out
-                       full-bleed: the left padding clears the parent table's expander column, and the outlined,
-                       tinted block contains them so the header row cannot read as more rows of the Schedules
-                       table. *@
+                       full-bleed: the left padding clears the parent table's expander column. The listing itself
+                       is an ordinary bordered table, exactly as every other listing in JIM; the border is what
+                       stops its header row reading as more rows of the Schedules table. *@
                     <td colspan="8" class="pa-0">
                         <div class="pl-12 pr-4 py-3">
-                            <MudPaper Outlined="true" Elevation="0" Class="pa-4"
-                                      Style="background-color: var(--mud-palette-background-grey);">
-                                <MudText Typo="Typo.subtitle2" Class="mb-3">Recent Schedule Executions: @context.Name</MudText>
-                                @if (_loadingScheduleIds.Contains(context.Id))
-                                {
-                                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
-                                }
-                                else
-                                {
-                                    var executions = GetRecentExecutions(context.Id);
-                                    @if (executions.Count == 0)
-                                    {
-                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">This Schedule has not run yet.</MudText>
-                                    }
-                                    else
-                                    {
-                                        <MudSimpleTable Hover="true" Dense="true" Elevation="0">
-                                            <thead>
-                                                <tr>
-                                                    <th><MudText Typo="Typo.button">Started</MudText></th>
-                                                    <th><MudText Typo="Typo.button">Outcome</MudText></th>
-                                                    <th><MudText Typo="Typo.button">Duration</MudText></th>
-                                                    <th><MudText Typo="Typo.button">Steps</MudText></th>
-                                                    <th><MudText Typo="Typo.button">Initiated By</MudText></th>
-                                                    <th></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var execution in executions)
-                                                {
-                                                    <tr @key="execution.Id">
-                                                        <td>
-                                                            @if (execution.StartedAt.HasValue)
-                                                            {
-                                                                var startedAt = execution.StartedAt.Value;
-                                                                <MudTooltip Text="@startedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                                                                    <span>@startedAt.ToLocalTime().ToRelativeTime()</span>
-                                                                </MudTooltip>
-                                                            }
-                                                            else
-                                                            {
-                                                                <EmptyValue />
-                                                            }
-                                                        </td>
-                                                        <td>
-                                                            <MudChip T="string" Variant="Variant.Text" Class="ml-0"
-                                                                     Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(execution.Status)">
-                                                                @execution.Status.ToString().SplitOnCapitalLetters()
-                                                            </MudChip>
-                                                        </td>
-                                                        <td>
-                                                            @{ var duration = GetExecutionDuration(execution); }
-                                                            @if (duration.HasValue)
-                                                            {
-                                                                var durationValue = duration.Value;
-                                                                <span>@durationValue.ToAbbreviatedString()</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <EmptyValue />
-                                                            }
-                                                        </td>
-                                                        <td>
-                                                            @if (execution.TotalSteps > 0)
-                                                            {
-                                                                <span>@(Math.Min(execution.CurrentStepIndex + 1, execution.TotalSteps)) of @execution.TotalSteps</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <EmptyValue />
-                                                            }
-                                                        </td>
-                                                        <td>
-                                                            <AuditPrincipalLink PrincipalType="execution.InitiatedByType"
-                                                                                PrincipalId="execution.InitiatedById"
-                                                                                PrincipalName="@execution.InitiatedByName" />
-                                                        </td>
-                                                        <td>
-                                                            <MudLink Href="@($"/admin/operations/schedule-executions/{execution.Id}")">View Schedule Execution</MudLink>
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </MudSimpleTable>
-                                    }
-                                }
-                            </MudPaper>
+                            @* Deliberately no TableDensityToggle: this is a short child listing inside another
+                               table's row, and a second density toggle on the same page would be confusing. *@
+                            <MudTable Items="@GetRecentExecutions(context.Id)" T="ScheduleExecution"
+                                      Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+                                      Outlined="true" Elevation="0"
+                                      Loading="@_loadingScheduleIds.Contains(context.Id)" LoadingProgressColor="Color.Primary">
+                                <ToolBarContent>
+                                    <MudText Typo="Typo.h6">Recent Schedule Executions: @context.Name</MudText>
+                                </ToolBarContent>
+                                <HeaderContent>
+                                    <MudTh><MudText Typo="Typo.button">Started</MudText></MudTh>
+                                    <MudTh><MudText Typo="Typo.button">Outcome</MudText></MudTh>
+                                    <MudTh><MudText Typo="Typo.button">Duration</MudText></MudTh>
+                                    <MudTh><MudText Typo="Typo.button">Steps</MudText></MudTh>
+                                    <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+                                    <MudTh></MudTh>
+                                </HeaderContent>
+                                @* MudTable keys each row on its item internally, so the loop's own @key moves with the rows. *@
+                                <RowTemplate Context="execution">
+                                    <MudTd DataLabel="Started">
+                                        @if (execution.StartedAt.HasValue)
+                                        {
+                                            var startedAt = execution.StartedAt.Value;
+                                            <MudTooltip Text="@startedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                                <span>@startedAt.ToLocalTime().ToRelativeTime()</span>
+                                            </MudTooltip>
+                                        }
+                                        else
+                                        {
+                                            <EmptyValue />
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Outcome">
+                                        <MudChip T="string" Variant="Variant.Text" Class="ml-0"
+                                                 Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(execution.Status)">
+                                            @execution.Status.ToString().SplitOnCapitalLetters()
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Duration">
+                                        @{ var duration = GetExecutionDuration(execution); }
+                                        @if (duration.HasValue)
+                                        {
+                                            var durationValue = duration.Value;
+                                            <span>@durationValue.ToAbbreviatedString()</span>
+                                        }
+                                        else
+                                        {
+                                            <EmptyValue />
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Steps">
+                                        @if (execution.TotalSteps > 0)
+                                        {
+                                            <span>@(Math.Min(execution.CurrentStepIndex + 1, execution.TotalSteps)) of @execution.TotalSteps</span>
+                                        }
+                                        else
+                                        {
+                                            <EmptyValue />
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Initiated By">
+                                        <AuditPrincipalLink PrincipalType="execution.InitiatedByType"
+                                                            PrincipalId="execution.InitiatedById"
+                                                            PrincipalName="@execution.InitiatedByName" />
+                                    </MudTd>
+                                    <MudTd>
+                                        <MudLink Href="@($"/admin/operations/schedule-executions/{execution.Id}")">View Schedule Execution</MudLink>
+                                    </MudTd>
+                                </RowTemplate>
+                                <NoRecordsContent>
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">This Schedule has not run yet.</MudText>
+                                </NoRecordsContent>
+                            </MudTable>
                         </div>
                     </td>
                 </MudTr>
