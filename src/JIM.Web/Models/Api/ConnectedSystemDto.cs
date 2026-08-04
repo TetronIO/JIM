@@ -4,6 +4,7 @@
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -39,6 +40,20 @@ public class ConnectedSystemDetailDto
     public ConfigurationDriftDto? ConfigurationDrift { get; set; }
 
     /// <summary>
+    /// How many accounts in this Connected System are waiting on a person over their initial password: refused by
+    /// the target and parked, or never given one before its time to live passed. Null on the create and update
+    /// responses, which describe the write that just happened rather than the system's readiness.
+    /// <para>
+    /// The two counts are never summed. Parked work is fixed on the Synchronisation Rules that provisioned those
+    /// accounts, by correcting their initial password settings; expired work cannot be fixed there at all.
+    /// </para>
+    /// </summary>
+    public int? ParkedInitialPasswordCount { get; set; }
+
+    /// <inheritdoc cref="ParkedInitialPasswordCount"/>
+    public int? ExpiredInitialPasswordCount { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -53,12 +68,17 @@ public class ConnectedSystemDetailDto
     /// <param name="configurationDrift">
     /// Pre-computed configuration drift status, or null to omit it (create and update responses do not carry it).
     /// </param>
+    /// <param name="initialPasswordAttention">
+    /// Pre-computed initial-password counts, or null to omit them (create and update responses do not carry them).
+    /// </param>
     public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0,
-        ConfigurationDriftStatus? configurationDrift = null)
+        ConfigurationDriftStatus? configurationDrift = null, InitialPasswordAttention? initialPasswordAttention = null)
     {
         return new ConnectedSystemDetailDto
         {
             ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
+            ParkedInitialPasswordCount = initialPasswordAttention?.ParkedCount,
+            ExpiredInitialPasswordCount = initialPasswordAttention?.ExpiredCount,
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,
