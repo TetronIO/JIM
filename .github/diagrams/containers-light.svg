@@ -5,6 +5,10 @@
 <!-- Strictly containers: Web Application, Worker Service, Scheduler Service, -->
 <!-- PostgreSQL and the PowerShell Module. In-process libraries (Application -->
 <!-- Layer, Connectors) are not containers; the Worker's annotation carries them. -->
+<!-- The boundary title is painted last (SVG paints in document order) so -->
+<!-- the REST API spoke and any data packet pass behind it, not over it; -->
+<!-- the knockout stroke on .jimdg-hub-title clears the gaps between -->
+<!-- glyphs. Keep it the final element if you add anything to this file. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
 <!-- Visual language: engineering/DESIGN.md > Diagrams. -->
@@ -67,7 +71,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 .jim-diagram .jimdg-flow          { stroke: var(--jimdg-flow); stroke-width: 2; }
 .jim-diagram .jimdg-flow-arrow    { fill: var(--jimdg-flow); }
 .jim-diagram text { text-anchor: middle; }
-.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text);
+                                   stroke: var(--jimdg-hub-fill); stroke-width: 5; stroke-linejoin: round;
+                                   paint-order: stroke fill; }
 .jim-diagram .jimdg-layer-title  { font-size: 14px; font-weight: 600; fill: var(--jimdg-layer-text); }
 .jim-diagram .jimdg-chip-label   { font-size: 13.5px; font-weight: 600; fill: var(--jimdg-chip-text); }
 .jim-diagram .jimdg-chip-sub     { font-size: 11px; fill: var(--jimdg-chip-text); opacity: 0.78; }
@@ -99,7 +105,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 @media (prefers-reduced-motion: reduce) { .jimdg-packet { display: none; } }
 </style>
   <title id="jimdg-ct-title">JIM Containers</title>
-  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems and file systems, with enterprise database and cloud application connectivity planned.</desc>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems and cloud applications, with enterprise database connectivity in development.</desc>
   <g id="jimdg-ct-people">
     <rect class="jimdg-stage" x="150" y="32" width="200" height="64" rx="8"/>
     <circle class="jimdg-person-glyph" cx="166" cy="53" r="6"/>
@@ -116,7 +122,6 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
   </g>
   <g id="jimdg-ct-boundary">
     <rect class="jimdg-hub" x="90" y="150" width="980" height="450" rx="8"/>
-    <text class="jimdg-hub-title" x="580" y="188">JIM</text>
   </g>
   <g id="jimdg-ct-containers">
     <rect class="jimdg-stage" x="140" y="225" width="220" height="80" rx="8"/>
@@ -175,9 +180,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <line class="jimdg-spoke-planned" x1="630" y1="516" x2="810" y2="656"/>
     <circle class="jimdg-link-end-planned" cx="630" cy="516" r="3.5"/>
     <circle class="jimdg-link-end-planned" cx="810" cy="656" r="3.5"/>
-    <line class="jimdg-spoke-planned" x1="680" y1="516" x2="1040" y2="656"/>
-    <circle class="jimdg-link-end-planned" cx="680" cy="516" r="3.5"/>
-    <circle class="jimdg-link-end-planned" cx="1040" cy="656" r="3.5"/>
+    <line class="jimdg-spoke" x1="680" y1="516" x2="1040" y2="656"/>
+    <circle class="jimdg-link-end" cx="680" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end" cx="1040" cy="656" r="3.5"/>
   </g>
   <g id="jimdg-ct-systems">
     <rect class="jimdg-system" x="20" y="656" width="200" height="64" rx="8"/>
@@ -191,10 +196,10 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <text class="jimdg-system-sub" x="580" y="705">CSV &amp; flat files</text>
     <rect class="jimdg-system-planned" x="710" y="656" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name-planned" x="810" y="684">Enterprise Databases</text>
-    <text class="jimdg-system-sub-planned" x="810" y="705">SQL (planned)</text>
-    <rect class="jimdg-system-planned" x="940" y="656" width="200" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="1040" y="684">Cloud Applications</text>
-    <text class="jimdg-system-sub-planned" x="1040" y="705">SCIM 2.0 (planned)</text>
+    <text class="jimdg-system-sub-planned" x="810" y="705">SQL (in development)</text>
+    <rect class="jimdg-system" x="940" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="1040" y="684">Cloud Applications</text>
+    <text class="jimdg-system-sub" x="1040" y="705">SCIM 2.0</text>
   </g>
   <g id="jimdg-ct-packets">
     <circle class="jimdg-packet" r="4.5">
@@ -209,5 +214,12 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
       <animateMotion dur="3s" begin="-0.75s" repeatCount="indefinite" path="M580,516 L580,656"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-0.75s" repeatCount="indefinite"/>
     </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-2.25s" repeatCount="indefinite" path="M680,516 L1040,656"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-2.25s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  <g id="jimdg-ct-boundary-title">
+    <text class="jimdg-hub-title" x="580" y="188">JIM</text>
   </g>
 </svg>
