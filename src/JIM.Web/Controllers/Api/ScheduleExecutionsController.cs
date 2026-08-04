@@ -93,6 +93,11 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         var tasksByStep = workerTasks.GroupBy(t => t.ScheduleStepIndex ?? -1)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        // How far through the Schedule this execution is, in step groups, read the same way the portal
+        // reads it (#1162). Built from the records already fetched above, so it costs no extra query.
+        dto.Progress = ScheduleStepReading.FromRecords(
+            workerTasks, activities, execution.TotalSteps, execution.CurrentStepIndex);
+
         // Get the schedule steps for step names and types
         if (execution.Schedule != null)
         {
