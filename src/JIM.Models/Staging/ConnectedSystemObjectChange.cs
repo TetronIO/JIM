@@ -93,4 +93,13 @@ public class ConnectedSystemObjectChange
     /// This is typically the value of the displayName or name attribute at the time of deletion.
     /// </summary>
     public string? DeletedObjectDisplayName { get; set; }
+
+    /// <summary>
+    /// If the object was deleted, the id it had before deletion. <see cref="ConnectedSystemObjectId"/> is a
+    /// foreign key and is nulled when the Connected System Object goes, taking with it the only way to reach
+    /// this record from anything that holds a reference to the deleted object (a causality view naming the
+    /// record a run deleted). This is a plain column, not a foreign key, so it survives; it is the Connected
+    /// System Object counterpart of <see cref="JIM.Models.Core.MetaverseObjectChange.DeletedMetaverseObjectId"/>.
+    /// </summary>
+    public Guid? DeletedConnectedSystemObjectId { get; set; }
 }

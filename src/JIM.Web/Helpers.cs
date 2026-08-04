@@ -12,6 +12,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Logic;
 using JIM.Utilities;
+using JIM.Web.Causality;
 using JIM.Web.Models;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
@@ -321,7 +322,7 @@ public static class Helpers
             ExternalIdStatus.Rejected =>
                 "This object was not created due to an import error. The external ID shown is from the source data.",
             ExternalIdStatus.PendingRemoval =>
-                "This object has been detected as deleted from the source system and is pending removal during the next synchronisation.",
+                "This object has been detected as deleted from the source system. It is pending removal during the next synchronisation.",
             ExternalIdStatus.Deleted =>
                 "This object has been deleted. The external ID shown is preserved from when this operation was recorded.",
             _ => "The external ID shown is preserved from when this operation was recorded."
@@ -1037,145 +1038,30 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets a MudBlazor colour for the sync outcome type chip.
+    /// Gets a MudBlazor colour for the sync outcome type chip. Delegates to
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static Color GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return outcomeType switch
-        {
-            // Import outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Color.Success,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Color.Info,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Color.Error,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Color.Success,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Color.Error,
-
-            // Sync outcomes — inbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Color.Primary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Color.Secondary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Color.Secondary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Color.Warning,
-
-            // Sync outcomes — outbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Color.Primary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Color.Info,
-
-            // Export outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Color.Info,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Color.Error,
-
-            // Attribute priority (#91): a deliberate clear worth drawing the eye to.
-            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Color.Warning,
-
-            // Attribute priority (#91): a value cleared with no contributor remaining; also worth attention.
-            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Color.Warning,
-
-            // Configuration change preview (#827). Coloured by what the transition costs the administrator, not by
-            // its direction: becoming deletion-eligible is the one that ends with objects gone, and it is worth the
-            // same weight here as an actual deletion.
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope => Color.Primary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible => Color.Error,
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible => Color.Success,
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate => Color.Warning,
-
-            _ => Color.Default,
-        };
+        return OutcomeDisplayMap.ToMudBlazorColor(OutcomeDisplayMap.Get(outcomeType).Tone);
     }
 
     /// <summary>
-    /// Gets a human-readable display name for a sync outcome type.
+    /// Gets the technical display name for a sync outcome type (e.g. "MVO Projected"). Delegates to
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return outcomeType switch
-        {
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => "CSO Added",
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => "CSO Updated",
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => "CSO Deleted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => "CSO Deletion Detected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => "CSO Export Confirmed",
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "CSO Export Failed",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => "MVO Projected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "MVO Attribute Flow",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "CSO Joined",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => "CSO Disconnected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "MVO Deletion Scheduled",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => "CSO Drift Corrected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => "CSO Provisioned",
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "CSO Pending Export",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => "CSO Exported",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "CSO Deprovisioned",
-            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => "MVO Null Asserted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => "MVO No Contributor",
-
-            // Configuration change preview (#827). Phrased as what would happen rather than in the CSO/MVO shorthand
-            // above: these appear in a panel an administrator reads to decide whether to make a change, not in a
-            // record of a run they have already made.
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope => "Would come into scope",
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope => "Would fall out of scope",
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible => "Would become eligible for deletion",
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible => "Would no longer be eligible for deletion",
-            ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate => "Deletion date would change",
-
-            _ => outcomeType.ToString()
-        };
+        return OutcomeDisplayMap.Get(outcomeType).TechnicalLabel;
     }
 
     /// <summary>
     /// Gets a Material icon string for a sync outcome type. Delegates to
-    /// <see cref="GetOperationIcon"/> where an outcome maps directly to an
-    /// ObjectChangeType so the two stay in sync automatically.
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static string GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return outcomeType switch
-        {
-            // Import outcomes — delegate to GetOperationIcon for consistency
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => GetOperationIcon(ObjectChangeType.Added),
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => GetOperationIcon(ObjectChangeType.Updated),
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => GetOperationIcon(ObjectChangeType.Deleted),
-
-            // Import outcomes — outcome-only (no ObjectChangeType equivalent)
-            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Icons.Material.Filled.RemoveCircle,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => GetOperationIcon(ObjectChangeType.PendingExportConfirmed),
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
-
-            // Sync outcomes — delegate to GetOperationIcon for consistency
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => GetOperationIcon(ObjectChangeType.Projected),
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => GetOperationIcon(ObjectChangeType.Joined),
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => GetOperationIcon(ObjectChangeType.AttributeFlow),
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => GetOperationIcon(ObjectChangeType.Disconnected),
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope),
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => GetOperationIcon(ObjectChangeType.DriftCorrection),
-
-            // Sync outcomes — outcome-only (no ObjectChangeType equivalent)
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Icons.Material.Filled.HourglassBottom,
-
-            // Outbound sync outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.SwitchAccessShortcut,
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => GetOperationIcon(ObjectChangeType.PendingExport),
-
-            // Export outcomes — delegate to GetOperationIcon for consistency
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => GetOperationIcon(ObjectChangeType.Exported),
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => GetOperationIcon(ObjectChangeType.Deprovisioned),
-
-            // Attribute priority (#91): an explicit "no value" assertion.
-            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Icons.Material.Filled.DoNotDisturbOn,
-
-            // Attribute priority (#91): a value cleared because no contributor supplied a replacement.
-            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Icons.Material.Filled.HighlightOff,
-
-            _ => Icons.Material.Filled.Circle,
-        };
+        return OutcomeDisplayMap.Get(outcomeType).Icon;
     }
 
     /// <summary>

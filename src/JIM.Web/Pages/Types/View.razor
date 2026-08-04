@@ -360,7 +360,7 @@
         _attributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
         _changeCount = detailResult.ChangeCount;
 
-        _displayName = MetaverseObject.DisplayName;
+        _displayName = MetaverseObject.NameOrId;
 
         _passwordCapableAccountCount = (await jim.ConnectedSystems.GetAccountsForPasswordSetAsync(MetaverseObject.Id))
             .Count(account => account.ConnectorCanSetPasswords);
@@ -376,7 +376,7 @@
             _lastUpdatedByHref = GetInitiatorHref(detailResult.LatestChangeInitiator.InitiatedByType, detailResult.LatestChangeInitiator.InitiatedById);
         }
 
-        if (MetaverseObject.DisplayName != null)
+        if (MetaverseObject.NameOrId != null)
             _breadcrumbs = new List<BreadcrumbItem>
             {
                 new("Home", href: "/", icon: Icons.Material.Filled.Home),

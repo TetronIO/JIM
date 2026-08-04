@@ -141,7 +141,7 @@ public class AuthServer
                 changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
 
             // update the parent activity with the user's details now that the MVO exists
-            activity.TargetName = user.DisplayName;
+            activity.TargetName = user.Name;
             activity.MetaverseObjectId = user.Id;
 
             // assign the Administrator role as a child activity
@@ -150,7 +150,7 @@ public class AuthServer
                 ParentActivityId = activity.Id,
                 TargetType = ActivityTargetType.MetaverseObject,
                 TargetOperationType = ActivityTargetOperationType.Update,
-                TargetName = user.DisplayName,
+                TargetName = user.Name,
                 MetaverseObjectId = user.Id,
                 Message = $"Assigning {Constants.BuiltInRoles.Administrator} role to initial administrator"
             };
@@ -170,7 +170,7 @@ public class AuthServer
                 throw;
             }
 
-            activity.Message = $"Created initial administrator '{user.DisplayName}'";
+            activity.Message = $"Created initial administrator '{user.NameOrId}'";
             await Application.Activities.CompleteActivityAsync(activity);
 
             Log.Information("AuthServer: Initial admin user created and assigned {Role} role.", Constants.BuiltInRoles.Administrator);

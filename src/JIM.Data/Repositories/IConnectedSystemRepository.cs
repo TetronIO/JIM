@@ -246,6 +246,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
     /// <returns>Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so a caller holding historical ids needs this to tell live rows from gone
+    /// ones without materialising any of them.
+    /// </summary>
+    public Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds);
+
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>
@@ -626,6 +633,17 @@ public interface IConnectedSystemRepository
     /// <param name="changeId">The ID of the CSO change record.</param>
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
     Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
+
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. The inverse of the browsing lookups: a caller holding a reference to a deleted record (a
+    /// causality view naming the record a run deleted) knows that id and nothing about the change record.
+    /// The foreign key to the Connected System Object is nulled when the object goes, which is why
+    /// <see cref="ConnectedSystemObjectChange.DeletedConnectedSystemObjectId"/> exists and is matched here.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId);
 
     #region Synchronisation Rule Mappings
     /// <summary>

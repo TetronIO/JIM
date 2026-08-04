@@ -923,7 +923,7 @@
                 dbSchedule.LastUpdated = DateTime.UtcNow;
                 dbSchedule.LastUpdatedByType = ActivityInitiatorType.User;
                 dbSchedule.LastUpdatedById = user.Id;
-                dbSchedule.LastUpdatedByName = user.DisplayName;
+                dbSchedule.LastUpdatedByName = user.NameOrId;
 
                 // Steps are reconciled before the audited schedule update, so the configuration snapshot
                 // captured by UpdateScheduleAsync reflects this save's step changes too.
@@ -979,7 +979,7 @@
                             dbStep.LastUpdated = DateTime.UtcNow;
                             dbStep.LastUpdatedByType = ActivityInitiatorType.User;
                             dbStep.LastUpdatedById = user.Id;
-                            dbStep.LastUpdatedByName = user.DisplayName;
+                            dbStep.LastUpdatedByName = user.NameOrId;
                             await jim.Scheduler.UpdateScheduleStepAsync(dbStep);
                         }
                     }
@@ -990,13 +990,13 @@
                         inMemoryStep.Created = DateTime.UtcNow;
                         inMemoryStep.CreatedByType = ActivityInitiatorType.User;
                         inMemoryStep.CreatedById = user.Id;
-                        inMemoryStep.CreatedByName = user.DisplayName;
+                        inMemoryStep.CreatedByName = user.NameOrId;
                         await jim.Scheduler.CreateScheduleStepAsync(inMemoryStep);
                     }
                 }
                 }
 
-                await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.DisplayName, changeReason);
+                await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
 
                 Snackbar.Add("Schedule updated successfully.", Severity.Success);
             }
@@ -1006,7 +1006,7 @@
                 _schedule.Created = DateTime.UtcNow;
                 _schedule.CreatedByType = ActivityInitiatorType.User;
                 _schedule.CreatedById = user.Id;
-                _schedule.CreatedByName = user.DisplayName;
+                _schedule.CreatedByName = user.NameOrId;
 
                 // Set up steps before saving - EF Core will cascade save them with the schedule
                 // StepIndex is already set by the UI (parallel steps share the same StepIndex)
@@ -1016,11 +1016,11 @@
                     step.Created = DateTime.UtcNow;
                     step.CreatedByType = ActivityInitiatorType.User;
                     step.CreatedById = user.Id;
-                    step.CreatedByName = user.DisplayName;
+                    step.CreatedByName = user.NameOrId;
                 }
 
                 // This will save the schedule and all its steps in one transaction
-                await jim.Scheduler.CreateScheduleAsync(_schedule, ActivityInitiatorType.User, user.Id, user.DisplayName, changeReason);
+                await jim.Scheduler.CreateScheduleAsync(_schedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
 
                 Snackbar.Add("Schedule created successfully.", Severity.Success);
             }

@@ -58,8 +58,13 @@ services:
       - samba-primary-etc:/usr/local/samba/etc
       - jim-connector-files-volume:/connector-files
     hostname: dc1
+    # The DC's own name must resolve on jim-network, because that is the name it advertises as its
+    # dNSHostName and carries in its TLS certificate. JIM's domain controller pinning connects to it
+    # directly after discovering it, and Docker's DNS otherwise knows only the service name.
     networks:
-      - jim-network
+      jim-network:
+        aliases:
+          - dc1.panoply.local
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1"]
       interval: 10s
@@ -106,8 +111,13 @@ services:
       - samba-source-private:/usr/local/samba/private
       - samba-source-etc:/usr/local/samba/etc
     hostname: dc1-source
+    # The DC's own name must resolve on jim-network, because that is the name it advertises as its
+    # dNSHostName and carries in its TLS certificate. JIM's domain controller pinning connects to it
+    # directly after discovering it, and Docker's DNS otherwise knows only the service name.
     networks:
-      - jim-network
+      jim-network:
+        aliases:
+          - dc1-source.resurgam.local
     profiles:
       - scenario2
       - scenario8
@@ -154,8 +164,13 @@ services:
       - samba-target-private:/usr/local/samba/private
       - samba-target-etc:/usr/local/samba/etc
     hostname: dc1-target
+    # The DC's own name must resolve on jim-network, because that is the name it advertises as its
+    # dNSHostName and carries in its TLS certificate. JIM's domain controller pinning connects to it
+    # directly after discovering it, and Docker's DNS otherwise knows only the service name.
     networks:
-      - jim-network
+      jim-network:
+        aliases:
+          - dc1-target.gentian.local
     profiles:
       - scenario2
       - scenario8

@@ -126,13 +126,13 @@ public class ActivityProgressDto
 
         // "Step 3 of 7" counts only top-level steps: a Connector's steps are detail inside the step
         // that called it, so counting them would make the same run read differently per Connector.
-        var topLevelPhases = progress.Phases.Where(p => p.ParentKey == null).OrderBy(p => p.Order).ToList();
+        // The rules are shared with the portal's stepper and progress readout, which have to agree.
+        var topLevelPhases = RunPhaseReading.TopLevel(progress.Phases);
         var current = progress.CurrentPhase;
         var currentTopLevel = current == null
             ? null
             : current.ParentKey == null ? current : progress.Phases.SingleOrDefault(p => p.Key == current.ParentKey);
-        var currentIndex = currentTopLevel == null ? -1 : topLevelPhases.FindIndex(p => p.Key == currentTopLevel.Key);
-        int? currentPhaseNumber = currentIndex >= 0 ? currentIndex + 1 : null;
+        var currentPhaseNumber = RunPhaseReading.PositionOf(progress.Phases, currentTopLevel);
 
         return new ActivityProgressDto
         {

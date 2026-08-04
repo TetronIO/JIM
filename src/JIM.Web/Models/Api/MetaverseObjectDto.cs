@@ -33,7 +33,7 @@ public class MetaverseObjectDto
             Id = entity.Id,
             Created = entity.Created,
             LastUpdated = entity.LastUpdated,
-            DisplayName = entity.DisplayName,
+            DisplayName = entity.Name,
             Status = entity.Status,
             Origin = entity.Origin,
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate,
@@ -131,7 +131,7 @@ public class MetaverseObjectAttributeValueDto
             GuidValue = entity.GuidValue,
             BoolValue = entity.BoolValue,
             ReferenceValueId = entity.ReferenceValueId,
-            ReferenceValueDisplayName = entity.ReferenceValue?.DisplayName,
+            ReferenceValueDisplayName = entity.ReferenceValue?.Name,
             ContributedBySystemId = entity.ContributedBySystemId,
             ContributedBySystemName = entity.ContributedBySystem?.Name,
             ContributedBySyncRuleId = entity.ContributedBySyncRuleId,
@@ -158,7 +158,7 @@ public class ConnectedSystemObjectReferenceDto
             Id = entity.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id ?? 0,
             ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
-            DisplayName = entity.DisplayNameOrId
+            DisplayName = entity.NameOrId
         };
     }
 }
@@ -238,7 +238,7 @@ public class PendingDeletionDto
         return new PendingDeletionDto
         {
             Id = entity.Id,
-            DisplayName = entity.DisplayName,
+            DisplayName = entity.Name,
             Type = new MetaverseObjectTypeDto
             {
                 Id = entity.Type?.Id ?? 0,

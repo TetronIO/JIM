@@ -27,7 +27,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 **Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
 - Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
 - Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
-- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist).
+- **Partial:** UI-only Blazor/Razor changes need `dotnet build`. UI tests exist in `test/JIM.Web.Tests/` (NUnit + bUnit) for the causality visualisation; run `dotnet test test/JIM.Web.Tests/` when changing causality components or display logic, and skip `dotnet test` for UI areas with no test coverage.
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
 - Running containers hold **stale images**: after changing `.cs`, rebuild the affected service(s) before verifying (a browser refresh shows nothing new). The full-stack and integration-test how-to (rebuild commands, `psql` access, `Run-IntegrationTests.ps1`) lives in `.devcontainer/CLAUDE.md` and `test/CLAUDE.md`; those files auto-load only under their own subtrees, so read them when validating from `src/`.
@@ -53,19 +53,21 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Bulk edits:** Avoid `sed`-based bulk rewrites on files that may have been partially modified by hand or by earlier tool calls; prefer targeted `Edit` calls, or dry-run the diff first. After any bulk edit, grep the touched files for unintended duplicates (e.g. repeated `ValidateSet` entries, duplicated `using` lines).
 
+**User Interface changes:** Always create CLAUDE Artefacts to demonstrate UI changes. This will help the user comprehend the options. The user prefers visual explanation of UI changes to text.
+
 **Pushback & honesty:** Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
 
 No glazing. Do not call an idea "great", "brilliant", or "smart" without concrete reasons, and even then lead with what is wrong or missing. Compliments without substance are noise. Do not echo my framing back ("X is definitely the move", "that makes a lot of sense"); start with the most useful sentence you can write instead.
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
-**Response style:** Optimise for my reading time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning.
+**Response style:** Optimise for minimising my reading and comprehension time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning. I need you to reduce my cognitive load. When problems are found, always provide solutions via recommendations, weighted towards what's needed to deliver the most usable, most stable, most maintainable and sustainable product.
 
 Structure every response as these three parts, in this order, and nothing else:
 
-1. **What I did:** the work you (the agent) completed, headed exactly "What I did" so it reads in your voice. One or two sentences, scaled to how much work it was. Never more.
-2. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it.
-3. **Questions:** anything you need from me, as a numbered list at the very end under a clear heading. Omit the section entirely when you need nothing.
+1. **What I did:** if you have made changes, then provide one or two sentences, scaled to how much work it was. Never more. Omit if you made no changes.
+2. **Questions:** if you anything need from me, as a numbered list under a clear heading. Omit the section entirely when you need nothing.
+3. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it. These should be written so as to help drive the objective to conclusion. Be the most helpful problem solver by always offering solutions to problems via recommendations. Ask the user they want you to implement the recommendations, i.e. make it eassy for them to get you to implement a recommendation and drive to the objective.
 
 - Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there.
 - No preamble, no recap of my request, no closing summary.
@@ -97,7 +99,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - NUnit `[Test]`, `Assert.That()`, Moq; test naming `MethodName_Scenario_ExpectedResult`
 - EF Core in-memory database auto-tracks navigation properties - this masks missing `.Include()` bugs. Run integration tests when modifying repository queries.
 
-Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Components.Tests/` (bUnit component tests; scope rules in `test/CLAUDE.md`).
+Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Tests/` (UI: causality display logic and bUnit component tests; scope rules in `test/CLAUDE.md`).
 
 > **Full patterns, debugging, integration testing runner:** `test/CLAUDE.md`
 

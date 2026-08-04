@@ -183,102 +183,100 @@
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
                       Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
         <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
-            <MudPaper Class="pa-0" Outlined="true">
-                <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
-                    Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
-                    Breakpoint="Breakpoint.None">
-                    <ToolBarContent>
-                        <TableDensityToggle @bind-Dense="_dense" />
-                    </ToolBarContent>
-                    <HeaderContent>
-                        <MudTh Class="jim-attr-header-name">
-                            <MudTableSortLabel SortBy="@_sortByAttribute"
-                                InitialDirection="SortDirection.Ascending" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Attribute</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-value">
-                            <MudTableSortLabel SortBy="@_sortByValue" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Value</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-type">
-                            <MudTableSortLabel SortBy="@_sortByType" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Type</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-plurality">
-                            <MudTableSortLabel SortBy="@_sortByPlurality" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Plurality</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-extid">
-                            <MudTableSortLabel SortBy="@_sortByExternalId" T="AttributeGroup">
-                                <MudText Typo="Typo.button">External ID?</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
-                            @if (IsUnmanagedAttribute(context))
-                            {
-                                <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
-                                </MudTooltip>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            @if (context.Values.Count == 1)
-                            {
-                                <CsoAttributeValue Value="@context.Values[0]" />
-                            }
-                            else if (context.TotalCount <= MvaInlineThreshold)
-                            {
-                                <div class="jim-attr-expanded">
-                                    @foreach (var val in context.Values)
-                                    {
-                                        <div class="jim-attr-expanded-item">
-                                            <CsoAttributeValue Value="@val" />
-                                        </div>
-                                    }
-                                </div>
-                            }
-                            else
-                            {
-                                <CsoMvaTable @key="context.AttributeName"
-                                             AttributeName="@context.AttributeName"
-                                             ConnectedSystemObjectId="@ConnectedSystemObject.Id"
-                                             IsReferenceAttribute="@context.IsReference"
-                                             Dense="@_dense" />
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="Plurality" Class="@($"jim-attr-plurality {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="External ID?" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")" Style="white-space: nowrap">
-                            @if (IsExternalId(context.Values[0]))
-                            {
-                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                            }
-                            else if (IsSecondaryExternalId(context.Values[0]))
-                            {
-                                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                            }
-                            else
-                            {
-                                <span>-</span>
-                            }
-                        </MudTd>
-                    </RowTemplate>
-                    <NoRecordsContent>
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
-                    </NoRecordsContent>
-                </MudTable>
-            </MudPaper>
+            <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
+                Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
+                Breakpoint="Breakpoint.None">
+                <ToolBarContent>
+                    <TableDensityToggle @bind-Dense="_dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh Class="jim-attr-header-name">
+                        <MudTableSortLabel SortBy="@_sortByAttribute"
+                            InitialDirection="SortDirection.Ascending" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Attribute</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-value">
+                        <MudTableSortLabel SortBy="@_sortByValue" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Value</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-type">
+                        <MudTableSortLabel SortBy="@_sortByType" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Type</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-plurality">
+                        <MudTableSortLabel SortBy="@_sortByPlurality" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Plurality</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-extid">
+                        <MudTableSortLabel SortBy="@_sortByExternalId" T="AttributeGroup">
+                            <MudText Typo="Typo.button">External ID?</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+                        @if (IsUnmanagedAttribute(context))
+                        {
+                            <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        @if (context.Values.Count == 1)
+                        {
+                            <CsoAttributeValue Value="@context.Values[0]" />
+                        }
+                        else if (context.TotalCount <= MvaInlineThreshold)
+                        {
+                            <div class="jim-attr-expanded">
+                                @foreach (var val in context.Values)
+                                {
+                                    <div class="jim-attr-expanded-item">
+                                        <CsoAttributeValue Value="@val" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <CsoMvaTable @key="context.AttributeName"
+                                         AttributeName="@context.AttributeName"
+                                         ConnectedSystemObjectId="@ConnectedSystemObject.Id"
+                                         IsReferenceAttribute="@context.IsReference"
+                                         Dense="@_dense" />
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Plurality" Class="@($"jim-attr-plurality {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="External ID?" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")" Style="white-space: nowrap">
+                        @if (IsExternalId(context.Values[0]))
+                        {
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                        }
+                        else if (IsSecondaryExternalId(context.Values[0]))
+                        {
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
+                </NoRecordsContent>
+            </MudTable>
         </MudTabPanel>
         <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
             @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
