@@ -90,6 +90,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - **British English (en-GB) for ALL text** - "authorisation", "synchronisation", "behaviour", "colour"
 - **Never use em dashes (`—`)** - use semicolons, commas, colons, or parentheses instead
 - **Proper-case JIM domain entity names** - "Synchronisation Rule", "Connected System", "Metaverse Object", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export" etc. are proper nouns; Title Case them even mid-sentence in UI text and docs, never "synchronisation rule". Always write "Synchronisation Rule" in full; never the "Sync Rule" shorthand (the `SyncRule` code identifier is unaffected)
+- **Connector names may drop the `JIM ` prefix in diagrams and running prose** - the reserved names in `ConnectorConstants` ("JIM LDAP Connector", "JIM SQL Connector", "JIM SCIM 2.0 Client Connector") are what the product surfaces show, but a diagram chip or a sentence reads better as "LDAP Connector" or "SQL Connector", and the prefix earns nothing when every connector carries it. Keep the full name where connectors are listed as products (`docs/connectors/index.md`, `docs/reference/roadmap.md`) and wherever the string must match the connector's actual name. Still Title Case them either way
 - All new source files carry the Tetron copyright header (`.editorconfig` enforces it for `.cs`)
 
 > **Full conventions** (DateTime quirks, raw SQL parameters, exception handling, copyright header table per file type, retrieval-method taxonomy, Razor/MudBlazor UI rules)**:** `src/CLAUDE.md`
