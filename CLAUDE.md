@@ -207,11 +207,21 @@ When feature work surfaces something that must be solved to deliver the feature 
 2. **Commit feature WIP** (a `wip:` commit is fine; squash-merge collapses it), then create the new layer **off the current feature branch**: `git checkout -b feature/<feature-suffix>-stack-<desc>`. A stack is a sequential chain; each layer branches from the one below it, never from `main`.
 3. **Implement the layer to full standard**: TDD, build/test gates, changelog and docs if user-facing. Being unplanned lowers no bars.
 4. **Open the layer's PR with its base set to the branch below** (`gh pr create --base feature/<feature>`), then link the chain into a stack: GitHub shows a banner on aligned chains offering to convert, or use the `gh stack` CLI (`gh extension install github/gh-stack`). Reviewers and history get one clean diff per concern.
-5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack (the web "Rebase stack" button, or `gh stack rebase` + `gh stack push`).
+5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack of the layers above it (see "Restacking" below).
 6. **Land bottom-up.** Any PR can merge once everything below it is green; merging an upper PR merges all unmerged PRs below it **atomically, in order, each recorded individually** - so the normal move is to merge from the top when the objective is complete. Every PR in the stack is evaluated against `main`'s protections (all seven required checks), regardless of its direct base.
 
 - **Auto-merge is not supported for stacked PRs.** Do not `gh pr merge --auto` a stack layer; wait for green, then merge (see `/pr-merge`).
-- **Stacks require fully linear history**, so within a stack the merge-don't-rebase rule is inverted: restack with cascading rebase (`gh stack rebase`, then `gh stack push` to force-push the layers), never by merging one layer into another.
+- **Linear history is required between layers, not between the bottom layer and `main`.** Never merge one layer into another; a layer is always rebased onto the layer below it. The bottom layer is an ordinary feature branch that happens to have a PR stacked on it, so it is brought up to date with `main` by merging, exactly as the next section prescribes. Verified on stack #1211: the bottom layer carried a merge commit from `origin/main`, and both PRs still reported `MERGEABLE`, rendered correctly in `gh stack view`, and merged bottom-up without complaint.
+- **Restacking (after the branch below moves): rebase the layer onto its own base, one layer at a time.**
+
+  ```bash
+  # <old-base> is the commit the layer was branched from; find it with `git merge-base`
+  # against the branch below BEFORE that branch moved, or read it off the layer's reflog.
+  git -c rebase.backend=apply rebase --onto feature/<branch-below> <old-base> feature/<layer>
+  git push --force-with-lease
+  ```
+
+  **Do NOT use `gh stack rebase` for this.** It rebases *every* branch in the chain, starting with the bottom layer onto `main`, which is precisely what the merge-don't-rebase rule exists to avoid: on a long-lived bottom layer it replays every commit over `main`'s drift and re-resolves the same conflicts per commit. On stack #1211 it hit conflicts in three files while replaying 53 commits and had to be aborted with `gh stack rebase --abort` (which restores cleanly). The `--onto` form above touches only the layer that actually needs moving. The `-c rebase.backend=apply` is for the same misleading "local changes would be overwritten by merge" on a clean tree noted in the next section; without it the rebase aborts on the first commit.
 - Layers stay shallow and single-concern; nest further layers the same way. Layer branches belong to the same session and objective as their parent feature branch; the `-stack-` naming keeps the lineage visible across parallel sessions.
 - GitHub issues remain only for genuine observations that are NOT needed to deliver the current objective (link them with native blocked-by/sub-issue relationships per the rules above).
 
@@ -226,7 +236,7 @@ git merge origin/main      # then git push (no force needed)
 
 - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After merging, eyeball that section for duplicated `###` headers or bullets and tidy if needed.
 - Only rebase when the user explicitly wants linear pre-squash history. If you do, and the merge backend reports a misleading "local changes would be overwritten" on a clean tree, `git -c rebase.backend=apply rebase origin/main` gets past it.
-- **Stacked PRs are the exception:** a stack requires fully linear history between its layers, so a branch that is part of a stack is brought up to date by cascading rebase (`gh stack rebase` + `gh stack push`, or the web "Rebase stack" button), never by merging. This section's merge-don't-rebase rule applies only to ordinary, non-stacked feature branches.
+- **Stacked PRs: this section applies unchanged to the bottom layer, and never to the layers above it.** The bottom layer targets `main` and is squash-merged like any other branch, so merging `origin/main` into it is right for exactly the reasons above; a merge commit there does not break the stack (see "Stacked PRs for discovered work"). Every layer above is instead rebased onto the layer below with `git rebase --onto`, never merged into. Do not reach for `gh stack rebase` to bring a stack up to date: it rebases the bottom layer onto `main` too, which is the very thing this section argues against.
 
 ### Merging via gh CLI
 
