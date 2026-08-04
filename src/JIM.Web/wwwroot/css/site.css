@@ -2,6 +2,13 @@
 
 :root {
     --jim-instance-bar-height: 28px;
+
+    /* The corner radius of every container element: papers, tables, alerts and expansion panels,
+       plus anything hand-built that joins one of them into a single box. Held as a token because
+       the alternative is what it replaced: a bar hard-coded to 4px sitting on top of a paper the
+       container rule below had already moved to 8px, so the box was rounder at the bottom than
+       the top. Deliberately not --mud-default-borderradius, which also drives buttons and inputs. */
+    --jim-container-radius: 8px;
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -219,7 +226,7 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 .mud-paper-outlined,
 .mud-table,
 .mud-alert {
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
 }
 
 /* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
@@ -377,7 +384,9 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     height: 40px;
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
     border-bottom: none;
-    border-radius: 4px 4px 0 0;
+    /* Joins the block beneath it into one box, so it carries the container radius on the two
+       corners that are actually on the outside of that box. */
+    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
     overflow: hidden;
     background-color: var(--mud-palette-surface);
 }
