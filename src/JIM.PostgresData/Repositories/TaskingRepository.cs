@@ -395,14 +395,22 @@ public class TaskingRepository : ITaskingRepository
             case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
             {
                 var templatePart = await db.ExampleDataTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateWorkerTask.TemplateId);
-                return templatePart != null ? templatePart.Name : "template not found!";
+                return templatePart?.Name ?? $"Example Data Template {dataGenerationTemplateWorkerTask.TemplateId}";
             }
             case SynchronisationWorkerTask synchronisationWorkerTask:
             {
+                // The Connected System behind the Run Profile is looked up by Single because the
+                // schema guarantees it: ConnectedSystemRunProfiles.ConnectedSystemId cascades on
+                // delete, so a Run Profile whose Connected System has gone cannot exist to be read.
+                // The Run Profile itself is a different matter, and is why the outer lookup tolerates
+                // nothing coming back: deleting a Connected System takes its Run Profiles with it
+                // while leaving any already-queued task behind.
                 var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == q.ConnectedSystemId).Name }).
                     SingleOrDefaultAsync(q => q.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
 
-                return runProfilePart != null ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}" : "Run Profile not found!";
+                return runProfilePart != null
+                    ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}"
+                    : $"Run Profile {synchronisationWorkerTask.ConnectedSystemRunProfileId}";
             }
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
             {

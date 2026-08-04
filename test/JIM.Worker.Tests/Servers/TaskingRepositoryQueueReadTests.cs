@@ -106,6 +106,51 @@ public class TaskingRepositoryQueueReadTests
     }
 
     [Test]
+    public async Task GetWorkerTaskHeadersAsync_SynchronisationTaskWhoseRunProfileHasGone_NamesItLikeTheOthersAsync()
+    {
+        // Deleting a Connected System cascades to its Run Profiles, so this is the same orphan as
+        // the clear task above, reached by a different route. It did not throw, but it named itself
+        // "Run Profile not found!", which reads as a fault in JIM rather than as a row describing
+        // configuration that has been deleted.
+        var workerTasks = new List<WorkerTask>
+        {
+            new SynchronisationWorkerTask(7, 404)
+            {
+                Id = Guid.NewGuid(),
+                InitiatedByType = ActivityInitiatorType.System,
+                Activity = NewActivity()
+            }
+        };
+
+        using var jim = BuildApplication(workerTasks);
+
+        var headers = await jim.Tasking.GetWorkerTaskHeadersAsync();
+
+        Assert.That(headers.Single().Name, Is.EqualTo("Run Profile 404"));
+    }
+
+    [Test]
+    public async Task GetWorkerTaskHeadersAsync_ExampleDataTaskWhoseTemplateHasGone_NamesItLikeTheOthersAsync()
+    {
+        var workerTasks = new List<WorkerTask>
+        {
+            new ExampleDataTemplateWorkerTask
+            {
+                Id = Guid.NewGuid(),
+                TemplateId = 404,
+                InitiatedByType = ActivityInitiatorType.System,
+                Activity = NewActivity()
+            }
+        };
+
+        using var jim = BuildApplication(workerTasks);
+
+        var headers = await jim.Tasking.GetWorkerTaskHeadersAsync();
+
+        Assert.That(headers.Single().Name, Is.EqualTo("Example Data Template 404"));
+    }
+
+    [Test]
     public async Task GetWorkerTaskHeadersAsync_MixedQueueWithOneOrphanedTask_NamesEveryOtherRowAsync()
     {
         // The damage from the throw was never confined to the offending row: the read builds the
