@@ -14,7 +14,7 @@
             @Value.ReferenceValue.Type.Name
         </MudChip>
         <MudLink Href="@Utilities.GetConnectedSystemObjectHref(Value.ReferenceValue)">
-            @Value.ReferenceValue.DisplayNameOrId
+            @Value.ReferenceValue.NameOrId
         </MudLink>
         @if (Value.ReferenceValue.SecondaryExternalIdAttributeValue != null)
         {
@@ -28,7 +28,7 @@ else if (Value.UnresolvedReferenceValue != null)
 {
     <span class="jim-attr-unresolved">
         <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
-        <span class="mud-text-secondary">@Value.UnresolvedReferenceValue</span>
+        <span class="mud-text-secondary jim-text-code">@Value.UnresolvedReferenceValue</span>
     </span>
 }
 else if (Value.Attribute.Type == AttributeDataType.DateTime && Value.DateTimeValue.HasValue)
@@ -49,11 +49,11 @@ else if (Value.Attribute.Type == AttributeDataType.Binary && Value.ByteValue != 
 }
 else if (Value.Attribute.Type == AttributeDataType.Text)
 {
-    <TextValueDisplay Value="@Value.StringValue" />
+    <TextValueDisplay Value="@Value.StringValue" Class="jim-text-code" />
 }
 else
 {
-    @Value.ToStringNoName()
+    <span class="jim-text-code">@Value.ToStringNoName()</span>
 }
 
 @code {

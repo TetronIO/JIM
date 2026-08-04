@@ -87,21 +87,41 @@ public async Task<ConnectedSystemImportResult> ImportAsync(
     await progress.EnterPhaseAsync("read");
 
     // ... and as the read goes on
-    await progress.ReportAsync($"Parsed {rowsRead:N0} rows...");
+    await progress.ReportAsync($"Reading the {region} region...");
 }
 ```
 
 `EnterPhaseAsync` moves to one of the steps you declared: the stepper advances, and the step's own name is shown unless you supply a message. `ReportAsync` narrates within the step already running, for detail the step's name cannot carry.
 
-JIM's own object counts cannot move while your call is running, because you have not returned any objects yet. A step that advances, and a message that keeps changing, are the only things that tell an administrator the difference between a healthy long phase and a stuck run.
-
 Rules worth following:
 
-- **Emit on phase and page boundaries, never per object.**<br /> Each emit writes to the Activity. A phase that is naturally repetitive should pace itself: JIM's File Connector reports every 10,000 rows parsed, and its LDAP Connector reports once per page fetched.
+- **Emit on phase and page boundaries, never per object.**<br /> Each emit writes to the Activity. A phase that is naturally repetitive should pace itself: JIM's File Connector reports every 10,000 rows read, and its LDAP Connector reports once per page fetched.
 - **The vocabulary is yours.**<br /> JIM owns the orchestration phase and the counts and does not interpret your message. Say what you are doing in the administrator's language, not your internal one: "Loading existing export file..." rather than "LoadExistingFileContent".
-- **Include scale and identity where you have them.**<br /> "Fetching User objects from Employees (page 3)..." tells an administrator far more than "Fetching...".
+- **Say what the counts cannot.**<br /> How many objects have arrived, how fast, and how long is left are all shown from the counts below; a message that repeats them says the same thing twice. "Fetching User objects from Employees (page 3)..." earns its place, "Parsed 50,000 rows..." does not.
 - **Entering a step you did not declare still works.**<br /> It is appended to the stepper rather than dropped, so nothing you narrate is lost; it just cannot be shown in advance.
 - **Do not depend on it succeeding.**<br /> JIM serialises the emits (safe to call from parallel internal work) and swallows any failure to record one, because narration must never fail a synchronisation run. Blank messages are ignored rather than clearing the Activity message.
+
+### Reporting how many objects there are
+
+**Report an object count wherever your Connected System can be asked for one cheaply.** It is the difference between an administrator seeing how far through a long import a run is and seeing a bar with no end to it, and only your Connector is in a position to know.
+
+Two figures, reported independently, through the same `IConnectorProgress`:
+
+```csharp
+// The whole run's total, as soon as you know it. Counting a file's records before parsing
+// them, or reading the count a query's response states, is worth the extra pass.
+await progress.ReportExpectedObjectCountAsync(recordCount);
+
+// How many objects you have read so far within the call you are currently serving.
+await progress.ReportObjectsReadAsync(rowsRead);
+```
+
+- **`ReportExpectedObjectCountAsync`** gives the fetching step a percentage and a time remaining. Report the whole run's expected total, not the current page's. It is your best answer rather than a guarantee: report it again to correct it, and if more objects turn up than you expected, JIM raises the total rather than letting the bar read past complete. Say nothing if answering would mean doing your own work twice; JIM shows the count and rate alone rather than inventing a figure.
+- **`ReportObjectsReadAsync`** moves the counters while your call is still running. JIM cannot count what you have not returned yet, so a Connector that hands everything over in one call leaves the Activity frozen for the whole read unless it reports this. Count only what the current call has read; JIM adds it to what earlier calls delivered. A Connector that returns a page at a time gains little, because JIM counts each page as it arrives.
+
+Between them these are what tell an administrator the difference between a healthy long phase and a stuck run, alongside a step that advances.
+
+Counts are reported on the same terms as messages: serialised, and a failure to record one is swallowed rather than failing the run.
 
 The design behind this, and the vocabulary the built-in Connectors use, is recorded in [`engineering/notes/RUN_PROFILE_PHASES.md`](https://github.com/TetronIO/JIM/blob/main/engineering/notes/RUN_PROFILE_PHASES.md).
 

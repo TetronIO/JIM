@@ -291,7 +291,7 @@ else
             if (string.Equals(query["d"], "true", StringComparison.OrdinalIgnoreCase))
             {
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-                _workerTaskHeaders = GenerateDemoData(user.Id, user.DisplayName ?? "Unknown User");
+                _workerTaskHeaders = GenerateDemoData(user.Id, user.NameOrId);
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
                 return;
             }
@@ -436,7 +436,7 @@ else
 
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user.Id, user.DisplayName ?? "Unknown User");
+        var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user.Id, user.NameOrId);
         var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

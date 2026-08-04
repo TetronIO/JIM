@@ -259,6 +259,14 @@ public static class Constants
         /// </summary>
         public const string ConfigurationChangePreviewWorkerThreshold = "Preview.WorkerThreshold";
 
+        /// <summary>
+        /// The estimated delta-row count above which a configuration change preview (#827) asks the administrator
+        /// to choose between a capped and a full set of drill-down rows, instead of quietly capping. Below it the
+        /// preview is capped without a prompt, which is the right answer and not worth a question. Default: 100,000
+        /// rows (roughly 40 MB).
+        /// </summary>
+        public const string ConfigurationChangePreviewFullDataSetPromptThreshold = "Preview.FullDataSetPromptThreshold";
+
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 

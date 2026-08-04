@@ -19,6 +19,14 @@ JIM requires TDD. The workflow is **Red → Green → Refactor**:
 
 **NEVER** write the implementation first and then write a test to match it. The test must fail before the fix to be meaningful.
 
+## Test Projects
+
+- `test/JIM.Models.Tests/` - domain model unit tests
+- `test/JIM.Worker.Tests/` - sync engine and worker unit tests
+- `test/JIM.Web.Api.Tests/` - REST API, application server and Helpers tests
+- `test/JIM.Web.Tests/` - JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component tests (bUnit; test-only dependency, nothing ships in containers); scope rules below
+- `test/JIM.Utilities.Tests/`, `test/JIM.InMemoryData.Tests/`, `test/JIM.Workflow.Tests/` - supporting suites
+
 ## Test Structure
 
 - Use NUnit with `[Test]` attribute
@@ -46,9 +54,9 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 
 ## Blazor component tests (bUnit)
 
-`test/JIM.Web.Components.Tests/` renders JIM.Web's Razor components with [bUnit](https://bunit.dev) and asserts on them from NUnit. It exists because some UI defects are only expressible at component level: the `PrefilledFormValidator` bug (the parent's `OnAfterRenderAsync` running before `MudForm`'s, so the initial validation result was overwritten) is a lifecycle-ordering fault that no plain unit test can reach.
+`test/JIM.Web.Tests/` renders JIM.Web's Razor components with [bUnit](https://bunit.dev) and asserts on them from NUnit (alongside its plain NUnit tests for causality display logic). Component rendering tests exist because some UI defects are only expressible at component level: the `PrefilledFormValidator` bug (the parent's `OnAfterRenderAsync` running before `MudForm`'s, so the initial validation result was overwritten) is a lifecycle-ordering fault that no plain unit test can reach.
 
-**Scope; keep it narrow.** In scope: components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour. Out of scope: pages, and components that are pure markup. Tests arrive when a component is written or changed; the existing component set is **not** retrofitted wholesale, because broad UI coverage buys little and costs upgrade friction on every MudBlazor release.
+**Scope; keep it narrow.** In scope: components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour. Out of scope: components that are pure markup, and pages, with one standing exception: the Run Profile Execution Item detail page, whose causality panel wiring is page-owned and only observable at page level. Tests arrive when a component is written or changed; the existing component set is **not** retrofitted wholesale, because broad UI coverage buys little and costs upgrade friction on every MudBlazor release.
 
 **Convention sweeps live here too.** A UI convention whose failure mode is "the next page hand-rolls its own version" cannot be caught by a per-component test: every individual instance renders correctly, and the defect is the *absence* of the shared component somewhere else. Those are source-shape tests that walk `src/JIM.Web`'s `.razor` files and fail with a list of offending call sites (`SearchFieldConventionTests`; see `src/JIM.Web/CLAUDE.md` > "Search and filter boxes"). Reach for one only when a convention has actually regressed more than once; prose in `src/JIM.Web/CLAUDE.md` is the default, and a sweep that encodes taste rather than a real defect is just friction. Give any such test an escape hatch that is a visible marker comment in the markup rather than an allowlist inside the test, so the justification sits where the next author will read it.
 
@@ -72,7 +80,8 @@ public class TextValueDisplayTests : JimComponentTestContext
 
 Notes:
 - The project uses `Microsoft.NET.Sdk.Razor`, not the plain SDK; bUnit needs the Razor SDK's compilation support. This is why it is a separate project rather than tests added to `JIM.Web.Api.Tests`.
-- It pins `AngleSharp` forward as a direct reference. bUnit 2.7.2 resolves 1.4.0, which carries CVE-2026-54570; the pin keeps `NuGetAudit` clean without suppressing the finding. Drop it once bUnit's own floor moves past 1.5.0.
+- It used to pin `AngleSharp` forward as a direct reference, because bUnit 2.7.2 resolved 1.4.0 and that carries CVE-2026-54570. bUnit 2.8.6 resolves 1.5.2, past the 1.5.0 fix, so the pin was dropped. Add one back only if a future advisory outruns bUnit's own floor; the csproj comment records the pattern.
+- `CausalityBunitContext.Create()` is a thin factory over the same base for test methods that prefer a disposable local context; the configuration lives in `JimComponentTestContext` either way.
 
 ## Debugging Failing Tests
 

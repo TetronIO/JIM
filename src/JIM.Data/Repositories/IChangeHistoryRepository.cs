@@ -16,6 +16,24 @@ public interface IChangeHistoryRepository
     Task<int> DeleteExpiredMvoChangesAsync(DateTime olderThan, int maxRecords);
 
     /// <summary>
+    /// Removes the results of expired configuration change previews (#827): the preview row, its summary groups and
+    /// its delta rows, for previews whose Activity is older than the cutoff and would itself be removed by
+    /// <see cref="DeleteExpiredActivitiesAsync"/>.
+    ///
+    /// The rows cascade from the Activity, so this path deletes nothing the Activity cleanup would not. What it adds
+    /// is a bound: the batch limit counts Activities, and a single preview Activity can own hundreds of thousands of
+    /// delta rows, so a full batch of them would cascade in one statement regardless of the limit. Run this first,
+    /// bounded by the same limit, and each pass stays the size the limit was chosen for.
+    ///
+    /// The Activity itself is deliberately left behind. A preview whose results have gone reads as "no longer
+    /// available", which is honest; removing the Activity here would delete a run record this pass had not budgeted
+    /// for, under a limit meant for something else.
+    /// </summary>
+    /// <param name="maxRecords">Maximum previews (not rows) to clear in this batch.</param>
+    /// <returns>Count of previews whose results were removed.</returns>
+    Task<int> DeleteExpiredPreviewsAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
     /// Deletes expired Activity records older than the specified date, sparing configuration-change Activities
     /// (those carrying a versioned configuration snapshot) and Authentication (security event) Activities, both of
     /// which are governed by their own, separate retention periods.

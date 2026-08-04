@@ -43,6 +43,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private LdapServerResolutionSource? _lastResolutionSource;
 
     /// <summary>
+    /// The plan the current import or export session was opened with, retained so a domain controller
+    /// discovered from the rootDSE can be probed with the same credentials, port, timeout and TLS settings
+    /// before it is pinned (issue #230 Phase 2).
+    /// </summary>
+    private ConnectionPlan? _openConnectionPlan;
+
+    /// <summary>
     /// Set when a connection opened via a pinned domain controller fails after retries are exhausted.
     /// Read (and cleared) by <see cref="CloseImportConnection"/>, which returns persisted connector data
     /// with the pin removed so the next run re-discovers and re-pins via Host.
@@ -394,6 +401,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         logger.Verbose("OpenImportConnection() called");
         var plan = BuildConnectionPlan(settingValues, logger);
         _connectionFactory = plan.Factory;
+        // Retained for the duration of the session so a domain controller discovered from the rootDSE can be
+        // probed with the same credentials and TLS settings before it is pinned (issue #230 Phase 2).
+        _openConnectionPlan = plan;
         _connection = OpenConnection(plan, logger);
     }
 
@@ -405,7 +415,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// replacing the connection an import or export session is already using.
     /// </para>
     /// </summary>
+    /// <param name="FactoryFor">
+    /// Opens a bound connection to an arbitrary server using this plan's credentials, port, timeout and TLS
+    /// settings. <see cref="Factory"/> is this applied to <see cref="EffectiveServer"/>; the open form exists so
+    /// a discovered domain controller can be proven reachable before it is pinned (issue #230 Phase 2).
+    /// </param>
     private sealed record ConnectionPlan(
+        Func<string, LdapConnection> FactoryFor,
         Func<LdapConnection> Factory,
         int MaxRetries,
         int RetryDelayMs,
@@ -463,7 +479,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         if (useSsl && _certificateProvider != null)
             PrepareTrustedCertificateDirectory(logger);
 
-        var identifier = new LdapDirectoryIdentifier(effectiveServer, directoryServerPortValue);
 
         // Decrypt the password if credential protection is available
         // If not available or password is plain text, it will be returned as-is
@@ -487,8 +502,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
+        LdapConnection ConnectTo(string server) => CreateConnection(
+            new LdapDirectoryIdentifier(server, directoryServerPortValue),
+            credential, authTypeEnumValue, connectionTimeout, useSsl, logger);
+
         return new ConnectionPlan(
-            () => CreateConnection(identifier, credential, authTypeEnumValue, connectionTimeout, useSsl, logger),
+            ConnectTo,
+            () => ConnectTo(effectiveServer),
             maxRetries,
             retryDelayMs,
             settingValues,
@@ -626,6 +646,44 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     }
 
     /// <summary>
+    /// Whether JIM can open a bound connection to <paramref name="server"/> with this session's credentials,
+    /// port, timeout and TLS settings (issue #230 Phase 2).
+    /// <para>
+    /// Deliberately single-attempt and non-retrying: this answers "should this domain controller be pinned",
+    /// and a name that needs retries to reach is not one to bind a Connected System to for every future run.
+    /// Any failure is an answer rather than an error, so nothing propagates; the caller falls back to Host
+    /// and warns.
+    /// </para>
+    /// </summary>
+    private bool CanConnectTo(string server, ILogger logger)
+    {
+        if (_openConnectionPlan == null)
+        {
+            logger.Warning("CanConnectTo: No connection plan is open, so {Server} cannot be validated; treating it as unreachable.",
+                LogSanitiser.Sanitise(server));
+            return false;
+        }
+
+        try
+        {
+            using var probe = _openConnectionPlan.FactoryFor(server);
+            return true;
+        }
+        catch (LdapException ex)
+        {
+            logger.Warning(ex, "CanConnectTo: Could not open a connection to {Server}.", LogSanitiser.Sanitise(server));
+            return false;
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or InvalidOperationException)
+        {
+            // Name resolution and malformed-identifier failures reach here rather than as LdapException, and
+            // mean exactly the same thing for this question: JIM cannot use this name.
+            logger.Warning(ex, "CanConnectTo: Could not resolve or address {Server}.", LogSanitiser.Sanitise(server));
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Executes an action with retry logic for transient failures.
     /// Uses exponential backoff between retries.
     /// </summary>
@@ -689,22 +747,42 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         var preferredDomainController = connectedSystem.SettingValues
             .SingleOrDefault(s => s.Setting.Name == _settingPreferredDomainController)?.StringValue;
 
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, preferredDomainController, logger, cancellationToken, progress);
+        // The server this session actually connected through, and a probe for any other, so the import can
+        // prove a discovered domain controller reachable before pinning it (issue #230 Phase 2).
+        var connectedServer = _openConnectionPlan?.EffectiveServer ?? string.Empty;
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, preferredDomainController, connectedServer, server => CanConnectTo(server, logger), logger, cancellationToken, progress);
 
         switch (runProfile.RunType)
         {
             case ConnectedSystemRunType.FullImport:
                 logger.Debug("ImportAsync: Full Import requested");
-                return import.GetFullImportObjectsAsync();
+                return WithPinValidationWarningAsync(import, import.GetFullImportObjectsAsync());
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
-                return import.GetDeltaImportObjectsAsync();
+                return WithPinValidationWarningAsync(import, import.GetDeltaImportObjectsAsync());
             case ConnectedSystemRunType.FullSynchronisation:
             case ConnectedSystemRunType.DeltaSynchronisation:
             case ConnectedSystemRunType.Export:
             default:
                 throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}");
         }
+    }
+
+    /// <summary>
+    /// Carries a rejected-domain-controller warning from the import session onto its result, which is how it
+    /// reaches the Activity (issue #230 Phase 2). A warning the import raised about itself always wins: it
+    /// describes how the import was performed, which matters more than a note about domain controller pinning.
+    /// </summary>
+    private static async Task<ConnectedSystemImportResult> WithPinValidationWarningAsync(
+        LdapConnectorImport import,
+        Task<ConnectedSystemImportResult> resultTask)
+    {
+        var result = await resultTask;
+
+        if (result.WarningMessage == null && import.PinValidationWarning != null)
+            result.WarningMessage = import.PinValidationWarning;
+
+        return result;
     }
 
     public string? CloseImportConnection()
@@ -761,10 +839,22 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 _lastResolutionSource != LdapServerResolutionSource.Pinned &&
                 !string.IsNullOrEmpty(rootDse.DnsHostName))
             {
-                Log.Logger.Information("OpenExportConnection: No pinned domain controller exists for this AD-family directory. Establishing one at {Server}.",
-                    LogSanitiser.Sanitise(rootDse.DnsHostName));
-                _exportDiscoveredPinnedServer = rootDse.DnsHostName;
-                _exportDiscoveredDirectoryTypeForPin = rootDse.DirectoryType;
+                // Validated exactly as the import path validates it: a domain controller JIM cannot reach must
+                // not be pinned, or every later run fails on it and re-pins the same unreachable name. Export
+                // has no Activity-level warning channel (its results are per object), so the administrator's
+                // warning comes from the next import, which rediscovers, re-validates and reports.
+                var decision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+                    rootDse.UseUsnDeltaImport, preferredDomainController, rootDse.DnsHostName,
+                    _openConnectionPlan?.EffectiveServer ?? string.Empty,
+                    server => CanConnectTo(server, Log.Logger), Log.Logger);
+
+                if (decision.PinnedServer != null)
+                {
+                    Log.Logger.Information("OpenExportConnection: No pinned domain controller exists for this AD-family directory. Establishing one at {Server}.",
+                        LogSanitiser.Sanitise(decision.PinnedServer));
+                    _exportDiscoveredPinnedServer = decision.PinnedServer;
+                    _exportDiscoveredDirectoryTypeForPin = rootDse.DirectoryType;
+                }
             }
         }
     }

@@ -221,6 +221,22 @@ The navy-o6 palette uses semantic tokens mapped through MudBlazor's `--mud-palet
 
 On hover, `Color.Primary` avatars darken to `--mud-palette-primary-darken` for contrast against the primary chip background. Chip-prefix classes flip to `primary-text` inside `.jim-chip-link:hover`.
 
+### Surface nesting
+
+A surface drawn inside another surface steps away from its parent by a small, even amount: **darker in light mode, lighter in dark mode**, so nesting always reads as recession from the page and elevation towards the viewer. Two levels are enough for anything JIM draws; a third means the layout, not the palette, needs rethinking.
+
+| Level | On the page | Inside a dialog |
+|---|---|---|
+| Base | `--mud-palette-surface` | `--jim-dialog-surface` |
+| Nested once | `--jim-inner-surface` | `--jim-dialog-inner-surface` |
+
+Applied automatically: `html[lang] .mud-dialog .mud-paper-outlined` paints every outlined paper inside a dialog with `--jim-dialog-inner-surface`, so a `<MudPaper Outlined>` in a dialog is already correct and needs no background of its own. A third level (the remediation guidance inside the Set Password results list) falls to `--mud-palette-background-grey`, which every theme defines as a small alpha over whatever sits beneath it, so it composites correctly at any depth.
+
+Two rules keep the ladder honest, and navy-o6-light broke both before they were written down:
+
+- **Keep the step small and even.** Roughly 6-8 units of 8-bit grey between levels. Every light theme here sits in that band; navy-o6-light stepped a full 12 and read as oppressive.
+- **Never reuse `--mud-palette-background` as a nested surface.** That is the colour of the page the dialog floats *above*. Painting a panel inside an elevated dialog with it makes the panel read as a hole punched through the dialog rather than a recess within it, which is exactly what `--jim-dialog-inner-surface: #f3f3f3` did against a `#ffffff` dialog.
+
 ### Transparent variants
 
 Use `color-mix(in srgb, var(--mud-palette-*) X%, transparent)` for transparent colour variants. Do not use the `rgba(var(--*-rgb), α)` pattern. The `-rgb` triplet custom properties exist in theme files only for MudBlazor's internal use (hover, ripple, focus on built-in components); never reference them from JIM's own CSS.

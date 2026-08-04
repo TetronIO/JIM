@@ -8,6 +8,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -121,6 +122,44 @@ public class ReferenceRecallDeduplicationTests
     }
 
     /// <summary>
+    /// Regression test: TargetEntityDescription on a recall PendingExportCreated outcome is
+    /// contractually the TARGET CONNECTED SYSTEM's name, matching the other four PendingExportCreated
+    /// call sites in SyncTaskProcessorBase. The bug wrote recallRpei.DisplayNameSnapshot instead, which
+    /// is the REFERENCING object's own display name (e.g. the group being updated), not a Connected
+    /// System name; found via a live database where a recall outcome's TargetEntityDescription held the
+    /// referencing group's name ("Project-Pulse") while the only Connected Systems configured were
+    /// "Yellowstone APAC" and "Glitterband EMEA". The recall target system here (id 9, "Glitterband
+    /// EMEA") is deliberately distinct from both the referencing group's display name ("Project-Pulse")
+    /// and the currently-syncing _connectedSystem ("Target LDAP", id 5), so neither the old
+    /// DisplayNameSnapshot bug nor a wrong fix that reads the ambient _connectedSystem.Name instead of
+    /// the Pending Export's own target system could accidentally satisfy this assertion.
+    /// </summary>
+    [Test]
+    public async Task FlushDeferredRecallRpeis_ReferencingObjectDeleted_RecordsTargetConnectedSystemNameAsync()
+    {
+        const int RecallTargetSystemId = 9;
+        const string RecallTargetSystemName = "Glitterband EMEA";
+
+        var groupCso = SeedGroupCso("cn=Project-Pulse,ou=Groups,dc=corp", "group", RecallTargetSystemId);
+        var processor = CreateProcessor(out var activity);
+        processor.SetRecallExportEvaluationCache(BuildRecallExportEvaluationCache(RecallTargetSystemId, RecallTargetSystemName));
+
+        var pendingExport = BuildRecallPendingExport(groupCso.Id, changeCount: 1, RecallTargetSystemId);
+        processor.CallStageDeferredRecallRpei(pendingExport, "Project-Pulse");
+
+        await processor.CallFlushDeferredRecallRpeisAsync();
+
+        var rpei = activity.RunProfileExecutionItems.Single(r => r.ObjectChangeType == ObjectChangeType.PendingExport);
+        var rootOutcome = rpei.SyncOutcomes.SingleOrDefault();
+
+        Assert.That(rootOutcome, Is.Not.Null, "Detailed outcome tracking must record a PendingExportCreated outcome");
+        Assert.That(rootOutcome!.TargetEntityDescription, Is.EqualTo(RecallTargetSystemName),
+            "TargetEntityDescription on a PendingExportCreated outcome must be the target Connected System's " +
+            "name (matching the other four PendingExportCreated call sites), not the referencing object's own " +
+            "display name and not the currently-syncing Connected System's name");
+    }
+
+    /// <summary>
     /// Nothing staged means nothing emitted (the end-of-run flush is a no-op).
     /// </summary>
     [Test]
@@ -131,7 +170,7 @@ public class ReferenceRecallDeduplicationTests
         Assert.That(activity.RunProfileExecutionItems, Is.Empty);
     }
 
-    private ConnectedSystemObject SeedGroupCso(string externalId, string typeName)
+    private ConnectedSystemObject SeedGroupCso(string externalId, string typeName, int connectedSystemId = TargetSystemId)
     {
         var groupType = new ConnectedSystemObjectType { Id = CsGroupTypeId, Name = typeName };
         var externalIdAttribute = new ConnectedSystemObjectTypeAttribute
@@ -145,7 +184,7 @@ public class ReferenceRecallDeduplicationTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            ConnectedSystemId = TargetSystemId,
+            ConnectedSystemId = connectedSystemId,
             TypeId = CsGroupTypeId,
             Type = groupType,
             Status = ConnectedSystemObjectStatus.Normal,
@@ -163,12 +202,12 @@ public class ReferenceRecallDeduplicationTests
         return cso;
     }
 
-    private static PendingExport BuildRecallPendingExport(Guid connectedSystemObjectId, int changeCount)
+    private static PendingExport BuildRecallPendingExport(Guid connectedSystemObjectId, int changeCount, int connectedSystemId = TargetSystemId)
     {
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
-            ConnectedSystemId = TargetSystemId,
+            ConnectedSystemId = connectedSystemId,
             ConnectedSystemObjectId = connectedSystemObjectId,
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending
@@ -184,6 +223,33 @@ public class ReferenceRecallDeduplicationTests
             });
         }
         return pendingExport;
+    }
+
+    /// <summary>
+    /// Minimal recall-scoped export evaluation cache carrying a single enabled export Synchronisation
+    /// Rule whose ConnectedSystem navigation resolves <paramref name="connectedSystemId"/> to
+    /// <paramref name="connectedSystemName"/>. Mirrors the shape SyncFullSyncTaskProcessor /
+    /// SyncDeltaSyncTaskProcessor build once per run into _recallExportEvaluationCache via
+    /// BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0).
+    /// </summary>
+    private static ExportEvaluationCache BuildRecallExportEvaluationCache(int connectedSystemId, string connectedSystemName)
+    {
+        const int mvoTypeId = 1;
+        var exportRule = new SyncRule
+        {
+            Id = 1,
+            Name = "Test Export Rule",
+            MetaverseObjectTypeId = mvoTypeId,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = connectedSystemName },
+            Direction = SyncRuleDirection.Export,
+            Enabled = true
+        };
+        var exportRulesByMvoTypeId = new Dictionary<int, List<SyncRule>> { { mvoTypeId, new List<SyncRule> { exportRule } } };
+        var csoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
+        var csoAttributeValues = Enumerable.Empty<ConnectedSystemObjectAttributeValue>()
+            .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+        return new ExportEvaluationCache(exportRulesByMvoTypeId, csoLookup, csoAttributeValues, new List<int> { connectedSystemId });
     }
 
     private DeferredRecallTestProcessor CreateProcessor(out Activity activity)
@@ -225,6 +291,8 @@ public class ReferenceRecallDeduplicationTests
         public void SetOutcomeTracking(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel level) => _syncOutcomeTrackingLevel = level;
 
         public void SetCsoChangeTrackingEnabled(bool enabled) => _csoChangeTrackingEnabled = enabled;
+
+        public void SetRecallExportEvaluationCache(ExportEvaluationCache cache) => _recallExportEvaluationCache = cache;
 
         public void CallStageDeferredRecallRpei(PendingExport pendingExport, string? displayName) => StageDeferredRecallRpei(pendingExport, displayName);
 

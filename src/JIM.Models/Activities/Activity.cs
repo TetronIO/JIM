@@ -315,6 +315,18 @@ public class Activity
 
     public int? ConnectedSystemId { get; set; }
 
+    /// <summary>
+    /// If this activity records an operation against a single Connected System Object (a password set, for
+    /// example), that object's id is recorded here alongside <see cref="ConnectedSystemId"/>, which together are
+    /// what a deep-link to the object needs. Null for every other activity.
+    /// <para>
+    /// A plain scalar column with no foreign key or navigation, following the same precedent as the
+    /// configuration target columns below: the activity is the audit record and must outlive the object it
+    /// describes, including through a connector space clear.
+    /// </para>
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
     public int? SyncRuleId { get; set; }
 
     /// <summary>

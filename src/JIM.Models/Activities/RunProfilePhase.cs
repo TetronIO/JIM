@@ -14,4 +14,10 @@ namespace JIM.Models.Activities;
 /// True for the one phase during which the Connector runs. A Connector's own declared phases nest
 /// inside this step, so the top-level step count stays the same whichever Connector is in use.
 /// </param>
-public record RunProfilePhase(string Key, string Name, bool HostsConnectorPhases = false);
+/// <param name="ParentKey">
+/// The phase this one happens inside, or null for a step of the run itself. Nest a phase where the
+/// run alternates between it and its parent: as a step of its own it would un-tick each time the
+/// run came back round to it, which reads as the run going backwards. A nested phase does not
+/// count towards the run's step total, and is declared after the phase it belongs to.
+/// </param>
+public record RunProfilePhase(string Key, string Name, bool HostsConnectorPhases = false, string? ParentKey = null);

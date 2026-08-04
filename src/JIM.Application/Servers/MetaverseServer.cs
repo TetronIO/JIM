@@ -120,7 +120,12 @@ public class MetaverseServer
     /// <param name="objectType">The object type to update.</param>
     /// <param name="initiatedBy">The Metaverse Object that initiated the update (may be null for system-initiated).</param>
     /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview the administrator read before making this change, if any (#827). Recorded on
+    /// the Activity so the audit answers not only what changed but what the person making it was told it would do.
+    /// </param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -131,7 +136,8 @@ public class MetaverseServer
         {
             TargetName = objectType.Name,
             TargetType = ActivityTargetType.MetaverseObjectType,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -148,7 +154,12 @@ public class MetaverseServer
     /// <param name="objectType">The object type to update.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
     /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview the caller read before making this change, if any (#827). Recorded on the
+    /// Activity so the audit answers not only what changed but what the caller was told it would do.
+    /// </param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -159,7 +170,8 @@ public class MetaverseServer
         {
             TargetName = objectType.Name,
             TargetType = ActivityTargetType.MetaverseObjectType,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
@@ -1217,17 +1229,16 @@ public class MetaverseServer
                 changeInitiatorType);
         }
 
-        // Keep the denormalised CachedDisplayName in sync if DisplayName was affected.
-        // Callers apply additions/removals to AttributeValues before calling this method,
+        // Keep the denormalised CachedDisplayName in sync if any naming attribute was affected. It must
+        // track every tier of ObjectNaming.MetaverseNameAttributes, not just Display Name: the Metaverse
+        // list and its ORDER BY read this column without materialising attribute values, so a narrower
+        // gate leaves a Group named only by its Common Name sorting and rendering as though it had no
+        // name at all. Callers apply additions/removals to AttributeValues before calling this method,
         // so re-deriving from the current collection handles SET, UPDATE, and DELETE cases.
-        var displayNameChanged = (additions?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false)
-            || (removals?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false);
-        if (displayNameChanged)
-        {
-            metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
-                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
-                ?.StringValue;
-        }
+        var nameAttributeChanged = (additions?.Any(av => ObjectNaming.IsMetaverseNameAttribute(av.Attribute?.Name)) ?? false)
+            || (removals?.Any(av => ObjectNaming.IsMetaverseNameAttribute(av.Attribute?.Name)) ?? false);
+        if (nameAttributeChanged)
+            metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
     }
@@ -1326,9 +1337,7 @@ public class MetaverseServer
         }
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
-        metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
-            .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
-            ?.StringValue;
+        metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
@@ -1394,15 +1403,9 @@ public class MetaverseServer
             // Capture the MVO ID before deletion — EF Core may clear the Id property after SaveChangesAsync.
             var mvoId = metaverseObject.Id;
 
-            // Resolve display name: prefer the MVO's current DisplayName (computed from AttributeValues),
-            // but if attributes were already recalled (sync processor path), derive it from the snapshot.
-            var displayName = metaverseObject.DisplayName;
-            if (displayName == null && attributesToCapture.Count > 0)
-            {
-                var displayNameAttrValue = attributesToCapture.SingleOrDefault(
-                    av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-                displayName = displayNameAttrValue?.StringValue;
-            }
+            // Resolve the name: prefer the MVO's own resolution (computed from AttributeValues), but if
+            // attributes were already recalled (sync processor path), derive it from the snapshot.
+            var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
             // Create a deletion change record.
             // IMPORTANT: Do NOT set the MetaverseObject navigation property! Setting it causes EF Core
@@ -1743,6 +1746,23 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// How many Metaverse Objects of a type a change to that type's deletion settings could affect (#1114): its
+    /// projected objects carrying a disconnection mark.
+    /// </summary>
+    public async Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectDeletionCandidateCountAsync(metaverseObjectTypeId);
+    }
+
+    /// <summary>
+    /// Streams those same objects, reduced to the facts a deletion-settings preview needs about each one.
+    /// </summary>
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId)
+    {
+        return Application.Repository.Metaverse.StreamMetaverseObjectDeletionCandidates(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
@@ -1773,6 +1793,18 @@ public class MetaverseServer
     public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
+    }
+
+    /// <summary>
+    /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.
+    /// Backs the Deleted Objects page's deep link, which is reached from a causality view holding the
+    /// deleted Identity's id rather than its change record's.
+    /// </summary>
+    /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangeAsync(deletedMetaverseObjectId);
     }
     #endregion
 }

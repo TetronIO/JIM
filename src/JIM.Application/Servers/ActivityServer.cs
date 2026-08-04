@@ -35,7 +35,7 @@ public class ActivityServer
         {
             activity.InitiatedByType = ActivityInitiatorType.User;
             activity.InitiatedById = initiatedBy.Id;
-            activity.InitiatedByName = initiatedBy.DisplayName;
+            activity.InitiatedByName = initiatedBy.Name;
         }
 
         ValidateActivity(activity);

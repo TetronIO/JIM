@@ -10,6 +10,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Preview;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -242,15 +243,96 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
-            await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, apiKey, request.ChangeReason);
+            await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, apiKey, request.ChangeReason, request.PreviewActivityId);
         else
-            await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, await GetCurrentUserAsync(), request.ChangeReason);
+            await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, await GetCurrentUserAsync(), request.ChangeReason, request.PreviewActivityId);
 
         _logger.LogInformation("Updated Metaverse Object Type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
             objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule.ToString(), objectType.DeletionGracePeriod?.ToString());
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Preview a change to a Metaverse Object Type's deletion rules
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed change to the deletion rules would do, without making it (#827/#1114): which
+    /// Metaverse Objects would become eligible for deletion, which would stop being eligible, and which would keep
+    /// a deletion date that moves.
+    ///
+    /// Field semantics match the update endpoint exactly: an omitted field previews the stored value. Send the same
+    /// body here and then to <c>PUT object-types/{id}</c> and the preview describes precisely what the update does.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>. Pass the same Activity id back as <c>PreviewActivityId</c> on the
+    /// update to record that this preview informed the change.
+    ///
+    /// A proposal that cannot be applied comes back with a blocking validation finding and is not evaluated; that
+    /// is a 202 with findings, not a 400, because being told what is wrong with it is the point of asking.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    /// <param name="request">The proposed deletion settings.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A referenced Connected System does not exist.</response>
+    /// <response code="404">Object Type not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("object-types/{id:int}/deletion-settings/preview", Name = "StartObjectTypeDeletionSettingsPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartDeletionSettingsPreviewAsync(int id,
+        [FromBody] StartMetaverseObjectTypeDeletionSettingsPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        // Only the references are validated here. Everything else the proposal could be wrong about (an
+        // authoritative-source rule with no sources, a negative grace period) is stage 1's job to report as a
+        // finding: refusing the request would withhold the very answer the caller asked for. A Connected System id
+        // that names nothing is different in kind; there is no coherent proposal to evaluate at all.
+        var missingReference = await ValidateTriggerConnectedSystemsExistAsync(request.DeletionTriggerConnectedSystemIds);
+        if (missingReference != null)
+            return BadRequest(missingReference);
+
+        // Omitted means "keep the stored value", exactly as the update endpoint reads it, so the two describe the
+        // same change. Zero is stored as no grace period, so it is previewed as one.
+        var gracePeriod = request.DeletionGracePeriod ?? objectType.DeletionGracePeriod;
+        var proposal = new MetaverseObjectTypeDeletionSettingsProposal(
+            request.DeletionRule ?? objectType.DeletionRule,
+            gracePeriod == TimeSpan.Zero ? null : gracePeriod,
+            request.DeletionTriggerConnectedSystemIds ?? objectType.DeletionTriggerConnectedSystemIds ?? [],
+            request.DeletionTriggerMode ?? objectType.DeletionTriggerMode);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
+            TargetId = objectType.Id,
+            TargetName = objectType.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started deletion settings preview {ActivityId} for Metaverse Object Type {Id}",
+            result.ActivityId, objectType.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
     }
 
     /// <summary>
@@ -278,16 +360,27 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds.");
         }
 
-        // Validate that requested trigger system IDs exist, regardless of rule type, to surface bad
-        // input early rather than silently storing dead IDs (Core retrieval; we only need existence).
-        if (requestedTriggerSystemIds != null)
+        return await ValidateTriggerConnectedSystemsExistAsync(requestedTriggerSystemIds);
+    }
+
+    /// <summary>
+    /// Checks that every requested trigger Connected System exists, regardless of rule type, so bad input is
+    /// surfaced rather than silently stored as dead ids. Core retrieval: only existence is needed.
+    ///
+    /// Shared by the create, update and preview paths. The preview path validates only this, because everything
+    /// else a proposal can be wrong about is something the preview exists to tell the caller about.
+    /// </summary>
+    /// <returns>The error to return as a 400 Bad Request, or null when every reference resolves.</returns>
+    private async Task<ApiErrorResponse?> ValidateTriggerConnectedSystemsExistAsync(IReadOnlyCollection<int>? requestedTriggerSystemIds)
+    {
+        if (requestedTriggerSystemIds == null)
+            return null;
+
+        foreach (var connectedSystemId in requestedTriggerSystemIds)
         {
-            foreach (var connectedSystemId in requestedTriggerSystemIds)
-            {
-                var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
-                if (connectedSystem == null)
-                    return ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found.");
-            }
+            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (connectedSystem == null)
+                return ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found.");
         }
 
         return null;

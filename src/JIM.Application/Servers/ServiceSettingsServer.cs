@@ -20,6 +20,13 @@ namespace JIM.Application.Servers
         /// </summary>
         public const int DefaultConfigurationChangePreviewWorkerThreshold = 2_500;
 
+        /// <summary>
+        /// Estimated delta rows above which an administrator is asked whether to keep the full data set. 100,000
+        /// rows is roughly 40 MB of preview data, which is the point at which the storage is worth a sentence
+        /// rather than an assumption. Like the threshold above, a starting position rather than a measurement.
+        /// </summary>
+        public const int DefaultConfigurationChangePreviewFullDataSetPromptThreshold = 100_000;
+
         private JimApplication Application { get; }
 
         internal ServiceSettingsServer(JimApplication application)
@@ -120,6 +127,19 @@ namespace JIM.Application.Servers
                 Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold,
                 DefaultConfigurationChangePreviewWorkerThreshold);
             return threshold > 0 ? threshold : DefaultConfigurationChangePreviewWorkerThreshold;
+        }
+
+        /// <summary>
+        /// The estimated delta-row count above which an administrator is offered the choice between a capped and a
+        /// full set of drill-down rows (#827). A non-positive stored value would prompt before every preview,
+        /// however small; it is treated as the default instead, on the same reasoning as the threshold above.
+        /// </summary>
+        public async Task<int> GetConfigurationChangePreviewFullDataSetPromptThresholdAsync()
+        {
+            var threshold = await GetSettingValueAsync(
+                Constants.SettingKeys.ConfigurationChangePreviewFullDataSetPromptThreshold,
+                DefaultConfigurationChangePreviewFullDataSetPromptThreshold);
+            return threshold > 0 ? threshold : DefaultConfigurationChangePreviewFullDataSetPromptThreshold;
         }
 
         /// <summary>

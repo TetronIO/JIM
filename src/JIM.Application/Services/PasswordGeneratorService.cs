@@ -439,6 +439,105 @@ public class PasswordGeneratorService : IPasswordGeneratorService
         return policy;
     }
 
+    /// <inheritdoc />
+    public PasswordPolicyReconciliation Reconcile(IReadOnlyList<PasswordPolicyForSystem> policies)
+    {
+        ArgumentNullException.ThrowIfNull(policies);
+
+        var known = policies.Where(p => p.Policy is { HasAnyDiscoveredConstraint: true }).ToList();
+        var combined = Combine(known.Select(p => p.Policy!).ToList());
+        var derived = DeriveFrom(combined);
+
+        // Checked against each system in its own right, not against the combination. The combination is a
+        // construct; what will actually refuse a password is a system, and this is the shape that reports
+        // which one. It cannot fail today (the settings are derived from these very constraints, and JIM
+        // discovers no maximum length to contradict a minimum), which is exactly why it is worth having: the
+        // day a conflicting constraint is discoverable, this reports it before a password is generated.
+        var conflicts = known
+            .Select(system => new { system.ConnectedSystemName, Assessment = Assess(derived, system.Policy) })
+            .Where(checkedSystem => !checkedSystem.Assessment.IsUsable)
+            .Select(checkedSystem => $"{checkedSystem.ConnectedSystemName}: {string.Join(" ", checkedSystem.Assessment.Problems)}")
+            .ToList();
+
+        return new PasswordPolicyReconciliation
+        {
+            Policy = derived,
+            Constraints = DescribeConstraints(combined),
+            SystemsWithNoDiscoveredPolicy = policies
+                .Where(p => p.Policy is not { HasAnyDiscoveredConstraint: true })
+                .Select(p => p.ConnectedSystemName)
+                .ToList(),
+            Conflicts = conflicts,
+            // Any system that may hold a stricter policy for some accounts, or that JIM could not ask, makes the
+            // whole combination a floor rather than a guarantee.
+            MayBeStricterThanDiscovered = known.Any(p => p.Policy!.FineGrainedPolicySignal != FineGrainedPolicySignal.Absent)
+        };
+    }
+
+    /// <summary>
+    /// Folds several discovered policies into the single strictest one.
+    /// <para>
+    /// Lengths and category counts take the maximum, because satisfying the strictest satisfies the rest. The
+    /// recognised categories take the <b>intersection</b>, which is the part that is easy to get backwards: a
+    /// category only one system counts is worthless for satisfying another system's "at least N categories",
+    /// so counting the union would promise a compliance the password does not have.
+    /// </para>
+    /// </summary>
+    private static ConnectedSystemPasswordPolicy? Combine(IReadOnlyList<ConnectedSystemPasswordPolicy> policies)
+    {
+        if (policies.Count == 0)
+            return null;
+
+        var recognised = policies
+            .Where(p => p.RecognisedCharacterClasses != PasswordCharacterClasses.None)
+            .Select(p => p.RecognisedCharacterClasses)
+            .ToList();
+
+        return new ConnectedSystemPasswordPolicy
+        {
+            MinimumLength = policies.Select(p => p.MinimumLength).Max(),
+            ComplexityRequired = policies.Any(p => p.ComplexityRequired == true) ? true : null,
+            RequiredCharacterClassCount = policies.Select(p => p.RequiredCharacterClassCount).Max(),
+            // None where no system said which categories it counts, which downstream reads as "count them all"
+            // rather than "count none"; reading a silence as a denial is the mistake this avoids.
+            RecognisedCharacterClasses = recognised.Count == 0
+                ? PasswordCharacterClasses.None
+                : recognised.Aggregate((left, right) => left & right),
+            PasswordHistoryLength = policies.Select(p => p.PasswordHistoryLength).Max(),
+            MaximumPasswordAge = policies.Select(p => p.MaximumPasswordAge).Min(),
+            MinimumPasswordAge = policies.Select(p => p.MinimumPasswordAge).Max(),
+            FineGrainedPolicySignal = policies.Any(p => p.FineGrainedPolicySignal == FineGrainedPolicySignal.Present)
+                ? FineGrainedPolicySignal.Present
+                : policies.Any(p => p.FineGrainedPolicySignal == FineGrainedPolicySignal.CouldNotDetermine)
+                    ? FineGrainedPolicySignal.CouldNotDetermine
+                    : FineGrainedPolicySignal.Absent
+        };
+    }
+
+    /// <summary>
+    /// Says what the combined rules amount to, for showing beside the Generate button. Only the constraints that
+    /// bear on what is generated: a password history length explains a rejection but does not shape a password.
+    /// </summary>
+    private static List<string> DescribeConstraints(ConnectedSystemPasswordPolicy? combined)
+    {
+        var constraints = new List<string>();
+        if (combined == null)
+            return constraints;
+
+        if (combined.MinimumLength is { } minimumLength)
+            constraints.Add($"{minimumLength} characters or more");
+
+        if (combined is { ComplexityRequired: true, RequiredCharacterClassCount: { } requiredClasses })
+        {
+            var recognised = combined.RecognisedCharacterClasses == PasswordCharacterClasses.None
+                ? 4
+                : System.Numerics.BitOperations.PopCount((uint)combined.RecognisedCharacterClasses);
+            constraints.Add($"{requiredClasses} of {recognised} character categories");
+        }
+
+        return constraints;
+    }
+
     #region constants
     /// <summary>
     /// How many letters of a pronounceable password go between one grouping separator and the next.

@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
@@ -868,6 +869,14 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        // Execution items can reference Connected System Objects in any system, so name candidates are
+        // matched by attribute name rather than by pre-resolved ids. Lowered here so the comparison
+        // translates to a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
+        // ObjectNaming.ConnectedSystemNameAttributes (guarded by ConnectedSystemNameAttributeTierCountTests).
+        var nameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
+        var nameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
+        var nameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
+
         // Header-tier read: do NOT eager-load the ConnectedSystemObject graph. The previous
         // implementation Include()d each RPEI's CSO plus its entire (multi-valued) AttributeValues
         // collection and then projected in memory, so a page that landed on a few large group CSOs
@@ -929,10 +938,12 @@ public class ActivityRepository : IActivityRepository
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(item =>
-                // Search display name (live CSO attribute)
+                // Search the name candidates (live CSO attributes)
                 (item.ConnectedSystemObject != null &&
                  item.ConnectedSystemObject.AttributeValues.Any(av =>
-                    EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                    (av.Attribute.Name.ToLower() == nameCandidate1 ||
+                     av.Attribute.Name.ToLower() == nameCandidate2 ||
+                     av.Attribute.Name.ToLower() == nameCandidate3) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern))) ||
                 // Search display name (snapshot fallback)
@@ -965,18 +976,20 @@ public class ActivityRepository : IActivityRepository
                         .Select(av => av.StringValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot),
+            // Sorts on the resolved live name, coalescing the naming tiers in preference order so the
+            // sort key matches what the Display Name column renders, then the snapshot for deleted CSOs.
             "displayname" or "name" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues
-                        .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault() ?? item.DisplayNameSnapshot
+                    ? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.DisplayNameSnapshot
                     : item.DisplayNameSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues
-                        .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault() ?? item.DisplayNameSnapshot
+                    ? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.DisplayNameSnapshot
                     : item.DisplayNameSnapshot),
             "type" or "objecttype" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
@@ -1014,10 +1027,10 @@ public class ActivityRepository : IActivityRepository
                 i.DisplayNameSnapshot,
                 i.ExternalIdSnapshot,
                 i.ObjectTypeSnapshot,
-                DisplayNameLive = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.Attribute.Name.ToLower() == "displayname")
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault(),
+                DisplayNameLive =
+                    i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
+                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
+                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault(),
                 TypeLive = i.ConnectedSystemObject!.Type!.Name,
                 // External id resolved as per-column scalar subqueries. A single multi-column
                 // projection here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
@@ -1425,7 +1438,9 @@ public class ActivityRepository : IActivityRepository
 
             // Pending Export, drift correction, provisioning and Metaverse Object deletion
             // stats from outcomes (housekeeping batches, #1020)
-            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            // Both staging outcome types: a queued deprovision is a Pending Export, and only its intent differs
+            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+                                              + OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
             totalDriftCorrections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
             totalProvisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
             totalMvoDeleted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);

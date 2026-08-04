@@ -66,19 +66,19 @@ Modifies an existing Metaverse Object Type: its identity (name, plural name, ico
 Set-JIMMetaverseObjectType -Id <int> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PassThru]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # ByName
 Set-JIMMetaverseObjectType -Name <string> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PassThru]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
-    [-ChangeReason <string>] [-PassThru]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 #### Parameters
@@ -96,6 +96,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected. How they trigger deletion is governed by `DeletionTriggerMode`. |
 | `DeletionTriggerMode` | `string` | No | | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to leave the stored mode unchanged. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
+| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) read before making this change. The change's Activity records the link, so the audit answers not only what changed but what the caller was told it would do. |
 | `PassThru` | `switch` | No | `false` | Return the updated object type |
 
 !!! info "ShouldProcess"
@@ -136,6 +137,11 @@ Set-JIMMetaverseObjectType -Id 5 -NewName "Gadget" -PluralName "Gadgets" -Icon "
 
 ```powershell title="Clear a custom type's icon"
 Set-JIMMetaverseObjectType -Id 5 -Icon $null
+```
+
+```powershell title="Apply a previewed change, recording which preview informed it"
+$preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
+Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
 ```
 
 ---
@@ -885,6 +891,72 @@ Get-JIMMetaverseObjectChangeHistory -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -
 Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
     Get-JIMMetaverseObjectChangeHistory -All
 ```
+
+---
+
+## Set-JIMMetaverseObjectPassword
+
+Sets the same password on several of a person's accounts across Connected Systems.
+
+Resolves the accounts a Metaverse Object is joined to and writes to each named Connected System in turn. There is no transaction across them: a run routinely ends with some accounts changed and others not, so every account's outcome is reported separately.
+
+You supply the password. JIM does not generate one here, because that would mean returning a password in a response body, which this API never does. Use the portal when you want JIM to generate one that satisfies every selected system's discovered policy at once.
+
+### Syntax
+
+```powershell
+Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Password <securestring>
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+
+Set-JIMMetaverseObjectPassword -Id <guid> -AllAccounts -Password <securestring>
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | Metaverse Object identifier. |
+| `ConnectedSystemId` | `int[]` | Yes (BySystem) | | The Connected Systems to set the password in. Accounts elsewhere are left alone. |
+| `AllAccounts` | `switch` | Yes (AllAccounts) | | Sets the password on every account this person has. |
+| `Password` | `securestring` | Yes | | The password to set. Sent to each Connected System and nowhere else. |
+| `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`, applied to every account. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the accounts as part of setting the password. Omitting it leaves their enabled state untouched. |
+| `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
+
+### Output
+
+One object per account attempted. No property carries the password.
+
+| Property | Description |
+|----------|-------------|
+| `ConnectedSystemId` | The Connected System the account is in |
+| `ConnectedSystemName` | Its name |
+| `ConnectedSystemObjectId` | The account |
+| `Success` | Whether the password was set |
+| `AppliedExpiryBehaviour` | The expiry behaviour really applied, where it was set |
+| `ExpiryBehaviourWarning` | Why the requested behaviour could not be honoured, or null |
+| `Message` | The Connected System's own reason, where it refused |
+
+### Examples
+
+```powershell title="Set one password in two named Connected Systems"
+$password = Read-Host -AsSecureString "New password"
+Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -ConnectedSystemId 1,2 -Password $password
+```
+
+```powershell title="Set it everywhere, then list only the accounts that refused it"
+$password = Read-Host -AsSecureString "New password"
+Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -AllAccounts -Password $password -Force |
+    Where-Object { -not $_.Success }
+```
+
+### Notes
+
+- **You must name the Connected Systems, or pass `-AllAccounts`.** There is no default: setting a password everywhere by default would turn a reset in one system into a reset in all of them.
+- **This is a password-reset primitive.** Anyone who can call it can reset any account in these connector spaces, subject only to what each Connected System's service account is permitted to do.
+- One Connected System refusing does not stop the others. Where that happens the person is left with a different password there from the accounts that accepted it, so check every returned outcome rather than the first.
+- A refused password will be refused again if you resend it. Generate a different one, and set it on every account rather than only the one that failed, or the person ends up with two.
 
 ---
 

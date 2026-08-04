@@ -904,13 +904,50 @@ internal static class LdapConnectorUtilities
     /// <param name="useUsnDeltaImport">Whether the connected directory is AD-family (<see cref="LdapConnectorRootDse.UseUsnDeltaImport"/>).</param>
     /// <param name="preferredDomainController">The "Preferred Domain Controller" setting value, or null/blank if not configured.</param>
     /// <param name="dnsHostName">The dnsHostName of the domain controller this connection reached.</param>
-    /// <returns>The value to persist as <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/>.</returns>
-    internal static string? ResolvePinnedDirectoryServerForImport(bool useUsnDeltaImport, string? preferredDomainController, string? dnsHostName)
+    /// <param name="connectedServer">The server this connection was actually opened against, so that a candidate
+    /// already proven reachable is not probed again.</param>
+    /// <param name="canConnectTo">Opens and closes a throwaway connection to the named server, returning whether
+    /// it succeeded. Invoked at most once, and only for a candidate that differs from <paramref name="connectedServer"/>.</param>
+    /// <param name="logger">Logger.</param>
+    /// <returns>The value to persist as <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/>, and a warning
+    /// to surface on the Activity when a discovered domain controller had to be rejected.</returns>
+    internal static PinnedDirectoryServerDecision ResolvePinnedDirectoryServerForImport(
+        bool useUsnDeltaImport,
+        string? preferredDomainController,
+        string? dnsHostName,
+        string connectedServer,
+        Func<string, bool> canConnectTo,
+        ILogger logger)
     {
-        if (!useUsnDeltaImport)
-            return null;
+        if (!useUsnDeltaImport || !string.IsNullOrWhiteSpace(preferredDomainController) || string.IsNullOrWhiteSpace(dnsHostName))
+            return new PinnedDirectoryServerDecision(null, null);
 
-        return string.IsNullOrWhiteSpace(preferredDomainController) ? dnsHostName : null;
+        // The connection that answered this rootDSE query was opened against connectedServer, so a candidate
+        // equal to it is already proven; probing would add a bind per run for an answer we hold. This is the
+        // steady state once a pin exists, which is why it must cost nothing.
+        if (string.Equals(dnsHostName, connectedServer, StringComparison.OrdinalIgnoreCase))
+            return new PinnedDirectoryServerDecision(dnsHostName, null);
+
+        if (canConnectTo(dnsHostName))
+            return new PinnedDirectoryServerDecision(dnsHostName, null);
+
+        // Pinning a name JIM cannot reach is unrecoverable rather than merely wrong: the pin is cleared when the
+        // connection through it fails, and the next run rediscovers the same name from the same directory and
+        // pins it again, so every run through the pin fails forever. Falling back to Host keeps the system
+        // working on the connection that demonstrably does, and the warning is what gives an administrator the
+        // one fact they need: the directory advertises a name their JIM host cannot resolve.
+        var warning =
+            $"The directory advertises its domain controller as '{dnsHostName}', but JIM could not open a connection to " +
+            $"that name, so it has not been pinned; this run and subsequent runs continue via '{connectedServer}'. This " +
+            "usually means DNS on the JIM host does not resolve the domain controller's own name (split-horizon DNS, or a " +
+            "directory reached through an alias or address). Resolve the name from the JIM host, or set the Preferred " +
+            "Domain Controller setting on this Connected System to a name that resolves, to pin a domain controller and " +
+            "get consistent delta imports.";
+
+        logger.Warning("ResolvePinnedDirectoryServerForImport: The discovered domain controller {DiscoveredServer} could not be reached from JIM; not pinning it. Continuing via {ConnectedServer}.",
+            LogSanitiser.Sanitise(dnsHostName), LogSanitiser.Sanitise(connectedServer));
+
+        return new PinnedDirectoryServerDecision(null, warning);
     }
 
     /// <summary>

@@ -759,11 +759,18 @@ public class ExportExecutionServer
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
 
+        // This pass counts its own work: the deferred exports, each finished with once it has been
+        // written or confirmed still unwritable. Reporting the export's totals here left the pass
+        // reading as complete for the whole time it ran.
+        var passTotal = deferredExports.Count;
+
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.ResolvingReferences,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = result.SuccessCount,
+            PassTotal = passTotal,
+            PassProcessed = 0,
             Message = $"Resolving {deferredExports.Count} deferred exports"
         });
 
@@ -810,6 +817,11 @@ public class ExportExecutionServer
                     Phase = ExportPhase.ResolvingReferences,
                     TotalExports = result.TotalPendingExports,
                     ProcessedExports = result.SuccessCount + result.FailedCount,
+                    // Resolution classifies; it finishes with nothing. Counting it here would run the
+                    // window to full and then back down as the writing began, which the estimator
+                    // reads as a new phase and the administrator reads as progress being lost.
+                    PassTotal = passTotal,
+                    PassProcessed = 0,
                     Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
                 });
             }
@@ -856,11 +868,11 @@ public class ExportExecutionServer
                 var immediateProcessedCount = result.SuccessCount + result.FailedCount;
                 await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
                     cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                    processedExportsOffset: immediateProcessedCount);
+                    processedExportsOffset: immediateProcessedCount, passTotal: passTotal);
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback);
+                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal);
             }
         }
 
@@ -870,6 +882,8 @@ public class ExportExecutionServer
             var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
             var resolvedMvoIds = csoLookup.Keys.ToHashSet();
             var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
+
+            var markedDeferredCount = 0;
 
             Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references and will be deferred. " +
                 "{Resolved} resolved, {TotalDeferred} total deferred this cycle. " +
@@ -889,6 +903,23 @@ public class ExportExecutionServer
 
                 await MarkExportDeferredAsync(export);
                 result.DeferredCount++;
+
+                // Confirming an export still cannot be written finishes with it as surely as
+                // writing it does, so it counts towards this pass's own work. Throttled to keep the
+                // progress writes off the per-export path.
+                markedDeferredCount++;
+                if (markedDeferredCount % 50 == 0 || markedDeferredCount == stillUnresolvedExports.Count)
+                {
+                    await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                    {
+                        Phase = ExportPhase.ResolvingReferences,
+                        TotalExports = result.TotalPendingExports,
+                        ProcessedExports = result.SuccessCount + result.FailedCount,
+                        PassTotal = passTotal,
+                        PassProcessed = resolvedExports.Count + markedDeferredCount,
+                        Message = "Recording exports that are still waiting on their references"
+                    });
+                }
             }
         }
     }
@@ -899,12 +930,17 @@ public class ExportExecutionServer
     /// <summary>
     /// Processes deferred batches sequentially using the existing connector and DbContext.
     /// </summary>
+    /// <param name="passTotal">
+    /// How many deferred exports this pass covers, so its progress is reported against its own work
+    /// rather than the export's totals.
+    /// </param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
         List<List<PendingExport>> batches,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback)
+        Func<ExportProgressInfo, Task>? progressCallback,
+        int passTotal)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -918,6 +954,8 @@ public class ExportExecutionServer
             Phase = ExportPhase.Executing,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = immediateProcessedCount + processedCount,
+            PassTotal = passTotal,
+            PassProcessed = processedCount,
             Message = subPhase
         });
 
@@ -931,6 +969,8 @@ public class ExportExecutionServer
                 Phase = ExportPhase.Executing,
                 TotalExports = result.TotalPendingExports,
                 ProcessedExports = immediateProcessedCount + processedCount,
+                PassTotal = passTotal,
+                PassProcessed = processedCount,
                 CurrentBatchSize = batch.Count,
                 Message = "Exporting deferred"
             });
@@ -977,7 +1017,8 @@ public class ExportExecutionServer
         Func<ISyncRepositoryScope> repositoryFactory,
         string spanName,
         int processedExportsOffset = 0,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
+        int? passTotal = null)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
             batches.Count, options.MaxParallelism);
@@ -998,6 +1039,8 @@ public class ExportExecutionServer
             Phase = ExportPhase.Executing,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = processedExportsOffset + Volatile.Read(ref processedCount),
+            PassTotal = passTotal,
+            PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) : null,
             Message = subPhase
         }, progressSemaphore);
 
@@ -1114,8 +1157,10 @@ public class ExportExecutionServer
                                 Phase = ExportPhase.Executing,
                                 TotalExports = result.TotalPendingExports,
                                 ProcessedExports = processedExportsOffset + newProcessedCount,
+                                PassTotal = passTotal,
+                                PassProcessed = passTotal.HasValue ? newProcessedCount : null,
                                 CurrentBatchSize = batch.Count,
-                                Message = "Exporting"
+                                Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
                             });
                         }
                         finally

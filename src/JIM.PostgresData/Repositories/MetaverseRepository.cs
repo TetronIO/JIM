@@ -2605,6 +2605,34 @@ public class MetaverseRepository : IMetaverseRepository
         return rowsAffected;
     }
 
+    public async Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId) =>
+        await DeletionCandidateQuery(metaverseObjectTypeId).CountAsync();
+
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId) =>
+        DeletionCandidateQuery(metaverseObjectTypeId)
+            // Ordered so a preview re-run over unchanged data produces its groups in the same order, and so the
+            // objects whose deletion is nearest lead the drill-down.
+            .OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
+            .ThenBy(mvo => mvo.Id)
+            .Select(mvo => new MetaverseObjectDeletionCandidate(
+                mvo.Id,
+                mvo.CachedDisplayName,
+                mvo.LastConnectorDisconnectedDate!.Value,
+                mvo.ConnectedSystemObjects.Any()))
+            .AsAsyncEnumerable();
+
+    /// <summary>
+    /// The objects a change to one Metaverse Object Type's deletion settings could affect: its projected objects
+    /// carrying a disconnection mark. The type's current rule is deliberately not part of the filter, because a
+    /// proposal that switches the rule has to be evaluated against the objects the current rule ignores.
+    /// </summary>
+    private IQueryable<MetaverseObject> DeletionCandidateQuery(int metaverseObjectTypeId) =>
+        Repository.Database.MetaverseObjects
+            .Where(mvo =>
+                mvo.Type.Id == metaverseObjectTypeId &&
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                mvo.LastConnectorDisconnectedDate != null);
+
     public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
         int page,
         int pageSize,
@@ -2853,6 +2881,20 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
 
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
+    {
+        // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
+        // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
+        // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        return await Repository.Database.MetaverseObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedMetaverseObjectId == deletedMetaverseObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.DeletedObjectType)
+            .FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />

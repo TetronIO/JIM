@@ -1,0 +1,47 @@
+@using System.Text.RegularExpressions
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Explanatory tooltip text, rendered one sentence per line. Two-sentence descriptions otherwise run
+   as a single long line, and the break is derived from the sentence boundary rather than authored
+   into each string: the descriptions range from a few words to two sentences, so a hand-placed break
+   is in the wrong place for the next one and has to be re-judged every time a description is added.
+   A one-sentence description renders unchanged; the site-wide tooltip measure (site.css) is what
+   stops a long single sentence running off the page.
+
+   Each sentence renders through Blazor's encoder rather than as a MarkupString, so a description
+   that ever carries a value sourced from a connected system cannot inject markup. *@
+
+@for (var i = 0; i < _sentences.Count; i++)
+{
+    @if (i > 0)
+    {
+        <br />
+    }
+    @_sentences[i]
+}
+
+@code {
+    /// <summary>
+    /// Splits after a sentence-ending mark followed by whitespace. Lookbehind keeps the mark on the
+    /// sentence it belongs to. No description carries an abbreviation, which is the case this would
+    /// mis-split; if one ever does, the fix is to reword it rather than to grow the pattern.
+    /// </summary>
+    private static readonly Regex SentenceBoundary = new(@"(?<=[.!?])\s+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The explanation to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    private IReadOnlyList<string> _sentences = [];
+
+    protected override void OnParametersSet()
+    {
+        _sentences = string.IsNullOrWhiteSpace(Text)
+            ? []
+            : SentenceBoundary.Split(Text.Trim()).Where(s => s.Length > 0).ToList();
+    }
+}

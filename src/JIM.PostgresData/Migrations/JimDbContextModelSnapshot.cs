@@ -97,6 +97,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("ConnectedSystemRunProfileId")
                         .HasColumnType("integer");
 
@@ -1883,6 +1886,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("ProposedConfigurationSnapshot")
                         .HasColumnType("jsonb");
 
+                    b.Property<int>("RequestedDeltaPersistence")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("StalenessBaseline")
                         .HasColumnType("timestamp with time zone");
 
@@ -2818,6 +2824,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DeletedConnectedSystemObjectId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("DeletedObjectDisplayName")

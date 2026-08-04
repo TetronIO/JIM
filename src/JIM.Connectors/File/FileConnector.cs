@@ -502,6 +502,14 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             case ConnectedSystemRunType.FullImport:
                 logger.Debug("ImportAsync: Full Import requested");
+
+                // A file import hands everything over in one call, so without stating how many
+                // records the file holds the Activity can only show a bar with no end to it for the
+                // whole read. Counting them is a second pass, but a parse-only one over a file the
+                // read that follows is about to warm the page cache for.
+                await progress.ReportExpectedObjectCountAsync(
+                    await CountDataRecordsAsync(runProfile.FilePath, connectedSystem.SettingValues, logger, cancellationToken));
+
                 return await import.GetFullImportObjectsAsync();
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
@@ -553,6 +561,35 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region private methods
+    /// <summary>
+    /// Counts the data records in a file, so JIM can show how far through reading it a run is.
+    /// </summary>
+    /// <remarks>
+    /// Counts records rather than lines: a quoted field may hold line breaks, and a total that
+    /// overstates the file leaves the progress bar stuck short of complete. Nothing is extracted
+    /// from the fields, so this is a parse-only pass, considerably cheaper than the read that
+    /// follows it.
+    /// </remarks>
+    private static async Task<int> CountDataRecordsAsync(
+        string filePath,
+        IReadOnlyCollection<ConnectedSystemSettingValue> settingValues,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        using var counter = GetCsvReader(filePath, settingValues, logger);
+        var records = 0;
+
+        // The first record is the header row, which is not an object.
+        await counter.CsvReader.ReadAsync();
+        counter.CsvReader.ReadHeader();
+
+        while (!cancellationToken.IsCancellationRequested && await counter.CsvReader.ReadAsync())
+            records++;
+
+        logger.Debug("CountDataRecordsAsync: '{FilePath}' holds {Records} records", LogSanitiser.Sanitise(filePath), records);
+        return records;
+    }
+
     /// <summary>
     /// Helper to simplify opening a file for reading. Takes care of file location and culture specifics.
     /// </summary>

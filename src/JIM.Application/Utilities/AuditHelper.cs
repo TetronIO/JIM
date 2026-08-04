@@ -24,7 +24,7 @@ public static class AuditHelper
         {
             entity.CreatedByType = ActivityInitiatorType.User;
             entity.CreatedById = user.Id;
-            entity.CreatedByName = user.DisplayName;
+            entity.CreatedByName = user.Name;
         }
     }
 
@@ -61,7 +61,7 @@ public static class AuditHelper
         {
             entity.LastUpdatedByType = ActivityInitiatorType.User;
             entity.LastUpdatedById = user.Id;
-            entity.LastUpdatedByName = user.DisplayName;
+            entity.LastUpdatedByName = user.Name;
         }
     }
 

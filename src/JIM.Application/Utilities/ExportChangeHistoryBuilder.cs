@@ -248,6 +248,6 @@ public static class ExportChangeHistoryBuilder
     /// </summary>
     public static string GetCsoDisplayIdentifier(ConnectedSystemObject cso)
     {
-        return cso.DisplayNameOrId ?? cso.Id.ToString();
+        return cso.NameOrId ?? cso.Id.ToString();
     }
 }

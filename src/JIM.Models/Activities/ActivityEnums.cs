@@ -103,7 +103,32 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// Preview only: the inverse. The Metaverse Object is eligible for deletion today and would cease to be, which
     /// is what a proposal that relaxes a deletion rule needs to state as plainly as one that tightens it.
     /// </summary>
-    WouldCeaseToBeDeletionEligible
+    WouldCeaseToBeDeletionEligible,
+
+    /// <summary>
+    /// Preview only: the Metaverse Object is on its way to deletion both before and after the proposal, but the
+    /// date it would be deleted on moves. Separate from the two above because it is a different question: those
+    /// answer "would this delete objects that are safe today", this answers "would this bring forward, push back,
+    /// or cancel a deletion already scheduled". A grace period edited from 30 days to 7 deletes nobody today and
+    /// changes the fate of everyone already waiting.
+    /// </summary>
+    WouldChangeDeletionEligibleDate,
+
+    /// <summary>
+    /// A Pending Export whose change type is Delete was staged during synchronisation: the object is queued to be
+    /// removed from the target Connected System on its next export run. The delete-flavoured sibling of
+    /// <see cref="PendingExportCreated"/>, which covers every other change type.
+    ///
+    /// The distinction exists because a delete Pending Export carries the Connected System Object's secondary
+    /// external ID (the DN, for LDAP) as an attribute value change, so the connector can still resolve the target
+    /// after the object is disconnected from its Metaverse Object and possibly housekept away. Reported as a plain
+    /// Pending Export, that payload read as "one attribute set" and a deprovisioning cascade was indistinguishable
+    /// from an attribute update.
+    ///
+    /// Counts towards an Activity's Pending Export totals exactly as <see cref="PendingExportCreated"/> does; it
+    /// is one, and only its intent differs.
+    /// </summary>
+    DeprovisionQueued
 }
 
 /// <summary>

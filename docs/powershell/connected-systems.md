@@ -1226,9 +1226,73 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
+## Set-JIMConnectedSystemObjectPassword
+
+Sets the password on one Connected System Object.
+
+The password is written straight to the Connected System: nothing is staged as a Pending Export, nothing is retried, and JIM stores nothing. The attempt is recorded as an Activity against the object, carrying the outcome and, where the system refused, its verbatim reason.
+
+This is the automation counterpart of the **Set Password** action in the administration portal. You supply the password rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one. Use the portal when you want JIM to generate one that follows the discovered policy.
+
+### Syntax
+
+```powershell
+Set-JIMConnectedSystemObjectPassword -ConnectedSystemId <int> -Id <guid> -Password <securestring>
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force] [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts a Connected System Object from the pipeline. |
+| `Id` | `guid` | Yes | | Connected System Object identifier. Accepts a Connected System Object from the pipeline. |
+| `Password` | `securestring` | Yes | | The password to set. Sent to the Connected System and nowhere else. |
+| `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the account as part of setting the password. Omitting it leaves the account's enabled state untouched. |
+| `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
+| `PassThru` | `switch` | No | `$false` | Returns the outcome. |
+
+### Output
+
+When `-PassThru` is specified, returns an object with these properties. No property carries the password.
+
+| Property | Description |
+|----------|-------------|
+| `AppliedExpiryBehaviour` | The expiry behaviour really applied, which is not always the one asked for |
+| `ExpiryBehaviourWarning` | Why the requested behaviour could not be honoured, or null if it was |
+
+### Examples
+
+```powershell title="Set a password, requiring a change at the next sign-in"
+$password = Read-Host -AsSecureString "New password"
+Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 -Password $password
+```
+
+```powershell title="Set a password and enable the account, reporting what the directory applied"
+$password = Read-Host -AsSecureString "New password"
+Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 -Password $password -EnableAccount -Force -PassThru
+```
+
+```powershell title="Pipeline: set the password on a retrieved Connected System Object"
+$password = Read-Host -AsSecureString "New password"
+Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b2c3d4e5f60 |
+    Set-JIMConnectedSystemObjectPassword -Password $password -ExpiryBehaviour NeverExpires
+```
+
+### Notes
+
+- **This is a password-reset primitive.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
+- The password is taken as a `SecureString` so it does not sit in your session's command history in clear text. It is unwrapped only to be sent over TLS.
+- A Connected System that cannot honour the requested expiry behaviour applies what it can and reports the difference in `ExpiryBehaviourWarning`; the password is still set.
+- A rejected password returns an error carrying the system's own reason. A Connected System that could not be reached is reported distinctly, because nothing was established about the password itself and the same request is worth repeating.
+- Routine initial passwords belong on the Synchronisation Rule that provisions the account; see `Set-JIMSyncRuleInitialPassword`.
+
+---
+
 ## See also
 
 - [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the connector space, partitions and containers, and common workflows
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on Connected Systems
-- [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation
+- [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation, including the initial password set on provisioned accounts
 - [Connection](connection.md): establish a session before using these cmdlets

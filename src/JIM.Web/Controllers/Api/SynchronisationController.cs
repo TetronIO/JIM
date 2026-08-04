@@ -444,6 +444,89 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Set the password on a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Writes the password straight to the Connected System. Nothing is staged, retried or stored: there is
+    /// nowhere in JIM to keep a password and no second attempt worth keeping one for. The attempt is recorded as
+    /// an Activity against the object, carrying the outcome and, where the target refused, its verbatim reason.
+    ///
+    /// The password is supplied by the caller. JIM does not generate one here, because doing so would mean
+    /// returning it in a response body, and password values do not go in those.
+    ///
+    /// This is a password-reset primitive: an administrator who can call it can reset any account in this
+    /// connector space, subject only to what the Connected System's own service account is permitted to do.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <param name="request">The password to set, and how to apply it.</param>
+    /// <response code="200">The password was set. The body reports the expiry behaviour actually applied.</response>
+    /// <response code="400">The password was empty, the Connector cannot set passwords, or the Connected System refused the password. The reason is the target's own where there is one.</response>
+    /// <response code="404">No such Connected System, or no such object within it.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    /// <response code="502">The Connected System could not be reached, so it is not known whether the password would be accepted. Try again.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/password", Name = "SetConnectedSystemObjectPassword")]
+    [ProducesResponseType(typeof(SetConnectedSystemObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> SetConnectedSystemObjectPasswordAsync(int connectedSystemId, Guid csoId, [FromBody] SetConnectedSystemObjectPasswordRequest request)
+    {
+        // Deliberately logs the object rather than anything about the password. There is nothing about a
+        // password value that belongs in a log line, including its length.
+        _logger.LogInformation("Setting the password on Connected System Object {CsoId} in Connected System {ConnectedSystemId}", csoId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for a Connected System Object password set");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(ApiErrorResponse.BadRequest("A password is required."));
+
+        var requestedExpiryBehaviour = request.ExpiryBehaviour ?? PasswordExpiryBehaviour.RequireChangeAtNextSignIn;
+        var options = new PasswordSetOptions
+        {
+            ExpiryBehaviour = requestedExpiryBehaviour,
+            EnableAccount = request.EnableAccount
+        };
+
+        PasswordSetResult result;
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            result = apiKey != null
+                ? await _application.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(connectedSystemId, csoId, request.Password, options, apiKey, HttpContext.RequestAborted)
+                : await _application.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(connectedSystemId, csoId, request.Password, options, initiatedBy, HttpContext.RequestAborted);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ApiErrorResponse.NotFound(ex.Message));
+        }
+        catch (NotSupportedException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        if (result.Success)
+            return Ok(SetConnectedSystemObjectPasswordResponse.FromResult(result, requestedExpiryBehaviour));
+
+        var reason = result.ErrorMessage ?? "The Connected System refused the password without saying why.";
+        return result.FailureReason switch
+        {
+            // An account that is not there yet is a 404 like any other missing resource, and is commonly just
+            // replication: the caller's move is to wait and repeat the request, not to change the password.
+            PasswordSetFailureReason.TargetObjectNotFound => NotFound(ApiErrorResponse.NotFound(reason)),
+            // Nothing was established about the password itself, so this must not read as a rejection of it.
+            PasswordSetFailureReason.Transient => StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadGateway(reason)),
+            _ => BadRequest(ApiErrorResponse.BadRequest(reason))
+        };
+    }
+
+    /// <summary>
     /// List the change history for a Connected System Object
     /// </summary>
     /// <remarks>
@@ -1642,7 +1725,7 @@ public class SynchronisationController(
         SynchronisationWorkerTask workerTask;
         if (initiatedBy != null)
         {
-            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown User");
+            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.NameOrId);
         }
         else
         {

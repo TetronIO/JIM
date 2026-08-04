@@ -1,9 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using System.ComponentModel.DataAnnotations.Schema;
 namespace JIM.Models.Staging;
 
 public class ConnectedSystemObject
@@ -37,16 +37,19 @@ public class ConnectedSystemObject
 
     /// <summary>
     /// The attribute that uniquely identifies this object in the Connected System.
-    /// It should be immutable (not change for the lifetime of the object). 
-    /// The Connected System may author it and be made available to JIM after import, or you may specify it at provisioning time, depending on the needs of the Connected System.
-    /// This is a convenience accessor. It's defined as a property on one of the Connected System Object Type attributes. i.e. ConnectedSystemObjectTypeAttribute.IsExternalId
+    /// It should be immutable (not change for the lifetime of the object).
+    /// The Connected System may author it and be made available to JIM after import, or you may specify it at
+    /// provisioning time, depending on the needs of the Connected System.
+    /// This is a convenience accessor. It's defined as a property on one of the Connected System Object Type
+    /// attributes. i.e. ConnectedSystemObjectTypeAttribute.IsExternalId
     /// </summary>
     public int ExternalIdAttributeId { get; set; }
 
     /// <summary>
     /// The attribute that may also identify the object in a Connected System.
-    /// Whether this exists depends on if the Connected System supports secondary external ids or not. 
-    /// For instance, an LDAP system will use the DN for references to other objects, even though this is not a good identifier as it's not immutable.
+    /// Whether this exists depends on if the Connected System supports secondary external ids or not.
+    /// For instance, an LDAP system will use the DN for references to other objects, even though this is not a good
+    /// identifier as it's not immutable.
     /// </summary>
     public int? SecondaryExternalIdAttributeId { get; set; }
 
@@ -190,29 +193,39 @@ public class ConnectedSystemObject
         }
     }
 
+    /// <summary>
+    /// The object's name as the Connected System knows it: the first present value from
+    /// <see cref="ObjectNaming.ConnectedSystemNameAttributes"/>, or null when it carries none of them.
+    /// <para>
+    /// Use this when persisting a name alongside a separately persisted identifier (a snapshot's
+    /// display-name column, a nullable API field). For anything a person reads on screen use
+    /// <see cref="NameOrId"/>, which falls through to an identifier rather than returning null.
+    /// </para>
+    /// </summary>
     [NotMapped]
-    public string? DisplayNameOrId
+    public string? Name
     {
         get
         {
             if (AttributeValues.Count == 0)
                 return null;
 
-            // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are not so standards based
-            // we may have to look at supporting a configurable attribute on the Connected System to use as the label.
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
-            if (av != null && !string.IsNullOrEmpty(av.StringValue))
-                return av.StringValue;
-
-            // no displayName attribute on this object, try the external id
-            var externalId = ExternalIdAttributeValue?.ToStringNoName();
-            if (!string.IsNullOrEmpty(externalId))
-                return externalId;
-
-            // fall back to secondary external id (e.g. DN for LDAP systems)
-            return SecondaryExternalIdAttributeValue?.ToStringNoName();
+            return ObjectNaming.BestRanked(
+                AttributeValues.Select(av => (av.Attribute?.Name, av.StringValue)),
+                ObjectNaming.ConnectedSystemNameRank);
         }
     }
+
+    /// <summary>
+    /// The best human-readable label for this object: its <see cref="Name"/>, else the external id,
+    /// else the secondary external id (the DN, for LDAP systems). Prefer this for display; prefer
+    /// <see cref="Name"/> when the identifier is already being surfaced separately.
+    /// </summary>
+    [NotMapped]
+    public string? NameOrId => ObjectNaming.FirstPresent(
+        Name,
+        ExternalIdAttributeValue?.ToStringNoName(),
+        SecondaryExternalIdAttributeValue?.ToStringNoName());
     #endregion
 
     #region public methods
@@ -221,12 +234,14 @@ public class ConnectedSystemObject
         if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
             throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued Attribute. Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
 
-        // the attribute might have pending changes already, so clear any previous pending changes as we can only accept the last change to an SVA
+        // the attribute might have pending changes already, so clear any previous pending changes as we can only
+        // accept the last change to an SVA
         PendingAttributeValueAdditions.RemoveAll(q => q.Attribute.Id == connectedSystemAttribute.Id);
         PendingAttributeValueRemovals.RemoveAll(q => q.Attribute.Id == connectedSystemAttribute.Id);
 
         // create a new attribute value object for the addition
-        var connectedSystemObjectAttributeValue = new ConnectedSystemObjectAttributeValue {
+        var connectedSystemObjectAttributeValue = new ConnectedSystemObjectAttributeValue
+        {
             Attribute = connectedSystemAttribute
         };
 
@@ -235,7 +250,7 @@ public class ConnectedSystemObject
         var newAttributeValueObject = newAttributeValue as object;
         if (typeof(T) == typeof(string))
             connectedSystemObjectAttributeValue.StringValue = newAttributeValueObject as string;
-        else if (typeof(T) == typeof(int)) 
+        else if (typeof(T) == typeof(int))
             connectedSystemObjectAttributeValue.IntValue = newAttributeValueObject as int?;
         else if (typeof(T) == typeof(DateTime))
             connectedSystemObjectAttributeValue.DateTimeValue = newAttributeValueObject as DateTime?;
@@ -330,10 +345,10 @@ public class ConnectedSystemObject
     {
         return AttributeValues.Where(q => q.Attribute?.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase) == true).ToList();
     }
-    
+
     public override string ToString()
     {
-        return $"{DisplayNameOrId} ({Id})";
+        return $"{NameOrId} ({Id})";
     }
     #endregion
 }

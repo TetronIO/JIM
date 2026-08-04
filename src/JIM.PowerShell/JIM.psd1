@@ -44,6 +44,7 @@
         'Approve-JIMConnectedSystemServerCertificate',
         'Get-JIMConnectorDefinition',
         'Set-JIMConnectedSystemObjectType',
+        'Set-JIMConnectedSystemObjectPassword',
         'Set-JIMConnectedSystemAttribute',
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',
@@ -135,6 +136,7 @@
 
         # Metaverse
         'Get-JIMMetaverseObject',
+        'Set-JIMMetaverseObjectPassword',
         'Get-JIMMetaverseObjectChangeHistory',
         'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
@@ -190,6 +192,12 @@
         'Get-JIMDeletedObject',
         'Get-JIMHistoryCount',
         'Invoke-JIMHistoryCleanup',
+
+        # Configuration Change Previews
+        'New-JIMConfigurationChangePreview',
+        'Get-JIMConfigurationChangePreview',
+        'Get-JIMConfigurationChangePreviewDelta',
+        'Stop-JIMConfigurationChangePreview',
 
         # Worker Tasks
         'Get-JIMWorkerTask',

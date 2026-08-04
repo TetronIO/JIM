@@ -119,8 +119,13 @@ html[lang] {
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
+    /* The inner surface matches --jim-inner-surface above: a surface nested inside another surface has one
+       value in this theme, not two. It was --mud-palette-background (#f3f3f3), the colour of the page the
+       dialog floats above, so a panel inside an elevated dialog was painted the same value as the thing it
+       was elevated over and read as a hole punched through it: twice the step of any other light theme
+       here. */
     --jim-dialog-surface: #ffffff;
-    --jim-dialog-inner-surface: #f3f3f3;
+    --jim-dialog-inner-surface: #f7f7f7;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #0076d3;
