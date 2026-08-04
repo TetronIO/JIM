@@ -185,7 +185,7 @@
                         </div>
                         <MudTable T="ConfigurationChangePreviewGroup" Items="@_groups" Dense="@_dense" Hover="true"
                                   Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm" OnRowClick="OnGroupClicked"
-                                  RowClass="cursor-pointer" Class="@(_dense ? "mt-2 dense-body-only" : "mt-2")">
+                                  RowClass="cursor-pointer" Class="mt-2">
                             <HeaderContent>
                                 <MudTh><MudText Typo="Typo.button">Change</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Population</MudText></MudTh>
@@ -284,7 +284,7 @@
                         <MudTable @ref="_deltasTable" T="ConfigurationChangePreviewDelta" ServerData="LoadDeltasAsync"
                                   Dense="@_dense" Hover="true" Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm"
                                   RowsPerPage="25" Loading="@_deltasLoading" LoadingProgressColor="Color.Primary"
-                                  Class="@(_dense ? "mt-2 dense-body-only jim-preview-deltas" : "mt-2 jim-preview-deltas")">
+                                  Class="mt-2 jim-preview-deltas">
                             <ToolBarContent>
                                 <MudSpacer />
                                 <SearchField Value="@_search" ValueChanged="OnSearchChanged" DebounceInterval="500"

@@ -21,7 +21,7 @@
     <MudButton Variant="Variant.Filled" Color="Color.Primary">Connectors</MudButton>
 </MudButtonGroup>
 
-<MudTable Items="@_headers" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+<MudTable Items="@_headers" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
