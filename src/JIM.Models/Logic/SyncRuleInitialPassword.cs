@@ -74,6 +74,48 @@ public class SyncRuleInitialPassword
     public bool EnableAccount { get; set; } = true;
 
     /// <summary>
+    /// A detached copy of everything <see cref="WouldDeliverTheSameAs"/> compares, for holding what was saved
+    /// while the editor mutates the live instance in place.
+    /// <para>
+    /// The portal needs this to tell an administrator, before they save, whether saving will release the accounts
+    /// parked against this rule. It cannot answer that by comparing the instance with itself, and re-reading the
+    /// saved row on every keystroke to find out would be a query per character typed.
+    /// </para>
+    /// <para>
+    /// Only the delivery settings are copied; the identity and navigation are deliberately left off, because this
+    /// is a value to compare against and never something to persist.
+    /// <c>SyncRuleInitialPasswordComparisonTests</c> fails if a setting is added and not copied here, which would
+    /// otherwise have the portal quietly stop offering the release for that setting.
+    /// </para>
+    /// </summary>
+    public SyncRuleInitialPassword SnapshotDeliverySettings()
+    {
+        return new SyncRuleInitialPassword
+        {
+            Enabled = Enabled,
+            Source = Source,
+            ExpiryBehaviour = ExpiryBehaviour,
+            EnableAccount = EnableAccount,
+            CustomPolicy = new PasswordGenerationPolicy
+            {
+                Style = CustomPolicy.Style,
+                Length = CustomPolicy.Length,
+                MinimumUppercase = CustomPolicy.MinimumUppercase,
+                MinimumLowercase = CustomPolicy.MinimumLowercase,
+                MinimumDigits = CustomPolicy.MinimumDigits,
+                MinimumSymbols = CustomPolicy.MinimumSymbols,
+                PermittedSymbols = CustomPolicy.PermittedSymbols,
+                WordCount = CustomPolicy.WordCount,
+                WordSeparator = CustomPolicy.WordSeparator,
+                WordCapitalisation = CustomPolicy.WordCapitalisation,
+                AppendedDigitCount = CustomPolicy.AppendedDigitCount,
+                AppendSymbol = CustomPolicy.AppendSymbol,
+                ExcludeAmbiguousCharacters = CustomPolicy.ExcludeAmbiguousCharacters
+            }
+        };
+    }
+
+    /// <summary>
     /// Whether two configurations would produce the same delivery: the same password, applied the same way.
     /// <para>
     /// This decides whether saving a Synchronisation Rule releases the accounts parked against it. Parking stops

@@ -1221,6 +1221,63 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ---
 
+## Initial Password
+
+### Get-JIMSyncRuleInitialPassword
+
+Gets whether JIM sets an initial password on the accounts a Synchronisation Rule provisions, how it generates one,
+and which accounts are waiting on a person.
+
+No password value is ever returned. Passwords are generated at the moment they are set and are not stored.
+
+#### Syntax
+
+```powershell
+Get-JIMSyncRuleInitialPassword -Id <int>
+Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
+```
+
+#### Output
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `enabled` | `bool` | Whether JIM sets an initial password on accounts this rule provisions |
+| `source` | `string` | `Discovered` (follow the Connected System's policy) or `Custom` |
+| `customPolicy` | `object` | The generator settings used when `source` is `Custom` |
+| `expiryBehaviour` | `string` | What happens to the password once it is set |
+| `enableAccount` | `bool` | Whether the account is enabled once the password is set |
+| `parkedAccountCount` | `int` | Accounts waiting on a change to these settings |
+| `expiredAccountCount` | `int` | Accounts never given an initial password within its time to live |
+| `parkedReasons` | `array` | One entry per distinct refusal, biggest group first |
+
+Each entry in `parkedReasons` carries `targetMessage` (what the target said, unaltered), `failureReason`,
+`accountCount` and `firstSeenAt`.
+
+The two counts are never summed. Correcting these settings and saving releases the parked accounts, and does
+nothing at all for the expired ones; those need a password set by other means.
+
+#### Examples
+
+```powershell title="See what a target objected to"
+(Get-JIMSyncRuleInitialPassword -Id 5).parkedReasons |
+    Format-Table accountCount, targetMessage -AutoSize
+```
+
+```powershell title="Find every rule with initial password work waiting"
+Get-JIMSyncRule -All | ForEach-Object {
+    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
+    if ($p.parkedAccountCount -or $p.expiredAccountCount) {
+        [PSCustomObject]@{ Rule = $_.name; Parked = $p.parkedAccountCount; Expired = $p.expiredAccountCount }
+    }
+}
+```
+
+### Set-JIMSyncRuleInitialPassword
+
+Replaces the configuration above. Saving a change that alters what would be delivered releases every account
+parked against the rule, and they are attempted again on the Connected System's next export run; saving a change
+that would deliver the same password in the same way releases nothing.
+
 ## See also
 
 - [Synchronisation Rules](../configuration/synchronisation-rules.md): direction, scoping, object matching, projection, and attribute mappings

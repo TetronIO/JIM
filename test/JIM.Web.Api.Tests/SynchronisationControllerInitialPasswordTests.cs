@@ -14,6 +14,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional.DTOs;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
@@ -38,6 +39,7 @@ public class SynchronisationControllerInitialPasswordTests
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
+    private Mock<ISyncRepository> _mockSyncRepo = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
 
@@ -48,6 +50,15 @@ public class SynchronisationControllerInitialPasswordTests
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
+
+        // Passed explicitly: JimApplication.SyncRepo comes from this constructor parameter, not from
+        // IRepository.Sync, so omitting it leaves the initial-password server with a null repository and the
+        // parked-work reporting on this endpoint throws. All three hosts pass it.
+        _mockSyncRepo = new Mock<ISyncRepository>();
+        _mockSyncRepo.Setup(r => r.GetParkedInitialPasswordReasonsAsync(It.IsAny<int>())).ReturnsAsync([]);
+        _mockSyncRepo.Setup(r => r.GetInitialPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync([]);
+
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
@@ -55,7 +66,7 @@ public class SynchronisationControllerInitialPasswordTests
         _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        _application = new JimApplication(_mockRepository.Object);
+        _application = new JimApplication(_mockRepository.Object, syncRepository: _mockSyncRepo.Object);
         _controller = new SynchronisationController(
             new Mock<ILogger<SynchronisationController>>().Object,
             _application,
@@ -254,6 +265,89 @@ public class SynchronisationControllerInitialPasswordTests
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
         _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
     }
+
+    #region Parked work reporting (#1221)
+
+    /// <summary>
+    /// The parked work travels with the settings that caused it. An administrator scripting a check over every
+    /// rule should get the answer from the response they were already fetching, not from a second call per rule.
+    /// </summary>
+    [Test]
+    public async Task GetSyncRuleInitialPassword_WithParkedAccounts_ReportsThemWithTheSettingsAsync()
+    {
+        var rule = BuildProvisioningRule(5);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(rule);
+        _mockSyncRepo.Setup(r => r.GetParkedInitialPasswordReasonsAsync(5)).ReturnsAsync([
+            new InitialPasswordRejection
+            {
+                TargetMessage = "0000052D: CONSTRAINT_ATT_TYPE",
+                FailureReason = PasswordSetFailureReason.PolicyRejection,
+                AccountCount = 11,
+                FirstSeenAt = new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc)
+            },
+            new InitialPasswordRejection { TargetMessage = "Too short.", AccountCount = 3 }
+        ]);
+        _mockSyncRepo.Setup(r => r.GetInitialPasswordAttentionBySyncRuleAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new Dictionary<int, InitialPasswordAttention>
+            {
+                [5] = new InitialPasswordAttention { ParkedCount = 14, ExpiredCount = 2 }
+            });
+
+        var result = await _controller.GetSyncRuleInitialPasswordAsync(5);
+        var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.ParkedAccountCount, Is.EqualTo(14));
+            Assert.That(response.ExpiredAccountCount, Is.EqualTo(2),
+                "never folded into the parked count: correcting these settings does nothing for an expired account");
+            Assert.That(response.ParkedReasons, Has.Count.EqualTo(2));
+            Assert.That(response.ParkedReasons[0].TargetMessage, Is.EqualTo("0000052D: CONSTRAINT_ATT_TYPE"),
+                "verbatim, because the code is what identifies the fault");
+            Assert.That(response.ParkedReasons[0].AccountCount, Is.EqualTo(11));
+            Assert.That(response.ParkedReasons[0].FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+            Assert.That(response.ParkedReasons[0].FirstSeenAt, Is.EqualTo(new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc)));
+        });
+    }
+
+    [Test]
+    public async Task GetSyncRuleInitialPassword_WithNothingParked_ReportsAnEmptyListAndZeroesAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(BuildProvisioningRule(5));
+
+        var result = await _controller.GetSyncRuleInitialPasswordAsync(5);
+        var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.ParkedReasons, Is.Empty);
+            Assert.That(response.ParkedAccountCount, Is.Zero);
+            Assert.That(response.ExpiredAccountCount, Is.Zero);
+        });
+    }
+
+    /// <summary>
+    /// The response carries what a target said about a password and must never carry the password itself.
+    /// </summary>
+    [Test]
+    public async Task GetSyncRuleInitialPassword_NeverReturnsAPasswordAlongsideTheReasonsAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(BuildProvisioningRule(5));
+        _mockSyncRepo.Setup(r => r.GetParkedInitialPasswordReasonsAsync(5)).ReturnsAsync([
+            new InitialPasswordRejection { TargetMessage = "Rejected.", AccountCount = 1 }
+        ]);
+
+        var result = await _controller.GetSyncRuleInitialPasswordAsync(5);
+        var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
+
+        Assert.That(typeof(SyncRuleInitialPasswordResponse).GetProperties(),
+            Has.None.Matches<System.Reflection.PropertyInfo>(p => p.Name.Contains("Password", StringComparison.OrdinalIgnoreCase)
+                                                                  && p.PropertyType == typeof(string)),
+            "no string property on this response may be a password; there is nothing stored to return");
+        Assert.That(response.ParkedReasons, Has.Count.EqualTo(1));
+    }
+
+    #endregion
 
     private static SyncRule BuildProvisioningRule(int id) =>
         new()

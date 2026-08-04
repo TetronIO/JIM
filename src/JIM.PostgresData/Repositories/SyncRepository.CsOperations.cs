@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -850,6 +851,72 @@ public partial class SyncRepository
             (int)PendingInitialPasswordStatus.Expired,
             connectedSystemId,
             asOf);
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // Grouped in the database rather than by materialising the records: this backs a list indicator, and the
+        // only thing the indicator needs is two numbers per row.
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { SyncRuleId = p.SyncRuleId!.Value, p.Status })
+            .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.SyncRuleId, c.Status, c.Count)));
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { p.ConnectedSystemId, p.Status })
+            .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.ConnectedSystemId, c.Status, c.Count)));
+    }
+
+    public async Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        return await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Max(p => p.FailureReason),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Folds one row per (key, status) into one <see cref="InitialPasswordAttention"/> per key. The query groups
+    /// by status because that is what the database can count in one pass; the surfaces want them side by side.
+    /// </summary>
+    private static Dictionary<int, InitialPasswordAttention> ToAttentionByKey(IEnumerable<(int Key, PendingInitialPasswordStatus Status, int Count)> counts)
+    {
+        return counts
+            .GroupBy(c => c.Key)
+            .ToDictionary(g => g.Key, g => new InitialPasswordAttention
+            {
+                ParkedCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Parked).Sum(c => c.Count),
+                ExpiredCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Expired).Sum(c => c.Count)
+            });
     }
 
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
