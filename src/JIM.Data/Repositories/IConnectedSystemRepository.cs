@@ -801,6 +801,17 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets just a Synchronisation Rule's initial-password configuration, or null where it sets no initial
+    /// passwords.
+    /// <para>
+    /// Read on the save path to compare what the rule is about to become against what it was, which decides
+    /// whether the accounts parked against it are released. That comparison only needs these few settings, so it
+    /// does not pay for the whole rule graph on every save.
+    /// </para>
+    /// </summary>
+    public Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId);
+
+    /// <summary>
     /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
     /// <para>
     /// Read on its own rather than through a Connected System navigation, because the caller that needs it (the
