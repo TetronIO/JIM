@@ -105,7 +105,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 **Progress reporting**
 
-21. Long-running operations must narrate their sub-phases via the callback pattern delivered by prerequisite #637 ("Executing query", "Reading rows", "Writing rows"), so operators can distinguish a healthy long-running query from a stuck one.
+21. The connector must declare its steps up-front via `IConnectorPhases` (rendered as sub-steps within the run's Connector step) and narrate them during execution via `IConnectorProgress` ("Executing query", "Reading rows", "Writing rows"), so operators can distinguish a healthy long-running query from a stuck one and see what work remains. Because a database can state result-set sizes cheaply, imports must additionally report the run's expected object count (`ReportExpectedObjectCountAsync`) so the Activity shows a real percentage and time remaining, and report objects read mid-call wherever a single call drains more than one internal page. (Updated 2026-08-02: the step model delivered by #1161 and #1212 supersedes #637's original callback design, which this requirement previously referenced.)
 
 ### Non-Functional Requirements
 
