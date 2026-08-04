@@ -203,6 +203,32 @@ public class SyncEngineDeletionRuleTests
     }
 
     [Test]
+    public void EvaluateMvoDeletionRule_AuthoritativeSource_WithSystemName_ReasonNamesTheSystem()
+    {
+        var mvo = CreateAuthoritativeSourceMvo(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerSystemIds: [5]);
+
+        var decision = _engine.EvaluateMvoDeletionRule(
+            mvo, disconnectingSystemId: 5, remainingConnectedSystemIds: [7, 8, 9], disconnectingSystemName: "APAC LDAP");
+
+        Assert.That(decision.Reason, Does.Contain("APAC LDAP"));
+        Assert.That(decision.Reason, Does.Not.Contain("system ID"));
+    }
+
+    [Test]
+    public void EvaluateMvoDeletionRule_AuthoritativeSource_WithoutSystemName_ReasonFallsBackToId()
+    {
+        var mvo = CreateAuthoritativeSourceMvo(
+            AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            triggerSystemIds: [5]);
+
+        var decision = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 5, remainingConnectedSystemIds: [7, 8, 9]);
+
+        Assert.That(decision.Reason, Does.Contain("system ID 5"));
+    }
+
+    [Test]
     public void EvaluateMvoDeletionRule_SpecificMode_ListedSourceDisconnects_AnotherListedSourceRemains_ReturnsDeleteImmediately()
     {
         var mvo = CreateAuthoritativeSourceMvo(

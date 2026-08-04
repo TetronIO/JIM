@@ -88,11 +88,16 @@ public interface ISyncEngine
     /// <param name="remainingConnectedSystemIds">The Connected System ID of each CSO still joined to the
     /// MVO after disconnection: one entry per CSO, so a system with multiple joined CSOs appears once per
     /// CSO. The remaining CSO count is derived from this collection's size.</param>
+    /// <param name="disconnectingSystemName">
+    /// The name of the disconnecting Connected System, used to make the human-readable deletion
+    /// reason name the system rather than a bare id. When null, the reason falls back to the id.
+    /// </param>
     /// <returns>A decision indicating whether/how to delete the MVO.</returns>
     MvoDeletionDecision EvaluateMvoDeletionRule(
         MetaverseObject mvo,
         int disconnectingSystemId,
-        IReadOnlyCollection<int> remainingConnectedSystemIds);
+        IReadOnlyCollection<int> remainingConnectedSystemIds,
+        string? disconnectingSystemName = null);
 
     /// <summary>
     /// Determines whether a system rejoining an MVO during its deletion grace period should cancel the

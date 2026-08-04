@@ -331,11 +331,16 @@ public abstract class SyncTaskProcessorBase
                             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
                             or ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
                     {
-                        // Fill in MVO display name if it was null at creation time
-                        if (string.IsNullOrEmpty(outcome.TargetEntityDescription)
-                            && !string.IsNullOrEmpty(mvo.DisplayName))
+                        // Fill in the MVO's description if it was blank at creation time. An all-zero
+                        // GUID counts as blank: it is what NameOrId yields before the MVO is persisted,
+                        // so treating it as a real description would leave it on display forever. The
+                        // creation sites write the name only and so no longer produce it, but this is
+                        // the last point at which a description can still be corrected, and it costs a
+                        // string comparison to make the whole class of mistake self-healing.
+                        if (IsBlankOrEmptyGuid(outcome.TargetEntityDescription)
+                            && !string.IsNullOrWhiteSpace(mvo.NameOrId))
                         {
-                            outcome.TargetEntityDescription = mvo.DisplayName;
+                            outcome.TargetEntityDescription = mvo.NameOrId;
                         }
 
                         // Fill in MVO ID if it was null at creation time (newly projected MVOs)
@@ -614,7 +619,11 @@ public abstract class SyncTaskProcessorBase
                         // disconnection (#1086).
                         var mvoRef = connectedSystemObject.MetaverseObject;
                         Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : changeResult.DisconnectedMvoId;
-                        string? mvoDescription = mvoRef?.DisplayName ?? changeResult.DisconnectedMvoDisplayName;
+                        // Name, not NameOrId, for the same reason as the projection path below: on a
+                        // projection the MVO is not persisted yet, so NameOrId's id fallback would write
+                        // an all-zero GUID that the retroactive pass then treats as a real description.
+                        string? mvoDescription = ObjectNaming.FirstPresent(mvoRef?.Name)
+                                                 ?? changeResult.DisconnectedMvoDisplayName;
 
                         // Only put detailCount on AttributeFlow/DisconnectedOutOfScope root outcomes, not on Joined/Projected
                         int? rootDetailCount = outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
@@ -748,7 +757,7 @@ public abstract class SyncTaskProcessorBase
         {
             SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
-                targetEntityDescription: changeResult.DisconnectedMvo.DisplayName,
+                targetEntityDescription: changeResult.DisconnectedMvo.NameOrId,
                 detailCount: clearedAttributeCount);
         }
     }
@@ -826,7 +835,8 @@ public abstract class SyncTaskProcessorBase
 
             // Not joined but has a different JoinType (e.g., Explicit) - this is a regular orphan deletion
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
@@ -845,7 +855,8 @@ public abstract class SyncTaskProcessorBase
             // Note: We still delete the CSO as it's obsolete in the source system,
             // but we don't disconnect from MVO or trigger deletion rules
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
@@ -855,7 +866,7 @@ public abstract class SyncTaskProcessorBase
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
         var mvoId = mvo.Id;
-        var mvoDisplayName = mvo.DisplayName;
+        var mvoDisplayName = mvo.NameOrId;
 
         // Single RPEI for both disconnection and deletion (one-RPEI-per-CSO rule).
         // The ObjectChangeType is Disconnected (the meaningful event); CsoDeleted is recorded
@@ -1029,8 +1040,13 @@ public abstract class SyncTaskProcessorBase
                     detailCount: recallClearedAttributeCount);
             }
 
+            // The id is captured here, before the record is deleted: ActivityRunProfileExecutionItems'
+            // ConnectedSystemObjectId is a foreign key and is nulled with the object, so this outcome is
+            // the only durable statement of which record the run deleted, and the only way to reach its
+            // deletion record afterwards.
             SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
-                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             // Add MVO deletion fate outcome when the deletion rule was triggered. The outcome carries
             // the deleted Metaverse Object's id and display name snapshot (captured before deletion)
@@ -1088,7 +1104,11 @@ public abstract class SyncTaskProcessorBase
     /// </returns>
     protected async Task<(MvoDeletionDecision Decision, string? PolicySnapshotJson)> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, IReadOnlyCollection<int> remainingConnectedSystemIds)
     {
-        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingConnectedSystemIds);
+        // Resolve the disconnecting system's name so the deletion reason names it rather than showing
+        // a bare id. The disconnecting CSO always belongs to the system this task is processing, so its
+        // name is to hand; leave null (id fallback) if that invariant ever fails to hold.
+        var disconnectingSystemName = disconnectingSystemId == _connectedSystem.Id ? _connectedSystem.Name : null;
+        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingConnectedSystemIds, disconnectingSystemName);
 
         // Capture the decision-time policy snapshot (#119) BEFORE applying the decision, so it records
         // the facts the engine evaluated (mode, sources, remaining sources) rather than post-apply state.
@@ -1312,6 +1332,19 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Whether an outcome description carries no real information: blank, or the all-zero GUID that
+    /// <see cref="MetaverseObject.NameOrId"/> produces when asked for a label before the object has
+    /// been persisted and given an id. Both mean "not described yet" and are safe to overwrite.
+    /// </summary>
+    private static bool IsBlankOrEmptyGuid(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description)
+               || string.Equals(description.Trim(), EmptyGuidText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly string EmptyGuidText = Guid.Empty.ToString();
+
+    /// <summary>
     /// Formats a grace period TimeSpan into a human-readable string for outcome detail messages.
     /// </summary>
     private static string FormatGracePeriod(TimeSpan period)
@@ -1513,7 +1546,12 @@ public abstract class SyncTaskProcessorBase
                     // Only store the MVO ID if it's already persisted (non-empty).
                     // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
                     var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
-                    var mvoDescription = mvo.DisplayName;
+                    // Name, not NameOrId. NameOrId falls back to the id, and for a newly projected MVO
+                    // that id is still Guid.Empty here, so the fallback bakes an all-zero GUID into the
+                    // description. Leaving it null lets the retroactive pass above fill it once the name
+                    // has flowed and the real id exists; that pass only fills blanks, so a zero GUID
+                    // written here would survive it and reach the causality view as the Identity's name.
+                    var mvoDescription = ObjectNaming.FirstPresent(mvo.Name);
 
                     // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
                     // Joined/AttributeFlow roots have no single attributable rule here.
@@ -1794,7 +1832,7 @@ public abstract class SyncTaskProcessorBase
                     if (peCsId > 0 && provisionedByCs.TryGetValue(peCsId, out var provisionedParent))
                     {
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1806,7 +1844,7 @@ public abstract class SyncTaskProcessorBase
                         csNameLookup.TryGetValue(peCsId, out var peCsName);
                         peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1817,7 +1855,7 @@ public abstract class SyncTaskProcessorBase
                         csNameLookup.TryGetValue(peCsId, out var peCsName);
                         peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1846,7 +1884,7 @@ public abstract class SyncTaskProcessorBase
                 foreach (var pe in result.PendingExports)
                 {
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
-                        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                        SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
@@ -2437,7 +2475,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                                         ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                        targetEntityDescription: mvo.DisplayName,
+                                        targetEntityDescription: mvo.NameOrId,
                                         detailCount: rpei.AttributeFlowCount);
                                 }
                             }
@@ -3359,7 +3397,7 @@ public abstract class SyncTaskProcessorBase
             if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
             {
                 var nestedOutcome = SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
@@ -3379,7 +3417,7 @@ public abstract class SyncTaskProcessorBase
                 ObjectChangeType = ObjectChangeType.PendingExport,
                 ConnectedSystemObjectId = csoId,
                 PendingExportId = pendingExport.Id,
-                DisplayNameSnapshot = deletedMvo?.DisplayName,
+                DisplayNameSnapshot = deletedMvo?.Name,
                 ExternalIdSnapshot = snapshot?.ExternalId,
                 ObjectTypeSnapshot = snapshot?.TypeName
             };
@@ -3387,7 +3425,7 @@ public abstract class SyncTaskProcessorBase
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var cascadeOutcome = SyncOutcomeBuilder.AddRootOutcome(cascadeRpei,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
                     targetEntityId: pendingExport.Id,
                     targetEntityDescription: targetCsName,
                     detailCount: pendingExport.AttributeValueChanges.Count,
@@ -3444,6 +3482,18 @@ public abstract class SyncTaskProcessorBase
         // collections materialised, so it is cheap even for large-membership group CSOs).
         var csoSnapshots = await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(_deferredRecallRpeisByCsoId.Keys.ToList());
 
+        // Build CS ID -> name lookup once for this flush (same in-memory pattern as the Detailed-mode
+        // Pending Export outcomes above): no database round trip, since _recallExportEvaluationCache's
+        // export rules are already loaded for the whole run and cover every target Connected System, not
+        // just the currently-syncing _connectedSystem (a recall Pending Export can target ANY system that
+        // has an export rule referencing the deleted object, not only the one this sync run is processing).
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
+            ?? new Dictionary<int, string>();
+
         foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
         {
             csoSnapshots.TryGetValue(csoId, out var snapshot);
@@ -3460,10 +3510,15 @@ public abstract class SyncTaskProcessorBase
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
+                // TargetEntityDescription on a PendingExportCreated outcome is contractually the TARGET
+                // Connected System's name (matching every other PendingExportCreated call site), not the
+                // referencing object's own display name (DisplayNameSnapshot is that; kept above for its
+                // own, unrelated purpose of identifying the referencing CSO after it is later deleted).
+                csNameLookup.TryGetValue(stagedPendingExport.ConnectedSystemId, out var targetSystemName);
                 var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(stagedPendingExport),
                     targetEntityId: stagedPendingExport.Id,
-                    targetEntityDescription: recallRpei.DisplayNameSnapshot,
+                    targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
                     detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
@@ -4308,7 +4363,7 @@ public abstract class SyncTaskProcessorBase
                 // Snapshot the MVO's display name BEFORE attribute recall and deletion, so the sync
                 // outcome nodes built later (after the join is broken and possibly after the MVO is
                 // deleted) can still describe the affected Metaverse Object (#1086).
-                var mvoDisplayName = mvo.DisplayName;
+                var mvoDisplayName = mvo.NameOrId;
 
                 // Query the joined Connected System ids BEFORE breaking the join so the list includes all
                 // current connectors, then exclude ONE occurrence of this CSO's system id (the CSO about

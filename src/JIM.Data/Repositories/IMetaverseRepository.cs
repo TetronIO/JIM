@@ -375,6 +375,19 @@ public interface IMetaverseRepository
     /// <param name="changeId">The ID of the MVO change record.</param>
     /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
     Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
+
+    /// <summary>
+    /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.
+    /// This is the inverse of the browsing lookups above: a caller holding a reference to a deleted object
+    /// (a causality view naming the Identity a run deleted) knows that id and nothing about the change
+    /// record, so it cannot reach the record any other way. The FK to the Metaverse Object is nulled when
+    /// the object goes, which is why <see cref="MetaverseObjectChange.DeletedMetaverseObjectId"/> exists and
+    /// is what this matches on.
+    /// </summary>
+    /// <param name="deletedMetaverseObjectId">The id the Metaverse Object had before it was deleted.</param>
+    /// <returns>The Deleted change record, or null when the object was not deleted or predates change tracking.</returns>
+    Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId);
+
     /// <summary>
     /// Returns a paginated set of attribute values for a specific attribute on a Metaverse Object.
     /// Supports server-side search and pagination for large multi-valued attributes.
