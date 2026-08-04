@@ -11,6 +11,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
@@ -1443,6 +1444,58 @@ public class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(parked.Count);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var attention = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value))
+            .GroupBy(p => p.SyncRuleId!.Value)
+            .Select(g => new { SyncRuleId = g.Key, Attention = SummariseAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.SyncRuleId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        var attention = _pendingInitialPasswords.Values
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId))
+            .GroupBy(p => p.ConnectedSystemId)
+            .Select(g => new { ConnectedSystemId = g.Key, Attention = SummariseAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.ConnectedSystemId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        var reasons = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Select(p => p.FailureReason).FirstOrDefault(r => r.HasValue),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToList();
+
+        return Task.FromResult(reasons);
+    }
+
+    private static InitialPasswordAttention SummariseAttention(IEnumerable<PendingInitialPassword> records)
+    {
+        var byStatus = records.ToLookup(p => p.Status);
+        return new InitialPasswordAttention
+        {
+            ParkedCount = byStatus[PendingInitialPasswordStatus.Parked].Count(),
+            ExpiredCount = byStatus[PendingInitialPasswordStatus.Expired].Count()
+        };
     }
 
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
