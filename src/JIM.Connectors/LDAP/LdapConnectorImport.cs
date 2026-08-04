@@ -29,6 +29,21 @@ internal class LdapConnectorImport
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
     private readonly string? _preferredDomainController;
+
+    /// <summary>
+    /// The server this import session's connection was opened against, and a probe for any other, so a
+    /// domain controller discovered from the rootDSE is proven reachable before being pinned (#230 Phase 2).
+    /// </summary>
+    private readonly string _connectedServer;
+
+    private readonly Func<string, bool> _canConnectTo;
+
+    /// <summary>
+    /// Set when a discovered domain controller was rejected as unreachable and so not pinned. Read by
+    /// <see cref="LdapConnector"/> onto the import result, which surfaces it on the Activity; an existing
+    /// warning on the result always wins, being about the import itself rather than about its plumbing.
+    /// </summary>
+    internal string? PinValidationWarning { get; private set; }
     private readonly TimeSpan _searchTimeout;
     private readonly string _placeholderMemberDn;
     private readonly IConnectorProgress _progress;
@@ -52,6 +67,8 @@ internal class LdapConnectorImport
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
         string? preferredDomainController,
+        string connectedServer,
+        Func<string, bool> canConnectTo,
         ILogger logger,
         CancellationToken cancellationToken,
         IConnectorProgress progress)
@@ -64,6 +81,8 @@ internal class LdapConnectorImport
         _paginationTokens = paginationTokens;
         _persistedConnectorData = persistedConnectorData;
         _preferredDomainController = preferredDomainController;
+        _connectedServer = connectedServer;
+        _canConnectTo = canConnectTo;
         _logger = logger;
         _cancellationToken = cancellationToken;
         _progress = progress;
@@ -899,8 +918,11 @@ internal class LdapConnectorImport
         // pin on first-ever connection and re-affirms/self-heals it on every later import. When a Preferred
         // Domain Controller is configured, the setting owns selection, so any pin from a previous
         // configuration is cleared rather than carried forward into the new baseline.
-        rootDse.PinnedDirectoryServer = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
-            rootDse.UseUsnDeltaImport, _preferredDomainController, rootDse.DnsHostName);
+        var pinDecision = LdapConnectorUtilities.ResolvePinnedDirectoryServerForImport(
+            rootDse.UseUsnDeltaImport, _preferredDomainController, rootDse.DnsHostName,
+            _connectedServer, _canConnectTo, _logger);
+        rootDse.PinnedDirectoryServer = pinDecision.PinnedServer;
+        PinValidationWarning = pinDecision.WarningMessage;
 
         _logger.Information("GetRootDseInformation: Directory capabilities detected. DirectoryType={DirectoryType}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}, LastAccesslogTimestamp={AccesslogTs}, InvocationId={InvocationId}, PinnedDirectoryServer={PinnedDirectoryServer}",
             rootDse.DirectoryType, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber, rootDse.LastAccesslogTimestamp ?? "(not set)", rootDse.InvocationId, LogSanitiser.Sanitise(rootDse.PinnedDirectoryServer) ?? "(not set)");
