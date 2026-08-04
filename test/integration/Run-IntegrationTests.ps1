@@ -408,11 +408,16 @@ function Get-SnapshotImageTag {
 
 function Get-SambaBaseBuildHash {
     # Compute expected build hash for the base Samba AD images from the files that affect
-    # them. Must match the hash computed by Build-SambaImages.ps1 (same file list, same order).
+    # them. Must match the hash computed by Build-SambaImages.ps1 (same file list, same order):
+    # this list and that one are the same contract in two places, and a file added to one but not
+    # the other silently disables staleness detection rather than failing.
     $sambaScriptDir = Join-Path $scriptRoot "docker" "samba-ad-prebuilt"
     $filesToHash = @(
         (Join-Path $sambaScriptDir "post-provision.sh"),
-        (Join-Path $sambaScriptDir "start-samba.sh")
+        (Join-Path $sambaScriptDir "start-samba.sh"),
+        # The build script performs the provisioning, so the flags it passes (the container hostname
+        # above all, which Samba bakes into the DC's dNSHostName and TLS certificate) are image content.
+        (Join-Path $sambaScriptDir "Build-SambaImages.ps1")
     )
     $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
     return [System.BitConverter]::ToString(
