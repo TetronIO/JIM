@@ -468,7 +468,7 @@ namespace JIM.Application.Servers
                     {
                         Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} completed. All steps done.", scheduleExecutionId);
 
-                        execution.Status = ScheduleExecutionStatus.Completed;
+                        execution.Status = ScheduleExecutionStatus.Complete;
                         execution.CompletedAt = DateTime.UtcNow;
                         await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
                     }

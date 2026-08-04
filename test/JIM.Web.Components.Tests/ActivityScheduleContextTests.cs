@@ -82,7 +82,7 @@ public class ActivityScheduleContextTests : JimComponentTestContext
         _jim?.Dispose();
     }
 
-    private void ArrangeExecution(int totalSteps = 6, ScheduleExecutionStatus status = ScheduleExecutionStatus.Completed)
+    private void ArrangeExecution(int totalSteps = 6, ScheduleExecutionStatus status = ScheduleExecutionStatus.Complete)
     {
         _mockSchedulingRepository
             .Setup(r => r.GetScheduleExecutionAsync(ExecutionId))
@@ -154,8 +154,9 @@ public class ActivityScheduleContextTests : JimComponentTestContext
     /// <summary>
     /// Every value in the page-width panel is labelled, and the status chip especially: the Summary panel above
     /// it already carries a chip for the Activity's own status, so an unlabelled second chip describing the whole
-    /// run's outcome reads as a contradiction ("Complete" beside "Completed"). The label is what disambiguates
-    /// them.
+    /// run's outcome is ambiguous about which object it describes. Both chips now read "Complete" (the Schedule
+    /// Execution vocabulary was aligned with the Activity vocabulary in #1196), so the label is the only thing
+    /// distinguishing them.
     /// </summary>
     [Test]
     public void ActivityScheduleContext_NotCompact_LabelsEveryFieldIncludingTheStatusChip()
@@ -174,7 +175,7 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             Assert.That(cut.Markup, Does.Contain(StepLabel));
             Assert.That(cut.Markup, Does.Contain(ScheduleExecutionLabel));
             // The run's outcome, which is what the labelled chip has to be readable as.
-            Assert.That(cut.Markup, Does.Contain("Completed"));
+            Assert.That(cut.Markup, Does.Contain("Complete"));
         });
     }
 

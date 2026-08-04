@@ -107,8 +107,14 @@ public enum ScheduleIntervalUnit
 }
 
 /// <summary>
-/// The status of a schedule execution.
+/// The status of a Schedule Execution.
 /// </summary>
+/// <remarks>
+/// Every member name here is a published REST contract: the API serialises enums by name and rejects integers
+/// (<c>JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)</c>, see <c>ApiJsonConfiguration</c>),
+/// so renaming a member breaks every client of the Schedule Execution endpoints and the PowerShell module's
+/// <c>-Status</c> filter. <c>ScheduleExecutionStatusWireContractTests</c> pins the names.
+/// </remarks>
 public enum ScheduleExecutionStatus
 {
     /// <summary>
@@ -122,9 +128,10 @@ public enum ScheduleExecutionStatus
     InProgress = 1,
 
     /// <summary>
-    /// Execution completed successfully.
+    /// Execution finished successfully. Named to match <c>ActivityStatus.Complete</c>: an Activity produced by a
+    /// Schedule shows both statuses side by side, and two spellings of the same outcome read as a contradiction.
     /// </summary>
-    Completed = 2,
+    Complete = 2,
 
     /// <summary>
     /// Execution failed with an error.

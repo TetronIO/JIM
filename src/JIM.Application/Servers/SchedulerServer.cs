@@ -673,7 +673,7 @@ public class SchedulerServer
             // No more waiting steps - execution complete
             Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} completed successfully.", execution.Id);
 
-            freshExecution.Status = ScheduleExecutionStatus.Completed;
+            freshExecution.Status = ScheduleExecutionStatus.Complete;
             freshExecution.CompletedAt = DateTime.UtcNow;
             await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
             return false;

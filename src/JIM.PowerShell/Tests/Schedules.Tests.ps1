@@ -522,6 +522,61 @@ Describe 'Start-JIMSchedule' {
         }
     }
 
+    Context 'Wait terminal-status detection' {
+
+        # The API serialises ScheduleExecutionStatus by name (ApiJsonConfiguration), so the polled
+        # 'status' is a string such as 'InProgress', never an ordinal. -Wait used to test
+        # "$currentExecution.status -ge 2", which PowerShell evaluates as a *string* comparison
+        # against '2' because the left operand types the comparison; every status name sorts above
+        # '2', so the loop broke out on its very first poll and -Wait never waited.
+
+        It 'Keeps polling while the execution is still InProgress' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $executionId = [guid]::NewGuid()
+                $script:pollCount = 0
+
+                Mock Start-Sleep { }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ executionId = $executionId }
+                    }
+
+                    $script:pollCount++
+                    # Two in-flight polls, then a terminal one.
+                    $status = if ($script:pollCount -ge 3) { 'Complete' } else { 'InProgress' }
+                    [PSCustomObject]@{ id = $executionId; status = $status; currentStepIndex = 0; totalSteps = 2 }
+                }
+
+                $result = Start-JIMSchedule -Id ([guid]::NewGuid()) -Wait -Confirm:$false
+
+                $script:pollCount | Should -BeGreaterThan 1
+                $result.status | Should -Be 'Complete'
+            }
+        }
+
+        It 'Stops on a Failed execution rather than waiting for the timeout' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $executionId = [guid]::NewGuid()
+
+                Mock Start-Sleep { }
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'POST') {
+                        return [PSCustomObject]@{ executionId = $executionId }
+                    }
+
+                    [PSCustomObject]@{ id = $executionId; status = 'Failed'; currentStepIndex = 1; totalSteps = 2 }
+                }
+
+                $result = Start-JIMSchedule -Id ([guid]::NewGuid()) -Wait -Confirm:$false
+
+                $result.status | Should -Be 'Failed'
+                Should -Invoke Start-Sleep -Times 0 -Exactly
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -780,9 +835,15 @@ Describe 'Get-JIMScheduleExecution' {
             $validateSet | Should -Not -BeNullOrEmpty
             $validateSet.ValidValues | Should -Contain 'Queued'
             $validateSet.ValidValues | Should -Contain 'InProgress'
-            $validateSet.ValidValues | Should -Contain 'Completed'
+            $validateSet.ValidValues | Should -Contain 'Complete'
             $validateSet.ValidValues | Should -Contain 'Failed'
             $validateSet.ValidValues | Should -Contain 'Cancelled'
+        }
+
+        It 'Should no longer accept the pre-#1196 "Completed" spelling, which the API now rejects' {
+            $param = $command.Parameters['Status']
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet.ValidValues | Should -Not -Contain 'Completed'
         }
 
         It 'Should have an Active switch parameter' {

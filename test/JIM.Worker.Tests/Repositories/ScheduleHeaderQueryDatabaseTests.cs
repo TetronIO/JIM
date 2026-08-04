@@ -94,7 +94,7 @@ public class ScheduleHeaderQueryDatabaseTests
             schedule.Steps.Add(new ScheduleStep { Id = Guid.NewGuid(), ScheduleId = schedule.Id, StepIndex = 0, Name = "First" });
             schedule.Steps.Add(new ScheduleStep { Id = Guid.NewGuid(), ScheduleId = schedule.Id, StepIndex = 1, Name = "Second" });
 
-            schedule.Executions.Add(NewExecution(schedule, ScheduleExecutionStatus.Completed, new DateTime(2026, 2, 1, 3, 0, 0, DateTimeKind.Utc), 1, 2));
+            schedule.Executions.Add(NewExecution(schedule, ScheduleExecutionStatus.Complete, new DateTime(2026, 2, 1, 3, 0, 0, DateTimeKind.Utc), 1, 2));
             schedule.Executions.Add(NewExecution(schedule, ScheduleExecutionStatus.Cancelled, new DateTime(2026, 2, 2, 3, 0, 0, DateTimeKind.Utc), 0, 2));
             schedule.Executions.Add(NewExecution(schedule, ScheduleExecutionStatus.Failed, new DateTime(2026, 2, 3, 3, 0, 0, DateTimeKind.Utc), 1, 2, "Connected System unreachable"));
 

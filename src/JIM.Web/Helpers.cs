@@ -266,7 +266,7 @@ public static class Helpers
     {
         return status switch
         {
-            ScheduleExecutionStatus.Completed => Color.Success,
+            ScheduleExecutionStatus.Complete => Color.Success,
             ScheduleExecutionStatus.InProgress => Color.Primary,
             ScheduleExecutionStatus.Failed => Color.Error,
             ScheduleExecutionStatus.Cancelled => Color.Warning,

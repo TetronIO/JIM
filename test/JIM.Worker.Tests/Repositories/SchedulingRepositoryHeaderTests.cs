@@ -148,7 +148,7 @@ public class SchedulingRepositoryHeaderTests
         var schedule = Schedule("Busy Schedule", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         // Deliberately added out of order, and with the OLDEST execution failing, so a projection that took the
         // first-in-collection execution rather than the newest by QueuedAt would report the wrong outcome.
-        var newest = Execution(schedule, ScheduleExecutionStatus.Completed, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+        var newest = Execution(schedule, ScheduleExecutionStatus.Complete, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
         var oldest = Execution(schedule, ScheduleExecutionStatus.Failed, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         var middle = Execution(schedule, ScheduleExecutionStatus.Cancelled, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
         schedule.Executions.AddRange(new[] { oldest, middle, newest });
@@ -161,7 +161,7 @@ public class SchedulingRepositoryHeaderTests
         Assert.Multiple(() =>
         {
             Assert.That(header.LastExecutionId, Is.EqualTo(newest.Id));
-            Assert.That(header.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Completed));
+            Assert.That(header.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Complete));
         });
     }
 

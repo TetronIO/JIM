@@ -343,7 +343,7 @@ public class SchedulingRepository : ISchedulingRepository
     {
         return await Repository.Database.ScheduleExecutions
             .Where(e => e.ScheduleId == scheduleId &&
-                        e.Status == ScheduleExecutionStatus.Completed &&
+                        e.Status == ScheduleExecutionStatus.Complete &&
                         e.StartedAt < beforeStartedAt)
             .OrderByDescending(e => e.StartedAt)
             .FirstOrDefaultAsync();

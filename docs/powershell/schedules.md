@@ -43,7 +43,7 @@ Alongside the schedule's configuration (`Id`, `Name`, `Description`, `TriggerTyp
 | Property | Type | Description |
 |---|---|---|
 | `LastExecutionId` | `Guid` | The most recent Schedule Execution. Pass it to `Get-JIMScheduleExecution -Id` for the per-step detail. |
-| `LastExecutionStatus` | `String` | How that run ended: `Queued`, `InProgress`, `Completed`, `Failed` or `Cancelled`. |
+| `LastExecutionStatus` | `String` | How that run ended: `Queued`, `InProgress`, `Complete`, `Failed` or `Cancelled`. |
 | `LastExecutionCurrentStepIndex` | `Int32` | The step the run reached, 0-based. Read with `LastExecutionTotalSteps` to see how far a failed run got. |
 | `LastExecutionTotalSteps` | `Int32` | How many steps the run set out to execute. |
 | `LastExecutionCompletedAt` | `DateTime` | When the run finished (UTC). Empty while it is still running. |
@@ -557,7 +557,7 @@ Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] -A
 | `Id` | `Guid` | Yes | ByPropertyName | ById | The unique identifier of the execution. Alias: `ExecutionId`. |
 | `ScheduleId` | `Guid` | No | ByPropertyName | List, Active | Filters executions to a specific schedule. |
 | `InputObject` | `PSCustomObject` | No | ByValue | List, Active | A Schedule object from the pipeline (e.g. from `Get-JIMSchedule`); its `Id` is used to filter executions, equivalent to specifying `-ScheduleId` directly. |
-| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Completed`, `Failed`, `Cancelled`. |
+| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Complete`, `Failed`, `Cancelled`. |
 | `Active` | `Switch` | Yes | No | Active | Returns only currently active executions (queued or in progress). |
 
 #### Output
