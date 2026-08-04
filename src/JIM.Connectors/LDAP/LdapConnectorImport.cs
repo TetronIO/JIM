@@ -274,10 +274,14 @@ internal class LdapConnectorImport
                 throw new CannotPerformDeltaImportException("Previous USN watermark not available. Run a full import first.");
             }
 
-            _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}",
-                _previousRootDse.HighestCommittedUsn);
+            // Held as a local because the watermark is read from inside the lambdas below, and null-state
+            // does not flow across a lambda boundary: the guard above is airtight but invisible there.
+            var previousUsn = _previousRootDse.HighestCommittedUsn.Value;
 
-            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since USN {_previousRootDse.HighestCommittedUsn.Value:N0}...");
+            _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}",
+                previousUsn);
+
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since USN {previousUsn:N0}...");
 
             // For AD, query objects where uSNChanged > previous HighestCommittedUSN
             foreach (var selectedPartition in GetTargetPartitions())
@@ -303,7 +307,7 @@ internal class LdapConnectorImport
 
                         await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching changed {selectedObjectType.Name} objects from {selectedContainer.Name}...");
                         await ReportObjectsReadByAsync(result,
-                            () => GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie));
+                            () => GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, previousUsn, lastRunsCookie));
                     }
                 }
 
@@ -318,7 +322,7 @@ internal class LdapConnectorImport
 
                 await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryDeletions, $"Querying deleted objects in {selectedPartition.Name}...");
                 await ReportObjectsReadByAsync(result,
-                    () => GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value));
+                    () => GetDeletedObjectsUsingUsn(result, selectedPartition, previousUsn));
             }
         }
         else if (_previousRootDse.UseAccesslogDeltaImport)
@@ -366,12 +370,15 @@ internal class LdapConnectorImport
                 throw new CannotPerformDeltaImportException("Previous changelog number not available. Run a full import first.");
             }
 
-            _logger.Debug("GetDeltaImportObjects: Using changelog-based delta import. Previous ChangeNumber: {PreviousChange}",
-                _previousRootDse.LastChangeNumber);
+            // Held as a local for the same reason as the USN watermark above: the lambda cannot see the guard.
+            var previousChangeNumber = _previousRootDse.LastChangeNumber.Value;
 
-            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {_previousRootDse.LastChangeNumber.Value:N0}...");
+            _logger.Debug("GetDeltaImportObjects: Using changelog-based delta import. Previous ChangeNumber: {PreviousChange}",
+                previousChangeNumber);
+
+            await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {previousChangeNumber:N0}...");
             await ReportObjectsReadByAsync(result,
-                () => GetDeltaResultsUsingChangelog(result, _previousRootDse.LastChangeNumber.Value));
+                () => GetDeltaResultsUsingChangelog(result, previousChangeNumber));
         }
 
         return result;

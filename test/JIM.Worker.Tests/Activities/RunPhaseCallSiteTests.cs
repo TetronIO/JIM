@@ -31,7 +31,7 @@ public class RunPhaseCallSiteTests
     private static string ProcessorSource()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var processors = Path.Combine(repositoryRoot, "src", "JIM.Worker", "Processors");
+        var processors = Path.Join(repositoryRoot, "src", "JIM.Worker", "Processors");
         Assert.That(Directory.Exists(processors), Is.True, $"Could not find the worker's processors at '{processors}'.");
 
         return string.Join("\n", Directory.EnumerateFiles(processors, "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
@@ -40,7 +40,7 @@ public class RunPhaseCallSiteTests
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "JIM.sln")))
+        while (directory != null && !File.Exists(Path.Join(directory.FullName, "JIM.sln")))
             directory = directory.Parent;
 
         Assert.That(directory, Is.Not.Null, "Could not locate the repository root from the test assembly's location.");

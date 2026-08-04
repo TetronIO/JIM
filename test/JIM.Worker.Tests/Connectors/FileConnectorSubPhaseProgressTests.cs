@@ -32,7 +32,7 @@ public class FileConnectorSubPhaseProgressTests
         if (!Directory.Exists(_testDirectory))
             Directory.CreateDirectory(_testDirectory);
 
-        _testExportPath = Path.Combine(_testDirectory, $"export_{Guid.NewGuid():N}.csv");
+        _testExportPath = Path.Join(_testDirectory, $"export_{Guid.NewGuid():N}.csv");
         _logger = new LoggerConfiguration().CreateLogger();
     }
 
@@ -276,7 +276,7 @@ public class FileConnectorSubPhaseProgressTests
 
     private string CreateCsvFile(int rowCount)
     {
-        var filePath = Path.Combine(_testDirectory, $"import_{Guid.NewGuid():N}.csv");
+        var filePath = Path.Join(_testDirectory, $"import_{Guid.NewGuid():N}.csv");
         var builder = new StringBuilder();
         builder.AppendLine("Id,Name");
         for (var i = 1; i <= rowCount; i++)
@@ -293,7 +293,7 @@ public class FileConnectorSubPhaseProgressTests
     /// </summary>
     private string CreateCsvFileWithAMultiLineField()
     {
-        var filePath = Path.Combine(_testDirectory, $"import_{Guid.NewGuid():N}.csv");
+        var filePath = Path.Join(_testDirectory, $"import_{Guid.NewGuid():N}.csv");
         File.WriteAllText(filePath, "Id,Name\r\n1,\"User\r\nOne\"\r\n2,User Two\r\n");
         _importFilePaths.Add(filePath);
         return filePath;
