@@ -5,9 +5,10 @@
 <!-- from the external systems. -->
 <!-- Four columns on a 240px pitch centred on the JIM.Connectors boundary -->
 <!-- (90..1070), so the outer chips clear it by 25px on both sides. -->
-<!-- The boundary title is painted after the edges (SVG paints in document -->
-<!-- order) so the Worker's arrows pass behind it, not through it; the -->
-<!-- knockout stroke on .jimdg-hub-title clears the gaps between glyphs. -->
+<!-- The boundary title is painted last (SVG paints in document order) so -->
+<!-- the Worker's arrows and their data packets pass behind it, not over -->
+<!-- it; the knockout stroke on .jimdg-hub-title clears the gaps between -->
+<!-- glyphs. Keep it the final element if you add anything to this file. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
 <!-- Visual language: engineering/DESIGN.md > Diagrams. -->
@@ -75,9 +76,6 @@
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(940,290) rotate(-90)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(940,410) rotate(90)"/>
   </g>
-  <g id="jimdg-cc-boundary-title">
-    <text class="jimdg-hub-title" x="580" y="176">JIM.Connectors</text>
-  </g>
   <g id="jimdg-cc-packets">
     <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="2.2s" begin="0s" repeatCount="indefinite" path="M220,302 L220,398"/>
@@ -99,5 +97,8 @@
       <animateMotion dur="2.2s" begin="-1.7s" repeatCount="indefinite" path="M940,302 L940,398"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="-1.7s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  <g id="jimdg-cc-boundary-title">
+    <text class="jimdg-hub-title" x="580" y="176">JIM.Connectors</text>
   </g>
 </svg>
