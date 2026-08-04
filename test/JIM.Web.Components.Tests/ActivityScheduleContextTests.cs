@@ -16,7 +16,7 @@ using NUnit.Framework;
 namespace JIM.Web.Components.Tests;
 
 /// <summary>
-/// Covers the Activity Schedule context banner (issue #1196, item 2c). The behaviour under test is that an
+/// Covers the Activity Schedule context panel (issue #1196, item 2c). The behaviour under test is that an
 /// Activity produced by a Schedule says so, linking back to the Schedule Execution that produced it, and that
 /// an Activity with no Schedule behind it (or whose Schedule Execution has since been pruned) renders nothing
 /// at all rather than an empty panel.
@@ -30,6 +30,12 @@ public class ActivityScheduleContextTests : JimComponentTestContext
 {
     private static readonly Guid ExecutionId = new("3f6f1d5e-6f2a-4a1e-9d0b-7c6c2f9a1b44");
     private const string ScheduleName = "Nightly Directory Synchronisation";
+
+    /// <summary>
+    /// The heading the page-width panel carries, and the only thing distinguishing it from the compact panel
+    /// section in the rendered markup.
+    /// </summary>
+    private const string PagePanelHeading = "Part of a Schedule";
 
     private Mock<ISchedulingRepository> _mockSchedulingRepository = null!;
     private JimApplication _jim = null!;
@@ -126,7 +132,7 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.ScheduleStepIndex, 2));
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(ScheduleName)));
-        // ScheduleStepIndex is 0-based; the banner is 1-based, so index 2 reads as "step 3 of 6".
+        // ScheduleStepIndex is 0-based; the display is 1-based, so index 2 reads as "step 3 of 6".
         Assert.That(cut.Markup, Does.Contain("step 3 of 6"));
     }
 
@@ -156,8 +162,12 @@ public class ActivityScheduleContextTests : JimComponentTestContext
         Assert.That(cut.Markup, Does.Not.Contain("step"));
     }
 
+    /// <summary>
+    /// The page-width variant is a panel matching the Activity page's other panels, headed "Part of a Schedule",
+    /// and explicitly not an alert: the context is another section of the page, not a notice interrupting it.
+    /// </summary>
     [Test]
-    public void ActivityScheduleContext_NotCompact_RendersTheAlertTreatment()
+    public void ActivityScheduleContext_NotCompact_RendersThePagePanelTreatment()
     {
         ArrangeExecution();
 
@@ -166,8 +176,13 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.ScheduleStepIndex, 2)
             .Add(c => c.Compact, false));
 
-        cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudAlert>(), Is.True));
-        Assert.That(cut.HasComponent<MudPaper>(), Is.False);
+        cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudPaper>(), Is.True));
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.HasComponent<MudAlert>(), Is.False);
+            Assert.That(cut.Markup, Does.Contain(PagePanelHeading));
+            Assert.That(cut.Markup, Does.Contain("View Schedule Execution"));
+        });
     }
 
     [Test]
@@ -181,7 +196,12 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.Compact, true));
 
         cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudPaper>(), Is.True));
-        Assert.That(cut.HasComponent<MudAlert>(), Is.False);
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.HasComponent<MudAlert>(), Is.False);
+            // Both variants are papers now, so the heading is what tells them apart.
+            Assert.That(cut.Markup, Does.Not.Contain(PagePanelHeading));
+        });
     }
 
     [Test]

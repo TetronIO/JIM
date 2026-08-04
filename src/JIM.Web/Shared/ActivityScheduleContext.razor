@@ -32,14 +32,17 @@
     }
     else
     {
-        @* Page-width treatment, for a detail page that has room for a full notice. *@
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Schedule" Class="@Class">
+        @* Page-width treatment: a panel matching the detail page's other panels, so the context reads as another
+           section of the page rather than a notice dropped on top of it. *@
+        <MudPaper Outlined="true" Class="@PanelClass">
+            <MudText Typo="Typo.h5" Class="mb-4">Part of a Schedule</MudText>
             <div class="d-flex align-center flex-wrap gap-2">
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" />
                 <span>@contextText</span>
                 <MudChip T="string" Variant="Variant.Text" Class="ml-0" Color="@statusColour">@statusText</MudChip>
-                <MudLink Href="@href" Color="Color.Inherit">View Schedule Execution</MudLink>
+                <MudLink Href="@href">View Schedule Execution</MudLink>
             </div>
-        </MudAlert>
+        </MudPaper>
     }
 }
 
@@ -58,8 +61,8 @@
     public int? ScheduleStepIndex { get; set; }
 
     /// <summary>
-    /// When false (the default), renders a page-width alert. When true, renders a panel section matching the
-    /// other sections of the Operations History side panel.
+    /// When false (the default), renders a page-width panel matching the detail page's other panels. When true,
+    /// renders a panel section matching the other sections of the Operations History side panel.
     /// </summary>
     [Parameter]
     public bool Compact { get; set; }
@@ -81,6 +84,8 @@
     private Guid? _loadedExecutionId;
 
     private string CompactClass => string.IsNullOrWhiteSpace(Class) ? "pa-3" : $"pa-3 {Class}";
+
+    private string PanelClass => string.IsNullOrWhiteSpace(Class) ? "pa-4" : $"pa-4 {Class}";
 
     protected override async Task OnParametersSetAsync()
     {

@@ -119,10 +119,10 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 An Activity that a Schedule produced carries `ScheduleExecutionId` and `ScheduleStepIndex`; anywhere an Activity is presented, say so and link back to the Schedule Execution that produced it. Use `<ActivityScheduleContext />` rather than hand-rolling it: the duplicated part is the load-and-derive logic (look up the execution, guard the nulls, turn the 0-based step index into the 1-based "step 3 of 6" a person reads, build the href), and the two call sites want different visual treatments.
 
 - It renders **nothing** when `ScheduleExecutionId` is null or the execution has since been pruned, so a call site can place it unconditionally without an `@if` of its own.
-- `Compact="false"` (the default) is a page-width `MudAlert`; `Compact="true"` is a panel section matching the sibling `MudPaper` sections of the Operations History side panel.
-- `Class` is the call site's to set, because only it knows the surrounding geometry. On `ActivityDetail` that is `mt-2 mb-6`, per the "a notice sitting between the breadcrumbs and..." rule under Panel spacing; inside the History panel's `gap-4` flex column it is nothing at all.
+- `Compact="false"` (the default) is a page-width `MudPaper Outlined` panel headed "Part of a Schedule", built to match the detail page's own panels (`Typo.h5` heading, `pa-4`); `Compact="true"` is a panel section matching the sibling `MudPaper` sections of the Operations History side panel. It is deliberately **not** an alert: the context is another section of the page, not a notice interrupting it.
+- `Class` is the call site's to set, because only it knows the surrounding geometry. On `ActivityDetail` it sits directly below the Summary panel, so that is `mt-6` per the Panel spacing rules; inside the History panel's `gap-4` flex column it is nothing at all.
 - The component guards its own lookup on the loaded execution id. Anything that polls (the History tab does) would otherwise query the database on every tick.
-- Do **not** add it to `ActivityRunProfileExecutionItemDetail`: its subject is one object's per-item outcome, it is only ever reached from the Activity page whose banner already carries the context, and Schedule context two levels down is noise.
+- Do **not** add it to `ActivityRunProfileExecutionItemDetail`: its subject is one object's per-item outcome, it is only ever reached from the Activity page whose panel already carries the context, and Schedule context two levels down is noise.
 
 ## Date and time display
 - **Relative** ("2 hours ago"): `dateTime.ToRelativeTime()`, e.g. as the primary text under a tooltip
