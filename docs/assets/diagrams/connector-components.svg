@@ -18,7 +18,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 500" role="img" aria-labelledby="jimdg-cc-title jimdg-cc-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-cc-title">Inside the Connectors library</title>
-  <desc id="jimdg-cc-desc">The JIM.Worker import and export processors invoke the connectors in the JIM.Connectors library. The LDAP Connector reads and writes Directory Services over LDAP and LDAPS; the File Connector reads and writes CSV and flat files, including HR exports; the SCIM 2.0 Connector reads and writes cloud applications that publish a SCIM 2.0 service provider interface. A Database Connector for SQL systems is in development.</desc>
+  <desc id="jimdg-cc-desc">The JIM.Worker import and export processors invoke the connectors in the JIM.Connectors library. The LDAP Connector reads and writes Directory Services over LDAP and LDAPS; the File Connector reads and writes CSV and flat files, including HR exports; the SCIM 2.0 Connector reads and writes cloud applications that publish a SCIM 2.0 service provider interface. The SQL Connector, one connector covering SQL Server, PostgreSQL, MySQL and Oracle, is in development.</desc>
   <g id="jimdg-cc-worker">
     <rect class="jimdg-stage" x="430" y="20" width="300" height="64" rx="8"/>
     <text class="jimdg-stage-label" x="580" y="46">JIM.Worker</text>
@@ -35,8 +35,8 @@
     <text class="jimdg-chip-label" x="460" y="250">File Connector</text>
     <text class="jimdg-chip-sub" x="460" y="270">CSV &amp; flat files</text>
     <rect class="jimdg-chip-planned" x="595" y="220" width="210" height="70" rx="8"/>
-    <text class="jimdg-chip-label-planned" x="700" y="250">Database Connector</text>
-    <text class="jimdg-chip-sub-planned" x="700" y="270">SQL (in development)</text>
+    <text class="jimdg-chip-label-planned" x="700" y="250">SQL Connector</text>
+    <text class="jimdg-chip-sub-planned" x="700" y="270">(in development)</text>
     <rect class="jimdg-chip" x="835" y="220" width="210" height="70" rx="8"/>
     <text class="jimdg-chip-label" x="940" y="250">SCIM 2.0 Connector</text>
     <text class="jimdg-chip-sub" x="940" y="270">SCIM 2.0 · HTTPS</text>

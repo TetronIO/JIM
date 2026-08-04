@@ -1,6 +1,7 @@
 # Initial Password Generation and Delivery on Provisioning
 
-- **Status:** Doing (Phases 1 to 4 complete; Phase 5 next)
+- **Status:** Doing (Phases 1 to 4 complete; Phase 5 part complete; Phases 6 and 7 outstanding)
+- **Note:** The four unbuilt Phase 5 items are tracked as their own issue; see the phase for which is which. The load-bearing one is release-on-configuration-change: without it a parked account never recovers, because parking deliberately stops the retry loop.
 - **Issue:** [#1121](https://github.com/TetronIO/JIM/issues/1121)
 - **Related:** [#1119](https://github.com/TetronIO/JIM/issues/1119) Password Synchronisation, [#1120](https://github.com/TetronIO/JIM/issues/1120) Defensive password filtering, [#618](https://github.com/TetronIO/JIM/issues/618) Email Notifications
 - **UI mockups:** [Initial Password Provisioning: UI Mockups](https://claude.ai/code/artifact/77c228ff-4f9b-48d0-a9b6-1b7b25c833bc) (all seven screens, built against `engineering/DESIGN.md` tokens)
@@ -199,31 +200,33 @@ Credential *delivery* (emailing the password to the user or their manager) is ou
 - **bUnit's `WaitForAssertion` and NUnit 4 do not compose.** `WaitForAssertion` catches the assertion exception and retries, but NUnit records every failed `Assert.That` into the test result as it happens, so a wait whose *first* evaluation fails leaves the test red even after a later evaluation succeeds. It fails with "Multiple failures or warnings in test" listing an assertion that ultimately passed, which reads as a flake rather than a harness mismatch. Use `WaitForState(() => predicate)` and assert once afterwards.
 - **The reveal timeout is a component parameter purely so it can be tested.** Thirty seconds is the shipped value; the tests pass 150 milliseconds. Without the seam the auto-conceal, which is the whole point of offering reveal at all, would have no coverage.
 
-### Phase 5: Rejection handling and administrator feedback loop
+### Phase 5: Rejection handling and administrator feedback loop (part complete)
 
-1. Parked state: a policy rejection parks the unit of work in a visible, non-auto-retrying state carrying the target's verbatim reason. Transient and configuration faults retain normal retry.
-2. Release on configuration change: saving a changed generator configuration on a Synchronisation Rule clears its parked states and retries immediately rather than waiting out a backoff.
-3. Run Profile execution summary reports a policy-rejection count via the existing stat-counter mechanism; the run outcome reflects it without being failed outright.
-4. Synchronisation Rule shows parked count and rejection reason inline, at the point of repair.
-5. Needs-attention indicators on the Synchronisation Rule and Connected System lists.
-6. Time-to-live expiry of a parked item records an explicit expiry outcome; it is never silently removed.
+The state machine landed; the loop that closes it back to a human did not. **As shipped, a parked account stays parked forever**: parking deliberately stops the retry loop, and none of the three surfaces that would tell an administrator about it, or the release that would clear it, exist yet. That is the silent failure the phase was written to prevent, so the outstanding items are not polish.
 
-**Tests:** rejection parks rather than retries; configuration change releases and retries; expiry records its own outcome; run statistics report the count; transient failures still retry.
+1. ✅ Parked state: a policy rejection parks the unit of work in a visible, non-auto-retrying state carrying the target's verbatim reason. Transient and configuration faults retain normal retry. (`PendingInitialPasswordStatus`, `InitialPasswordDeliveryResult`, and the migration; policy rejections and unsupported operations park, everything else retries.)
+2. ❌ Release on configuration change: saving a changed generator configuration on a Synchronisation Rule clears its parked states and retries immediately rather than waiting out a backoff. **The behaviour is described in `PendingInitialPasswordStatus.Parked`'s own documentation but nothing implements it.** This is the item that makes parking recoverable; without it the other three only report a condition that can never clear.
+3. ✅ Run Profile execution summary reports a policy-rejection count via the existing stat-counter mechanism; the run outcome reflects it without being failed outright. (`SyncExportTaskProcessor` reports `ParkedCount` as "N needing attention".)
+4. ❌ Synchronisation Rule shows parked count and rejection reason inline, at the point of repair.
+5. ❌ Needs-attention indicators on the Synchronisation Rule and Connected System lists.
+6. ❌ Time-to-live expiry of a parked item records an explicit expiry outcome; it is never silently removed. The `Expired` state exists on the enum; nothing ever sets it.
+
+**Tests:** rejection parks rather than retries ✅ and transient failures still retry ✅ (`InitialPasswordDeliveryServerTests`); configuration change releases and retries ❌; expiry records its own outcome ❌; run statistics report the count ✅.
 
 ### UI surfaces (delivered across Phases 2, 4 and 5)
 
 Mockups for all seven screens are linked in the header. In build order:
 
-| Screen | Phase | Route |
-|--------|-------|-------|
-| Discovered Password Policy panel, with the Fine-Grained warning | 2 | `/admin/connected-systems/{id}` (Schema) |
-| Initial Password section inheriting the discovered policy | 4 | `/admin/sync-rules/{id}` (Details) |
-| Custom generator settings, random-character style | 4 | `/admin/sync-rules/{id}` (Details) |
-| Word-based style, with live entropy and policy check | 4 | `/admin/sync-rules/{id}` (Details) |
-| Administrator set-password dialog with Generate | 4 | `/metaverse/objects/{id}` |
-| Parked-rejection alert with Save-and-retry | 5 | `/admin/sync-rules/{id}` (Details) |
-| Needs-attention columns on both list views | 5 | `/admin/sync-rules`, `/admin/connected-systems` |
-| Run Profile execution summary rejection statistic | 5 | `/activities/{id}` |
+| Screen | Phase | Route | State |
+|--------|-------|-------|-------|
+| Discovered Password Policy panel, with the Fine-Grained warning | 2 | `/admin/connected-systems/{id}` (Schema) | ✅ |
+| Initial Password section inheriting the discovered policy | 4 | `/admin/sync-rules/{id}` (Details) | ✅ |
+| Custom generator settings, random-character style | 4 | `/admin/sync-rules/{id}` (Details) | ✅ |
+| Word-based style, with live entropy and policy check | 4 | `/admin/sync-rules/{id}` (Details) | ✅ |
+| Administrator set-password dialog with Generate | 4 | `/metaverse/objects/{id}` | ✅ |
+| Parked-rejection alert with Save-and-retry | 5 | `/admin/sync-rules/{id}` (Details) | ❌ |
+| Needs-attention columns on both list views | 5 | `/admin/sync-rules`, `/admin/connected-systems` | ❌ |
+| Run Profile execution summary rejection statistic | 5 | `/activities/{id}` | ✅ |
 
 ### Testing the password channel before relying on it
 
@@ -247,13 +250,17 @@ Most failures never reach that question, though, and those are checkable without
 
 If a live test is ever revisited, the one route that carries its own authorisation is offering to set a password on **the signed-in administrator's own account**, since they are self-evidently entitled to change it. That has its own gap: an administrator using a dedicated admin account outside JIM's lifecycle management may have no Connected System Object to target.
 
-### Phase 6: REST API and PowerShell parity
+### Phase 6: REST API and PowerShell parity (outstanding)
 
 Endpoints and cmdlets for generator configuration, the on-demand generate affordance, discovered-policy read, and parked-item read plus manual release. ID-based routes for writes per the API identifier rules; Pester tests for the cmdlets.
 
-### Phase 7: Documentation and changelog
+❌ None of this has shipped. **Do not read #1204 as having covered it:** that PR delivered surface parity for *setting a password on an object* (`POST .../connector-space/{csoId}/password`, `Set-JIMConnectedSystemObjectPassword`, `Set-JIMMetaverseObjectPassword`), which is a different capability from configuring the generator, reading the discovered policy, or reading and releasing parked items. Every item in this phase remains, and the parked-item read and release depend on Phase 5 item 2 existing first.
+
+### Phase 7: Documentation and changelog (outstanding)
 
 New public documentation page for initial passwords (configuration, policy discovery, what happens on rejection, the security model), LDAP connector reference updates, REST and PowerShell reference updates, `engineering/DEVELOPER_GUIDE.md` for the new component, and a changelog entry.
+
+❌ The initial-passwords page does not exist. #1152 and #1204 documented what they each shipped on existing pages (`docs/configuration/connected-systems.md`, `docs/powershell/connected-systems.md`, `docs/powershell/metaverse.md`) and added their changelog entries, so the gap is the concept-and-how-to page that ties policy discovery, generation, delivery and rejection together, plus the `DEVELOPER_GUIDE.md` component entry.
 
 ## Success Criteria
 

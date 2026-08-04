@@ -90,6 +90,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - **British English (en-GB) for ALL text** - "authorisation", "synchronisation", "behaviour", "colour"
 - **Never use em dashes (`—`)** - use semicolons, commas, colons, or parentheses instead
 - **Proper-case JIM domain entity names** - "Synchronisation Rule", "Connected System", "Metaverse Object", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export" etc. are proper nouns; Title Case them even mid-sentence in UI text and docs, never "synchronisation rule". Always write "Synchronisation Rule" in full; never the "Sync Rule" shorthand (the `SyncRule` code identifier is unaffected)
+- **Connector names may drop the `JIM ` prefix in diagrams and running prose** - the reserved names in `ConnectorConstants` ("JIM LDAP Connector", "JIM SQL Connector", "JIM SCIM 2.0 Client Connector") are what the product surfaces show, but a diagram chip or a sentence reads better as "LDAP Connector" or "SQL Connector", and the prefix earns nothing when every connector carries it. Keep the full name where connectors are listed as products (`docs/connectors/index.md`, `docs/reference/roadmap.md`) and wherever the string must match the connector's actual name. Still Title Case them either way
 - All new source files carry the Tetron copyright header (`.editorconfig` enforces it for `.cs`)
 
 > **Full conventions** (DateTime quirks, raw SQL parameters, exception handling, copyright header table per file type, retrieval-method taxonomy, Razor/MudBlazor UI rules)**:** `src/CLAUDE.md`
@@ -114,6 +115,8 @@ Quick reference:
 > **Full commands, aliases, Docker workflows, dependency policy, troubleshooting:** `.devcontainer/CLAUDE.md`
 
 **Cloud sandbox (Claude Code on the web):** the SessionStart hook (`.claude/hooks/session-start.sh`) provisions the .NET SDK, PowerShell and Docker automatically. Run the stack with `pwsh ./scripts/Start-SandboxStack.ps1` and verify changes at runtime per `engineering/SANDBOX_RUNTIME_VERIFICATION.md`. Never use `jim-build` (Docker image builds) in sandboxes; the light stack is canonical there.
+
+**The sandbox clone is shallow, so git ancestry is not trustworthy there.** `git rev-parse --is-shallow-repository` returns `true` and `.git/shallow` grafts history at a few boundary commits, which means `git merge-base`, `A..B` commit counts and "your branch has diverged" warnings are all computed against truncated history. A `git pull --ff-only` on `main` can therefore refuse with a divergence that does not exist: the commit joining the two fragments was simply never fetched. **Never conclude that commits are missing, unpushed, or at risk from local git output alone** - check the SHA against GitHub first (the MCP `get_commit` tool answers this in one call). `git fetch --unshallow` downloads the full history if ancestry genuinely needs to be reasoned about; `git reset --hard origin/main` on a `main` carrying no local work is the ordinary fix for the refused fast-forward. (Rule added after a session spent investigating 50 "unpushed" commits on `main` that were all ordinary merged PRs, present on GitHub the whole time.)
 
 ## Scripting
 
