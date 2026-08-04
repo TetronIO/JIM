@@ -489,13 +489,13 @@ public class SyncExportTaskProcessor
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
         {
-            completionMessage = $"Preview complete: {result.TotalPendingExports} export(s) would be processed";
+            completionMessage = ExportOutcomeMessage.ForPreview(result.TotalPendingExports);
         }
         else
         {
             var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
-            completionMessage = $"Export complete: {result.SuccessCount} succeeded, {result.FailedCount} failed, {result.DeferredCount} deferred" +
-                throughput.FormatCompletion(processed);
+            completionMessage = ExportOutcomeMessage.ForExport(
+                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed));
         }
 
         await _syncRepo.UpdateActivityAsync(_activity);
