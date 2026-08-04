@@ -295,6 +295,202 @@ public class ActivitiesControllerTests
 
     #endregion
 
+    #region GetActivitiesAsync filter query parameter tests
+
+    // The Activities query supports considerably more filtering than the endpoint used to expose; these cover
+    // every query parameter reaching the application layer intact. Arguments are read back off the mock's
+    // invocation by parameter name rather than asserted through a nineteen-argument Moq expression, which
+    // would be unreadable and would silently pass if the parameter order changed.
+
+    [Test]
+    public async Task GetActivitiesAsync_WithOperationFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            operation: [ActivityTargetOperationType.Execute, ActivityTargetOperationType.Clear]);
+
+        Assert.That(LastActivitiesQueryArguments()["operationFilter"],
+            Is.EquivalentTo(new[] { ActivityTargetOperationType.Execute, ActivityTargetOperationType.Clear }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithOutcomeFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            outcome: [ActivityOutcomeType.Errors]);
+
+        Assert.That(LastActivitiesQueryArguments()["outcomeFilter"], Is.EquivalentTo(new[] { ActivityOutcomeType.Errors }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithStatusFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            status: [ActivityStatus.FailedWithError]);
+
+        Assert.That(LastActivitiesQueryArguments()["statusFilter"], Is.EquivalentTo(new[] { ActivityStatus.FailedWithError }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithInitiatedById_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+        var principalId = Guid.NewGuid();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, initiatedById: principalId);
+
+        Assert.That(LastActivitiesQueryArguments()["initiatedById"], Is.EqualTo(principalId));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithHasChildActivities_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, hasChildActivities: true);
+
+        Assert.That(LastActivitiesQueryArguments()["hasChildActivities"], Is.True);
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithCreatedRange_PassesBothBoundsToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            createdFrom: from, createdTo: to);
+
+        var arguments = LastActivitiesQueryArguments();
+        Assert.Multiple(() =>
+        {
+            Assert.That(arguments["createdFrom"], Is.EqualTo(from));
+            Assert.That(arguments["createdTo"], Is.EqualTo(to));
+        });
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithConnectedSystemFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            connectedSystem: ["Contoso AD", "Fabrikam HR"]);
+
+        Assert.That(LastActivitiesQueryArguments()["connectedSystemFilter"],
+            Is.EquivalentTo(new[] { "Contoso AD", "Fabrikam HR" }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithRunProfileFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            runProfile: ["Full Import"]);
+
+        Assert.That(LastActivitiesQueryArguments()["runProfileFilter"], Is.EquivalentTo(new[] { "Full Import" }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithInitiatedBy_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, initiatedBy: "alice");
+
+        Assert.That(LastActivitiesQueryArguments()["initiatedByFilter"], Is.EqualTo("alice"));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithScheduledOnly_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, scheduledOnly: false);
+
+        Assert.That(LastActivitiesQueryArguments()["initiatedBySchedule"], Is.False);
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithScheduleIdFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+        var scheduleId = Guid.NewGuid();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, scheduleId: [scheduleId]);
+
+        Assert.That(LastActivitiesQueryArguments()["scheduleFilter"], Is.EquivalentTo(new[] { scheduleId }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithNoFilters_PassesNoneOfThemToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 });
+
+        var arguments = LastActivitiesQueryArguments();
+        Assert.Multiple(() =>
+        {
+            Assert.That(arguments["operationFilter"], Is.Null);
+            Assert.That(arguments["outcomeFilter"], Is.Null);
+            Assert.That(arguments["statusFilter"], Is.Null);
+            Assert.That(arguments["initiatedById"], Is.Null);
+            Assert.That(arguments["hasChildActivities"], Is.Null);
+            Assert.That(arguments["createdFrom"], Is.Null);
+            Assert.That(arguments["createdTo"], Is.Null);
+            Assert.That(arguments["connectedSystemFilter"], Is.Null);
+            Assert.That(arguments["runProfileFilter"], Is.Null);
+            Assert.That(arguments["initiatedByFilter"], Is.Null);
+            Assert.That(arguments["initiatedBySchedule"], Is.Null);
+            Assert.That(arguments["scheduleFilter"], Is.Null);
+        });
+    }
+
+    /// <summary>
+    /// Answers any Activities query with an empty page, so a test can assert on what the controller asked
+    /// for rather than on what came back.
+    /// </summary>
+    private void SetupAnyActivitiesQuery()
+    {
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>(),
+                It.IsAny<IEnumerable<ActivityInitiatorType>?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<IEnumerable<string>?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(),
+                It.IsAny<bool?>(), It.IsAny<IEnumerable<Guid>?>()))
+            .ReturnsAsync(new PagedResultSet<Activity>
+            {
+                Results = new List<Activity>(),
+                TotalResults = 0,
+                CurrentPage = 1,
+                PageSize = 20
+            });
+    }
+
+    /// <summary>
+    /// The arguments the most recent Activities query received, keyed by parameter name.
+    /// </summary>
+    private IReadOnlyDictionary<string, object?> LastActivitiesQueryArguments()
+    {
+        var invocation = _mockActivityRepo.Invocations
+            .Last(i => i.Method.Name == nameof(IActivityRepository.GetActivitiesAsync));
+
+        return invocation.Method.GetParameters()
+            .Select((parameter, index) => (parameter.Name!, Argument: (object?)invocation.Arguments[index]))
+            .ToDictionary(x => x.Item1, x => x.Argument);
+    }
+
+    #endregion
+
     #region GetActivityAsync tests
 
     [Test]

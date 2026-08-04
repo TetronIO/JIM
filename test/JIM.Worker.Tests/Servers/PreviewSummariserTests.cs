@@ -263,4 +263,138 @@ public class PreviewSummariserTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => _ = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 0));
     }
+
+    #region Pattern detection (Phase 4b)
+
+    [Test]
+    public void BuildGroups_ValuePairGroup_CarriesThePatternItsValuesDescribe()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        summariser.Add(Delta("bob@contoso.com", "bob@fabrikam.com"));
+        summariser.Add(Delta("bob@contoso.com", "bob@fabrikam.com"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        Assert.That(groups[0].PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
+    }
+
+    [Test]
+    public void BuildGroups_ValuePairGroup_LabelsItsKeptDeltasToo()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        summariser.Add(Delta("bob@contoso.com", "bob@fabrikam.com"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups[0].Deltas.Select(d => d.PatternKey),
+            Is.All.EqualTo(PreviewPatternKeys.EmailDomainChanged));
+    }
+
+    [Test]
+    public void BuildGroups_CollapsedGroupWhereEveryDeltaSharesAPattern_NamesIt()
+    {
+        // The case the detectors exist for: too many distinct domain pairs to name individually, but every one of
+        // them is the same kind of change, and that is the sentence an administrator needs.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 2);
+        for (var i = 0; i < 6; i++)
+            summariser.Add(Delta($"user{i}@contoso.com", $"user{i}@fabrikam.com"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1), "the guard should have collapsed these back to the attribute level");
+        Assert.Multiple(() =>
+        {
+            Assert.That(groups[0].OldValue, Is.Null);
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(6));
+            Assert.That(groups[0].PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
+        });
+    }
+
+    [Test]
+    public void BuildGroups_CollapsedGroupWhoseDeltasDisagree_NamesNoPattern()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 2);
+        for (var i = 0; i < 5; i++)
+            summariser.Add(Delta($"user{i}@contoso.com", $"user{i}@fabrikam.com"));
+        summariser.Add(Delta("bsmith", "svc-bsmith"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups[0].PatternKey, Is.Null,
+            "five in six is not a pattern; a group labelled 'domain changed' must mean every object in it");
+    }
+
+    [Test]
+    public void BuildGroups_CollapsedGroupWhereOneDeltaMatchesNothing_NamesNoPattern()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 2);
+        for (var i = 0; i < 5; i++)
+            summariser.Add(Delta($"user{i}@contoso.com", $"user{i}@fabrikam.com"));
+        summariser.Add(Delta("Sales", "Marketing"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups[0].PatternKey, Is.Null,
+            "an unrecognised delta is a disagreement, not an abstention");
+    }
+
+    [Test]
+    public void BuildGroups_CollapsedGroupThatDisagreedEarly_StillCountsEveryDelta()
+    {
+        // Consensus is abandoned as soon as it breaks, which is also when detection stops being worth running.
+        // Whatever that short-circuit does, it must not touch the count.
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 1);
+        summariser.Add(Delta("bob@contoso.com", "bob@fabrikam.com"));
+        summariser.Add(Delta("Sales", "Marketing"));
+        for (var i = 0; i < 20; i++)
+            summariser.Add(Delta($"user{i}", $"svc-user{i}"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.That(groups, Has.Count.EqualTo(1));
+        Assert.Multiple(() =>
+        {
+            Assert.That(groups[0].ObjectCount, Is.EqualTo(22));
+            Assert.That(groups[0].PatternKey, Is.Null);
+            Assert.That(summariser.TotalDeltas, Is.EqualTo(22));
+        });
+    }
+
+    [Test]
+    public void BuildGroups_CollapsedGroupOfMixedPatterns_StillLabelsEachKeptDeltaIndividually()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null, maximumValuePairsPerGroup: 1);
+        summariser.Add(Delta("bob@contoso.com", "bob@fabrikam.com"));
+        summariser.Add(Delta("bsmith", "svc-bsmith"));
+        summariser.Add(Delta("Sales", "Marketing"));
+
+        var deltas = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems).SelectMany(g => g.Deltas).ToList();
+
+        Assert.That(deltas, Has.Count.EqualTo(3));
+        Assert.Multiple(() =>
+        {
+            Assert.That(deltas.Count(d => d.PatternKey == PreviewPatternKeys.EmailDomainChanged), Is.EqualTo(1));
+            Assert.That(deltas.Count(d => d.PatternKey == PreviewPatternKeys.PrefixAdded), Is.EqualTo(1));
+            Assert.That(deltas.Count(d => d.PatternKey == null), Is.EqualTo(1),
+                "the group cannot be labelled, but the rows behind it still can be, and that is where the drill-down looks");
+        });
+    }
+
+    [Test]
+    public void BuildGroups_DeltasWithNoRecognisablePattern_LeaveTheKeyUnset()
+    {
+        var summariser = new PreviewSummariser(maximumDeltasPerGroup: null);
+        summariser.Add(Delta("2026-09-01", "2026-10-15"));
+
+        var groups = summariser.BuildGroups(Guid.CreateVersion7(), NoConnectedSystems);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(groups[0].PatternKey, Is.Null);
+            Assert.That(groups[0].Deltas.First().PatternKey, Is.Null);
+        });
+    }
+
+    #endregion
 }

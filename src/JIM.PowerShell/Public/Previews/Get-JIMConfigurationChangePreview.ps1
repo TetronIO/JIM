@@ -33,9 +33,12 @@ function Get-JIMConfigurationChangePreview {
 
     .EXAMPLE
         $preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
-        $preview.Groups | Format-Table TransitionType, MetaverseObjectTypeName, AttributeName, ObjectCount
+        $preview.Groups | Format-Table TransitionType, MetaverseObjectTypeName, AttributeName, PatternKey, ObjectCount
 
-        Shows the summary groups behind the counts.
+        Shows the summary groups behind the counts. PatternKey names what kind of change a group describes
+        (EmailDomainChanged, ContainerChanged, CasingChanged, PrefixAdded, PrefixRemoved, SuffixAdded,
+        SuffixRemoved), and is empty where no pattern was recognised or where the group's objects did not all
+        share one.
 
     .LINK
         New-JIMConfigurationChangePreview
