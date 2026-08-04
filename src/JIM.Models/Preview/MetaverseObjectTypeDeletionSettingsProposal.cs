@@ -40,4 +40,29 @@ public record MetaverseObjectTypeDeletionSettingsProposal(
     /// </summary>
     public MetaverseObjectDeletionSettings ToSettings() =>
         new(DeletionRule, DeletionGracePeriod);
+
+    /// <summary>
+    /// Whether <paramref name="other"/> proposes the same settings as this one. What decides whether a preview an
+    /// administrator is looking at still answers the question they are about to ask; an editor compares what is on
+    /// the form against what the visible preview was run for, and labels the preview stale when they diverge.
+    ///
+    /// Not the record's own equality, for two reasons. The trigger list is compared by reference by the generated
+    /// <c>Equals</c>, so an editor rebuilding the proposal on every render would report a change that never
+    /// happened; and the sources are a set, so the order they were selected in is not a configuration change.
+    /// A null and a zero grace period are the same period as far as deletion is concerned, and compare equal here
+    /// for the same reason the adapter treats an edit between them as no change at all.
+    /// </summary>
+    public bool DescribesSameSettingsAs(MetaverseObjectTypeDeletionSettingsProposal? other)
+    {
+        if (other is null)
+            return false;
+
+        return DeletionRule == other.DeletionRule &&
+               NormaliseGracePeriod(DeletionGracePeriod) == NormaliseGracePeriod(other.DeletionGracePeriod) &&
+               DeletionTriggerMode == other.DeletionTriggerMode &&
+               DeletionTriggerConnectedSystemIds.Order().SequenceEqual(other.DeletionTriggerConnectedSystemIds.Order());
+    }
+
+    private static TimeSpan NormaliseGracePeriod(TimeSpan? gracePeriod) =>
+        gracePeriod is { } grace && grace > TimeSpan.Zero ? grace : TimeSpan.Zero;
 }

@@ -63,6 +63,12 @@ function Set-JIMMetaverseObjectType {
         Optional reason for the change, recorded on the audit Activity and shown in the object's
         configuration change history.
 
+    .PARAMETER PreviewActivityId
+        The Configuration Change Preview read before making this change, if any. Pass the ActivityId
+        returned by New-JIMConfigurationChangePreview and the update's own Activity records the link, so
+        the audit answers not only what changed but what the caller was told it would do. Optional: a
+        preview is an affordance, not a precondition.
+
     .PARAMETER PassThru
         If specified, returns the updated Object Type object.
 
@@ -111,10 +117,17 @@ function Set-JIMMetaverseObjectType {
 
         Clears the Object Type's icon (passing '' is equivalent).
 
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
+        Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
+
+        Applies the change that was previewed, recording which preview informed it.
+
     .LINK
         Get-JIMMetaverseObjectType
         Remove-JIMMetaverseObjectType
         Get-JIMMetaverseObject
+        New-JIMConfigurationChangePreview
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
@@ -157,6 +170,9 @@ function Set-JIMMetaverseObjectType {
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
+
+        [Parameter()]
+        [guid]$PreviewActivityId,
 
         [switch]$PassThru
     )
@@ -229,6 +245,12 @@ function Set-JIMMetaverseObjectType {
 
         if ($ChangeReason) {
             $body.changeReason = $ChangeReason
+        }
+
+        # Set after the "no updates specified" guard above deliberately: a preview link on its own is not
+        # a change, and recording one against an update that changes nothing would be a false audit entry.
+        if ($PSBoundParameters.ContainsKey('PreviewActivityId')) {
+            $body.previewActivityId = $PreviewActivityId
         }
 
         $displayName = $Name ?? "ID $Id"
