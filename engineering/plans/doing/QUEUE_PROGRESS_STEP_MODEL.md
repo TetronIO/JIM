@@ -172,7 +172,7 @@ Prerequisite for everything else, and the issue calls it out explicitly.
 
 Deliberately no tooltips on the cell's rail: a segment is a few pixels wide, so eight of them are eight poor hover targets, and the approved mock-up has none. The labelled rail is one click away on the Activity.
 
-### Phase 4: The Schedule Execution group header
+### Phase 4: The Schedule Execution group header ✅
 
 - `ScheduleStepReading` (JIM.Models): group `WorkerTaskHeader`s by `ScheduleStepIndex`, derive each step's aggregate status, and for a parallel step return status-ordered wedge proportions.
 - New `ScheduleStepRail.razor` consuming it; P3 markers rendered as a `conic-gradient` built from the proportions.
@@ -180,6 +180,33 @@ Deliberately no tooltips on the cell's rail: a segment is a few pixels wide, so 
 - Tests: **the wedge-ordering rule gets its own unit test** (failed first from twelve o'clock, then completed, running, pending) at 2, 3, 6 and 12 tasks. It is the rule that makes P3 work at scale and the one most likely to be "simplified" later by someone who does not know why it is there.
 
 **Done when:** a Schedule with a parallel step showing one failed and one succeeded task renders a two-tone marker with the failure at twelve o'clock.
+
+#### Corrections to this plan's original shape
+
+**The first bullet was wrong, and would have produced a rail that shrinks as the Schedule progresses.** A Worker Task is deleted the moment its work finishes, so the queue only ever holds outstanding work. Grouping `WorkerTaskHeader`s by `ScheduleStepIndex` can therefore never show a completed step, never show a failed one, and reports "step 1 of 3" for a five-step Schedule that is two steps in. It also cannot show the case the divided marker was chosen for: a parallel step where one task has failed and the other is still running is, by then, one live task and one deleted one.
+
+The steps a Schedule has already run survive only as Activities, which is how `SchedulerServer.CheckAndAdvanceExecutionAsync` already decides whether a step is done. Phase 4 therefore reads both records:
+
+- `ScheduleStepObservation` (JIM.Models) carries whichever of the two exist for one task, plus its `ActivityId` so a caller holding both can tell they are the same task; counting one task twice would put a phantom wedge in a parallel step.
+- `ActivityRepository.GetScheduleStepOutcomesAsync` projects the Activities of every execution in the queue in one batched query, rather than one per execution, because the queue re-reads on every progress notification.
+- `ScheduleStepReading.FromQueue` merges the two, discarding outcomes whose Activity the queue already holds.
+
+**`ScheduleExecution.TotalSteps` had to be fixed first, in its own stack layer (PR #1231).** `CurrentStepIndex` counts step *groups*; `TotalSteps` was set from `schedule.Steps.Count`, the number of step *rows*. Any Schedule with a parallel step therefore reported a total it could never reach, and the field is on the REST DTOs today. The rail needs it because a step group can leave no record at all (a step type that queues no task and writes no Activity is passed straight through), so a rail assembled purely from what it can see would still shorten mid-run.
+
+**The step names come from the records, not from the Schedule.** `ScheduleStep` rows would have needed a Connected System and Run Profile lookup per step, and the Schedule can be edited while an execution of it is running. A queued task's name and a finished task's Activity together name every step that exists, and both are formatted the same way so a step reads identically either side of its task being deleted.
+
+#### Found by driving the page, not by the tests
+
+Every one of these passed the full suite first.
+
+1. **The step number disappeared exactly when it mattered.** `CurrentStepNumber` was derived by finding the first step whose status was Running. A step group holding a failure alongside a task still running aggregates to *failed*, so no step read as running and the header fell back to counting tasks: "6 tasks across 5 steps" at the moment an administrator most needs to know which step they are looking at. The position is recorded on the execution; it is now read from there rather than inferred.
+2. **A pending parallel step looked like work already done.** Filling its wedges with the pending grey drew a solid 16px disc, heavier than the outlined marker used for a pending single step. Empty wedges inside the marker's own ring make the two states match.
+3. **The step names did not sit under their markers.** Markers are spaced from the first to the last, so on a three-step rail they land at 0%, 50% and 100%; equal-share labels centre at 17%, 50% and 83%. On a short rail that put the last name nearer its neighbour's marker than its own. Half a share to each end label, aligned outwards, anchors every name to its marker (measured: within 3px across a 5-step and a 3-step rail).
+4. **No animation in the group header, deliberately.** The worker activity bar directly above it shimmers while tasks are processing, and the mock-up's own note flagged the two competing. The running marker's halo is static.
+
+Contrast measured on the running page against the composited group-header background, both themes: pending marker and leg 3.28:1 light and 4.30:1 dark (WCAG 1.4.11 wants 3:1), completed 5.03:1 and above, step names 7.14:1 and 5.40:1 as text.
+
+Runtime-verified against a real Schedule with a parallel step group, executed on the full stack: `TotalSteps` recorded 3 for its four step rows, and the rail rendered its parallel step as one divided marker while naming the two sequential steps individually, which is only possible if the Activity projection ran and deduplicated against the queue's own tasks.
 
 ### Phase 5: Surface parity (REST + PowerShell)
 

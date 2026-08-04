@@ -110,6 +110,8 @@ public class TaskingRepository : ITaskingRepository
                 ScheduleExecutionId = workerTask.ScheduleExecutionId,
                 ScheduleExecutionName = workerTask.ScheduleExecution?.ScheduleName,
                 ScheduleStepIndex = workerTask.ScheduleStepIndex,
+                ScheduleTotalSteps = workerTask.ScheduleExecution?.TotalSteps,
+                ScheduleCurrentStepIndex = workerTask.ScheduleExecution?.CurrentStepIndex,
                 Steps = workerTask.Activity != null && stepsByActivity.TryGetValue(workerTask.Activity.Id, out var steps) ? steps : null
             });
         }
