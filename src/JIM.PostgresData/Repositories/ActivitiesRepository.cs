@@ -90,6 +90,31 @@ public class ActivityRepository : IActivityRepository
         var syncOutcomes = items.SelectMany(i => i.SyncOutcomes).ToList();
         await ActivityStatCounterWriter.UpsertDeltasAsync(
             Repository.Database, ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(items, syncOutcomes));
+
+        // Drain any causal edges buffered on these items (#1223). This path is EF-based and the buffer is
+        // deliberately unmapped, so AddRange above does not reach the edges; without this, every edge written
+        // by a caller that persists through here (Metaverse Object Housekeeping, which is where grace-period
+        // deletions and their cascades happen) would be dropped with nothing failing. Ids are resolved here for
+        // the same reason the bulk path resolves them at flush time: neither the item nor the outcome has one
+        // until it is persisted.
+        var edges = new List<CausalEdge>();
+        foreach (var item in items.Where(i => i.CausalEdges.Count > 0))
+        {
+            foreach (var edge in item.CausalEdges)
+                edge.ResolveTransientReferences(item.Id);
+
+            edges.AddRange(item.CausalEdges);
+        }
+
+        if (edges.Count == 0)
+            return;
+
+        Repository.Database.CausalEdges.AddRange(edges);
+        await Repository.Database.SaveChangesAsync();
+
+        // Emptied once written, matching the bulk path: an item re-persisted later must not duplicate them.
+        foreach (var item in items.Where(i => i.CausalEdges.Count > 0))
+            item.CausalEdges.Clear();
     }
 
     public async Task UpdateActivityAsync(Activity activity)

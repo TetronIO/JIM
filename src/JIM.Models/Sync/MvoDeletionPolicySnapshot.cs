@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -62,6 +63,17 @@ public class MvoDeletionPolicySnapshot
     /// accurate after the grace period is reconfigured (#119).
     /// </summary>
     public DateTime? DeletionEligibleDate { get; set; }
+
+    /// <summary>
+    /// Why the rule decided to delete, as the machine-readable code causal edge cohorts group on (#1223).
+    /// </summary>
+    /// <remarks>
+    /// Recorded here because this snapshot is the only part of the decision that survives to a grace-period
+    /// deletion: housekeeping deletes the object in a later Activity, long after the deciding run has ended,
+    /// and would otherwise have nothing but the human-readable reason sentence to attribute the cascade with.
+    /// Cohorts must never group on prose (see <see cref="CausalReasonCode"/>).
+    /// </remarks>
+    public CausalReasonCode ReasonCode { get; set; }
 
     /// <summary>
     /// The Connected System whose disconnection triggered the evaluation.

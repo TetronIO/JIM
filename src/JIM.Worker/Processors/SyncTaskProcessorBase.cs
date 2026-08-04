@@ -1192,6 +1192,9 @@ public abstract class SyncTaskProcessorBase
             GracePeriod = type.DeletionGracePeriod,
             TriggeringSystemId = disconnectingSystemId,
             TriggeringSystemName = await ResolveConnectedSystemNameAsync(disconnectingSystemId),
+            // Carried so a grace-period deletion, executed by housekeeping in a later Activity, can still
+            // attribute the cascade it causes to the reason this run decided on (#1223).
+            ReasonCode = decision.ReasonCode,
             // Record when the deletion becomes due, so surfaces can answer "when?" without deriving it
             // from the disconnection time and a grace period that may since have been reconfigured (#119).
             DeletionEligibleDate = decision.Fate == MvoDeletionFate.DeletionScheduled && decision.GracePeriod.HasValue

@@ -62,13 +62,7 @@ public partial class SyncRepository
         foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
         {
             foreach (var edge in rpei.CausalEdges)
-            {
-                if (edge.Id == Guid.Empty)
-                    edge.Id = Guid.NewGuid();
-                edge.EffectRunProfileExecutionItemId = rpei.Id;
-                if (edge.EffectSyncOutcome != null)
-                    edge.EffectSyncOutcomeId = edge.EffectSyncOutcome.Id;
-            }
+                edge.ResolveTransientReferences(rpei.Id);
 
             allEdges.AddRange(rpei.CausalEdges);
         }

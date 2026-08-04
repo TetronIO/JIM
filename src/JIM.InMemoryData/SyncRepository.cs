@@ -1628,11 +1628,7 @@ public class SyncRepository : ISyncRepository
                 continue;
 
             foreach (var edge in rpei.CausalEdges)
-            {
-                edge.EffectRunProfileExecutionItemId = rpei.Id;
-                if (edge.EffectSyncOutcome != null)
-                    edge.EffectSyncOutcomeId = edge.EffectSyncOutcome.Id;
-            }
+                edge.ResolveTransientReferences(rpei.Id);
 
             RecordCausalEdges(rpei.CausalEdges);
             rpei.CausalEdges.Clear();

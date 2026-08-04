@@ -14,6 +14,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -755,6 +756,12 @@ public class Worker : BackgroundService
                 mvosToDelete.Select(m => m.Id).ToList());
             var deletedMvoIds = new List<Guid>();
 
+            // What each deletion will be recorded as having caused (#1223). Housekeeping is the grace-period
+            // path, and it runs in its own Activity long after the run that scheduled the deletion, so nothing
+            // else connects the removals below to the objects whose deletion caused them. Populated as each
+            // object is deleted, so the cause carries the very execution item and outcome recording it.
+            var deletionCauses = new Dictionary<Guid, CausalCause>();
+
             // One export evaluation cache for the batch, so per-MVO deletion evaluation (issue #655)
             // and reference recall staging do not re-load Synchronisation Rules for every object.
             // Source system 0: deletions must consider export rules to every system.
@@ -802,12 +809,17 @@ public class Worker : BackgroundService
                         DeletionPolicySnapshotJson = mvo.DeletionPolicySnapshotJson
                     };
                     var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
+                    // The decision-time snapshot is the only surviving record of WHY this object is being
+                    // deleted: the deciding run ended in a previous Activity, and only the snapshot rode across
+                    // on the object. Cohorts group on the code it carries, never on the reason sentence.
+                    var policySnapshot = MvoDeletionPolicySnapshot.FromJson(mvo.DeletionPolicySnapshotJson);
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                     {
                         var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
                             targetEntityDescription: mvo.NameOrId);
+                        deletionCauses[mvo.Id] = BuildDeletionCause(mvo, policySnapshot, deletionItem, mvoDeletedOutcome);
 
                         // Deletion cascade (#1044): record each delete Pending Exports this deletion staged as a
                         // consequence of it, so the item reads as action and consequences: MVO Deleted, then one
@@ -825,10 +837,20 @@ public class Worker : BackgroundService
                     {
                         // Outcome tracking is off, so there is no deletion outcome to hang the exports off. They
                         // are still staged work an administrator must see: record one execution item each.
-                        executionItems.AddRange(reportableDeleteExports
-                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.NameOrId, mvo.Type?.Name,
-                                csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
-                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
+                        // With no outcome tree to express it, the deprovisioning's cause is recorded as an edge
+                        // instead; this is the standalone case that edge type exists for (#1223).
+                        var deprovisionCause = BuildDeletionCause(mvo, policySnapshot, rpei: null, outcome: null);
+                        deletionCauses[mvo.Id] = deprovisionCause;
+                        foreach (var pendingExport in reportableDeleteExports)
+                        {
+                            var deprovisionItem = BuildPendingExportExecutionItem(pendingExport, mvo.NameOrId, mvo.Type?.Name,
+                                csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
+                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+                            deprovisionItem.CausalEdges.Add(deprovisionCause.ToEdge(
+                                CausalEdgeType.MetaverseObjectDeletionCausedDeprovision,
+                                deprovisionItem.SyncOutcomes.FirstOrDefault()));
+                            executionItems.Add(deprovisionItem);
+                        }
                     }
 
                     executionItems.Add(deletionItem);
@@ -866,13 +888,41 @@ public class Worker : BackgroundService
 
                 // Fold the staged recall exports into Activity reporting: one execution item per staged
                 // Pending Export with a PendingExportCreated outcome, mirroring the sync-run recall reporting.
-                executionItems.AddRange(recallResult.StagedPendingExports
-                    .Select(pe => BuildPendingExportExecutionItem(
-                        pe,
-                        ResolveReferencingObjectDisplayName(pe, recallResult),
+                // Which deleted objects each referencing object lost, from the recall context captured before
+                // deletion nulled the reference foreign keys. This is the only record of the linkage, and the
+                // recall item belongs to the referencing group rather than to anything deleted, so without the
+                // edges below the group's removal reads as having no cause whatsoever (#1223).
+                var deletedMvoIdSet = deletedMvoIds.ToHashSet();
+                var causesByReferencingMvoId = recallContext.Candidates
+                    .Where(c => deletedMvoIdSet.Contains(c.ReferencedMetaverseObjectId))
+                    .GroupBy(c => c.ReferencingMetaverseObjectId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(c => c.ReferencedMetaverseObjectId).Distinct()
+                            .Select(id => deletionCauses.GetValueOrDefault(id))
+                            .Where(cause => cause != null)
+                            .Select(cause => cause!)
+                            .ToList());
+
+                foreach (var pendingExport in recallResult.StagedPendingExports)
+                {
+                    var recallItem = BuildPendingExportExecutionItem(
+                        pendingExport,
+                        ResolveReferencingObjectDisplayName(pendingExport, recallResult),
                         objectTypeSnapshot: null,
-                        csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
-                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
+                        csNameLookup.GetValueOrDefault(pendingExport.ConnectedSystemId),
+                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled);
+
+                    if (pendingExport.SourceMetaverseObjectId.HasValue
+                        && causesByReferencingMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out var causes))
+                    {
+                        var effectOutcome = recallItem.SyncOutcomes.FirstOrDefault();
+                        foreach (var cause in causes)
+                            recallItem.CausalEdges.Add(cause.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
+                    }
+
+                    executionItems.Add(recallItem);
+                }
             }
 
             if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -894,6 +944,40 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Error during Metaverse Object housekeeping batch");
             await jim.Activities.FailActivityWithErrorAsync(activity, ex);
         }
+    }
+
+    /// <summary>
+    /// Describes a housekeeping deletion as the cause of whatever it goes on to trigger (#1223), so a removal
+    /// recorded against a different object can still name the object whose deletion caused it.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object being deleted. Read for its name and the triggering system
+    /// recorded on it when the deletion was scheduled.</param>
+    /// <param name="policySnapshot">The decision-time policy snapshot carried across from the run that
+    /// scheduled the deletion, and the only surviving source of the reason code. Null on objects scheduled
+    /// before snapshots were captured, or whose snapshot no longer parses, in which case the cause is recorded
+    /// without a reason: an unattributed cause is still far better than none.</param>
+    /// <param name="rpei">The execution item recording the deletion, where one carries a deletion outcome.</param>
+    /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where outcome tracking recorded one.</param>
+    private static CausalCause BuildDeletionCause(
+        MetaverseObject mvo,
+        MvoDeletionPolicySnapshot? policySnapshot,
+        ActivityRunProfileExecutionItem? rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? outcome)
+    {
+        return new CausalCause
+        {
+            RunProfileExecutionItem = rpei,
+            SyncOutcome = outcome,
+            MetaverseObjectId = mvo.Id,
+            // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
+            // "<guid> was deleted" for an unnamed object.
+            DisplayName = mvo.Name,
+            ReasonCode = policySnapshot?.ReasonCode ?? CausalReasonCode.NotSet,
+            // Prefer the snapshot's triggering system: it is the decision-time fact, whereas the object's own
+            // marker fields are cleared by a cancelled deletion and re-set by a later one.
+            ConnectedSystemId = policySnapshot?.TriggeringSystemId ?? mvo.DeletionTriggeredBySystemId,
+            ConnectedSystemName = policySnapshot?.TriggeringSystemName ?? mvo.DeletionTriggeredBySystemName
+        };
     }
 
     /// <summary>

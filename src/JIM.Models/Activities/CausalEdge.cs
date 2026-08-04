@@ -88,6 +88,26 @@ public class CausalEdge
     public Guid? CauseSyncOutcomeId { get; set; }
 
     /// <summary>
+    /// Transient reference to the Run Profile Execution Item recording the cause, resolved into
+    /// <see cref="CauseRunProfileExecutionItemId"/> when the edge is persisted. Never persisted itself.
+    /// </summary>
+    [NotMapped]
+    public ActivityRunProfileExecutionItem? CauseRunProfileExecutionItem { get; set; }
+
+    /// <summary>
+    /// Transient reference to the outcome node recording the cause, resolved into
+    /// <see cref="CauseSyncOutcomeId"/> when the edge is persisted. Never persisted itself.
+    /// </summary>
+    /// <remarks>
+    /// The cause side needs this for the same reason the effect side does, and for one case in particular:
+    /// where cause and effect are persisted in the <b>same</b> batch (Metaverse Object Housekeeping deletes an
+    /// object and records the removals it caused in one Activity), the causing outcome has no id either when
+    /// the edge is built. Resolving eagerly there would silently store no cause at all.
+    /// </remarks>
+    [NotMapped]
+    public ActivityRunProfileExecutionItemSyncOutcome? CauseSyncOutcome { get; set; }
+
+    /// <summary>
     /// The Metaverse Object that was the cause, when the cause is best identified by object rather
     /// than by event (a deletion cascade names the deleted object). Not a foreign key: the object is
     /// routinely already gone by the time anyone reads the edge, which is the point.
@@ -148,4 +168,38 @@ public class CausalEdge
     /// timestamp lives on the record the cause side points at, and may be long purged.
     /// </summary>
     public DateTime Created { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Resolves every transient reference this edge holds into the id column beside it, and stamps the effect
+    /// item's id. Called by each persistence path immediately before writing, once ids exist.
+    /// </summary>
+    /// <remarks>
+    /// None of the four ids an edge points at exists when a seam creates the edge: Run Profile Execution Items
+    /// and sync outcomes are both assigned ids as they are persisted. Every path that writes edges must
+    /// therefore call this, and there is more than one such path (the sync engine's bulk flush and the EF-based
+    /// path used by Metaverse Object Housekeeping). Keeping the resolution here rather than in each of them is
+    /// what stops the two drifting: a path that resolved three of the four would store an edge that looks
+    /// complete and silently names no cause.
+    ///
+    /// An id of <c>Guid.Empty</c> behind a reference means the record was never persisted, which is not
+    /// something anyone can navigate to; those store null rather than a link that resolves to nothing.
+    /// Existing ids are left alone, so an edge whose cause was persisted in an earlier run is untouched.
+    /// </remarks>
+    /// <param name="effectRunProfileExecutionItemId">The id of the item this edge was buffered on.</param>
+    public void ResolveTransientReferences(Guid effectRunProfileExecutionItemId)
+    {
+        if (Id == Guid.Empty)
+            Id = Guid.NewGuid();
+
+        EffectRunProfileExecutionItemId = effectRunProfileExecutionItemId;
+
+        if (EffectSyncOutcome != null && EffectSyncOutcome.Id != Guid.Empty)
+            EffectSyncOutcomeId = EffectSyncOutcome.Id;
+
+        if (CauseRunProfileExecutionItem != null && CauseRunProfileExecutionItem.Id != Guid.Empty)
+            CauseRunProfileExecutionItemId = CauseRunProfileExecutionItem.Id;
+
+        if (CauseSyncOutcome != null && CauseSyncOutcome.Id != Guid.Empty)
+            CauseSyncOutcomeId = CauseSyncOutcome.Id;
+    }
 }

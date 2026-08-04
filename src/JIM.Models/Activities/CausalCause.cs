@@ -13,10 +13,11 @@ namespace JIM.Models.Activities;
 /// earlier pages. So the causing side is captured where it is known and carried forward.
 ///
 /// It carries object <b>references</b> rather than ids for the two run-scoped records, because neither has an
-/// id when the cause is captured: a Run Profile Execution Item is assigned one by the flush, and a sync outcome
-/// likewise. Reading them through the reference at edge-creation time gets the assigned values, exactly as the
-/// effect side does. Everything else is a snapshot scalar, which is the point: a cause must still read
-/// correctly after the object, the Connected System or the Run Profile Execution Item recording it is gone.
+/// id when the cause is captured: a Run Profile Execution Item is assigned one as it is persisted, and a sync
+/// outcome likewise. The references are handed straight to the edge, which resolves all four of its ids
+/// together at persistence time, so the case where cause and effect are persisted in the same batch works like
+/// any other. Everything else is a snapshot scalar, which is the point: a cause must still read correctly after
+/// the object, the Connected System or the Run Profile Execution Item recording it is gone.
 /// </remarks>
 public class CausalCause
 {
@@ -72,8 +73,8 @@ public class CausalCause
     public string? SyncRuleName { get; init; }
 
     /// <summary>
-    /// Builds the edge recording that this cause produced <paramref name="effectOutcome"/>, resolving the
-    /// run-scoped ids through the references held since capture.
+    /// Builds the edge recording that this cause produced <paramref name="effectOutcome"/>, handing the
+    /// run-scoped references on for the persistence path to resolve.
     /// </summary>
     /// <param name="edgeType">Which cascade seam the pair sits on.</param>
     /// <param name="effectOutcome">The outcome node the effect was recorded as, where there is one. The edge
@@ -83,12 +84,11 @@ public class CausalCause
         return new CausalEdge
         {
             EffectSyncOutcome = effectOutcome,
-            // An id of Guid.Empty means the causing item was never flushed, which is not a cause anyone can
-            // navigate to; store null rather than a reference that resolves to nothing.
-            CauseRunProfileExecutionItemId = RunProfileExecutionItem != null && RunProfileExecutionItem.Id != Guid.Empty
-                ? RunProfileExecutionItem.Id
-                : null,
-            CauseSyncOutcomeId = SyncOutcome != null && SyncOutcome.Id != Guid.Empty ? SyncOutcome.Id : null,
+            // Handed over as references, not ids. Where cause and effect are persisted in the same batch the
+            // causing records have no ids yet either; every persistence path resolves all four together via
+            // CausalEdge.ResolveTransientReferences once they do.
+            CauseRunProfileExecutionItem = RunProfileExecutionItem,
+            CauseSyncOutcome = SyncOutcome,
             CauseMetaverseObjectId = MetaverseObjectId,
             CauseConnectedSystemObjectId = ConnectedSystemObjectId,
             CauseDisplayName = DisplayName,

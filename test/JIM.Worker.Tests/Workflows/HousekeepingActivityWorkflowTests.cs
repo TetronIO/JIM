@@ -192,6 +192,59 @@ public class HousekeepingActivityWorkflowTests
     }
 
     /// <summary>
+    /// Causal provenance (#1223): the group's recall item must record which deleted object caused its removal.
+    ///
+    /// This is the grace-period path, and it is the case with no other answer available. Housekeeping runs in
+    /// its own Activity, minutes or weeks after the run that scheduled the deletion; the removal is recorded
+    /// against the referencing group, not against anything deleted; and deletion has already nulled the
+    /// reference foreign keys that connected them. Without the edge, an administrator looking at "Team Alpha
+    /// lost a member" has nothing at all to go on, which is the exact defect the feature exists to fix.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoReferencedByGroup_RecordsWhatCausedTheRecallAsync()
+    {
+        var (memberMvo, memberDn) = SeedEligibleMemberWithTargetCso("Lena Leaver");
+        // The decision-time snapshot rides across from the run that scheduled the deletion, and is the only
+        // surviving source of the reason and the system that triggered it.
+        memberMvo.DeletionPolicySnapshotJson = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            TriggeringSystemId = 9,
+            TriggeringSystemName = "Yellowstone APAC"
+        }.ToJson();
+        var groupMvo = SeedGroupMvoReferencing("Team Alpha", memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberMvo.Id, memberDn);
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([memberMvo]);
+
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var recallRpei = _persistedRpeis.Single(r => r.ActivityId == activity.Id
+            && r.ObjectChangeType == ObjectChangeType.PendingExport
+            && r.ConnectedSystemObjectId == groupTargetCso.Id);
+
+        var edge = recallRpei.CausalEdges.SingleOrDefault();
+        Assert.That(edge, Is.Not.Null,
+            "the group's removal item is the only record of the change and nothing on it says why; the edge is what supplies the cause");
+        Assert.Multiple(() =>
+        {
+            Assert.That(edge!.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval));
+            Assert.That(edge!.CauseMetaverseObjectId, Is.EqualTo(memberMvo.Id));
+            Assert.That(edge!.CauseDisplayName, Is.EqualTo("Lena Leaver"),
+                "the deleted object is already gone, so the chain can only name it from the snapshot");
+            Assert.That(edge!.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected),
+                "the reason comes from the decision-time snapshot; the deciding run ended in a previous Activity");
+            Assert.That(edge!.ConnectedSystemId, Is.EqualTo(9));
+            Assert.That(edge!.ConnectedSystemName, Is.EqualTo("Yellowstone APAC"));
+            Assert.That(edge!.CauseSyncOutcome, Is.Not.Null,
+                "the cause must point at the deletion outcome recorded in this same batch, not just at the object");
+        });
+    }
+
+    /// <summary>
     /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
     /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
     /// That export deprovisions a real account, so it must be recorded on the housekeeping Activity as a consequence

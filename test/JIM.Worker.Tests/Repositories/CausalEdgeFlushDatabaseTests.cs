@@ -175,6 +175,71 @@ public class CausalEdgeFlushDatabaseTests
             "the buffer hands edges to the flush; leaving them behind would duplicate them on any later flush of the same RPEI");
     }
 
+    /// <summary>
+    /// The EF-based persistence path, which is what Metaverse Object Housekeeping uses. It is a separate path
+    /// from the sync engine's bulk flush, and the edge buffer is deliberately unmapped, so <c>AddRange</c> does
+    /// not reach the edges: without an explicit drain here, every edge written by the grace-period deletion
+    /// path would be dropped with nothing failing anywhere.
+    ///
+    /// This is also the only path where cause and effect are persisted in the <b>same</b> batch, so it is the
+    /// one that proves the cause-side references resolve. Housekeeping deletes an object and records the
+    /// removals that deletion caused in one Activity; the causing outcome has no id when the edge is built, so
+    /// an implementation that resolved the cause eagerly would store an edge naming no cause at all.
+    /// </summary>
+    [Test]
+    public async Task CreateActivityRunProfileExecutionItemsAsync_ItemCarryingAnEdge_WritesItAndResolvesBothSidesAsync()
+    {
+        var activityId = await SeedActivityAsync();
+
+        var causeItem = NewRpei(activityId);
+        var causeOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+        };
+        causeItem.SyncOutcomes.Add(causeOutcome);
+
+        var effectItem = NewRpei(activityId);
+        var effectOutcome = new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+        };
+        effectItem.SyncOutcomes.Add(effectOutcome);
+        effectItem.CausalEdges.Add(new CausalCause
+        {
+            RunProfileExecutionItem = causeItem,
+            SyncOutcome = causeOutcome,
+            MetaverseObjectId = Guid.NewGuid(),
+            DisplayName = "Lena Leaver",
+            ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
+            ConnectedSystemId = 9,
+            ConnectedSystemName = "Yellowstone APAC"
+        }.ToEdge(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval, effectOutcome));
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Activity.CreateActivityRunProfileExecutionItemsAsync([causeItem, effectItem]);
+        }
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.CausalEdges.AsNoTracking().SingleOrDefaultAsync();
+
+        Assert.That(persisted, Is.Not.Null,
+            "the EF path must drain the edge buffer too; the buffer is unmapped, so AddRange cannot reach it");
+        Assert.Multiple(() =>
+        {
+            Assert.That(persisted!.EffectRunProfileExecutionItemId, Is.EqualTo(effectItem.Id));
+            Assert.That(persisted!.EffectSyncOutcomeId, Is.EqualTo(effectOutcome.Id));
+            Assert.That(persisted!.CauseRunProfileExecutionItemId, Is.EqualTo(causeItem.Id),
+                "the causing item was persisted in this same batch, so its id existed only after the save");
+            Assert.That(persisted!.CauseSyncOutcomeId, Is.EqualTo(causeOutcome.Id),
+                "an implementation resolving the cause eagerly would have stored null here and named no cause");
+            Assert.That(persisted!.CauseDisplayName, Is.EqualTo("Lena Leaver"));
+            Assert.That(persisted!.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected));
+        });
+        Assert.That(effectItem.CausalEdges, Is.Empty, "the buffer is emptied once written on this path too");
+    }
+
     private static CausalEdge NewEdge()
     {
         return new CausalEdge
