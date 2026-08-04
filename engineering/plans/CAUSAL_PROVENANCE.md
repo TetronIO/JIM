@@ -111,6 +111,19 @@ A cohort of one is the degenerate case and renders as a plain hop, which is why 
 
 Edge writes join the existing RPEI flush transaction, never a new one, so an edge can never exist without the effect it describes.
 
+**Two constraints found while implementing, which this phase's design has to accommodate:**
+
+1. **Sync outcome ids do not exist when the outcome is created.** `SyncOutcomeBuilder.AddRootOutcome` and `AddChildOutcome` return an outcome with `Id == Guid.Empty`; ids are assigned at flush time by `FlattenSyncOutcomes` in `SyncRepository.RpeiOperations.cs`. An edge therefore cannot be given its `EffectSyncOutcomeId` at the seam. Carry a transient reference to the outcome object on the edge and resolve the id at flush time, immediately after the outcomes are inserted. This is exactly the pattern the flush already uses for `ConnectedSystemObjectChangeId`, so it needs no new concept:
+   ```csharp
+   foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
+       outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
+   ```
+   The transient reference must be `[NotMapped]`, or EF will try to make it a second relationship to the outcome table.
+
+2. **The RPEI flush has two paths, and both need the edge insert.** A small batch takes a single-connection transactional path; a large batch takes a parallel COPY path whose partitions have already committed by the time stat counters are written ("Not transactional with the COPY partitions"). Wiring only the small-batch path would silently drop every edge on exactly the large cascades this feature exists to explain, and no test that runs under the batch threshold would notice. Cover both, and add a test that crosses the threshold.
+
+Given both, edges are passed explicitly into `BulkInsertRpeisAsync` alongside the RPEIs rather than being accumulated in repository state, so the flush owns the ordering and the transaction and the seams stay declarative.
+
 | Seam | Where |
 |---|---|
 | Scope loss to disconnect | `SyncTaskProcessorBase`, the `DisconnectedOutOfScope` path |
