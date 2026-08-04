@@ -168,6 +168,63 @@ public class ConnectedSystemObjectTypeTagPersistenceDatabaseTests
             "A deleted object type must take its classification tags with it.");
     }
 
+    [Test]
+    public async Task DeleteConnectedSystemAsync_AlsoDeletesItsObjectTypesClassificationsAsync()
+    {
+        // Deleting a Connected System runs a hand-written sequence of raw SQL deletes, which bypasses EF's own
+        // cascade handling: whether the tags go depends on the foreign key having a real database-level
+        // ON DELETE CASCADE, so it is asserted rather than assumed. Left behind, they would be rows referencing a
+        // system that no longer exists.
+        var systemId = await SeedAsync();
+
+        var detachedSystem = await LoadDetachedAsync(systemId);
+        detachedSystem.ObjectTypes!.Single().Tags =
+        [
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural }
+        ];
+        await SaveSchemaAsync(detachedSystem);
+
+        await using (var deleteContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(deleteContext);
+            await repository.ConnectedSystems.DeleteConnectedSystemAsync(systemId, deleteChangeHistory: true);
+        }
+
+        await using var verify = NewContext();
+        Assert.Multiple(async () =>
+        {
+            Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False);
+            Assert.That(await verify.ConnectedSystemObjectTypeTags.CountAsync(), Is.Zero,
+                "Deleting a Connected System must take its object types' classifications with it.");
+        });
+    }
+
+    [Test]
+    public async Task FactoryReset_AlsoDeletesObjectTypeClassificationsAsync()
+    {
+        // The reset wipes customer data with TRUNCATE ... CASCADE over a hand-maintained table list. The tags table
+        // is not in that list, so it is only wiped if PostgreSQL follows the foreign key from the truncated
+        // ConnectedSystems chain to it; surviving rows would be customer data left behind by a factory reset.
+        var systemId = await SeedAsync();
+
+        var detachedSystem = await LoadDetachedAsync(systemId);
+        detachedSystem.ObjectTypes!.Single().Tags =
+        [
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindAuxiliary }
+        ];
+        await SaveSchemaAsync(detachedSystem);
+
+        await using (var resetContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(resetContext);
+            await repository.System.ResetSystemAsync(includeAdministrators: true);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConnectedSystemObjectTypeTags.CountAsync(), Is.Zero,
+            "A factory reset must remove object type classifications along with the rest of the customer's data.");
+    }
+
     /// <summary>
     /// Loads the Connected System in its own scope and lets that scope go, so what the caller holds is detached,
     /// exactly as the portal does.
