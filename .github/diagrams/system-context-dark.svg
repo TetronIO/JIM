@@ -174,5 +174,9 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
       <animateMotion dur="3s" begin="-1.5s" repeatCount="indefinite" path="M450,384 L140,516"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.5s" repeatCount="indefinite"/>
     </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-0.75s" repeatCount="indefinite" path="M709,384 L1021,516"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-0.75s" repeatCount="indefinite"/>
+    </circle>
   </g>
 </svg>
