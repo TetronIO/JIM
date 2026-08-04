@@ -423,6 +423,22 @@ public class Activity
     /// </summary>
     public int? ScheduleStepIndex { get; set; }
 
+    /// <summary>
+    /// If a Schedule produced this activity, the Schedule's id is recorded here. This is a denormalised copy taken
+    /// when the activity is created, deliberately carrying no foreign key or navigation: Schedule -> ScheduleExecution
+    /// cascades on delete, so resolving the Schedule through the execution at query time would silently blank the
+    /// attribution out for every historical activity the moment the Schedule was deleted, on a permanent audit record.
+    /// This is NOT <see cref="ScheduleId"/>, which is the configuration-change target column for Schedules.
+    /// </summary>
+    public Guid? ScheduledByScheduleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the producing Schedule's name at the time this activity was created, taken for the same
+    /// durability reason as <see cref="ScheduledByScheduleId"/> (and mirroring ScheduleExecution.ScheduleName),
+    /// so history still reads correctly after the Schedule is renamed or deleted.
+    /// </summary>
+    public string? ScheduledByScheduleName { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // history retention cleanup stats (for HistoryRetentionCleanup activities)
     // -----------------------------------------------------------------------------------------------------------------

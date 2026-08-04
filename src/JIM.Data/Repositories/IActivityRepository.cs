@@ -67,7 +67,9 @@ public interface IActivityRepository
         string? initiatedByFilter = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool? hasChildActivities = null);
+        bool? hasChildActivities = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null);
 
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 

@@ -49,9 +49,30 @@ Set per step. By default, a failing step halts the schedule. Turn this on for st
 
 ## Executions
 
-Each schedule run produces a **schedule execution** record with per-step progress. Active and historical executions can be listed, retrieved, and (for active ones) cancelled.
+Each schedule run produces a **Schedule Execution** record with per-step progress. Active and historical executions can be listed, retrieved, and (for active ones) cancelled.
 
-A schedule execution typically appears as a parent activity with one child activity per step; this lets you walk down a schedule's execution tree from a single high-level record into the per-step detail.
+A Schedule Execution typically appears as a parent activity with one child activity per step; this lets you walk down a schedule's execution tree from a single high-level record into the per-step detail.
+
+### Seeing how a run ended
+
+The Schedules list shows each schedule's last run and, beside it, how that run *ended*. A run that stopped on a failure names the step it stopped on, so you can tell at a glance whether last night's schedule did what it was supposed to. A schedule that has never run says so.
+
+Expanding a schedule's row lists its recent executions with their outcomes, how long each took, and how many of its steps ran. This is the quickest way to tell a one-off failure from a step that has been failing all week.
+
+The same last-run outcome is available to automation. `Get-JIMSchedule` and the Schedules list REST endpoint carry it on each Schedule as `LastExecutionId`, `LastExecutionStatus`, `LastExecutionCurrentStepIndex`, `LastExecutionTotalSteps`, `LastExecutionCompletedAt` and `LastExecutionErrorMessage`, so a monitoring script can ask whether last night's run succeeded without walking the execution history. See the [Schedules cmdlets](../powershell/schedules.md#get-jimschedule) for the field-by-field description.
+
+### The Schedule Execution view
+
+Selecting an execution opens a view of that single run:
+
+- Every step, in the order it ran, with its outcome and duration.
+- Steps that share a step index are shown as a group, because they ran in parallel.
+- A link from each step to the [Activity](activities.md) that produced it, where the per-object detail and any error live.
+- The error that stopped the run, where one did, together with whether **Continue on failure** was set on the step that failed.
+
+Steps after a hard failure are shown as **not run**, rather than pending: the run has stopped, and they never will.
+
+An execution that is still in progress refreshes as it goes, and can be cancelled from this view.
 
 ## Enabled flag
 

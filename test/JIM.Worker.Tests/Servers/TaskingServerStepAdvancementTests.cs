@@ -147,7 +147,7 @@ public class TaskingServerStepAdvancementTests
         // Assert: Execution marked as completed
         _mockSchedulingRepository.Verify(
             r => r.UpdateScheduleExecutionAsync(It.Is<ScheduleExecution>(e =>
-                e.Status == ScheduleExecutionStatus.Completed &&
+                e.Status == ScheduleExecutionStatus.Complete &&
                 e.CompletedAt != null)),
             Times.Once);
     }

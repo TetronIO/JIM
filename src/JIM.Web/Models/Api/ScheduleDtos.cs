@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -104,7 +105,49 @@ public class ScheduleDto
     public DateTime? LastUpdated { get; set; }
 
     /// <summary>
-    /// Creates a DTO from a Schedule entity.
+    /// The unique identifier of the most recent Schedule Execution, if the Schedule has ever run.
+    /// Only populated by the list endpoint; the single-Schedule, enable, disable, create and update responses
+    /// leave every LastExecution field null, because they describe the Schedule's configuration rather than its
+    /// run history. Use the Schedule Executions endpoints for the full history.
+    /// </summary>
+    public Guid? LastExecutionId { get; set; }
+
+    /// <summary>
+    /// The outcome of the most recent Schedule Execution. Null when the Schedule has never run, and on the
+    /// endpoints listed on <see cref="LastExecutionId"/> that do not populate the last-execution fields.
+    /// </summary>
+    public ScheduleExecutionStatus? LastExecutionStatus { get; set; }
+
+    /// <summary>
+    /// The step the most recent Schedule Execution reached (0-based). Read with <see cref="LastExecutionTotalSteps"/>
+    /// to see how far a failed run got before it stopped. Null when the Schedule has never run, and on the endpoints
+    /// listed on <see cref="LastExecutionId"/> that do not populate the last-execution fields.
+    /// </summary>
+    public int? LastExecutionCurrentStepIndex { get; set; }
+
+    /// <summary>
+    /// How many steps the most recent Schedule Execution set out to run. Null when the Schedule has never run, and on
+    /// the endpoints listed on <see cref="LastExecutionId"/> that do not populate the last-execution fields.
+    /// </summary>
+    public int? LastExecutionTotalSteps { get; set; }
+
+    /// <summary>
+    /// When the most recent Schedule Execution finished (UTC). Null while it is still running, when the Schedule has
+    /// never run, and on the endpoints listed on <see cref="LastExecutionId"/> that do not populate the
+    /// last-execution fields.
+    /// </summary>
+    public DateTime? LastExecutionCompletedAt { get; set; }
+
+    /// <summary>
+    /// The error reported by the most recent Schedule Execution, if it failed. Null when the run succeeded, when the
+    /// Schedule has never run, and on the endpoints listed on <see cref="LastExecutionId"/> that do not populate the
+    /// last-execution fields.
+    /// </summary>
+    public string? LastExecutionErrorMessage { get; set; }
+
+    /// <summary>
+    /// Creates a DTO from a Schedule entity. A Schedule entity carries no last-execution projection, so every
+    /// LastExecution field is left null here; see <see cref="LastExecutionId"/>.
     /// </summary>
     public static ScheduleDto FromEntity(Schedule schedule)
     {
@@ -130,6 +173,42 @@ public class ScheduleDto
             LastUpdated = schedule.LastUpdated
         };
     }
+
+    /// <summary>
+    /// Creates a DTO from a ScheduleHeader projection, as returned by the list query. The header carries the step
+    /// count as a projected value rather than as a materialised collection, and is the only source that can populate
+    /// the last-execution fields; see <see cref="LastExecutionId"/>.
+    /// </summary>
+    public static ScheduleDto FromHeader(ScheduleHeader header)
+    {
+        return new ScheduleDto
+        {
+            Id = header.Id,
+            Name = header.Name,
+            Description = header.Description,
+            TriggerType = header.TriggerType,
+            CronExpression = header.CronExpression,
+            PatternType = header.PatternType,
+            DaysOfWeek = header.DaysOfWeek,
+            RunTimes = header.RunTimes,
+            IntervalValue = header.IntervalValue,
+            IntervalUnit = header.IntervalUnit,
+            IntervalWindowStart = header.IntervalWindowStart,
+            IntervalWindowEnd = header.IntervalWindowEnd,
+            IsEnabled = header.IsEnabled,
+            LastRunTime = header.LastRunTime,
+            NextRunTime = header.NextRunTime,
+            StepCount = header.StepCount,
+            Created = header.Created,
+            LastUpdated = header.LastUpdated,
+            LastExecutionId = header.LastExecutionId,
+            LastExecutionStatus = header.LastExecutionStatus,
+            LastExecutionCurrentStepIndex = header.LastExecutionCurrentStepIndex,
+            LastExecutionTotalSteps = header.LastExecutionTotalSteps,
+            LastExecutionCompletedAt = header.LastExecutionCompletedAt,
+            LastExecutionErrorMessage = header.LastExecutionErrorMessage
+        };
+    }
 }
 
 /// <summary>
@@ -143,7 +222,8 @@ public class ScheduleDetailDto : ScheduleDto
     public List<ScheduleStepDto> Steps { get; set; } = new();
 
     /// <summary>
-    /// Creates a detail DTO from a Schedule entity with steps.
+    /// Creates a detail DTO from a Schedule entity with steps. As with <see cref="ScheduleDto.FromEntity"/>, the
+    /// inherited last-execution fields are left null; see <see cref="ScheduleDto.LastExecutionId"/>.
     /// </summary>
     public static new ScheduleDetailDto FromEntity(Schedule schedule)
     {

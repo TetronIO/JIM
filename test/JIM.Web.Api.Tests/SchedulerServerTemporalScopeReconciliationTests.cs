@@ -107,7 +107,7 @@ public class SchedulerServerTemporalScopeReconciliationTests
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(currentExecutionId))
             .ReturnsAsync(new ScheduleExecution { Id = currentExecutionId, ScheduleId = scheduleId, StartedAt = currentStartedAt });
         _mockSchedulingRepository.Setup(r => r.GetLastCompletedScheduleExecutionAsync(scheduleId, currentStartedAt))
-            .ReturnsAsync(new ScheduleExecution { Id = Guid.NewGuid(), ScheduleId = scheduleId, Status = ScheduleExecutionStatus.Completed, StartedAt = previousStartedAt });
+            .ReturnsAsync(new ScheduleExecution { Id = Guid.NewGuid(), ScheduleId = scheduleId, Status = ScheduleExecutionStatus.Complete, StartedAt = previousStartedAt });
 
         var result = await _application.Scheduler.GetTemporalScopeReconciliationWatermarkAsync(currentExecutionId);
 

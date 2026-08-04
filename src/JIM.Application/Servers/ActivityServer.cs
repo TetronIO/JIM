@@ -471,6 +471,9 @@ public class ActivityServer
     /// <param name="initiatedByFilter">Optional text search on initiator name.</param>
     /// <param name="sortBy">Optional column to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="hasChildActivities">Optional filter: true = only activities with children, false = only without, null = all.</param>
+    /// <param name="initiatedBySchedule">Optional filter: true = only activities a Schedule produced, false = only those no Schedule produced, null = all.</param>
+    /// <param name="scheduleFilter">Optional filter for the ids of the Schedules that produced the activities (additive/OR within filter).</param>
     public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page = 1,
         int pageSize = 20,
@@ -480,10 +483,13 @@ public class ActivityServer
         string? initiatedByFilter = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool? hasChildActivities = null)
+        bool? hasChildActivities = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
-            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending, hasChildActivities);
+            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending,
+            hasChildActivities, initiatedBySchedule, scheduleFilter);
     }
 
     /// <summary>

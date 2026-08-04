@@ -173,6 +173,14 @@ public class UpdateMetaverseObjectTypeRequest
     /// Optional reason for the change, recorded on the audit Activity and configuration change history.
     /// </summary>
     public string? ChangeReason { get; set; }
+
+    /// <summary>
+    /// The Configuration Change Preview read before making this change, if any (#827). Supply the Activity id
+    /// returned by <c>POST object-types/{id}/deletion-settings/preview</c> and the update's own Activity records
+    /// the link, so the audit answers not only what changed but what the caller was told it would do.
+    /// Optional: a preview is an affordance, not a precondition.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
 }
 
 /// <summary>

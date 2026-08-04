@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -18,7 +19,17 @@ public interface ISchedulingRepository
 
     Task<List<Schedule>> GetAllSchedulesAsync();
 
-    Task<PagedResultSet<Schedule>> GetSchedulesAsync(
+    /// <summary>
+    /// Gets a page of Schedules projected into lightweight headers, each carrying its step count and the outcome of
+    /// its most recent execution. The last-execution fields are projected in the same query, so a page costs one
+    /// round trip rather than one query per Schedule.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page (capped at 100).</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over name and description.</param>
+    /// <param name="sortBy">Optional field to sort by (name, isEnabled, lastRunTime, nextRunTime); defaults to created.</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    Task<PagedResultSet<ScheduleHeader>> GetScheduleHeadersAsync(
         int page,
         int pageSize,
         string? searchQuery = null,

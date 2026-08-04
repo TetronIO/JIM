@@ -38,7 +38,7 @@ JIM ships with the following built-in connectors:
 
 ## 🗺️ Upcoming Connectors
 
-A Database Connector for SQL Server, PostgreSQL, MySQL and Oracle is in development. PowerShell and REST API connectors are planned. See the [Roadmap](../reference/roadmap.md) for the full picture.
+The JIM SQL Connector is in development: one connector covering SQL Server, PostgreSQL, MySQL and Oracle, rather than one per database engine. PowerShell and REST API connectors are planned. See the [Roadmap](../reference/roadmap.md) for the full picture.
 
 ## 🧩 Custom Connectors
 

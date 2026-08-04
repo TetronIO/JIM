@@ -110,10 +110,29 @@ function Get-JIMSchedule {
                     $allSchedules = $allSchedules | Where-Object { $_.name -like $Name }
                 }
 
-                # If IncludeSteps, fetch full details for each schedule
+                # If IncludeSteps, fetch full details for each schedule. The single-Schedule endpoint returns a
+                # ScheduleDetailDto built from the Schedule entity, which carries no last-execution projection, so
+                # the outcome of the last run would be lost on this path; carry those fields over from the list
+                # response so -IncludeSteps returns a superset of the list output rather than a different shape.
                 if ($IncludeSteps) {
+                    $lastExecutionProperties = @(
+                        'LastExecutionId'
+                        'LastExecutionStatus'
+                        'LastExecutionCurrentStepIndex'
+                        'LastExecutionTotalSteps'
+                        'LastExecutionCompletedAt'
+                        'LastExecutionErrorMessage'
+                    )
+
                     foreach ($schedule in $allSchedules) {
                         $fullSchedule = Invoke-JIMApi -Endpoint "/api/v1/schedules/$($schedule.id)"
+
+                        if ($fullSchedule) {
+                            foreach ($property in $lastExecutionProperties) {
+                                $fullSchedule | Add-Member -NotePropertyName $property -NotePropertyValue $schedule.$property -Force
+                            }
+                        }
+
                         $fullSchedule
                     }
                 }

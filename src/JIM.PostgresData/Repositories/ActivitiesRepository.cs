@@ -418,7 +418,9 @@ public class ActivityRepository : IActivityRepository
         string? initiatedByFilter = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool? hasChildActivities = null)
+        bool? hasChildActivities = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -460,6 +462,21 @@ public class ActivityRepository : IActivityRepository
         {
             query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
         }
+
+        // Apply the Schedule attribution filters. The attribution is denormalised onto the Activity, so both of
+        // these are plain indexed predicates rather than a join through Schedule Executions.
+        if (initiatedBySchedule == true)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId != null);
+        }
+        else if (initiatedBySchedule == false)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId == null);
+        }
+
+        var scheduleIds = scheduleFilter?.ToList();
+        if (scheduleIds is { Count: > 0 })
+            query = query.Where(a => a.ScheduledByScheduleId != null && scheduleIds.Contains(a.ScheduledByScheduleId!.Value));
 
         // Apply sorting
         query = sortBy?.ToLower() switch
@@ -533,10 +550,24 @@ public class ActivityRepository : IActivityRepository
             .OrderBy(name => name)
             .ToListAsync();
 
+        // One option per Schedule id, carrying the most recently recorded name: a Schedule renamed part-way through
+        // its history would otherwise yield two options sharing an id, which a MudSelect cannot represent.
+        var schedules = await query
+            .Where(a => a.ScheduledByScheduleId != null && a.ScheduledByScheduleName != null)
+            .GroupBy(a => a.ScheduledByScheduleId!.Value)
+            .Select(g => new ScheduleFilterOption
+            {
+                Id = g.Key,
+                Name = g.OrderByDescending(a => a.Created).Select(a => a.ScheduledByScheduleName!).First()
+            })
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
         return new ActivityFilterOptions
         {
             ConnectedSystems = connectedSystems,
-            RunProfiles = runProfiles
+            RunProfiles = runProfiles,
+            Schedules = schedules
         };
     }
 
