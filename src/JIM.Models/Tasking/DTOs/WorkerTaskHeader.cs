@@ -51,6 +51,14 @@ public class WorkerTaskHeader
     /// </summary>
     public string? ProgressMessage { get; set; }
 
+    /// <summary>
+    /// The run's steps and the one running now (#1162), or null where the task is not a Run Profile
+    /// execution and so has no steps: clearing Connected System Objects, example data generation and
+    /// factory reset all record none. A list view showing this task falls back to the object counts
+    /// alone in that case.
+    /// </summary>
+    public RunPhaseSummary? Steps { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Schedule execution context - for grouping tasks by schedule in the queue UI
     // -----------------------------------------------------------------------------------------------------------------

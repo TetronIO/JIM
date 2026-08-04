@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 using JIM.Utilities;
@@ -88,6 +89,8 @@ public class TaskingRepository : ITaskingRepository
             .OrderByDescending(q => q.Timestamp)
             .ToListAsync();
 
+        var stepsByActivity = await GetStepsForActivitiesAsync(workerTasks);
+
         foreach (var workerTask in workerTasks)
         {
             workerTaskHeaders.Add(new WorkerTaskHeader
@@ -106,10 +109,54 @@ public class TaskingRepository : ITaskingRepository
                 ProgressMessage = workerTask.Activity?.Message,
                 ScheduleExecutionId = workerTask.ScheduleExecutionId,
                 ScheduleExecutionName = workerTask.ScheduleExecution?.ScheduleName,
-                ScheduleStepIndex = workerTask.ScheduleStepIndex
+                ScheduleStepIndex = workerTask.ScheduleStepIndex,
+                Steps = workerTask.Activity != null && stepsByActivity.TryGetValue(workerTask.Activity.Id, out var steps) ? steps : null
             });
         }
         return workerTaskHeaders;
+    }
+
+    /// <summary>
+    /// The run steps (#454) for every task in the queue that has any, keyed by Activity.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Phases are their own table keyed by ActivityId rather than a navigation off the Activity, so
+    /// they are fetched in one batch and matched up here; the alternative is a query per row, and
+    /// the queue re-reads on every progress notification.
+    /// </para>
+    /// <para>
+    /// Bounded by design: a Worker Task row is deleted once its work completes, so this only ever
+    /// sees work still in flight, at roughly ten phase rows apiece.
+    /// </para>
+    /// <para>
+    /// Every phase is fetched, including a Connector's own, and <see cref="RunPhaseSummary.From"/>
+    /// decides which of them are steps of the run. Filtering to <c>ParentKey == null</c> in SQL
+    /// would be cheaper by a handful of rows and would put a second definition of "what counts as a
+    /// step" outside <see cref="RunPhaseReading"/>, which is the thing that must not happen.
+    /// </para>
+    /// </remarks>
+    private async Task<Dictionary<Guid, RunPhaseSummary>> GetStepsForActivitiesAsync(List<WorkerTask> workerTasks)
+    {
+        var activityIds = workerTasks
+            .Where(t => t.Activity != null)
+            .Select(t => t.Activity!.Id)
+            .Distinct()
+            .ToList();
+
+        if (activityIds.Count == 0)
+            return [];
+
+        var phases = await Repository.Database.ActivityPhases
+            .AsNoTracking()
+            .Where(p => activityIds.Contains(p.ActivityId))
+            .ToListAsync();
+
+        return phases
+            .GroupBy(p => p.ActivityId)
+            .Select(g => new { g.Key, Summary = RunPhaseSummary.From(g) })
+            .Where(x => x.Summary != null)
+            .ToDictionary(x => x.Key, x => x.Summary!);
     }
 
     public async Task<WorkerTask?> GetNextWorkerTaskAsync()

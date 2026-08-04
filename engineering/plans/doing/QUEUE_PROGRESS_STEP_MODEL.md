@@ -134,13 +134,23 @@ Prerequisite for everything else, and the issue calls it out explicitly.
 
 **Done when:** the Activity page is pixel-identical and no Razor component contains status-to-appearance logic. ✅
 
-### Phase 2: Carry the steps to the queue
+### Phase 2: Carry the steps to the queue ✅
 
-- Add `WorkerTaskPhaseSummary` (JIM.Models) and the four fields on `WorkerTaskHeader`.
-- `TaskingRepository.GetWorkerTaskHeadersAsync`: add `.ThenInclude(a => a.Phases)`, project through `RunPhaseReading.TopLevel`, populate the scalars.
-- Tests: repository-level coverage that a Run Profile task carries its top-level phases and correct step scalars, and that a Connector's phases are excluded. A `RequiresPostgres` test is warranted here because the in-memory provider auto-tracks navigation properties and would mask a missing `Include`.
+- Add `RunPhaseStep` and `RunPhaseSummary` (JIM.Models), and one `Steps` property on `WorkerTaskHeader`.
+- `TaskingRepository.GetWorkerTaskHeadersAsync`: batch-fetch the phases and attach them.
+- Tests: `RunPhaseSummaryTests` (JIM.Models.Tests) for the rule, `WorkerTaskHeaderStepsDatabaseTests` (`RequiresPostgres`) for the fetch.
 
-**Done when:** a queue header for a running import carries eight phases and "step 6 of 8: Saving changes", and one for a Clear Connected System Objects task carries none.
+**Two corrections to this plan's original shape, both found by reading the code:**
+
+1. **There is no `Activity.Phases` navigation.** `ActivityPhase` is its own table keyed by `ActivityId`, read by `ActivitiesRepository.GetActivityPhasesAsync`. `.ThenInclude(a => a.Phases)` does not exist to be written. The header read batch-fetches every relevant Activity's phases in one query and matches them up in memory. That also changes what the `RequiresPostgres` test is *for*: not "did the `Include` chain survive" (there is no `Include`) but "did each row get its own run's steps", which is the failure that reads as plausible progress rather than as an error.
+
+2. **One `Steps` property, not four loose fields.** `RunPhaseSummary.From(phases)` returns the shape of the run plus the sentence naming the running step, or null where there is no run to summarise. The REST DTOs and PowerShell (Phase 5) need the identical derivation, so it belongs in JIM.Models beside `RunPhaseReading` rather than being recomputed per surface. Null rather than an empty summary means a phase-less task needs one check at each call site instead of unpicking an empty rail.
+
+`RunPhaseSummary.From` fetches every phase and calls `RunPhaseReading.TopLevel` rather than filtering `ParentKey == null` in SQL. Cheaper by a handful of rows, but it would put a second definition of "what counts as a step" outside `RunPhaseReading`, which is the thing that must not happen.
+
+**Found in passing, not fixed:** `TaskingRepository.GetWorkerHeaderNameAsync` opens `new JimDbContext()` per Worker Task, so the queue read makes one extra connection per row and reads its configuration from environment variables rather than the injected context. Separately, its `ClearConnectedSystemObjectsWorkerTask` branch uses `.Single(...)` on the Connected System, so a queue containing a clear task for an already-deleted system throws (the `DeleteConnectedSystemWorkerTask` branch immediately below it handles exactly that case). Both are pre-existing and out of scope here; worth their own issue.
+
+**Done when:** a queue header for a running import carries its steps and "step 6 of 8: Saving changes", and one for a task that is not a Run Profile execution carries null. ✅
 
 ### Phase 3: The per-task Progress cell
 
