@@ -228,6 +228,14 @@ public class SyncExportTaskProcessor
                     });
             }
 
+            // The Connector has nothing left to do, so whichever step it last declared stops being
+            // true here. Coarser than the import's per-call close, and deliberately so: an export
+            // batches, and may run those batches in parallel, so the Connector genuinely is at work
+            // for the whole of ExecuteExportsAsync. Left open, the step was closed by whatever JIM
+            // entered next and took that step's time with it, which on a large export is the whole
+            // of finalising the run's results (#1214).
+            await _phases.ExitConnectorPhasesAsync();
+
             exportSpan.SetTag("successCount", result.SuccessCount);
             exportSpan.SetTag("failedCount", result.FailedCount);
             exportSpan.SetTag("deferredCount", result.DeferredCount);
