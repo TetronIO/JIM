@@ -6,7 +6,7 @@ For the latest status and issue tracking, see the public [JIM Roadmap project bo
 
 ---
 
-## 🎯 v1.0 -- Identity Lifecycle Complete
+## 🎯 v1.0 - Identity Lifecycle Complete
 
 The first stable release, delivering a production-ready identity lifecycle platform.
 
@@ -17,17 +17,14 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ---
 
-## 🌳 v1.x -- Connector Ecosystem
+## 🌳 v1.x - Connector Ecosystem
 
 Expanding the range of systems JIM can connect to out of the box. The SCIM 2.0 Client Connector has already shipped and is listed here for continuity.
 
 | Connector | Description | Status |
 |---|---|---|
 | [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | SCIM 2.0 endpoints | ✅ Available |
-| JIM SQL Server Connector | Microsoft SQL Server databases | 🚧 In development |
-| JIM PostgreSQL Connector | PostgreSQL databases | 🚧 In development |
-| JIM MySQL Connector | MySQL databases | 🚧 In development |
-| JIM Oracle Connector | Oracle databases | 🚧 In development |
+| JIM SQL Connector | SQL Server, PostgreSQL, MySQL and Oracle databases | 🚧 In development |
 | JIM PowerShell Connector | PowerShell Core scripts | Planned |
 | JIM REST Connector | REST API web services | Planned |
 
@@ -35,7 +32,7 @@ Each connector follows JIM's established connector architecture, supporting sche
 
 ---
 
-## 🏛️ v2.0 -- IGA Foundation
+## 🏛️ v2.0 - IGA Foundation
 
 Evolves JIM's core IDAM capabilities so identities can be managed directly in JIM, without depending on Source-of-Record systems for everyday changes. The focus is depth in the existing identity surface (Users, Groups, custom types) rather than branching into adjacent domains.
 
