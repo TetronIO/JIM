@@ -103,14 +103,21 @@
         _execution = await jim.Scheduler.GetScheduleExecutionAsync(executionId);
     }
 
+    /// <summary>
+    /// Builds the sentence naming the Schedule and the step. The non-compact panel is already headed "Part of a
+    /// Schedule", so the "Part of" prefix is carried by the heading there and only prepended in the compact
+    /// treatment, which has no such heading.
+    /// </summary>
     private string BuildContextText(ScheduleExecution execution)
     {
+        var prefix = Compact ? "Part of " : string.Empty;
+
         if (ScheduleStepIndex.HasValue && execution.TotalSteps > 0)
         {
             var stepIndex = ScheduleStepIndex.Value;
-            return $"Part of {execution.ScheduleName}, step {stepIndex + 1} of {execution.TotalSteps}";
+            return $"{prefix}{execution.ScheduleName}, step {stepIndex + 1} of {execution.TotalSteps}";
         }
 
-        return $"Part of {execution.ScheduleName}";
+        return $"{prefix}{execution.ScheduleName}";
     }
 }
