@@ -1415,6 +1415,22 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        var parked = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .ToList();
+
+        foreach (var pending in parked)
+        {
+            pending.Status = PendingInitialPasswordStatus.Pending;
+            pending.FailureReason = null;
+            pending.TargetMessage = null;
+        }
+
+        return Task.FromResult(parked.Count);
+    }
+
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)

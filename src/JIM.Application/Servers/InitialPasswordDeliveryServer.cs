@@ -148,6 +148,34 @@ public class InitialPasswordDeliveryServer
     }
 
     /// <summary>
+    /// Sets a Synchronisation Rule's parked accounts retrying, and returns how many were released.
+    /// <para>
+    /// This is the other half of parking. A policy rejection stops the retry loop because the same generator
+    /// configuration produces another password the target refuses for the same reason; the administrator
+    /// correcting that configuration is the event that makes another attempt worth making, and this is how that
+    /// event reaches the parked work. Without it, parking is a one-way door.
+    /// </para>
+    /// <para>
+    /// Releasing makes the accounts outstanding again rather than delivering to them here. Delivery needs an
+    /// open Connector connection, so it belongs to the export pass that already owns one; the released accounts
+    /// are picked up by the next run over that Connected System with no backoff to wait out. Nothing is
+    /// regenerated or invalidated in the meantime because no password was ever stored: each is generated at the
+    /// moment of delivery, so the retry uses the corrected configuration by construction.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose parked accounts to release.</param>
+    public async Task<int> ReleaseParkedForSyncRuleAsync(int syncRuleId)
+    {
+        var released = await _syncRepo.ReleaseParkedInitialPasswordsAsync(syncRuleId);
+
+        if (released > 0)
+            Log.Information("ReleaseParkedForSyncRuleAsync: {Count} accounts parked against Synchronisation Rule {SyncRuleId} " +
+                "have been released and will be attempted again on its Connected System's next export run", released, syncRuleId);
+
+        return released;
+    }
+
+    /// <summary>
     /// Turns one account's outcome into what happens to its record, and counts it.
     /// </summary>
     private static void Record(

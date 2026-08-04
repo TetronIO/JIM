@@ -545,6 +545,23 @@ public interface ISyncRepository
     Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// Returns every parked initial-password record for a Synchronisation Rule to the outstanding state, so the
+    /// next delivery pass attempts it again, and returns how many were released.
+    /// <para>
+    /// Parking stops the retry loop on purpose, which is only safe because this exists: the administrator
+    /// changing the configuration the target objected to is the event that makes another attempt worth making.
+    /// Records in any other state are left alone, because a record awaiting retry is already going to be tried
+    /// and an expired one has outlived the purpose it was created for.
+    /// </para>
+    /// <para>
+    /// The target's reason goes with the release. It described a configuration that no longer exists, so
+    /// keeping it would have the portal report a complaint an administrator has already acted on. The attempt
+    /// count survives: those attempts really were made, and a release is not another one.
+    /// </para>
+    /// </summary>
+    Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId);
+
+    /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>

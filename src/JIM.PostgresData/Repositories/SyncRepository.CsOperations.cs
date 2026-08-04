@@ -813,6 +813,26 @@ public partial class SyncRepository
             """DELETE FROM "PendingInitialPasswords" WHERE "Id" = ANY({0})""", idList);
     }
 
+    public async Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        // A targeted status mark rather than a write of the entity, so it is deliberately not driven from
+        // PendingInitialPasswordBulkColumns: the three columns here are exactly the ones a release changes, and
+        // a future column must not be swept into it by being added to that list.
+        //
+        // The WHERE clause carries the Parked filter rather than the caller doing it: a record awaiting retry is
+        // already going to be tried, and an expired one has outlived the purpose it was created for, so neither
+        // should be disturbed by an administrator saving a rule.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}, "FailureReason" = NULL, "TargetMessage" = NULL
+            WHERE "SyncRuleId" = {1} AND "Status" = {2}
+            """,
+            (int)PendingInitialPasswordStatus.Pending,
+            syncRuleId,
+            (int)PendingInitialPasswordStatus.Parked);
+    }
+
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var pendingExportsList = pendingExports.ToList();

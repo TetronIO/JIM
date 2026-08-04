@@ -303,6 +303,102 @@ public class InitialPasswordDeliveryServerTests
         Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().ConnectedSystemId, Is.EqualTo(99));
     }
 
+    #region Releasing parked work
+
+    /// <summary>
+    /// Parking is deliberate, and it is only safe because an administrator changing the configuration can undo
+    /// it. Without this the parked account is stuck for ever: nothing else in the system moves a record out of
+    /// Parked, and the delivery pass will not look at one.
+    /// </summary>
+    [Test]
+    public async Task ReleaseParkedForSyncRuleAsync_WithAParkedRecord_MakesItOutstandingAgainAsync()
+    {
+        await StageOutstandingAsync();
+        var refusing = MockConnector(PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused."));
+        await _server.DeliverOutstandingAsync(_connectedSystem, refusing.Object, CancellationToken.None);
+
+        var released = await _server.ReleaseParkedForSyncRuleAsync(SyncRuleId);
+
+        var accepting = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+        var retry = await _server.DeliverOutstandingAsync(_connectedSystem, accepting.Object, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(released, Is.EqualTo(1));
+            Assert.That(retry.AttemptedCount, Is.EqualTo(1), "the released record must be attempted again");
+            Assert.That(retry.DeliveredCount, Is.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// The stale refusal goes with the release. Leaving it would have the Synchronisation Rule report a reason
+    /// for a record that is no longer parked, so an administrator who had just fixed the configuration would
+    /// still be looking at the complaint that sent them there.
+    /// </summary>
+    [Test]
+    public async Task ReleaseParkedForSyncRuleAsync_WithAParkedRecord_ClearsTheStaleRefusalAsync()
+    {
+        await StageOutstandingAsync();
+        var refusing = MockConnector(PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused."));
+        await _server.DeliverOutstandingAsync(_connectedSystem, refusing.Object, CancellationToken.None);
+
+        await _server.ReleaseParkedForSyncRuleAsync(SyncRuleId);
+
+        var stored = _syncRepo.PendingInitialPasswords.Values.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
+            Assert.That(stored.FailureReason, Is.Null);
+            Assert.That(stored.TargetMessage, Is.Null);
+            Assert.That(stored.AttemptCount, Is.EqualTo(1),
+                "the release is not a new attempt, so the count of real attempts must survive it");
+        });
+    }
+
+    /// <summary>
+    /// Saving one Synchronisation Rule says nothing about the configuration of any other, so a release must not
+    /// reach past its own rule and set another rule's accounts retrying against settings nobody has touched.
+    /// </summary>
+    [Test]
+    public async Task ReleaseParkedForSyncRuleAsync_ForAnotherRule_LeavesItsParkedRecordsAloneAsync()
+    {
+        await StageOutstandingAsync();
+        var refusing = MockConnector(PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused."));
+        await _server.DeliverOutstandingAsync(_connectedSystem, refusing.Object, CancellationToken.None);
+
+        var released = await _server.ReleaseParkedForSyncRuleAsync(SyncRuleId + 1);
+
+        Assert.That(released, Is.Zero);
+        Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().Status,
+            Is.EqualTo(PendingInitialPasswordStatus.Parked));
+    }
+
+    /// <summary>
+    /// A record that was never parked is already going to be retried, so a release must leave it exactly as it
+    /// is rather than resetting anything about it.
+    /// </summary>
+    [Test]
+    public async Task ReleaseParkedForSyncRuleAsync_WithARecordAwaitingRetry_LeavesItUntouchedAsync()
+    {
+        await StageOutstandingAsync();
+        var unreachable = MockConnector(PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Unreachable."));
+        await _server.DeliverOutstandingAsync(_connectedSystem, unreachable.Object, CancellationToken.None);
+
+        var released = await _server.ReleaseParkedForSyncRuleAsync(SyncRuleId);
+
+        var stored = _syncRepo.PendingInitialPasswords.Values.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(released, Is.Zero, "nothing was parked, so nothing was released");
+            Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
+            Assert.That(stored.TargetMessage, Is.EqualTo("Unreachable."),
+                "the reason for a record still awaiting retry is current, not stale, and must survive");
+            Assert.That(stored.AttemptCount, Is.EqualTo(1));
+        });
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
