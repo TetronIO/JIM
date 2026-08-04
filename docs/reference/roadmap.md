@@ -19,19 +19,19 @@ The first stable release, delivering a production-ready identity lifecycle platf
 
 ## 🌳 v1.x -- Connector Ecosystem
 
-Expanding the range of systems JIM can connect to out of the box.
+Expanding the range of systems JIM can connect to out of the box. The SCIM 2.0 Client Connector has already shipped and is listed here for continuity.
 
-| Connector | Description | Target |
+| Connector | Description | Status |
 |---|---|---|
-| JIM SQL Server Connector | Microsoft SQL Server databases | v1.x |
-| JIM PostgreSQL Connector | PostgreSQL databases | v1.x |
-| JIM MySQL Connector | MySQL databases | v1.x |
-| JIM Oracle Connector | Oracle databases | v1.x |
-| JIM PowerShell Connector | PowerShell Core scripts | v1.x |
-| JIM SCIM Connector | SCIM 2.0 endpoints | v1.x |
-| JIM REST Connector | REST API web services | v1.x |
+| [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | SCIM 2.0 endpoints | ✅ Available |
+| JIM SQL Server Connector | Microsoft SQL Server databases | 🚧 In development |
+| JIM PostgreSQL Connector | PostgreSQL databases | 🚧 In development |
+| JIM MySQL Connector | MySQL databases | 🚧 In development |
+| JIM Oracle Connector | Oracle databases | 🚧 In development |
+| JIM PowerShell Connector | PowerShell Core scripts | Planned |
+| JIM REST Connector | REST API web services | Planned |
 
-Each connector will follow JIM's established connector architecture, supporting schema discovery, full and delta import, and export with the same reliability guarantees as the built-in connectors.
+Each connector follows JIM's established connector architecture, supporting schema discovery, full and delta import, and export with the same reliability guarantees as the built-in connectors.
 
 ---
 

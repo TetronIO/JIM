@@ -10,7 +10,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 640" role="img" aria-labelledby="jimdg-hs-title jimdg-hs-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-hs-title">JIM hub-and-spoke synchronisation concept</title>
-  <desc id="jimdg-hs-desc">Source systems on the left and target systems on the right connect to JIM in the centre. Inside JIM, Connectors pass imported data through the Import, Synchronise and Export pipeline, which correlates and projects identities into the Metaverse, the authoritative data store for fused identities. Every flow passes through JIM; no data moves directly between Connected Systems. Enterprise database connectivity is planned.</desc>
+  <desc id="jimdg-hs-desc">Source systems on the left and target systems on the right connect to JIM in the centre. Inside JIM, Connectors pass imported data through the Import, Synchronise and Export pipeline, which correlates and projects identities into the Metaverse, the authoritative data store for fused identities. Every flow passes through JIM; no data moves directly between Connected Systems. Enterprise database connectivity is in development.</desc>
   <g id="jimdg-hs-hub">
     <rect class="jimdg-hub" x="300" y="28" width="560" height="584" rx="8"/>
     <text class="jimdg-hub-title" x="580" y="66">JIM</text>
@@ -23,7 +23,7 @@
       <text class="jimdg-chip-label" x="520" y="157">File / CSV</text>
       <rect class="jimdg-chip-planned" x="584" y="130" width="112" height="44" rx="8"/>
       <text class="jimdg-chip-label-planned" x="640" y="148">SQL</text>
-      <text class="jimdg-chip-sub-planned" x="640" y="164">(planned)</text>
+      <text class="jimdg-chip-sub-planned" x="640" y="164">(in development)</text>
       <rect class="jimdg-chip" x="704" y="130" width="112" height="44" rx="8"/>
       <text class="jimdg-chip-label" x="760" y="157">SCIM 2.0</text>
     </g>
@@ -66,7 +66,7 @@
     <text class="jimdg-system-sub" x="130" y="337">LDAP</text>
     <rect class="jimdg-system-planned" x="20" y="458" width="220" height="64" rx="8"/>
     <text class="jimdg-system-name-planned" x="130" y="486">Enterprise Databases</text>
-    <text class="jimdg-system-sub-planned" x="130" y="507">SQL (planned)</text>
+    <text class="jimdg-system-sub-planned" x="130" y="507">SQL (in development)</text>
   </g>
   <g id="jimdg-hs-targets">
     <rect class="jimdg-system" x="920" y="118" width="220" height="64" rx="8"/>

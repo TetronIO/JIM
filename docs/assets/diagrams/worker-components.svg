@@ -9,7 +9,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 690" role="img" aria-labelledby="jimdg-wk-title jimdg-wk-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-wk-title">Inside the Worker Service</title>
-  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. The Connectors layer hosts the LDAP, File/CSV and SCIM 2.0 connectors, with a SQL connector planned.</desc>
+  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. The Connectors layer hosts the LDAP, File/CSV and SCIM 2.0 connectors, with a SQL connector in development.</desc>
   <g id="jimdg-wk-db">
     <path class="jimdg-stage" d="M20,96 A110,16 0 0 1 240,96 L240,264 A110,16 0 0 1 20,264 Z"/>
     <ellipse class="jimdg-stage" cx="130" cy="96" rx="110" ry="16"/>
@@ -52,7 +52,7 @@
     <text class="jimdg-chip-label" x="629" y="573">File / CSV</text>
     <rect class="jimdg-chip-planned" x="741" y="546" width="160" height="44" rx="8"/>
     <text class="jimdg-chip-label-planned" x="821" y="564">SQL</text>
-    <text class="jimdg-chip-sub-planned" x="821" y="580">(planned)</text>
+    <text class="jimdg-chip-sub-planned" x="821" y="580">(in development)</text>
     <rect class="jimdg-chip" x="934" y="546" width="160" height="44" rx="8"/>
     <text class="jimdg-chip-label" x="1014" y="573">SCIM 2.0</text>
   </g>

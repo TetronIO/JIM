@@ -99,7 +99,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 @media (prefers-reduced-motion: reduce) { .jimdg-packet { display: none; } }
 </style>
   <title id="jimdg-ct-title">JIM Containers</title>
-  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems and cloud applications, with enterprise database connectivity planned.</desc>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems and cloud applications, with enterprise database connectivity in development.</desc>
   <g id="jimdg-ct-people">
     <rect class="jimdg-stage" x="150" y="32" width="200" height="64" rx="8"/>
     <circle class="jimdg-person-glyph" cx="166" cy="53" r="6"/>
@@ -191,7 +191,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <text class="jimdg-system-sub" x="580" y="705">CSV &amp; flat files</text>
     <rect class="jimdg-system-planned" x="710" y="656" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name-planned" x="810" y="684">Enterprise Databases</text>
-    <text class="jimdg-system-sub-planned" x="810" y="705">SQL (planned)</text>
+    <text class="jimdg-system-sub-planned" x="810" y="705">SQL (in development)</text>
     <rect class="jimdg-system" x="940" y="656" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="1040" y="684">Cloud Applications</text>
     <text class="jimdg-system-sub" x="1040" y="705">SCIM 2.0</text>
