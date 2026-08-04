@@ -100,7 +100,23 @@ Get-JIMConfigurationChangePreview -ActivityId "019fc824-f8c6-7588-8d9a-24a295e76
 
 ```powershell title="Show the summary groups behind the counts"
 $preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
-$preview.Groups | Format-Table TransitionType, MetaverseObjectTypeName, AttributeName, ObjectCount, DeltasSampled
+$preview.Groups | Format-Table TransitionType, MetaverseObjectTypeName, AttributeName, PatternKey, ObjectCount, DeltasSampled
+```
+
+Each group carries a `PatternKey` naming what kind of edit it describes, or nothing where JIM recognised none, or where the group's objects did not all make the same kind of edit. The values are stable identifiers you can match on:
+
+| `PatternKey` | Means |
+|---|---|
+| `EmailDomainChanged` | An address or User Principal Name keeps its local part and moves to a different domain. |
+| `ContainerChanged` | A distinguished name keeps its leaf name and moves to a different parent path. |
+| `CasingChanged` | The value is the same text in a different case. |
+| `PrefixAdded`, `PrefixRemoved` | Text was added to, or removed from, the start of the value. |
+| `SuffixAdded`, `SuffixRemoved` | Text was added to, or removed from, the end of the value. |
+
+```powershell title="Check that a domain cutover only changes domains"
+$preview = Get-JIMConfigurationChangePreview -ActivityId $activityId
+$unexpected = $preview.Groups | Where-Object { $_.PatternKey -ne 'EmailDomainChanged' }
+if ($unexpected) { $unexpected | Format-Table AttributeName, OldValue, NewValue, PatternKey, ObjectCount }
 ```
 
 ---
@@ -135,7 +151,9 @@ Get-JIMConfigurationChangePreviewDelta -ActivityId <guid> -All [-GroupId <guid>]
 
 ### Output
 
-Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType` and the identifiers of the objects concerned.
+Returns one `PSCustomObject` per row, with `ObjectDisplayName`, `ObjectTypeName`, `AttributeName`, `OldValue`, `NewValue`, `TransitionType`, `PatternKey` and the identifiers of the objects concerned.
+
+`PatternKey` takes the same values as on a group (see [`Get-JIMConfigurationChangePreview`](#get-jimconfigurationchangepreview) above). It is per row here, so a group covering a mixture of edits can still be sorted by the kind each object makes.
 
 !!! warning "These rows may be a sample"
 

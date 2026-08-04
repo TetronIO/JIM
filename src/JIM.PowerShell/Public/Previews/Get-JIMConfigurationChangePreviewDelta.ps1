@@ -39,7 +39,11 @@ function Get-JIMConfigurationChangePreviewDelta {
 
     .OUTPUTS
         PSCustomObject per row, with ObjectDisplayName, ObjectTypeName, AttributeName, OldValue,
-        NewValue, TransitionType and the identifiers of the objects concerned.
+        NewValue, TransitionType, PatternKey and the identifiers of the objects concerned.
+
+        PatternKey names what kind of change the row describes (EmailDomainChanged, ContainerChanged,
+        CasingChanged, PrefixAdded, PrefixRemoved, SuffixAdded, SuffixRemoved), and is empty where no
+        pattern was recognised. Useful for sorting a collapsed group's rows by the kind of edit they make.
 
     .EXAMPLE
         Get-JIMConfigurationChangePreviewDelta -ActivityId $activityId

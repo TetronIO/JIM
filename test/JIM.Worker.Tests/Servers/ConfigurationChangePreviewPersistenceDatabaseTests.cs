@@ -127,7 +127,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             Assert.That(group.AttributeName, Is.EqualTo("Email"));
             Assert.That(group.OldValue, Is.EqualTo("@old.example"));
             Assert.That(group.NewValue, Is.EqualTo("@new.example"));
-            Assert.That(group.PatternKey, Is.EqualTo("email-domain-changed"));
+            Assert.That(group.PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
             Assert.That(group.ObjectCount, Is.EqualTo(4_812));
             Assert.That(group.DeltasSampled, Is.True);
 
@@ -141,7 +141,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             Assert.That(delta.AttributeName, Is.EqualTo("Email"));
             Assert.That(delta.OldValue, Is.EqualTo("ada@old.example"));
             Assert.That(delta.NewValue, Is.EqualTo("ada@new.example"));
-            Assert.That(delta.PatternKey, Is.EqualTo("email-domain-changed"));
+            Assert.That(delta.PatternKey, Is.EqualTo(PreviewPatternKeys.EmailDomainChanged));
         });
     }
 
@@ -307,7 +307,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             AttributeName = "Email",
             OldValue = "@old.example",
             NewValue = "@new.example",
-            PatternKey = "email-domain-changed",
+            PatternKey = PreviewPatternKeys.EmailDomainChanged,
             ObjectCount = 4_812,
             DeltasSampled = true
         };
@@ -327,7 +327,7 @@ public class ConfigurationChangePreviewPersistenceDatabaseTests
             AttributeName = "Email",
             OldValue = "ada@old.example",
             NewValue = "ada@new.example",
-            PatternKey = "email-domain-changed"
+            PatternKey = PreviewPatternKeys.EmailDomainChanged
         });
         await context.SaveChangesAsync();
 
