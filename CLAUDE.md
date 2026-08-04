@@ -27,7 +27,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 **Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
 - Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
 - Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
-- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist).
+- **Partial:** UI-only Blazor/Razor changes need `dotnet build`. UI tests exist in `test/JIM.Web.Tests/` (NUnit + bUnit) for the causality visualisation; run `dotnet test test/JIM.Web.Tests/` when changing causality components or display logic, and skip `dotnet test` for UI areas with no test coverage.
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
 - Running containers hold **stale images**: after changing `.cs`, rebuild the affected service(s) before verifying (a browser refresh shows nothing new). The full-stack and integration-test how-to (rebuild commands, `psql` access, `Run-IntegrationTests.ps1`) lives in `.devcontainer/CLAUDE.md` and `test/CLAUDE.md`; those files auto-load only under their own subtrees, so read them when validating from `src/`.
@@ -53,19 +53,21 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Bulk edits:** Avoid `sed`-based bulk rewrites on files that may have been partially modified by hand or by earlier tool calls; prefer targeted `Edit` calls, or dry-run the diff first. After any bulk edit, grep the touched files for unintended duplicates (e.g. repeated `ValidateSet` entries, duplicated `using` lines).
 
+**User Interface changes:** Always create CLAUDE Artefacts to demonstrate UI changes. This will help the user comprehend the options. The user prefers visual explanation of UI changes to text.
+
 **Pushback & honesty:** Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
 
 No glazing. Do not call an idea "great", "brilliant", or "smart" without concrete reasons, and even then lead with what is wrong or missing. Compliments without substance are noise. Do not echo my framing back ("X is definitely the move", "that makes a lot of sense"); start with the most useful sentence you can write instead.
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
-**Response style:** Optimise for my reading time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning.
+**Response style:** Optimise for minimising my reading and comprehension time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning. I need you to reduce my cognitive load. When problems are found, always provide solutions via recommendations, weighted towards what's needed to deliver the most usable, most stable, most maintainable and sustainable product.
 
 Structure every response as these three parts, in this order, and nothing else:
 
-1. **What I did:** the work you (the agent) completed, headed exactly "What I did" so it reads in your voice. One or two sentences, scaled to how much work it was. Never more.
-2. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it.
-3. **Questions:** anything you need from me, as a numbered list at the very end under a clear heading. Omit the section entirely when you need nothing.
+1. **What I did:** if you have made changes, then provide one or two sentences, scaled to how much work it was. Never more. Omit if you made no changes.
+2. **Questions:** if you anything need from me, as a numbered list under a clear heading. Omit the section entirely when you need nothing.
+3. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it. These should be written so as to help drive the objective to conclusion. Be the most helpful problem solver by always offering solutions to problems via recommendations. Ask the user they want you to implement the recommendations, i.e. make it eassy for them to get you to implement a recommendation and drive to the objective.
 
 - Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there.
 - No preamble, no recap of my request, no closing summary.
@@ -97,7 +99,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - NUnit `[Test]`, `Assert.That()`, Moq; test naming `MethodName_Scenario_ExpectedResult`
 - EF Core in-memory database auto-tracks navigation properties - this masks missing `.Include()` bugs. Run integration tests when modifying repository queries.
 
-Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Components.Tests/` (bUnit component tests; scope rules in `test/CLAUDE.md`).
+Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Tests/` (UI: causality display logic and bUnit component tests; scope rules in `test/CLAUDE.md`).
 
 > **Full patterns, debugging, integration testing runner:** `test/CLAUDE.md`
 
@@ -205,11 +207,21 @@ When feature work surfaces something that must be solved to deliver the feature 
 2. **Commit feature WIP** (a `wip:` commit is fine; squash-merge collapses it), then create the new layer **off the current feature branch**: `git checkout -b feature/<feature-suffix>-stack-<desc>`. A stack is a sequential chain; each layer branches from the one below it, never from `main`.
 3. **Implement the layer to full standard**: TDD, build/test gates, changelog and docs if user-facing. Being unplanned lowers no bars.
 4. **Open the layer's PR with its base set to the branch below** (`gh pr create --base feature/<feature>`), then link the chain into a stack: GitHub shows a banner on aligned chains offering to convert, or use the `gh stack` CLI (`gh extension install github/gh-stack`). Reviewers and history get one clean diff per concern.
-5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack (the web "Rebase stack" button, or `gh stack rebase` + `gh stack push`).
+5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack of the layers above it (see "Restacking" below).
 6. **Land bottom-up.** Any PR can merge once everything below it is green; merging an upper PR merges all unmerged PRs below it **atomically, in order, each recorded individually** - so the normal move is to merge from the top when the objective is complete. Every PR in the stack is evaluated against `main`'s protections (all seven required checks), regardless of its direct base.
 
 - **Auto-merge is not supported for stacked PRs.** Do not `gh pr merge --auto` a stack layer; wait for green, then merge (see `/pr-merge`).
-- **Stacks require fully linear history**, so within a stack the merge-don't-rebase rule is inverted: restack with cascading rebase (`gh stack rebase`, then `gh stack push` to force-push the layers), never by merging one layer into another.
+- **Linear history is required between layers, not between the bottom layer and `main`.** Never merge one layer into another; a layer is always rebased onto the layer below it. The bottom layer is an ordinary feature branch that happens to have a PR stacked on it, so it is brought up to date with `main` by merging, exactly as the next section prescribes. Verified on stack #1211: the bottom layer carried a merge commit from `origin/main`, and both PRs still reported `MERGEABLE`, rendered correctly in `gh stack view`, and merged bottom-up without complaint.
+- **Restacking (after the branch below moves): rebase the layer onto its own base, one layer at a time.**
+
+  ```bash
+  # <old-base> is the commit the layer was branched from; find it with `git merge-base`
+  # against the branch below BEFORE that branch moved, or read it off the layer's reflog.
+  git -c rebase.backend=apply rebase --onto feature/<branch-below> <old-base> feature/<layer>
+  git push --force-with-lease
+  ```
+
+  **Do NOT use `gh stack rebase` for this.** It rebases *every* branch in the chain, starting with the bottom layer onto `main`, which is precisely what the merge-don't-rebase rule exists to avoid: on a long-lived bottom layer it replays every commit over `main`'s drift and re-resolves the same conflicts per commit. On stack #1211 it hit conflicts in three files while replaying 53 commits and had to be aborted with `gh stack rebase --abort` (which restores cleanly). The `--onto` form above touches only the layer that actually needs moving. The `-c rebase.backend=apply` is for the same misleading "local changes would be overwritten by merge" on a clean tree noted in the next section; without it the rebase aborts on the first commit.
 - Layers stay shallow and single-concern; nest further layers the same way. Layer branches belong to the same session and objective as their parent feature branch; the `-stack-` naming keeps the lineage visible across parallel sessions.
 - GitHub issues remain only for genuine observations that are NOT needed to deliver the current objective (link them with native blocked-by/sub-issue relationships per the rules above).
 
@@ -224,7 +236,7 @@ git merge origin/main      # then git push (no force needed)
 
 - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After merging, eyeball that section for duplicated `###` headers or bullets and tidy if needed.
 - Only rebase when the user explicitly wants linear pre-squash history. If you do, and the merge backend reports a misleading "local changes would be overwritten" on a clean tree, `git -c rebase.backend=apply rebase origin/main` gets past it.
-- **Stacked PRs are the exception:** a stack requires fully linear history between its layers, so a branch that is part of a stack is brought up to date by cascading rebase (`gh stack rebase` + `gh stack push`, or the web "Rebase stack" button), never by merging. This section's merge-don't-rebase rule applies only to ordinary, non-stacked feature branches.
+- **Stacked PRs: this section applies unchanged to the bottom layer, and never to the layers above it.** The bottom layer targets `main` and is squash-merged like any other branch, so merging `origin/main` into it is right for exactly the reasons above; a merge commit there does not break the stack (see "Stacked PRs for discovered work"). Every layer above is instead rebased onto the layer below with `git rebase --onto`, never merged into. Do not reach for `gh stack rebase` to bring a stack up to date: it rebases the bottom layer onto `main` too, which is the very thing this section argues against.
 
 ### Merging via gh CLI
 

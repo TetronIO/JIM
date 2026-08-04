@@ -67,33 +67,48 @@ $scriptDir = $PSScriptRoot
 
 # Compute a content hash of the build scripts that affect the image contents.
 # This hash is stored as a Docker image label so the test runner can detect stale images.
+# This script is hashed alongside them because it performs the provisioning itself: the flags it passes to
+# docker run (the container hostname, above all) are baked into the domain and into the DC's TLS certificate,
+# so a change here changes image content just as surely as a change to the shell scripts does. Omitting it
+# meant a corrected build produced no new hash, and every cached snapshot stayed stale and undetected.
 $postProvisionContent = Get-Content -Path (Join-Path $scriptDir "post-provision.sh") -Raw
 $startSambaContent = Get-Content -Path (Join-Path $scriptDir "start-samba.sh") -Raw
-$combinedContent = $postProvisionContent + $startSambaContent
+$buildScriptContent = Get-Content -Path (Join-Path $scriptDir "Build-SambaImages.ps1") -Raw
+$combinedContent = $postProvisionContent + $startSambaContent + $buildScriptContent
 $buildContentHash = [System.BitConverter]::ToString(
     [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
 ).Replace("-", "").Substring(0, 16).ToLower()
 Write-Host "Build content hash: $buildContentHash" -ForegroundColor DarkGray
 
 # Image definitions
+# Hostname MUST match the `hostname:` the corresponding service is given in
+# docker-compose.integration-tests.yml, and the alias that resolves it on jim-network. Samba records the
+# provisioning container's hostname as the domain controller's dNSHostName and issues its TLS certificate for
+# that name, and neither is rewritten when the container later runs under a different hostname. Left unset,
+# Docker supplies the build container's ID, so every snapshot advertised a domain controller called something
+# like 26cf8b8c8285.panoply.local: a name nothing can resolve, which JIM's domain controller pinning then
+# discovered and pinned, failing every AD-family run from the second connection onwards.
 $imageDefinitions = @{
     Primary = @{
         Domain    = "PANOPLY.LOCAL"
         Tag       = "primary"
         Password  = "Test@123!"
         Container = "samba-build-primary"
+        Hostname  = "dc1"
     }
     Source  = @{
         Domain    = "RESURGAM.LOCAL"
         Tag       = "source"
         Password  = "Test@123!"
         Container = "samba-build-source"
+        Hostname  = "dc1-source"
     }
     Target  = @{
         Domain    = "GENTIAN.LOCAL"
         Tag       = "target"
         Password  = "Test@123!"
         Container = "samba-build-target"
+        Hostname  = "dc1-target"
     }
 }
 
@@ -198,8 +213,10 @@ foreach ($imageName in $imagesToBuild) {
     Write-Host "  Base image: $baseImage" -ForegroundColor DarkGray
     Write-Host "  Realm: $($config.Domain)" -ForegroundColor DarkGray
     Write-Host "  Short domain: $shortDomain" -ForegroundColor DarkGray
+    Write-Host "  Hostname: $($config.Hostname) (becomes the DC's dNSHostName and TLS certificate name)" -ForegroundColor DarkGray
     docker run -d `
         --name $containerName `
+        --hostname $($config.Hostname) `
         --privileged `
         -e "REALM=$($config.Domain)" `
         -e "DOMAIN=$shortDomain" `

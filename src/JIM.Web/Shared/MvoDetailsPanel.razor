@@ -127,7 +127,7 @@
         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
         {
             <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">
-                @(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())
+                @(attributeValue.ReferenceValue.NameOrId ?? attributeValue.ReferenceValue.Id.ToString())
             </MudLink>
         }
     };
@@ -170,7 +170,7 @@
                     {
                         <MudTd DataLabel="Display Name">
                             <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
-                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                                @(context.ReferenceValue.NameOrId ?? context.ReferenceValue.Id.ToString())
                             </MudLink>
                         </MudTd>
                         <MudTd DataLabel="Type">
@@ -208,7 +208,7 @@
                     {
                         <MudTd DataLabel="Display Name">
                             <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
-                                @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                                @(context.ReferenceValue.NameOrId ?? context.ReferenceValue.Id.ToString())
                             </MudLink>
                         </MudTd>
                         <MudTd DataLabel="Type">
@@ -242,7 +242,7 @@
                         if (val.ReferenceValue != null)
                         {
                             <MudChip T="string" Href="@Utilities.GetMetaverseObjectHref(val.ReferenceValue)" Color="Color.Primary" Variant="Variant.Text">
-                                @(val.ReferenceValue.DisplayName ?? val.ReferenceValue.Id.ToString())
+                                @(val.ReferenceValue.NameOrId ?? val.ReferenceValue.Id.ToString())
                             </MudChip>
                         }
                         else
@@ -275,7 +275,7 @@
                     if (val.ReferenceValue != null)
                     {
                         <MudListItem T="string" Href="@Utilities.GetMetaverseObjectHref(val.ReferenceValue)" Icon="@Icons.Material.Filled.Link">
-                            @(val.ReferenceValue.DisplayName ?? val.ReferenceValue.Id.ToString())
+                            @(val.ReferenceValue.NameOrId ?? val.ReferenceValue.Id.ToString())
                         </MudListItem>
                     }
                     else
@@ -664,7 +664,7 @@
             return true;
 
         var displayValue = value.ReferenceValue != null
-            ? value.ReferenceValue.DisplayName ?? value.ReferenceValue.Id.ToString()
+            ? value.ReferenceValue.NameOrId ?? value.ReferenceValue.Id.ToString()
             : GetDisplayValue(value);
 
         return displayValue.Contains(searchText, StringComparison.OrdinalIgnoreCase);

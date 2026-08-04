@@ -5,6 +5,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
+using JIM.Connectors;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -96,8 +97,13 @@ public class JimApplication : IDisposable
     /// the preview framework through this facade with a test double, which is otherwise impossible without either
     /// reflection-based discovery or a real adapter.
     /// </param>
+    /// <param name="connectorFactory">
+    /// How Connectors are instantiated. Null takes the real one, which loads the Connector assembly named by the
+    /// Connected System's Connector Definition. Supplied by tests that need to drive a server method which talks
+    /// to a Connected System (setting a password, for example) without one in front of it.
+    /// </param>
     public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null,
-        ConfigurationChangePreviewAdapterRegistry? previewAdapters = null)
+        ConfigurationChangePreviewAdapterRegistry? previewAdapters = null, IConnectorFactory? connectorFactory = null)
     {
         Activities = new ActivityServer(this);
         Auth = new AuthServer(this);
@@ -119,7 +125,7 @@ public class JimApplication : IDisposable
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);
-        ConnectedSystems = new ConnectedSystemServer(this);
+        ConnectedSystems = new ConnectedSystemServer(this, connectorFactory);
         ExampleData = new ExampleDataServer(this);
         DriftDetection = new DriftDetectionService(this);
         SyncRepo = syncRepository!; // All DI registrations pass PostgresData.SyncRepository explicitly.

@@ -157,7 +157,7 @@ public class MetaverseObjectAttributeValue
 
         if (ReferenceValue != null)
         {
-            output += $"{ReferenceValue.Id} ({ReferenceValue.DisplayName})";
+            output += $"{ReferenceValue.Id} ({ReferenceValue.Name})";
             return output;
         }
 

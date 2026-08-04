@@ -1,0 +1,219 @@
+@using JIM.Models.Activities
+@using JIM.Web.Causality
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
+   technical-names toggle, the Timeline's expanded event and the Flow and Graph views' selected
+   event (whose attribute detail renders in the shared bottom drawer); builds the causality model
+   and summary once per (Item, Context) pair and renders the summary band (whose head row carries
+   the view switcher and technical-names toggle in its Actions slot), the active view and the
+   drawer. Persisted view and technical-names preferences load on first render per the
+   TableDensityToggle idiom; the Flow view is the default, and a stored preference for an unknown
+   view falls back to it without being overwritten. *@
+
+<div class="causality-panel">
+    @if (Item.SyncOutcomes.Count == 0)
+    {
+        <div class="pa-4">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Outcome tracking was not enabled when this activity was recorded.
+                Only the operation type is available.
+            </MudAlert>
+        </div>
+    }
+    else if (_model != null && _summary != null)
+    {
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
+            <Actions>
+                @if (AvailableViews.Count > 1)
+                {
+                    <div class="seg" role="group" aria-label="Causality view">
+                        @foreach (var view in AvailableViews)
+                        {
+                            <button type="button" class="@(view == _view ? "on" : null)"
+                                    aria-pressed="@(view == _view ? "true" : "false")"
+                                    @onclick="() => SelectViewAsync(view)">@GetViewLabel(view)</button>
+                        }
+                    </div>
+                }
+                <button type="button" class="toggle-line @(_technicalNames ? "on" : null)"
+                        aria-pressed="@(_technicalNames ? "true" : "false")"
+                        @onclick="ToggleTechnicalNamesAsync">
+                    <span class="track" aria-hidden="true"></span> Technical names
+                </button>
+            </Actions>
+        </CausalitySummaryBand>
+
+        <div class="canvas-wrap">
+            @switch (_view)
+            {
+                case CausalityView.Flow:
+                    <CausalityFlowView Model="_model" TechnicalNames="_technicalNames"
+                                       @bind-SelectedEvent="_selectedEvent" />
+                    break;
+                case CausalityView.Graph:
+                    <CausalityGraphView Model="_model" TechnicalNames="_technicalNames"
+                                        @bind-SelectedEvent="_selectedEvent" />
+                    break;
+                case CausalityView.Timeline:
+                default:
+                    <CausalityTimelineView Model="_model" TechnicalNames="_technicalNames"
+                                           @bind-ExpandedEvent="_expandedEvent" />
+                    break;
+            }
+        </div>
+
+        @* ─── Bottom drawer: attribute detail for the Flow/Graph views' selected event ─── *@
+        @if (_view != CausalityView.Timeline && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRows.Count > 0)
+        {
+            <div class="drawer">
+                <div class="drawer-inner">
+                    <div class="drawer-head">
+                        <span class="drawer-title">@(_technicalNames ? selectedEvent.TechnicalLabel : selectedEvent.PlainLabel)</span>
+                        <span class="drawer-sub">@GetDrawerSubtitle(selectedEvent)</span>
+                        <button type="button" class="drawer-close" aria-label="Close detail"
+                                @onclick="CloseDrawer">&#x2715;</button>
+                    </div>
+                    @* Keyed on the event so the detail's filter state resets when another card is selected *@
+                    @* An event with a rows caption is naming what its rows are rather than counting changes,
+                       so those rows carry no meaningful operation to show. *@
+                    <CausalityAttributeDetail @key="selectedEvent" Rows="selectedEvent.AttributeRows"
+                                              ShowOperations="@(selectedEvent.AttributeRowsCaption == null)" />
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The views currently implemented, in switcher order. A stored preference only takes effect
+    /// when its view appears here.
+    /// </summary>
+    private static readonly IReadOnlyList<CausalityView> AvailableViews =
+        [CausalityView.Flow, CausalityView.Timeline, CausalityView.Graph];
+
+    /// <summary>
+    /// The Run Profile Execution Item whose causality is visualised.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ActivityRunProfileExecutionItem Item { get; set; } = null!;
+
+    /// <summary>
+    /// The page-level context (run, Connected System, record and Metaverse Object Type names) used
+    /// for sentence composition and link building.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityPageContext Context { get; set; } = null!;
+
+    /// <summary>
+    /// The Pending Exports this item created that are still queued, or null when the host page did
+    /// not resolve them (in which case every Pending Export link stays precise). Pending Export rows
+    /// are deleted once exported, so this is what lets a link degrade to the target system's queue
+    /// rather than 404. Pass the same instance across renders; a new set rebuilds the model and drops
+    /// the expanded and selected event.
+    /// </summary>
+    [Parameter]
+    public IReadOnlySet<Guid>? LivePendingExportIds { get; set; }
+
+    /// <summary>
+    /// The execution timestamp (UTC) shown in the summary band.
+    /// </summary>
+    [Parameter]
+    public DateTime? Timestamp { get; set; }
+
+    private CausalityModel? _model;
+    private CausalitySummary? _summary;
+    private CausalityView _view = CausalityView.Flow;
+    private bool _technicalNames;
+    private CausalityEvent? _expandedEvent;
+    private CausalityEvent? _selectedEvent;
+    private ActivityRunProfileExecutionItem? _builtItem;
+    private CausalityPageContext? _builtContext;
+    private IReadOnlySet<Guid>? _builtLivePendingExportIds;
+
+    protected override void OnParametersSet()
+    {
+        // Build once per (Item, Context) pair; parent re-renders with unchanged values must not
+        // discard the expanded/selected-event state by rebuilding the model
+        if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext)
+            && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds))
+            return;
+
+        _builtItem = Item;
+        _builtContext = Context;
+        _builtLivePendingExportIds = LivePendingExportIds;
+        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds);
+        _summary = CausalitySummaryBuilder.Build(_model);
+        _expandedEvent = null;
+        _selectedEvent = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // No try/catch needed: the preference service swallows JS interop unavailability internally
+        var storedView = CausalityViewPreference.FromKey(await PreferenceService.GetCausalityViewAsync());
+        var storedTechNames = await PreferenceService.GetCausalityTechNamesAsync();
+
+        // A stored preference for a view that has not shipped keeps the default without
+        // overwriting the stored value, so it takes effect if that view becomes available
+        if (storedView.HasValue && AvailableViews.Contains(storedView.Value))
+            _view = storedView.Value;
+
+        _technicalNames = storedTechNames == true;
+        StateHasChanged();
+    }
+
+    private async Task SelectViewAsync(CausalityView view)
+    {
+        _view = view;
+        _selectedEvent = null;
+        await PreferenceService.SetCausalityViewAsync(CausalityViewPreference.ToKey(view));
+    }
+
+    private async Task ToggleTechnicalNamesAsync()
+    {
+        _technicalNames = !_technicalNames;
+        await PreferenceService.SetCausalityTechNamesAsync(_technicalNames);
+    }
+
+    private void CloseDrawer()
+    {
+        _selectedEvent = null;
+    }
+
+    private static string GetDrawerSubtitle(CausalityEvent selectedEvent)
+    {
+        var count = selectedEvent.AttributeRows.Count;
+        // A queued deprovision's rows identify the target rather than change it, so the drawer says what
+        // they are rather than calling them changes; see CausalityEvent.AttributeRowsCaption.
+        var subtitle = selectedEvent.AttributeRowsCaption
+                       ?? $"{count} attribute change{(count == 1 ? "" : "s")}";
+        return string.IsNullOrWhiteSpace(selectedEvent.SystemName)
+            ? subtitle
+            : $"{subtitle} · {selectedEvent.SystemName}";
+    }
+
+    private CausalityTone GetStatusTone()
+    {
+        return Item.ErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet
+            ? CausalityTone.Error
+            : CausalityTone.Success;
+    }
+
+    private static string GetViewLabel(CausalityView view)
+    {
+        return view switch
+        {
+            CausalityView.Flow => "Flow",
+            CausalityView.Graph => "Graph",
+            _ => "Timeline"
+        };
+    }
+}

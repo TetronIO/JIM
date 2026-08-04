@@ -54,7 +54,7 @@ flowchart TD
     SetExecuted --> TaskType{WorkerTask<br/>type?}
 
     %% --- Sync task ---
-    TaskType -->|SynchronisationWorkerTask| ResolveConnector[Resolve connector<br/>LDAP / File / ...]
+    TaskType -->|SynchronisationWorkerTask| ResolveConnector[Resolve connector<br/>LDAP / File / SCIM / ...]
     ResolveConnector --> ResolveRP[Get RunProfile from<br/>ConnectedSystem.RunProfiles]
     ResolveRP --> RunType{RunProfile<br/>RunType?}
 

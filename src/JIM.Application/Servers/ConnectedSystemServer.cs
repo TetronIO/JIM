@@ -36,9 +36,15 @@ public class ConnectedSystemServer
     /// </summary>
     internal IConnectorFactory ConnectorFactory { private get; set; } = new ConnectorFactory();
 
-    internal ConnectedSystemServer(JimApplication application)
+    internal ConnectedSystemServer(JimApplication application, IConnectorFactory? connectorFactory = null)
     {
         Application = application;
+
+        // The constructor parameter is a convenience over the property above, not a second seam: tests that
+        // build a whole JimApplication (the password fan-out ones) can hand the factory in at construction
+        // rather than reaching into the server afterwards. Both routes end at the same field.
+        if (connectorFactory != null)
+            ConnectorFactory = connectorFactory;
     }
 
     /// <summary>
@@ -1068,7 +1074,7 @@ public class ConnectedSystemServer
     public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
+            connectedSystemId, initiatedBy?.NameOrId ?? "System", deleteChangeHistory);
 
         // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
@@ -1099,7 +1105,7 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
@@ -1117,7 +1123,7 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
@@ -1897,6 +1903,360 @@ public class ConnectedSystemServer
         return CreateConnector(connectedSystem) is IConnectorPasswordManagement passwordConnector
             ? passwordConnector.SupportedExpiryBehaviours
             : [];
+    }
+
+    /// <summary>
+    /// Sets the password on one account in a Connected System, at an administrator's request (issue #1121).
+    /// <para>
+    /// This is the manual counterpart to the initial password an export delivers: the account whose provisioning
+    /// password was parked, the person who never received theirs, the reset that has to happen now. It writes
+    /// straight to the target and records the attempt as an Activity; nothing is staged, retried or persisted,
+    /// because there is nowhere to keep a password and no second chance worth keeping one for.
+    /// </para>
+    /// <para>
+    /// <b>The password value goes to the Connector and nowhere else.</b> It is never logged, never written to the
+    /// Activity, and never returned. Callers must hold it no longer than the call.
+    /// </para>
+    /// <para>
+    /// This is a password-reset primitive, and JIM's Administrator role is the whole of the authorisation on it:
+    /// an administrator who can reach this can reset the password of any account in the connector space, up to
+    /// and including privileged ones, subject only to what the Connected System's own service account is
+    /// permitted to do. That is the same authority the provisioning path already exercises unattended, so it
+    /// grants nothing new; it does make the target selection a person's rather than a Synchronisation Rule's,
+    /// which is why every attempt is recorded.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the account lives in.</param>
+    /// <param name="connectedSystemObjectId">The Connected System Object to set the password on.</param>
+    /// <param name="password">The password to set. Never logged, never persisted, never returned.</param>
+    /// <param name="options">How to apply it: the expiry behaviour, and whether to enable the account.</param>
+    /// <param name="initiatedBy">The administrator making the request, for attribution on the Activity.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <returns>
+    /// The classified outcome. A target that refuses the password is a result, not an exception: its verbatim
+    /// reason is the single most useful thing to show the administrator who has to choose another one.
+    /// </returns>
+    /// <exception cref="ArgumentException">The password is empty, or no such Connected System Object exists.</exception>
+    /// <exception cref="NotSupportedException">The Connector cannot set passwords.</exception>
+    public async Task<PasswordSetResult> SetConnectedSystemObjectPasswordAsync(
+        int connectedSystemId,
+        Guid connectedSystemObjectId,
+        string password,
+        PasswordSetOptions options,
+        MetaverseObject? initiatedBy,
+        CancellationToken cancellationToken)
+    {
+        return await SetConnectedSystemObjectPasswordCoreAsync(connectedSystemId, connectedSystemObjectId, password, options,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy), parentActivityId: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sets the password on one account in a Connected System. API-key initiator overload; see the
+    /// user-initiated overload for the behaviour and the security note.
+    /// </summary>
+    public async Task<PasswordSetResult> SetConnectedSystemObjectPasswordAsync(
+        int connectedSystemId,
+        Guid connectedSystemObjectId,
+        string password,
+        PasswordSetOptions options,
+        ApiKey initiatedByApiKey,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+
+        return await SetConnectedSystemObjectPasswordCoreAsync(connectedSystemId, connectedSystemObjectId, password, options,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey), parentActivityId: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// The accounts a Metaverse Object is joined to, with what each one's Connected System can do about
+    /// passwords (issue #1172).
+    /// <para>
+    /// Systems whose Connector cannot set a password are returned marked as such rather than left out, so an
+    /// administrator looking for an account that is not offered can see that JIM knows about it and why it is
+    /// not on the list.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<IReadOnlyList<MetaverseObjectAccount>> GetAccountsForPasswordSetAsync(Guid metaverseObjectId)
+    {
+        var connectedSystemObjects = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
+
+        // Each Connected System is resolved once and reused across its accounts. The retrieval above does not
+        // load the Connected System navigation, and an unloaded navigation is indistinguishable from an absent
+        // value, so the system is loaded here by id rather than read off the object.
+        var systems = new Dictionary<int, (string Name, IReadOnlyCollection<PasswordExpiryBehaviour> ExpiryBehaviours, ConnectedSystemPasswordPolicy? Policy, bool CanDiscoverPolicy)>();
+        foreach (var connectedSystemId in connectedSystemObjects.Select(cso => cso.ConnectedSystemId).Distinct())
+        {
+            var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+            if (connectedSystem == null)
+                continue;
+
+            var expiryBehaviours = CreateConnector(connectedSystem) is IConnectorPasswordManagement passwordConnector
+                ? passwordConnector.SupportedExpiryBehaviours
+                : [];
+
+            systems[connectedSystemId] = (
+                connectedSystem.Name,
+                expiryBehaviours,
+                expiryBehaviours.Count > 0 ? await GetPasswordPolicyAsync(connectedSystemId) : null,
+                connectedSystem.ConnectorDefinition.SupportsPasswordPolicyDiscovery);
+        }
+
+        return connectedSystemObjects
+            .Where(cso => systems.ContainsKey(cso.ConnectedSystemId))
+            .Select(cso =>
+            {
+                var system = systems[cso.ConnectedSystemId];
+                return new MetaverseObjectAccount
+                {
+                    ConnectedSystemObjectId = cso.Id,
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemName = system.Name,
+                    AccountIdentifier = cso.NameOrId ?? cso.Id.ToString(),
+                    ConnectorCanSetPasswords = system.ExpiryBehaviours.Count > 0,
+                    SupportedExpiryBehaviours = system.ExpiryBehaviours,
+                    DiscoveredPolicy = system.Policy,
+                    ConnectorCanDiscoverPasswordPolicy = system.CanDiscoverPolicy
+                };
+            })
+            .OrderBy(account => account.ConnectedSystemName)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Sets the same password on several of a person's accounts, one Connected System at a time (issue #1172).
+    /// <para>
+    /// <b>There is no transaction across systems.</b> Each write is independent, and a fan-out routinely ends
+    /// with some accounts changed and others not; that is reported per account rather than rolled into a count,
+    /// because which accounts took the password is what the administrator has to act on.
+    /// </para>
+    /// <para>
+    /// Sequential on purpose. A handful of accounts makes the wall-clock saving of running them at once
+    /// negligible, and sequence is what lets the caller narrate progress at all. It also means a target
+    /// refusing everything is discovered on the first account rather than the fourth.
+    /// </para>
+    /// <para>
+    /// Two or more accounts are grouped under a parent Activity, so the fan-out is findable afterwards as one
+    /// action; a single account gets none, because a group of one is a row in the Activity list that says
+    /// nothing and hides the row that does.
+    /// </para>
+    /// </summary>
+    /// <param name="metaverseObjectId">The person whose accounts these are, for the parent Activity.</param>
+    /// <param name="accounts">The accounts to set the password on, in the order to attempt them.</param>
+    /// <param name="password">The password to set. Never logged, never persisted, never returned.</param>
+    /// <param name="options">How to apply it, applied identically to every account.</param>
+    /// <param name="initiatedBy">The administrator making the request, for attribution.</param>
+    /// <param name="progress">
+    /// Reports each account's outcome as it lands, so a caller can show progress while the rest are still
+    /// being written. Optional; the full set is returned regardless.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// Stops before the accounts not yet reached. It cannot undo the ones already written, and their outcomes
+    /// are still returned, because a password that landed has landed whatever the administrator did next.
+    /// </param>
+    public async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
+        Guid metaverseObjectId,
+        IReadOnlyList<MetaverseObjectAccount> accounts,
+        string password,
+        PasswordSetOptions options,
+        MetaverseObject? initiatedBy,
+        IProgress<AccountPasswordSetOutcome>? progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        if (accounts.Count == 0)
+            throw new ArgumentException("At least one account is required.", nameof(accounts));
+
+        Activity? parentActivity = null;
+        if (accounts.Count > 1)
+        {
+            parentActivity = new Activity
+            {
+                TargetName = $"{accounts.Count} accounts",
+                TargetType = ActivityTargetType.MetaverseObject,
+                TargetOperationType = ActivityTargetOperationType.SetPassword,
+                MetaverseObjectId = metaverseObjectId
+            };
+            await Application.Activities.CreateActivityAsync(parentActivity, initiatedBy);
+        }
+
+        var outcomes = new List<AccountPasswordSetOutcome>(accounts.Count);
+        try
+        {
+            foreach (var account in accounts)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                var startedAt = DateTime.UtcNow;
+                PasswordSetResult result;
+                try
+                {
+                    result = await SetConnectedSystemObjectPasswordCoreAsync(
+                        account.ConnectedSystemId, account.ConnectedSystemObjectId, password, options,
+                        activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+                        parentActivity?.Id, cancellationToken);
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+                {
+                    // A missing account or a Connector that cannot do this stops that account, not the fan-out.
+                    // The administrator picked several systems and the rest of them may work perfectly.
+                    result = PasswordSetResult.Failed(
+                        ex is NotSupportedException ? PasswordSetFailureReason.UnsupportedOperation : PasswordSetFailureReason.TargetObjectNotFound,
+                        ex.Message);
+                }
+
+                var outcome = new AccountPasswordSetOutcome
+                {
+                    ConnectedSystemObjectId = account.ConnectedSystemObjectId,
+                    ConnectedSystemId = account.ConnectedSystemId,
+                    ConnectedSystemName = account.ConnectedSystemName,
+                    Result = result,
+                    Duration = DateTime.UtcNow - startedAt
+                };
+                outcomes.Add(outcome);
+                progress?.Report(outcome);
+            }
+        }
+        finally
+        {
+            if (parentActivity != null)
+                await CompleteFanOutActivityAsync(parentActivity, outcomes);
+        }
+
+        // Synchronisation Integrity: summary statistics at the end of every batch operation. The Connected
+        // System Object ids are logged so an administrator can find the accounts that refused; the password is
+        // not, and no part of it ever is.
+        var failed = outcomes.Where(o => !o.Result.Success).ToList();
+        Log.Information("SetPasswordOnAccountsAsync: Password set on {Succeeded} of {Attempted} accounts for Metaverse Object {MetaverseObjectId}. Refused by: {Refused}",
+            outcomes.Count - failed.Count, outcomes.Count, metaverseObjectId,
+            failed.Count == 0 ? "none" : string.Join(", ", failed.Select(f => f.ConnectedSystemObjectId)));
+
+        return new MultiAccountPasswordSetResult { Outcomes = outcomes };
+    }
+
+    /// <summary>
+    /// Finishes the parent Activity with what the fan-out achieved. Failed rather than completed where any
+    /// account refused, because the administrator asked for a password on all of them and did not get one.
+    /// </summary>
+    private async Task CompleteFanOutActivityAsync(Activity parentActivity, IReadOnlyList<AccountPasswordSetOutcome> outcomes)
+    {
+        var failed = outcomes.Where(o => !o.Result.Success).ToList();
+        if (failed.Count == 0)
+        {
+            parentActivity.Message = $"Password set on {outcomes.Count} accounts.";
+            await Application.Activities.CompleteActivityAsync(parentActivity);
+            return;
+        }
+
+        await Application.Activities.FailActivityWithErrorAsync(parentActivity,
+            $"Password set on {outcomes.Count - failed.Count} of {outcomes.Count} accounts. Not set on: {string.Join(", ", failed.Select(f => f.ConnectedSystemName))}.");
+    }
+
+    private async Task<PasswordSetResult> SetConnectedSystemObjectPasswordCoreAsync(
+        int connectedSystemId,
+        Guid connectedSystemObjectId,
+        string password,
+        PasswordSetOptions options,
+        Func<Activity, Task> createActivityAsync,
+        Guid? parentActivityId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (string.IsNullOrWhiteSpace(password))
+            throw new ArgumentException("A password is required.", nameof(password));
+
+        // Deliberately without a parameter name: these messages are shown to an administrator and returned by the
+        // REST API, where "(Parameter 'connectedSystemObjectId')" is noise about JIM's own method signature.
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId)
+            ?? throw new ArgumentException($"Connected System {connectedSystemId} does not exist.");
+
+        var connectedSystemObject = await GetConnectedSystemObjectAsync(connectedSystemId, connectedSystemObjectId)
+            ?? throw new ArgumentException(
+                $"Connected System Object {connectedSystemObjectId} does not exist in Connected System {connectedSystemId}.");
+
+        // Both resolved before the Activity is created, so a Connector that cannot do this never leaves an
+        // in-flight Activity behind. Same reasoning as the hierarchy import above.
+        if (CreateConnector(connectedSystem) is not IConnectorPasswordManagement passwordConnector)
+            throw new NotSupportedException(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support setting passwords.");
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemObject.NameOrId ?? connectedSystemObjectId.ToString(),
+            TargetType = ActivityTargetType.ConnectedSystemObject,
+            TargetOperationType = ActivityTargetOperationType.SetPassword,
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemObjectId = connectedSystemObjectId,
+            MetaverseObjectId = connectedSystemObject.MetaverseObjectId,
+            ParentActivityId = parentActivityId
+        };
+        await createActivityAsync(activity);
+
+        var result = await ApplyPasswordAsync(passwordConnector, connectedSystem, connectedSystemObject, password, options, cancellationToken);
+
+        if (result.Success)
+        {
+            // The applied behaviour, not the requested one: a target that could not honour the request says so,
+            // and recording what was asked for would misstate the account's actual state.
+            activity.Message = result.ExpiryBehaviourWarning == null
+                ? $"Password set. Expiry behaviour applied: {result.AppliedExpiryBehaviour}."
+                : $"Password set. Expiry behaviour applied: {result.AppliedExpiryBehaviour}. {result.ExpiryBehaviourWarning}";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        else
+        {
+            // Failed rather than completed: the administrator asked for a password to be set and it was not.
+            // The target's own words are kept verbatim, since why a directory refuses a password is a property
+            // of that directory's policy and is what the administrator has to act on.
+            await Application.Activities.FailActivityWithErrorAsync(activity,
+                $"The password could not be set ({result.FailureReason}): {result.ErrorMessage}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Opens the password connection, sets the password, and closes the connection whatever happens.
+    /// <para>
+    /// A connection that could not be opened, or a Connector that threw rather than classifying, is reported as
+    /// a transient failure: it says nothing about whether the password itself would be acceptable, and an
+    /// administrator's next move is to try again once the target is reachable.
+    /// </para>
+    /// </summary>
+    private static async Task<PasswordSetResult> ApplyPasswordAsync(
+        IConnectorPasswordManagement passwordConnector,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemObject connectedSystemObject,
+        string password,
+        PasswordSetOptions options,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            passwordConnector.OpenPasswordConnection(connectedSystem.SettingValues);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "SetConnectedSystemObjectPasswordAsync: Could not open the password connection to Connected System {ConnectedSystemId}", connectedSystem.Id);
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient,
+                $"JIM could not open a password connection to the Connected System: {ex.Message}");
+        }
+
+        try
+        {
+            return await passwordConnector.SetPasswordAsync(connectedSystemObject, password, options, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "SetConnectedSystemObjectPasswordAsync: The Connector threw setting a password on Connected System Object {CsoId}", connectedSystemObject.Id);
+            return PasswordSetResult.Failed(PasswordSetFailureReason.Transient, ex.Message);
+        }
+        finally
+        {
+            passwordConnector.ClosePasswordConnection();
+        }
     }
 
     /// <summary>
@@ -3163,10 +3523,9 @@ public class ConnectedSystemServer
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
         var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName();
-        // Get the displayName attribute value directly (don't use DisplayNameOrId which falls back to External ID)
-        var displayNameAttr = connectedSystemObject.AttributeValues
-            .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
-        var displayName = displayNameAttr?.StringValue;
+        // Name only, never NameOrId: the external id is captured separately just above, and letting it
+        // stand in for the name would persist the same value into both snapshot fields.
+        var displayName = connectedSystemObject.Name;
 
         // Snapshot all attribute values BEFORE deletion for change tracking.
         // Attribute values are cascade-deleted with the CSO, so we must capture them now.
@@ -3202,6 +3561,9 @@ public class ConnectedSystemServer
             // Use string fields to preserve the values for UI display:
             DeletedObjectExternalId = externalIdDisplayValue,
             DeletedObjectDisplayName = displayName,
+            // The id survives here as a plain column; ConnectedSystemObjectId is a foreign key and is nulled
+            // with the object, so this is the only way back to this record from a reference to what was deleted.
+            DeletedConnectedSystemObjectId = connectedSystemObject.Id,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             // Copy initiator info from the Activity for audit trail (if Activity is loaded)
             InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -3246,13 +3608,11 @@ public class ConnectedSystemServer
         // Capture external ID, display name, and all attribute values before deletion.
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
-        // Get displayName attribute directly (don't use DisplayNameOrId which falls back to External ID).
+        // Name only, never NameOrId: the external id is captured separately alongside it.
         var deletedObjectInfo = connectedSystemObjects
             .Select(cso => (
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.AttributeValues
-                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue,
+                DisplayName: cso.Name,
                 FinalAttributeValues: cso.AttributeValues
                     .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
                     .ToList()))
@@ -3282,6 +3642,7 @@ public class ConnectedSystemServer
                     // Use string fields to preserve the values for UI display:
                     DeletedObjectExternalId = externalId,
                     DeletedObjectDisplayName = displayName,
+                    DeletedConnectedSystemObjectId = cso.Id,
                     ActivityRunProfileExecutionItem = executionItem,
                     // Copy initiator info from the Activity for audit trail (if Activity is loaded)
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -3933,12 +4294,11 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != rpeis.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
+        // Name only, never NameOrId: the external id is captured separately alongside it.
         var deletedObjectInfo = connectedSystemObjects
             .Select(cso => (
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.AttributeValues
-                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue,
+                DisplayName: cso.Name,
                 FinalAttributeValues: cso.AttributeValues
                     .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
                     .ToList()))
@@ -3960,6 +4320,7 @@ public class ConnectedSystemServer
                     DeletedObjectType = cso.Type,
                     DeletedObjectExternalId = externalId,
                     DeletedObjectDisplayName = displayName,
+                    DeletedConnectedSystemObjectId = cso.Id,
                     ActivityRunProfileExecutionItem = executionItem,
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
                     InitiatedById = executionItem.Activity?.InitiatedById,
@@ -5619,6 +5980,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so anything holding historical ids (a causality record naming the Pending
+    /// Export an event created) needs this to tell a live row from one that has since been run.
+    /// </summary>
+    /// <param name="pendingExportIds">The ids to test. An empty list returns an empty result without querying.</param>
+    public async Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetExistingPendingExportIdsAsync(pendingExportIds);
+    }
+
+    /// <summary>
     /// Retrieves a single Pending Export with capped multi-valued attribute changes for the detail page.
     /// Multi-valued attribute changes are capped at 10 per attribute; total counts are returned separately.
     /// </summary>
@@ -5760,6 +6132,18 @@ public class ConnectedSystemServer
     public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
+    }
+
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. Backs the Deleted Objects page's deep link, reached from a causality view that holds the
+    /// deleted record's id rather than its change record's.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    public async Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeAsync(deletedConnectedSystemObjectId);
     }
     #endregion
 

@@ -79,7 +79,7 @@ public class SecurityAuditServer
             };
 
             await Application.Activities.CreateCompletedActivityWithTriadAsync(
-                activity, ActivityInitiatorType.User, metaverseObject.Id, metaverseObject.DisplayName);
+                activity, ActivityInitiatorType.User, metaverseObject.Id, metaverseObject.Name);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

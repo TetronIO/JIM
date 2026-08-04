@@ -82,7 +82,7 @@ public class DeletionCascadeExportReportingTests
     /// The set-based fast path: a Metaverse Object deleted inline by the run, whose target Connected
     /// System Object is matched by an export Synchronisation Rule with a Delete deprovisioning action,
     /// must record the staged delete Pending Export as a consequence of the deletion: a
-    /// PendingExportCreated outcome nested beneath the MvoDeleted outcome on the disconnecting object's
+    /// DeprovisionQueued outcome nested beneath the MvoDeleted outcome on the disconnecting object's
     /// execution item, naming the Connected System the account is being deleted from.
     /// </summary>
     [Test]
@@ -106,7 +106,9 @@ public class DeletionCascadeExportReportingTests
         var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
         Assert.That(cascadeOutcome, Is.Not.Null,
             "The staged delete Pending Export must be recorded as a consequence of the Metaverse Object deletion");
-        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued),
+            "A staged Delete Pending Export is a queued deprovision, not an attribute update: reported as the " +
+            "generic PendingExportCreated, its DN-preservation payload read as 'one attribute set' in the causality views");
         Assert.That(cascadeOutcome.ParentSyncOutcome, Is.SameAs(mvoDeletedOutcome));
         Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
         Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
@@ -380,16 +382,16 @@ public class DeletionCascadeExportReportingTests
             {
                 Id = Guid.NewGuid(),
                 ObjectChangeType = ObjectChangeType.Disconnected,
-                DisplayNameSnapshot = mvo.DisplayName
+                DisplayNameSnapshot = mvo.Name
             };
             var disconnectedOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
                 ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected,
                 targetEntityId: mvo.Id,
-                targetEntityDescription: mvo.DisplayName);
+                targetEntityDescription: mvo.NameOrId);
             var mvoDeletedOutcome = SyncOutcomeBuilder.AddChildOutcome(rpei, disconnectedOutcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                 targetEntityId: mvo.Id,
-                targetEntityDescription: mvo.DisplayName);
+                targetEntityDescription: mvo.NameOrId);
             _activity.RunProfileExecutionItems.Add(rpei);
             return (rpei, mvoDeletedOutcome);
         }

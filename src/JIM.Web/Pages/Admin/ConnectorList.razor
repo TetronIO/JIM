@@ -32,8 +32,8 @@
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Description ?? string.Empty)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)"><MudText Typo="Typo.button">In-use?</MudText></MudTableSortLabel></MudTh>
+        <MudTh Class="jim-nowrap"><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+        <MudTh Class="jim-nowrap"><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)"><MudText Typo="Typo.button">In-use?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions ?? string.Empty)"><MudText Typo="Typo.button">Version(s)</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>

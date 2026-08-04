@@ -2,6 +2,16 @@
 
 :root {
     --jim-instance-bar-height: 28px;
+
+    /* The corner radius of every container element: papers, tables, alerts, expansion panels, code
+       blocks and cards, plus anything hand-built that joins one of them into a single box. This is
+       the only place the figure appears; nothing else should write a container radius as a literal.
+       Held as a token because the alternative is what it replaced: a status bar hard-coded to 4px
+       sitting on top of a paper the container rule had already moved to 8px, so the box was rounder
+       at the bottom than at the top, and the two literals were written months apart with nothing
+       tying them together. Deliberately not --mud-default-borderradius, which is smaller because it
+       also drives buttons, inputs and other interactive controls. */
+    --jim-container-radius: 8px;
 }
 
 /* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
@@ -219,7 +229,7 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 .mud-paper-outlined,
 .mud-table,
 .mud-alert {
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
 }
 
 /* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
@@ -261,7 +271,7 @@ html[lang] .mud-table-outlined {
 /* JIM styled expansion panels - use .jim-expansion-panel class on MudExpansionPanels */
 .jim-expansion-panel {
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
     overflow: hidden;
 }
 
@@ -377,7 +387,9 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     height: 40px;
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
     border-bottom: none;
-    border-radius: 4px 4px 0 0;
+    /* Joins the block beneath it into one box, so it carries the container radius on the two
+       corners that are actually on the outside of that box. */
+    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
     overflow: hidden;
     background-color: var(--mud-palette-surface);
 }
@@ -512,13 +524,13 @@ html[lang] .mud-paper .mud-card::after {
 /* Match the tabs container radius to our 8px standard and clip child content so
    the first/last tab's active highlight doesn't overflow the rounded corners. */
 .mud-tabs-rounded {
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
 }
 
 /* Ensure the rounded outlined tabbar uses our 8px radius on all corners and clips
    child content so tab highlights respect the rounded shape. */
 html[lang] .mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined {
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
     overflow: hidden;
 }
 
@@ -526,6 +538,14 @@ html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-inner,
 html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-content,
 html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-wrapper {
     border-radius: inherit;
+}
+
+/* A tab's count badge is absolutely positioned around a zero-width anchor, so it
+   occupies no layout space; when the tab is wider than its 160px min-width the
+   badge's right half lands past the tab's padding edge and .mud-ripple's
+   overflow:hidden clips it. Reserve the badge's overhang in the tab's width. */
+html[lang] .mud-tab .mud-badge-root.mud-tab-badge {
+    margin-inline-end: 12px;
 }
 
 /* Strengthen tab bar separator line to match container borders */
@@ -615,7 +635,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--mud-palette-text-primary);
     background: var(--jim-inner-surface, var(--mud-palette-background));
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow-x: auto;
     white-space: pre;
 }
@@ -1222,7 +1242,7 @@ html[lang] .mud-alert-filled-normal {
 /* Dialog/Modal background - use lighter surface colour where defined for better elevation */
 html[lang] .mud-dialog {
     background-color: var(--jim-dialog-surface, var(--mud-palette-surface)) !important;
-    border-radius: 8px !important;
+    border-radius: var(--jim-container-radius) !important;
 }
 
 /* Dialog inner elements - slightly lighter backgrounds for nested content */
@@ -1346,7 +1366,7 @@ html[lang] .jim-schema-change-table td {
 .jim-log-panel .mud-expand-panels {
     margin: 0 !important;
     border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
 }
 
 .jim-log-panel .mud-expand-panel {
@@ -1394,7 +1414,7 @@ html[lang] .jim-schema-change-table td {
 .jim-activity-panel .mud-expand-panels {
     margin: 0 !important;
     border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
 }
 
 .jim-activity-panel .mud-expand-panel {
@@ -1427,7 +1447,7 @@ html[lang] .jim-schema-change-table td {
     margin: 0;
     padding: 12px;
     background: var(--jim-inner-surface, var(--mud-palette-background));
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-word;
@@ -1455,6 +1475,27 @@ html[lang] .jim-schema-change-table td {
 
 .jim-json-punctuation {
     color: var(--mud-palette-text-primary);
+}
+
+/* Multi-Valued to Single-Valued indicator (attribute flow rules): present but low-lighted,
+   brightening on hover so it reads as an advisory rather than an error. */
+.jim-mva-sva-indicator {
+    color: var(--mud-palette-warning);
+    opacity: 0.5;
+    transition: opacity 150ms ease-in-out;
+    /* The icon is wrapped by MudTooltip's inline root, whose line box adds descender
+       space below the baseline-aligned svg; centring that box leaves the icon sitting
+       high. Blocking the svg makes the wrapper exactly icon-height so it centres true. */
+    display: block;
+    /* Optical correction on top of that: the warning glyph is drawn from y=2 to y=21
+       inside its 24-unit box, so its ink sits above the box centre and still reads high
+       next to a chip once the box is geometrically centred. */
+    position: relative;
+    top: 1px;
+}
+
+.jim-mva-sva-indicator:hover {
+    opacity: 0.9;
 }
 
 /* Expression syntax highlighting (attribute flow rules) */
@@ -1504,7 +1545,7 @@ html[lang] .jim-schema-change-table td {
 
 /* CSO Attribute Table Styles */
 .jim-attribute-table {
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow: hidden;
 }
 
@@ -1558,7 +1599,9 @@ html[lang] .jim-schema-change-table td {
 
 /* Dense mode: tighten multi-valued attribute layout so MVA rows compact too.
    Removes the inter-item gap and per-item padding, and shrinks chips so each
-   value row matches the dense cell height instead of staying at default size. */
+   value row matches the dense cell height instead of staying at default size.
+   The chip keeps a little vertical margin: at the dense cell padding alone the
+   chip fills the row edge to edge and the rows read as cramped. */
 .jim-attribute-table.mud-table-dense .jim-attr-expanded {
     gap: 8px;
 }
@@ -1570,7 +1613,7 @@ html[lang] .jim-schema-change-table td {
 .jim-attribute-table.mud-table-dense .mud-chip {
     height: 24px;
     font-size: 0.75rem;
-    margin: 0 4px 0 0;
+    margin: 3px 4px 3px 0;
 }
 
 .jim-attribute-table.mud-table-dense .mud-chip .mud-chip-content {
@@ -1587,6 +1630,13 @@ html[lang] .jim-schema-change-table td {
 
 .jim-mva-dialog-table .mud-chip {
     margin: 0;
+}
+
+/* The nested MVA table sits directly inside the attribute table's value cell; its own
+   outlined border reads tighter than plain SVA text at the same cell padding, so give it
+   extra vertical margin to match the visual gap SVA values get above and below. */
+.jim-attr-value .jim-mva-dialog-table {
+    margin: 8px 0;
 }
 
 
@@ -1651,6 +1701,33 @@ html[lang] .jim-schema-change-table td {
     vertical-align: top;
 }
 
+/* Key/value detail tables (the label/value panels on detail pages).
+   Two things need normalising. MudSimpleTable renders its cells at body2 (0.875rem)
+   while MudText/MudLink children render at body1 (1rem), so a panel ends up mixing
+   two text sizes; and a MudChip carries its own 4px margin on top of its 32px height,
+   so chip-bearing rows sit taller than plain-text rows and the panel looks unbalanced.
+   A single cell height plus a zeroed chip margin makes every row identical. */
+.jim-detail-table tbody tr td {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    height: 44px;
+    padding: 4px 16px !important;
+    vertical-align: middle;
+}
+
+.jim-detail-table tbody tr td .mud-chip {
+    margin: 0;
+}
+
+/* A chip carries 12px of its own horizontal padding, so its label starts indented
+   relative to the plain-text values above and below it in the same column. Pull a
+   top-level chip back by that much so every value in the column shares one left edge.
+   Chips nested inside a link (the CSO/MVO chip links) are deliberately excluded: they
+   lead with an avatar that already carries its own negative margin. */
+.jim-detail-table tbody tr td > .mud-chip {
+    margin-left: -12px;
+}
+
 /* Blazor Server Reconnection UI */
 #components-reconnect-modal {
     display: none;
@@ -1673,7 +1750,7 @@ html[lang] .jim-schema-change-table td {
 .jim-reconnect-content {
     background-color: var(--mud-palette-surface);
     color: var(--mud-palette-text-primary);
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     padding: 32px 48px;
     text-align: center;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -1840,7 +1917,7 @@ html[lang] .jim-schema-change-table td {
 
 /* Schedule Step Block Styles */
 .jim-step-block {
-    border-radius: 8px;
+    border-radius: var(--jim-container-radius);
     overflow: hidden;
     margin-bottom: 8px;
 }
@@ -1910,153 +1987,6 @@ html[lang] .jim-schema-change-table td {
 
 .jim-quick-link:hover {
     background-color: var(--jim-inner-surface, var(--mud-palette-action-default-hover));
-}
-
-/* Outcome tree — causality chain display on RPEI detail page */
-.outcome-tree {
-    padding: 4px 0;
-}
-
-.outcome-tree > .outcome-node {
-    padding: 8px 0;
-}
-
-.outcome-tree > .outcome-node + .outcome-node {
-    border-top: 1px solid var(--jim-inner-border-color, var(--mud-palette-lines-default));
-}
-
-.outcome-children {
-    margin-left: 11px;
-    padding-left: 24px;
-    border-left: 2px solid var(--mud-palette-lines-default);
-}
-
-.outcome-children > .outcome-node {
-    position: relative;
-    padding: 8px 0;
-}
-
-.outcome-children > .outcome-node::before {
-    content: '';
-    position: absolute;
-    left: -24px;
-    top: 20px;
-    width: 20px;
-    border-top: 2px solid var(--mud-palette-lines-default);
-}
-
-/* Hide the vertical line below the last child's connector stub */
-.outcome-children > .outcome-node:last-child::after {
-    content: '';
-    position: absolute;
-    left: -26px;
-    top: 20px;
-    bottom: 0;
-    width: 4px;
-    background: var(--mud-palette-surface);
-}
-
-/* Continue the branch line alongside the expanded attribute table
-   when the node has children below it. Aligns with .outcome-children border. */
-.outcome-table-continuation {
-    margin-left: 11px;
-    padding-left: 24px;
-    border-left: 2px solid var(--mud-palette-lines-default);
-}
-
-/* Collapse cumulative bottom padding from deeply nested last children
-   so the tree's bottom spacing matches the top. */
-.outcome-tree > .outcome-node:last-child,
-.outcome-children > .outcome-node:last-child {
-    padding-bottom: 0;
-}
-
-.outcome-children:last-child {
-    margin-bottom: 0;
-    padding-bottom: 0;
-}
-
-/* Attribute change table — transparent background so it inherits from its container.
-   The theme (navy-o5-dark) sets background-color on pagination/footer/empty-row with
-   html[lang] .mud-paper .mud-table specificity, so we must match it. */
-.attribute-change-table,
-.attribute-change-table .mud-table-container {
-    background-color: transparent !important;
-}
-
-html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-pagination-toolbar,
-html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-foot .mud-table-cell,
-html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
-    background-color: transparent !important;
-}
-
-/* Advisory Standard Mapping hints in the Attribute Flow editor (#1122). Shown against a Metaverse Attribute
-   in a picker, they must read as annotation rather than as part of the attribute's own identity: secondary
-   colour, monospace counterpart name, and a bordered standard label. The matched attribute (the one the
-   source attribute's name corresponds to) gets the emphasised variant. Theme-aware via palette variables. */
-.jim-standard-hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    white-space: nowrap;
-}
-
-.jim-standard-hint-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.jim-standard-hint-standard {
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--mud-palette-text-secondary);
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 3px;
-    padding: 1px 5px;
-}
-
-.jim-standard-hint-name {
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 0.85rem;
-    color: var(--mud-palette-text-secondary);
-}
-
-.jim-standard-hint-match .jim-standard-hint-standard {
-    color: var(--mud-palette-primary);
-    border-color: var(--mud-palette-primary);
-}
-
-.jim-standard-hint-match .jim-standard-hint-name {
-    color: var(--mud-palette-text-primary);
-}
-
-/* Attribute Flow picker option row: name and shape on the left, Standard Mapping hint pushed to the right.
-   The hint never shrinks or wraps (a half-shown attribute name is worse than none), so the attribute's own
-   name and shape take the compression, keeping every row inside the picker's width. */
-.jim-flow-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-}
-
-.jim-flow-option > span:first-child {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.jim-flow-option-spacer {
-    flex: 1 1 auto;
-    min-width: 16px;
-}
-
-.jim-flow-option .jim-standard-hint {
-    flex: 0 0 auto;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2324,6 +2254,47 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     margin: 4px 0 0;
 }
 
+/* ─── Tooltip measure ─── */
+
+/* MudBlazor sets no max-width on a tooltip, so a long explanatory one grows to a single line as wide
+   as the sentence needs (the Operation field's deletion description rendered ~690px wide across the
+   page). Capping the measure wraps it into a readable block instead. It is deliberately a cap rather
+   than a hard line break in each string: the descriptions range from a few words to two sentences,
+   so a break authored for one is in the wrong place for the rest, and translations would move it
+   again. Left-align follows from the cap; MudBlazor centres tooltip text, which is fine on the one
+   line it assumed and poor once the text wraps. Short tooltips are unaffected either way, because
+   the box still shrinks to fit its content. */
+.mud-tooltip {
+    max-width: 24rem;
+    text-align: left;
+}
+
+/* ─── Explanatory tooltip affordance ─── */
+
+/* Opt-in hover response for a *value* that has an explanatory tooltip behind it: the help cursor
+   plus the icon lifting to full text colour. Deliberately not applied to every .mud-tooltip-root: a
+   tooltip on a button or a link already has its own affordance and must keep the pointer cursor.
+
+   Nothing marks the value at rest. A dotted underline was tried and rejected: it reads as decoration
+   on a panel whose direction is calmer and flatter, and the values it lands on are plain statements
+   of fact rather than terms needing a gloss.
+
+   fit-content matters. MudStack's row is a flex container that fills its grid column, so without it
+   the help cursor and the hover response would cover the empty space to the right of a short value,
+   which reads as a much larger target than the one that actually responds. */
+.jim-explained {
+    cursor: help;
+    width: fit-content;
+}
+
+.jim-explained .mud-icon-root {
+    transition: color 0.15s ease;
+}
+
+.jim-explained:hover .mud-icon-root {
+    color: var(--mud-palette-text-primary);
+}
+
 /* ─── Buttons inside alerts ─── */
 
 /* A button offered inside an alert belongs to that alert's message. Left to itself it renders in the page's
@@ -2376,52 +2347,58 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 }
 
 /* ─── Run phase step shared styling (#454) ───
-   Used by the phase stepper on the Activity detail page: the step name, its duration, the live
-   message beneath the rail, and the Connector's own steps shown while their step runs. */
-.jim-phase-step-duration,
-.jim-phase-step-note {
+   Used by the phase stepper on the Activity detail page, and by the readout beneath it: a step's
+   duration, and the steps shown inside the one running. */
+.jim-phase-step-duration {
     color: var(--mud-palette-text-secondary);
 }
 
-.jim-phase-step-message {
-    color: var(--mud-palette-text-secondary);
-    margin-top: 0.125rem;
+/* A step's own name and its duration sit inline in the readout, so the figure is separated from
+   the name, dimmed, and set in tabular numerals: at the same weight it read as part of the name,
+   and proportional digits made the row jitter as the durations changed. */
+.jim-run-substep-separator,
+.jim-run-substep-duration {
+    color: var(--mud-palette-text-disabled);
 }
 
-.jim-phase-substep {
+.jim-run-substep-duration {
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-run-substep {
     display: flex;
     align-items: center;
     gap: 0.375rem;
     color: var(--mud-palette-text-secondary);
 }
 
-.jim-phase-substep .jim-phase-substep-icon {
+.jim-run-substep .jim-run-substep-icon {
     font-size: 0.875rem;
 }
 
-.jim-phase-substep--pending {
+.jim-run-substep--pending {
     color: var(--mud-palette-text-disabled);
 }
 
-.jim-phase-substep--completed .jim-phase-substep-icon {
+.jim-run-substep--completed .jim-run-substep-icon {
     color: var(--mud-palette-success);
 }
 
-.jim-phase-substep--active {
+.jim-run-substep--active {
     color: var(--mud-palette-text-primary);
 }
 
-.jim-phase-substep--active .jim-phase-substep-icon {
+.jim-run-substep--active .jim-run-substep-icon {
     color: var(--mud-palette-primary);
     animation: jim-worker-icon-tick 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-.jim-phase-substep--failed .jim-phase-substep-icon {
+.jim-run-substep--failed .jim-run-substep-icon {
     color: var(--mud-palette-error);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .jim-phase-substep--active .jim-phase-substep-icon {
+    .jim-run-substep--active .jim-run-substep-icon {
         animation: none;
     }
 }
@@ -2429,9 +2406,12 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 /* ─── Run phase stepper, horizontal (#454) ───
    Reads left to right as a stepped progress bar: a marker per step, and a filling line between
    markers showing how far through the step it leaves the run is. */
-.jim-phase-stepper-h {
-    /* One token drives the marker and the connector's alignment to its centre, so resizing the
-       markers cannot leave the rail running through them off-centre. */
+/* One token drives every rail's markers and the alignment of the line through them, so resizing the
+   markers cannot leave a rail running through them off-centre. Declared at the root rather than on
+   the stepper, because the Set Password dialog's rail is a second user of these markers and a token
+   scoped to one component silently resolves to nothing in the other: the marker's width, height and
+   the connector's offset all collapse, which is exactly how that rail first shipped. */
+:root {
     --jim-phase-marker-size: 1.75rem;
 }
 
@@ -2474,7 +2454,11 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     display: none;
 }
 
-.jim-phase-h-label {
+/* Shared with the Set Password dialog's fan-out rail, so a completed, failed or running step looks the same
+   wherever JIM reports a sequence of work. The marker tokens live here; the two rails lay them out
+   differently, because one is a MudStepper and the other is a plain row. */
+.jim-phase-h-label,
+.jim-password-rail-marker {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2486,11 +2470,13 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     color: var(--mud-palette-text-disabled);
 }
 
-.jim-phase-h-label .mud-icon-root {
+.jim-phase-h-label .mud-icon-root,
+.jim-password-rail-marker .mud-icon-root {
     font-size: 0.9375rem;
 }
 
-.jim-phase-h-label--completed {
+.jim-phase-h-label--completed,
+.jim-password-rail-marker--completed {
     border-color: var(--mud-palette-success);
     background-color: var(--mud-palette-success);
     color: var(--mud-palette-success-text);
@@ -2505,14 +2491,16 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     color: var(--mud-palette-success);
 }
 
-.jim-phase-h-label--failed {
+.jim-phase-h-label--failed,
+.jim-password-rail-marker--failed {
     border-color: var(--mud-palette-error);
     background-color: var(--mud-palette-error);
     color: var(--mud-palette-error-text);
 }
 
 /* The running step: filled, and breathing, so the eye lands on it first. */
-.jim-phase-h-label--active {
+.jim-phase-h-label--active,
+.jim-password-rail-marker--active {
     border-color: var(--mud-palette-primary);
     background-color: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text);
@@ -2601,17 +2589,9 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     to   { background-position: 0.75rem 0; }
 }
 
-/* What the running step is doing: the Connector's own steps, and the live message. */
-.jim-phase-h-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--mud-palette-lines-default);
-}
-
-.jim-phase-h-substeps {
+/* The steps inside the running step, shown in the readout beneath the rail rather than above it,
+   so each reads after the thing it belongs to. */
+.jim-run-substeps {
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem 1.25rem;
@@ -2619,10 +2599,366 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 
 @media (prefers-reduced-motion: reduce) {
     .jim-phase-h-label--active,
+    .jim-password-rail-marker--active,
     .jim-phase-h-connector-fill--active {
         animation: none;
     }
 }
+
+/* ─── Live progress metrics beneath a run's steps ───
+   The percentage rides beside the bar; the numbers behind it sit underneath as a labelled
+   readout. Fixed-width columns and tabular figures keep the row still while the digits change,
+   which they do on every poll. */
+.jim-run-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Which step these figures measure. Sits above the bar so it governs the percentage too, and is
+   set apart from the readout it scopes rather than reading as a heading for the panel.
+   Deliberately not uppercased, unlike the column labels below it: those are single words, whereas
+   this carries a step's name, and upper-casing a sentence both slows it down and erases the Proper
+   Case that distinguishes a JIM entity ("Connected System Objects") from an ordinary noun. */
+/* Separates the running step's readout from the rail above it. The divider belongs to the readout
+   rather than the rail because the rail outlives it: a finished run still shows its steps, and a
+   line drawn by the rail was left dividing nothing underneath every completed Activity. */
+.jim-run-progress--under-steps {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-run-scope {
+    color: var(--mud-palette-text-primary);
+    letter-spacing: 0.02em;
+}
+
+/* What the run is doing inside the step named above it: the detail follows the context, and takes
+   the quieter weight, because the step is the thing the figures below are measuring. */
+.jim-run-message {
+    color: var(--mud-palette-text-secondary);
+    margin-top: -0.125rem;
+}
+
+.jim-run-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+}
+
+.jim-run-bar-row .jim-run-bar {
+    flex: 1 1 auto;
+}
+
+.jim-run-percent {
+    flex: 0 0 auto;
+    min-width: 3.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-run-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2.5rem;
+}
+
+/* The minimum width is what keeps the columns still. Tabular figures hold each number's own
+   width, but the cells are sized by content, so without a floor the Rate and Remaining columns
+   slide sideways every time the processed count gains a digit; the run polls about once a
+   second, so that reads as the whole row twitching. */
+.jim-run-metric {
+    display: flex;
+    flex-direction: column;
+    min-width: 9rem;
+}
+
+.jim-run-metric-label {
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.jim-run-metric-value {
+    font-variant-numeric: tabular-nums;
+/* ─── Set Password dialog (#1121, #1172) ───
+   The fan-out across several Connected Systems is reported the same way a Run Profile execution is: a rail of
+   markers with a filling line between them. It is not the same component (a password set is not an Activity,
+   and MudStepper's navigation and content machinery would only be hidden again), so the layout below is its
+   own; the markers share the phase stepper's rules verbatim, above, so "what a completed step looks like" has
+   one definition rather than two that drift. */
+.jim-password-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.jim-password-rail-steps {
+    display: flex;
+    align-items: flex-start;
+}
+
+.jim-password-rail-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 0 0 auto;
+    max-width: 8rem;
+    text-align: center;
+    line-height: 1.25;
+}
+
+/* Aligned to the marker's centre so the line reads through the markers however many lines a name wraps to,
+   and pulled under the names either side so each leg runs marker to marker rather than label to label. */
+.jim-password-rail-connector {
+    flex: 1 1 2.5rem;
+    min-width: 1.5rem;
+    height: 0.25rem;
+    margin-top: calc((var(--jim-phase-marker-size) / 2) - 0.125rem);
+    margin-inline: -1.5rem;
+    border-radius: 0.125rem;
+    background-color: var(--mud-palette-lines-default);
+    overflow: hidden;
+}
+
+/* A leg belongs to the step it leaves, so it carries that step's outcome. Filling every traversed leg
+   green would draw a green rail through three red markers on a run where nothing worked at all. */
+.jim-password-rail-connector-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 0.125rem;
+    background-color: var(--mud-palette-success);
+    transition: width 0.4s ease;
+}
+
+.jim-password-rail-connector-fill--completed,
+.jim-password-rail-connector-fill--failed {
+    width: 100%;
+}
+
+.jim-password-rail-connector-fill--failed {
+    background-color: var(--mud-palette-error);
+}
+
+.jim-password-rail-step-name {
+    line-height: 1.25;
+}
+
+.jim-password-rail-step--pending .jim-password-rail-step-name {
+    color: var(--mud-palette-text-disabled);
+}
+
+.jim-password-rail-step--active .jim-password-rail-step-name {
+    font-weight: 500;
+}
+
+.jim-password-rail-step--failed .jim-password-rail-step-name {
+    color: var(--mud-palette-error);
+}
+
+/* ─── Results, one row per account the password was written to ───
+   A separate list from the picker rather than status bolted onto it: choosing where to write and reading what
+   happened are different questions, and a checkbox column has nothing to say once the writing is done. */
+.jim-password-results {
+    display: flex;
+    flex-direction: column;
+}
+
+/* One padding for every row this dialog lists, at the 1rem the rest of JIM gives a panel (the `pa-4` in the
+   panel-spacing rules). Defined once and shared by the picker and the results rather than set as a utility
+   class per call site, so the two lists cannot drift apart; they were at 8px and 10px/12px, both tighter than
+   anything else in the application. */
+.jim-password-row {
+    padding: 1rem;
+}
+
+.jim-password-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-password-result:last-child {
+    border-bottom: 0;
+}
+
+.jim-password-result-icon {
+    flex: none;
+    font-size: 1.125rem;
+    margin-top: 0.125rem;
+}
+
+.jim-password-result-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+    flex: 1;
+}
+
+/* A failed row carries its severity in the row, not in the sentence. The target's own words set in red made
+   three lines of washed-out prose that read as milder than the thing they were reporting; the house error
+   alert above already establishes the opposite convention, keeping its message in the ordinary text colour
+   "for accessibility" and signalling severity through the container. The rule is an inset shadow rather than
+   a border so it costs no layout and the row's text stays aligned with the rows above and below it. */
+.jim-password-result--failed {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--mud-palette-error);
+}
+
+/* Primary rather than secondary: on a failed row this sentence is the thing to read, where a successful
+   row's "Password set." is only confirmation. */
+.jim-password-result-reason {
+    color: var(--mud-palette-text-primary);
+}
+
+/* ─── Remediation guidance, folded away until asked for ───
+   Sentence case and inline: MudBlazor's default upper-cases button text and stretches a button to the width of
+   a flex column, which turned a quiet "how to fix this" into a shouting full-width bar. */
+.jim-password-guidance-toggle.mud-button-root {
+    align-self: flex-start;
+    min-width: 0;
+    padding: 0;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+/* This is a third surface level, and a third tint is not one: its step from the results row is about six
+   units of grey in either scheme, which is too little to read as a boundary. The definition comes from a
+   border instead, using the token every theme already defines for the edge of a nested surface. The tint
+   stays, so the panel still reads as subordinate detail rather than as a peer of the row it sits in. A left
+   accent rule was tried and rejected: the purple is reserved for interactive elements, and it made a third
+   competing accent beside the error icon and its red text. */
+/* Opaque, not a wash. MudBlazor's outlined alerts tint with a transparent mix of the severity colour, which
+   is right on a plain surface and wrong here: this one sits on a row washed in the error colour, so the red
+   came straight through and the advice read as a paler part of the failure rather than as something separate.
+   The same mix is composited over the results list's own surface instead of over transparency, so it is blue
+   whatever the row beneath it is doing. */
+/* html[lang] to clear the theme's own `html[lang] .mud-alert-outlined-info` rule, which is !important and
+   would otherwise win on specificity. */
+html[lang] .jim-password-guidance.mud-alert {
+    margin-top: 0.5rem;
+    background-color: color-mix(in srgb, var(--mud-palette-info) 10%,
+        var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
+}
+
+/* The icon belongs beside the headline, not halfway down the advice. JIM centres alert icons app-wide (see
+   "Centre-align alert icon and close button vertically" above), which is right for the one-line alerts that
+   rule was written for and leaves the icon adrift beside the third bullet of a panel this tall. Opting out
+   here rather than changing the global rule, and qualified with html[lang] to match that rule's specificity:
+   the alert root's own align-items does not reach the icon, and an equal-specificity selector loses to it. */
+html[lang] .jim-password-guidance .mud-alert-position {
+    align-items: flex-start;
+    padding-top: 0.125rem;
+}
+
+/* The alert supplies the tint, the rule and the icon; the layout of the advice inside it stays here. */
+.jim-password-guidance .mud-alert-message {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    /* Body colour for the whole panel, so every line in it is secondary by inheritance and only the headline
+       opts out. Two reasons this is set rather than inherited: MudBlazor's outlined alerts colour their
+       message in the severity colour, which would turn six lines of advice into six lines of blue prose, the
+       same readability problem the failed row's red prose had; and setting it per line meant mixing it with
+       MudBlazor's mud-text-secondary, which resolves to the same colour but also applies opacity: 0.8, so a
+       paragraph and the bullets beneath it rendered as two different greys while reporting an identical
+       computed colour. The house error alert already does exactly this, "for accessibility". */
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Sentence case for every action in the panel. One carries a Connected System's name and a tab label and the
+   other a sentence with a count in it; MudBlazor's default upper-casing turns both into lines of shouting,
+   and applying it to only one of them left two buttons in the same alert set differently. */
+.jim-password-guidance .mud-button-root {
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.jim-password-guidance-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* A dot, not an icon. Chevrons read as "expand me" and turned a list of things to check into a row of dead
+   controls. Colour is inherited from the panel rather than set here; see the note on that rule. */
+.jim-password-guidance-checks li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.jim-password-guidance-checks li::before {
+    content: "";
+    flex: none;
+    width: 0.3125rem;
+    height: 0.3125rem;
+    margin-top: 0.5rem;
+    border-radius: 50%;
+    background-color: var(--mud-palette-text-disabled);
+}
+
+/* One weight for an emphasised line anywhere in this dialog, so a Connected System's name in the picker, the
+   same name in the results, and the guidance headline all read as the same rank. <b> was giving 700 in the
+   lists against 600 here, which is two answers to one question. */
+.jim-password-system-name,
+.jim-password-guidance-headline {
+    font-weight: 600;
+}
+
+/* The headline names what went wrong, so it leads: the panel's one emphasised line, at the same size as the
+   prose under it. Weight and colour carry the hierarchy; nothing here changes size. */
+.jim-password-guidance-headline {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+/* The verdict is the line that decides whether to press the button again, so it is set apart by weight and a
+   dot rather than by a third size or a third text colour. */
+.jim-password-guidance-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    font-weight: 500;
+}
+
+.jim-password-guidance-verdict::before {
+    content: "";
+    flex: none;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 50%;
+    background-color: var(--jim-verdict-dot, var(--mud-palette-text-secondary));
+}
+
+.jim-password-guidance-verdict--retry {
+    --jim-verdict-dot: var(--mud-palette-info);
+}
+
+.jim-password-guidance-verdict--somebody-else {
+    --jim-verdict-dot: var(--mud-palette-warning);
+}
+
+.jim-password-guidance-verdict--never {
+    --jim-verdict-dot: var(--mud-palette-error);
+}
+
+/* The account picker's control sits against the Connected System's name rather than halfway down a two-line
+   row. MudBlazor's checkbox is a 1.5rem glyph in a taller hit area, so its centre lands 6px below the centre
+   of the 1.25rem line beside it; the offset puts the two centres together. Measured against the rendered
+   page, not guessed. The class lands on MudBlazor's .mud-input-control wrapper, and that wrapper carries a
+   blanket `margin: 0` in MudBlazor's own sheet, which is loaded after this one and therefore wins at equal
+   specificity; qualifying the selector with the wrapper's class is what makes the offset stick. */
+.jim-password-account-control.mud-input-control {
+    margin-top: -0.375rem;
 
 /* Count chip inside a navigation button (the Connector Space and Pending Exports actions on a
    Connected System). Sits inside the button label rather than as a MudBadge corner overlay, so the

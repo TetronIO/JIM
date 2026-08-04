@@ -29,6 +29,70 @@ public class ConnectorProgressTests
     }
 
     [Test]
+    public async Task ReportExpectedObjectCountAsync_WithDelegate_ForwardsTheCountAsync()
+    {
+        var counts = new List<int>();
+        using var progress = new ConnectorProgress(
+            report: null,
+            reportExpectedObjectCount: count =>
+            {
+                counts.Add(count);
+                return Task.CompletedTask;
+            });
+
+        await progress.ReportExpectedObjectCountAsync(120_000);
+        await progress.ReportExpectedObjectCountAsync(120_400);
+
+        Assert.That(counts, Is.EqualTo(new[] { 120_000, 120_400 }),
+            "A Connector may correct the figure it first gave, so every report has to reach JIM.");
+    }
+
+    [Test]
+    public async Task ReportObjectsReadAsync_WithDelegate_ForwardsTheCountAsync()
+    {
+        var counts = new List<int>();
+        using var progress = new ConnectorProgress(
+            report: null,
+            reportObjectsRead: count =>
+            {
+                counts.Add(count);
+                return Task.CompletedTask;
+            });
+
+        await progress.ReportObjectsReadAsync(10_000);
+        await progress.ReportObjectsReadAsync(20_000);
+
+        Assert.That(counts, Is.EqualTo(new[] { 10_000, 20_000 }));
+    }
+
+    [Test]
+    public async Task ReportExpectedObjectCountAsync_WhenTheDelegateThrows_DoesNotFailTheRunAsync()
+    {
+        // Counting is cosmetic, exactly as narration is; losing a figure must not cost a run.
+        using var progress = new ConnectorProgress(
+            report: null,
+            reportExpectedObjectCount: _ => throw new InvalidOperationException("The Activity could not be written"));
+
+        await progress.ReportExpectedObjectCountAsync(500);
+
+        Assert.Pass();
+    }
+
+    [Test]
+    public async Task ReportCounts_WithNoCountDelegates_DoNothingAsync()
+    {
+        // A Connector never checks whether anybody is listening.
+        using var progress = new ConnectorProgress(report: null);
+
+        await progress.ReportExpectedObjectCountAsync(500);
+        await progress.ReportObjectsReadAsync(250);
+        await ConnectorProgress.None.ReportExpectedObjectCountAsync(500);
+        await ConnectorProgress.None.ReportObjectsReadAsync(250);
+
+        Assert.Pass();
+    }
+
+    [Test]
     public async Task ReportAsync_WithNoReportDelegate_DoesNothingAsync()
     {
         // Connectors never check whether anybody is listening, so a reporter that records nothing
