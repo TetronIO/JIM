@@ -53,6 +53,16 @@ Each schedule run produces a **schedule execution** record with per-step progres
 
 A schedule execution typically appears as a parent activity with one child activity per step; this lets you walk down a schedule's execution tree from a single high-level record into the per-step detail.
 
+### Watching one run
+
+While a schedule is running, its tasks are grouped under a header in **Admin > Operations > Queue**, and that header draws the whole schedule as a rail: one marker per step, in the order they run, with the step names underneath and the step it has reached named beside them ("Step 2 of 5").
+
+The rail shows the whole schedule, not just the part still queued. A task is removed from the queue the moment it finishes, so steps already done would otherwise disappear as the run progressed; their outcomes are read from their Activities instead. A step that failed stays visible as a failed marker, including when the group is collapsed to a single row.
+
+A step running several tasks at once is drawn as one divided marker, a wedge per task, each carrying that task's own outcome. So a step where one of two parallel imports has failed while the other is still running reads as exactly that, rather than as a single colour for the whole step. The wedges are ordered by outcome rather than by task, so a failure always starts at the top of the marker and stays visible however wide the schedule fans out.
+
+A step's position counts step *groups*: steps that run concurrently share one position, so a schedule of six steps where two run together is five steps long.
+
 ## Enabled flag
 
 Disabled schedules don't fire on their cron trigger and don't appear as eligible for manual run. This is useful for temporarily pausing a schedule during maintenance without losing its definition.

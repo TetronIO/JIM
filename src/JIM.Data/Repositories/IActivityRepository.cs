@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -122,6 +123,19 @@ public interface IActivityRepository
     /// A step may have multiple activities if it runs multiple Run Profiles in parallel.
     /// </summary>
     public Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
+
+    /// <summary>
+    /// What each Schedule Execution's tasks have left behind, keyed by execution (#1162): one
+    /// observation per Activity, carrying the step it belongs to, its name and its status.
+    /// </summary>
+    /// <remarks>
+    /// A projection rather than the Activities themselves, and batched across executions rather than
+    /// queried per execution, because the Operations queue re-reads this on every progress
+    /// notification. Callers that also hold the queue's Worker Tasks must discard the observations
+    /// whose <see cref="ScheduleStepObservation.ActivityId"/> they already have, since a task that has
+    /// started is described by both records at once.
+    /// </remarks>
+    public Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds);
 
     /// <summary>
     /// Gets the creation time of the most recent HistoryRetentionCleanup activity.

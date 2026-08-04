@@ -2731,6 +2731,130 @@ html[lang] .jim-schema-change-table td {
     vertical-align: top;
 }
 
+/* ─── A Schedule Execution's steps in a queue group header (#1162) ───
+   One marker per step group, joined by legs, with the step names underneath. The unit here is honest
+   in a way the per-task rail's is not: one segment is one whole Run Profile execution, and there is
+   no comparably-sized alternative to divide the Schedule into. */
+.jim-schedule-rail-block {
+    flex: 1 1 auto;
+    min-width: 12rem;
+    max-width: 26rem;
+}
+
+.jim-schedule-rail {
+    display: flex;
+    align-items: center;
+}
+
+.jim-schedule-node {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    border: 1.5px solid var(--jim-run-step-pending);
+    color: var(--mud-palette-surface);
+}
+
+/* The icon rides inside a 12px marker, so it is sized against the marker rather than left at the
+   inherited font size, which would overflow it. */
+.jim-schedule-node .mud-icon-root {
+    width: 9px;
+    height: 9px;
+    font-size: 9px;
+}
+
+.jim-schedule-node--completed {
+    background-color: var(--mud-palette-success);
+    border-color: var(--mud-palette-success);
+}
+
+.jim-schedule-node--failed {
+    background-color: var(--mud-palette-error);
+    border-color: var(--mud-palette-error);
+}
+
+.jim-schedule-node--cancelled {
+    background-color: var(--mud-palette-warning);
+    border-color: var(--mud-palette-warning);
+}
+
+/* A halo rather than a pulse. The worker activity bar immediately above the group header shimmers
+   while tasks are processing, and a second animation beside it would leave two things competing for
+   one glance; a static ring says "here" just as well and survives prefers-reduced-motion untouched. */
+.jim-schedule-node--running {
+    background-color: var(--mud-palette-info);
+    border-color: var(--mud-palette-info);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mud-palette-info) 22%, transparent);
+}
+
+/* A step running several tasks concurrently is drawn as one marker divided into a wedge per task,
+   painted by an inline conic gradient the component builds (the wedge count is a property of the
+   Schedule, not of this stylesheet). Larger than a whole marker because it is carrying more.
+   It keeps the outline every marker has, rather than relying on the gradient to reach the edge: a
+   step whose tasks have all yet to start has nothing but empty wedges, and without the ring there
+   would be nothing there at all. */
+.jim-schedule-node--divided {
+    width: 16px;
+    height: 16px;
+    border-color: var(--jim-run-step-pending);
+}
+
+.jim-schedule-leg {
+    flex: 1 1 28px;
+    min-width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    background-color: var(--jim-run-step-pending);
+}
+
+.jim-schedule-leg--done {
+    background-color: var(--mud-palette-success);
+}
+
+/* Each name has to sit under the marker it belongs to, which equal shares do not achieve: the markers
+   are spaced from the first to the last, so they sit at 0%, 50% and 100% of a three-step rail, while
+   equal-share labels centre at 17%, 50% and 83%. On a short rail that drift puts the last name nearer
+   its neighbour's marker than its own, which is worse than no name at all when the question being
+   asked is which step failed.
+   Half a share to each end label, aligned outwards, puts every name back under its marker: the ends
+   line up with the rail's ends, and each middle label centres on (0.5 + k) of the remaining shares,
+   which is exactly where its marker is. */
+.jim-schedule-labels {
+    display: flex;
+    margin-top: 0.25rem;
+}
+
+.jim-schedule-labels span {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 0.7rem;
+    text-align: center;
+    color: var(--mud-palette-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jim-schedule-labels span:first-child {
+    flex: 0.5 1 0;
+    text-align: left;
+}
+
+.jim-schedule-labels span:last-child {
+    flex: 0.5 1 0;
+    text-align: right;
+}
+
+/* A Schedule of one step has one marker, drawn at the left where the rail begins. */
+.jim-schedule-labels span:only-child {
+    flex: 1 1 0;
+    text-align: left;
+}
+
 /* ─── Live progress metrics beneath a run's steps ───
    The percentage rides beside the bar; the numbers behind it sit underneath as a labelled
    readout. Fixed-width columns and tabular figures keep the row still while the digits change,

@@ -107,6 +107,40 @@ public enum ScheduleIntervalUnit
 }
 
 /// <summary>
+/// Where one step of a Schedule Execution, or one task within a step that runs several concurrently,
+/// has got to (#1162). Deliberately coarser than the statuses it is derived from: a list view draws a
+/// few pixels per step, and the distinctions it can carry are "done", "went wrong", "happening now"
+/// and "not yet".
+/// </summary>
+public enum ScheduleStepStatus
+{
+    /// <summary>
+    /// Queued, or waiting for an earlier step to finish.
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// Running now.
+    /// </summary>
+    Running = 1,
+
+    /// <summary>
+    /// Finished, with or without warnings.
+    /// </summary>
+    Completed = 2,
+
+    /// <summary>
+    /// Finished with an error, or failed outright.
+    /// </summary>
+    Failed = 3,
+
+    /// <summary>
+    /// Cancelled, or in the middle of being cancelled.
+    /// </summary>
+    Cancelled = 4
+}
+
+/// <summary>
 /// The status of a schedule execution.
 /// </summary>
 public enum ScheduleExecutionStatus

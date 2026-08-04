@@ -1,5 +1,6 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
+@using JIM.Models.Scheduling
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
@@ -102,33 +103,38 @@ else
             @if (isScheduleGroup)
             {
                 var scheduleName = groupTasks.First().ScheduleExecutionName ?? "Schedule";
-                var totalTasks = groupTasks.Count;
                 var processing = groupTasks.Count(t => t.Status == WorkerTaskStatus.Processing);
                 var queued = groupTasks.Count(t => t.Status == WorkerTaskStatus.Queued);
                 var waiting = groupTasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
-                var distinctSteps = groupTasks.Select(t => t.ScheduleStepIndex).Distinct().Count();
                 var executionId = groupTasks.First().ScheduleExecutionId!.Value;
                 var groupKey = executionId.ToString();
-                var isCollapsed = _collapsedGroups.Contains(groupKey);
+                var scheduleProgress = _scheduleProgress.GetValueOrDefault(executionId);
 
                 <MudTh Class="mud-table-cell-custom-group" colspan="6">
-                    <div class="d-flex align-center justify-space-between" style="width: 100%;">
-                        <div class="d-flex align-center gap-3" style="cursor: pointer;" @onclick="() => ToggleGroupCollapse(groupKey)">
+                    <div class="d-flex align-center gap-5" style="width: 100%;">
+                        <div class="d-flex align-center gap-3" style="cursor: pointer; flex: 0 0 auto;" @onclick="() => ToggleGroupCollapse(groupKey)">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" />
                             <div>
                                 <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @totalTasks tasks across @distinctSteps steps
-                                    @if (processing > 0) { <span> — @processing processing</span> }
-                                    @if (queued > 0) { <span>, @queued queued</span> }
-                                    @if (waiting > 0) { <span>, @waiting waiting</span> }
+                                    @SchedulePosition(scheduleProgress, groupTasks.Count)@if (processing > 0)
+                                    {<span>, @processing processing</span>}@if (queued > 0)
+                                    {<span>, @queued queued</span>}@if (waiting > 0)
+                                    {<span>, @waiting waiting</span>}
                                 </MudText>
                             </div>
                         </div>
-                        <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
-                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
-                                           OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
-                        </MudTooltip>
+
+                        <ScheduleStepRail Progress="@scheduleProgress" />
+
+                        @* Pushed right so it lands under the Actions column, in line with the per-task
+                           cancel buttons in the rows below rather than adrift in the middle of the header. *@
+                        <div style="flex: 0 0 auto; margin-left: auto;">
+                            <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
+                                               OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
+                            </MudTooltip>
+                        </div>
                     </div>
                 </MudTh>
             }
@@ -227,6 +233,13 @@ else
     private bool _hasProcessingTasks;
     private readonly HashSet<string> _collapsedGroups = new();
 
+    /// <summary>
+    /// Each Schedule Execution in the queue, reduced to the shape its group header draws (#1162).
+    /// Kept beside the task headers rather than derived in markup: it needs the steps whose tasks have
+    /// already been deleted, which only their Activities still record.
+    /// </summary>
+    private Dictionary<Guid, ScheduleExecutionProgress?> _scheduleProgress = new();
+
     private readonly TableGroupDefinition<WorkerTaskHeader> _groupDefinition = new()
     {
         GroupName = "Queue Group",
@@ -284,6 +297,7 @@ else
             {
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 _workerTaskHeaders = GenerateDemoData(user.Id, user.NameOrId);
+                _scheduleProgress = GenerateDemoScheduleProgress(_workerTaskHeaders);
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
                 return;
             }
@@ -292,6 +306,7 @@ else
         // Get initial data for worker task table rendering
         _workerTaskHeaders = await jim.Tasking.GetWorkerTaskHeadersAsync();
         _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
+        await RefreshScheduleProgressAsync(jim);
 
         // Event-driven refresh (issue #307): database notifications trigger an immediate refresh, so the
         // queue reacts in real time rather than waiting for the next polling cycle.
@@ -371,6 +386,7 @@ else
             if (stateHasChanged)
             {
                 _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
+                await RefreshScheduleProgressAsync(refreshJim);
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -492,6 +508,47 @@ else
         }
     }
 
+    /// <summary>
+    /// The clause a group header opens with: where the Schedule has got to, or, where nothing is
+    /// running, how much of it there is.
+    /// </summary>
+    private static string SchedulePosition(ScheduleExecutionProgress? progress, int taskCount)
+    {
+        if (progress == null)
+            return $"{taskCount} tasks";
+
+        return progress.CurrentStepNumber.HasValue
+            ? $"Step {progress.CurrentStepNumber} of {progress.TotalSteps}"
+            : $"{taskCount} tasks across {progress.TotalSteps} steps";
+    }
+
+    /// <summary>
+    /// Rebuilds each Schedule Execution's shape from the queue's own tasks plus what its finished
+    /// tasks left behind. One query for the whole queue, run only when the queue has actually changed.
+    /// </summary>
+    private async Task RefreshScheduleProgressAsync(JimApplication jim)
+    {
+        var executionIds = _workerTaskHeaders
+            .Where(t => t.ScheduleExecutionId.HasValue)
+            .Select(t => t.ScheduleExecutionId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (executionIds.Count == 0)
+        {
+            _scheduleProgress = new Dictionary<Guid, ScheduleExecutionProgress?>();
+            return;
+        }
+
+        var outcomes = await jim.Activities.GetScheduleStepOutcomesAsync(executionIds);
+
+        _scheduleProgress = executionIds.ToDictionary(
+            executionId => executionId,
+            executionId => ScheduleStepReading.FromQueue(
+                _workerTaskHeaders.Where(t => t.ScheduleExecutionId == executionId).ToList(),
+                outcomes.GetValueOrDefault(executionId, [])));
+    }
+
     private static string GetTaskStatusDisplay(WorkerTaskHeader task)
     {
         return task.Status switch
@@ -523,6 +580,7 @@ else
                 Id = Guid.NewGuid(), Name = "HR System - Full Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Processing, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 1,
                 ObjectsToProcess = 12500, ObjectsProcessed = 8320,
                 ProgressMessage = "Importing users",
@@ -534,6 +592,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Full Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Processing, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 1,
                 ObjectsToProcess = 45000, ObjectsProcessed = 31200,
                 ProgressMessage = "Importing objects",
@@ -545,6 +604,7 @@ else
                 Id = Guid.NewGuid(), Name = "HR System - Delta Sync", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 2,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -553,6 +613,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Delta Sync", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 2,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -561,6 +622,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Export", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 3,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -569,6 +631,7 @@ else
                 Id = Guid.NewGuid(), Name = "AD - Confirming Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
                 ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleTotalSteps = 5, ScheduleCurrentStepIndex = 1,
                 ScheduleStepIndex = 4,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -579,6 +642,7 @@ else
                 Id = Guid.NewGuid(), Name = "Azure AD - Export", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Queued, Timestamp = now.AddMinutes(-1),
                 ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleTotalSteps = 3, ScheduleCurrentStepIndex = 0,
                 ScheduleStepIndex = 0,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -587,6 +651,7 @@ else
                 Id = Guid.NewGuid(), Name = "Azure AD - Confirming Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-1),
                 ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleTotalSteps = 3, ScheduleCurrentStepIndex = 0,
                 ScheduleStepIndex = 1,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -595,6 +660,7 @@ else
                 Id = Guid.NewGuid(), Name = "Azure AD - Delta Sync", Type = "Synchronisation",
                 Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-1),
                 ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleTotalSteps = 3, ScheduleCurrentStepIndex = 0,
                 ScheduleStepIndex = 2,
                 InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
             },
@@ -620,6 +686,40 @@ else
                 InitiatedById = currentUserId, InitiatedByName = currentUserName
             }
         };
+    }
+
+    /// <summary>
+    /// The demo queue's Schedule Executions, assembled the way the real ones are. The finished and
+    /// failed steps are supplied here as Activity outcomes because that is where they come from in
+    /// earnest: a task is deleted the moment it ends, so a demo built only from queued tasks could
+    /// not show a completed step, and could not show the case the divided marker exists for, a
+    /// parallel step where one task has failed while its sibling is still running.
+    /// </summary>
+    private static Dictionary<Guid, ScheduleExecutionProgress?> GenerateDemoScheduleProgress(List<WorkerTaskHeader> headers)
+    {
+        var demoOutcomes = new Dictionary<string, List<ScheduleStepObservation>>
+        {
+            ["Nightly Full Sync"] =
+            [
+                new ScheduleStepObservation
+                {
+                    StepIndex = 0, Name = "HR System - Full Import", ActivityId = Guid.NewGuid(),
+                    ActivityStatus = JIM.Models.Activities.ActivityStatus.Complete
+                },
+                new ScheduleStepObservation
+                {
+                    StepIndex = 1, Name = "Legacy CRM - Full Import", ActivityId = Guid.NewGuid(),
+                    ActivityStatus = JIM.Models.Activities.ActivityStatus.FailedWithError
+                }
+            ]
+        };
+
+        return headers
+            .Where(t => t.ScheduleExecutionId.HasValue)
+            .GroupBy(t => t.ScheduleExecutionId!.Value)
+            .ToDictionary(g => g.Key, g => ScheduleStepReading.FromQueue(
+                g.ToList(),
+                demoOutcomes.GetValueOrDefault(g.First().ScheduleExecutionName ?? string.Empty, [])));
     }
 
     /// <summary>

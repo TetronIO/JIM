@@ -77,4 +77,17 @@ public class WorkerTaskHeader
     /// The step index within the schedule, for ordering within the group.
     /// </summary>
     public int? ScheduleStepIndex { get; set; }
+
+    /// <summary>
+    /// The number of step groups the Schedule Execution is working through (#1162). Needed to draw the
+    /// whole Schedule rather than only the part of it still in the queue: finished steps have had their
+    /// tasks deleted, so a rail counted from the queue alone would shorten as the Schedule progressed.
+    /// </summary>
+    public int? ScheduleTotalSteps { get; set; }
+
+    /// <summary>
+    /// The step group the Schedule Execution has reached (0-based), which settles where a step that
+    /// left no record of its own sits relative to the Schedule's progress.
+    /// </summary>
+    public int? ScheduleCurrentStepIndex { get; set; }
 }
