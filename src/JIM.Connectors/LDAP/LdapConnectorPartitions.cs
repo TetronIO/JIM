@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
@@ -18,6 +19,38 @@ internal class LdapConnectorPartitions
         _connection = ldapConnection;
         _logger = logger;
         _directoryType = directoryType;
+    }
+
+    /// <summary>
+    /// The attribute carrying the directory's own immutable identifier for an entry, which is what container
+    /// identity is keyed on across hierarchy refreshes. Mirrors <see cref="LdapConnectorRootDse.ExternalIdAttributeName"/>,
+    /// which is not available here because partition discovery runs from the directory type alone.
+    /// </summary>
+    private string StableIdAttributeName => _directoryType is LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD
+        ? "objectGUID"
+        : "entryUUID";
+
+    /// <summary>
+    /// Reads the directory's immutable identifier from a container entry, returning null when the directory did not
+    /// supply one so that the merge falls back to Distinguished Name matching.
+    /// </summary>
+    /// <remarks>
+    /// Active Directory returns objectGUID as 16 binary bytes in Microsoft byte order; OpenLDAP returns entryUUID as
+    /// an RFC 4530 string. Both are normalised to the same canonical GUID string so a directory that changes its
+    /// representation cannot silently orphan every stored container.
+    /// </remarks>
+    private static string? ReadStableId(SearchResultEntry entry, string stableIdAttribute)
+    {
+        if (!entry.Attributes.Contains(stableIdAttribute))
+            return null;
+
+        var value = entry.Attributes[stableIdAttribute][0];
+        return value switch
+        {
+            byte[] { Length: 16 } guidBytes => IdentifierParser.FromMicrosoftBytes(guidBytes).ToString(),
+            string text when Guid.TryParse(text.Trim(), out var parsed) => parsed.ToString(),
+            _ => null
+        };
     }
 
     internal async Task<List<ConnectorPartition>> GetPartitionsAsync(bool skipHiddenPartitions = true)
@@ -159,7 +192,17 @@ internal class LdapConnectorPartitions
     private List<ConnectorContainer> GetPartitionContainers(ConnectorPartition partition)
     {
         var ldapStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var request = new SearchRequest(partition.Name, "(|(objectClass=organizationalUnit)(objectClass=container))", SearchScope.Subtree);
+        // Ask for the directory's own immutable identifier alongside the name: the hierarchy merge keys container
+        // identity on it, because the Distinguished Name it would otherwise match on changes on every rename and
+        // move. "name" and the identifier are requested explicitly; operational attributes such as entryUUID are not
+        // returned by a default search.
+        var stableIdAttribute = StableIdAttributeName;
+        var request = new SearchRequest(
+            partition.Name,
+            "(|(objectClass=organizationalUnit)(objectClass=container))",
+            SearchScope.Subtree,
+            "name",
+            stableIdAttribute);
         var response = (SearchResponse)_connection.SendRequest(request);
         ldapStopwatch.Stop();
 
@@ -168,7 +211,8 @@ internal class LdapConnectorPartitions
         var entries = response.Entries.Cast<SearchResultEntry>()
             .Select(e => new ContainerEntry(
                 e.DistinguishedName,
-                LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name") ?? e.DistinguishedName))
+                LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name") ?? e.DistinguishedName,
+                ReadStableId(e, stableIdAttribute)))
             .ToList();
 
         var containers = BuildContainerHierarchy(entries, partition.Name);
@@ -209,7 +253,7 @@ internal class LdapConnectorPartitions
 
         // Step 3: Create all ConnectorContainer objects upfront (O(n))
         var containerByDn = entries
-            .ToDictionary(e => e.DistinguishedName, e => new ConnectorContainer(e.DistinguishedName, e.Name), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(e => e.DistinguishedName, e => new ConnectorContainer(e.DistinguishedName, e.Name) { StableId = e.StableId }, StringComparer.OrdinalIgnoreCase);
 
         // Step 4: Build hierarchy using dictionary lookups (O(n))
         var topLevelContainers = new List<ConnectorContainer>();
@@ -259,7 +303,13 @@ internal class LdapConnectorPartitions
     /// Simple DTO representing a container entry from LDAP search results.
     /// Used to decouple the hierarchy building algorithm from System.DirectoryServices.Protocols.
     /// </summary>
-    internal record ContainerEntry(string DistinguishedName, string Name);
+    /// <summary>
+    /// A container as read from the directory. <paramref name="StableId"/> is the directory's own immutable
+    /// identifier (objectGUID on Active Directory, entryUUID on OpenLDAP), which the hierarchy merge keys container
+    /// identity on because the Distinguished Name changes on every rename and move. Null where the directory did
+    /// not return one.
+    /// </summary>
+    internal record ContainerEntry(string DistinguishedName, string Name, string? StableId = null);
 
     /// <summary>
     /// Retrieves the namingContexts attribute from the rootDSE (RFC 4512).
