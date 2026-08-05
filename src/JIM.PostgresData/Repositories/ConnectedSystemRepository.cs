@@ -2826,7 +2826,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Object Types
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
-    /// Includes Attributes.
+    /// Includes Attributes and classification Tags.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
@@ -2834,6 +2834,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(q => q.Attributes)
+            .Include(q => q.Tags)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
