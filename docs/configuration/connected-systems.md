@@ -151,7 +151,7 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. This writes the password straight to the Connected System: it is not staged as a Pending Export, not retried, and not stored anywhere in JIM.
 
-Use it for the account whose provisioning password was refused, the person who never received theirs, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
+Use it for the new starter about to sign in for the first time, the account whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
 
 The dialog is built around one rule: **the password is masked from the moment it is generated, and copying it does not require showing it.**
 
@@ -164,7 +164,7 @@ Choose what happens to the password once it is set (requiring a change at the ne
 
 A Connected System that refuses the password says why, and the dialog stays open carrying its own words so you can try another one. Every attempt is recorded as an Activity against the object, whether it succeeded or not; the Activity records that a password was set, never the password.
 
-!!! warning "This is a password-reset primitive"
+!!! warning "This resets the password on whichever account you point it at"
     Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
 
 !!! note "Copying and your operating system's clipboard"

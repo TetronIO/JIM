@@ -13,14 +13,14 @@ function Set-JIMConnectedSystemObjectPassword {
         reason.
 
         This is the automation counterpart of the Set Password action in the administration portal, for the
-        account whose provisioning password was parked, the person who never received theirs, and the reset
+        new starter about to sign in for the first time, the account whose provisioning password was parked, and the reset
         that has to happen now.
 
         Supply the password with -Password, or use -Generate to have JIM produce one that follows the Connected
         System's discovered policy. A generated password is returned once, on GeneratedPassword; JIM stores it
         nowhere and cannot give it to you again.
 
-        This is a password-reset primitive. Anyone who can call it can reset any account in this connector
+        This resets the password on whichever account it is pointed at. Anyone who can call it can reset any account in this connector
         space, subject only to what the Connected System's own service account is permitted to do.
 
     .PARAMETER ConnectedSystemId

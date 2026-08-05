@@ -11,7 +11,9 @@ This page covers what JIM does with passwords and why. To actually configure it,
 
 ## 🔑 Giving new accounts their first password
 
-Most directories will not let an account be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every account that rule creates, so a new starter's account works from the moment it exists.
+Most directories will not let an account be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every account that rule creates, so the account is complete and enabled from the moment it exists instead of waiting on somebody to do it by hand.
+
+That password is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below.
 
 --8<-- "assets/diagrams/initial-password.svg"
 
@@ -65,7 +67,7 @@ So treat what JIM discovered as a **floor, not a guarantee**, and read a blank v
 
 ## 🔐 Setting a password on demand
 
-Alongside provisioning, you can set a password whenever you need to: the account whose provisioning password was refused, the person who never received theirs, the reset that has to happen now.
+Alongside provisioning, you can set a password whenever you need to: the new starter about to sign in for the first time, the account whose provisioning password was refused, the reset that has to happen now.
 
 - **One account.**<br /> Open a Connected System Object and use **Set Password**. The password is masked from the moment it is generated, and **Copy works while it is still masked**, so handing someone their password never means putting it on a screen others can read. Reveal is there for reading one aloud, and hides itself again after thirty seconds.
 - **One person, several systems.**<br /> Open a person and the same action lists every account they have that JIM can set a password on. Nothing is selected by default, so a reset in one system never quietly resets the others.
@@ -95,12 +97,17 @@ Every attempt is recorded as an Activity against the account, whether it worked 
 
 ### So how does the person get their password?
 
-For accounts provisioned in bulk, they usually should not receive one directly. Requiring a change at next sign-in is the default, and the right behaviour for a password somebody else chose: the account works, and the person replaces the password the first time they use it, through whatever sign-in or self-service reset they already have.
+**Not the one set during provisioning.** It is different for every account and JIM keeps no copy, so there is nothing for anyone to look up or pass on. Nobody can tell a new starter what it is, including you.
 
-When you do need a password in your hand for a named individual, use the on-demand action above for that account. Do not expect JIM to still hold the one it generated during provisioning; it never had it.
+That is deliberate, and it means the initial password is doing a different job from the one it might look like it is doing. Its job is to get the account into a working state: many directories will not enable an account, or let it be used at all, until it holds a password that meets their rules, and an account left sitting with no password while it waits for somebody to get round to it is worth closing off. It is not a password anybody is meant to receive.
 
-!!! warning "Setting a password is a password-reset primitive"
-    Anyone who can reach these actions can reset any account in that connector space, including privileged ones, limited only by what the Connected System's service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the parts of the directory JIM manages.
+When the person actually needs to sign in, set their password then, using **Set Password** on that account, and hand them the value. Requiring a change at next sign-in (the default) then does what you would expect: they use what you gave them once, and choose their own.
+
+!!! note "There is no shared initial password"
+    JIM has no option to set one known password on every account a Synchronisation Rule provisions. Each is generated per account and stored nowhere, so it cannot be printed on an onboarding sheet or read back out of JIM afterwards.
+
+!!! warning "Anyone who can set a password can reset any account"
+    These actions reset the password on whichever account they are pointed at, including privileged ones, limited only by what the Connected System's service account is allowed to do. Grant the Administrator role accordingly, and restrict the service account's rights to the parts of the directory JIM manages.
 
     That service account needs the **Reset Password** right on those containers and nothing more; in Active Directory this is separate from write access to attributes. **It does not need to be a Domain Admin, and should not be.** See [Service Account Permissions](../connectors/jim-ldap-connector.md#service-account-permissions).
 

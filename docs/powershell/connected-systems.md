@@ -1342,7 +1342,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 
 ### Notes
 
-- **This is a password-reset primitive.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
+- **This resets the password on whichever account you point it at.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
 - The password is taken as a `SecureString` so it does not sit in your session's command history in clear text. It is unwrapped only to be sent over TLS.
 - A Connected System that cannot honour the requested expiry behaviour applies what it can and reports the difference in `ExpiryBehaviourWarning`; the password is still set.
 - A rejected password returns an error carrying the system's own reason. A Connected System that could not be reached is reported distinctly, because nothing was established about the password itself and the same request is worth repeating.
