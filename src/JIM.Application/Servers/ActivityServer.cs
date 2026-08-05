@@ -552,5 +552,155 @@ public class ActivityServer
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemAsync(id);
     }
+
+    /// <summary>
+    /// Walks upward from a Run Profile Execution Item through the causal edges recorded against it, returning
+    /// what caused the changes it describes as a tree of cohorts (#1223).
+    /// </summary>
+    /// <param name="runProfileExecutionItemId">The item to explain.</param>
+    /// <param name="maxDepth">How many levels to follow. Bounded because a cascade can chain arbitrarily far,
+    /// and hitting the bound is reported rather than presented as the end of the story.</param>
+    /// <remarks>
+    /// Two properties matter more than the shape of the result.
+    ///
+    /// <b>It costs one round trip per level, not one per cause.</b> Each level resolves every branch at once:
+    /// a cohort can hold thousands of members, and a walk that queried per member would issue thousands of
+    /// round trips to render one panel.
+    ///
+    /// <b>Every ending is named.</b> An unresolvable ancestor produces an explicit
+    /// <see cref="CausalChainResolution"/>, never a gap and never an exception. "Nothing caused this" and "the
+    /// cause is no longer retained" are indistinguishable as an absence and mean opposite things to the person
+    /// reading; presenting the second as the first would tell them they had the whole story when the chain had
+    /// actually been cut short by retention.
+    /// </remarks>
+    public async Task<CausalChain> GetCausalChainAsync(Guid runProfileExecutionItemId, int maxDepth = 5)
+    {
+        var rootEdges = await Application.Repository.Activity
+            .GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync([runProfileExecutionItemId]);
+
+        if (rootEdges.Count == 0)
+            return new CausalChain { RunProfileExecutionItemId = runProfileExecutionItemId };
+
+        var cohorts = GroupIntoCohorts(rootEdges);
+        var truncatedByDepth = await ExpandLevelsAsync(cohorts, maxDepth);
+
+        return new CausalChain
+        {
+            RunProfileExecutionItemId = runProfileExecutionItemId,
+            Cohorts = cohorts,
+            IsTruncatedByDepth = truncatedByDepth
+        };
+    }
+
+    /// <summary>
+    /// Resolves each member of <paramref name="cohorts"/> level by level, breadth-first, until the depth bound
+    /// or until no member has anywhere further to go. Returns whether any branch stopped at the bound.
+    /// </summary>
+    private async Task<bool> ExpandLevelsAsync(List<CausalChainCohort> cohorts, int maxDepth)
+    {
+        // The frontier is every member at the current level that names a causing item. Members that name none
+        // are already terminal and never enter it.
+        var frontier = cohorts.SelectMany(c => c.Members)
+            .Where(m => m.RunProfileExecutionItemId.HasValue)
+            .ToList();
+
+        for (var depth = 1; frontier.Count > 0; depth++)
+        {
+            if (depth >= maxDepth)
+            {
+                foreach (var member in frontier)
+                    member.Resolution = CausalChainResolution.DepthLimitReached;
+
+                return true;
+            }
+
+            // Distinct, because a cohort of many members routinely points at one causing item, and a level of
+            // a large cascade would otherwise ask about the same item thousands of times.
+            var causeItemIds = frontier.Select(m => m.RunProfileExecutionItemId!.Value).Distinct().ToList();
+            var retained = await Application.Repository.Activity.GetRetainedRunProfileExecutionItemIdsAsync(causeItemIds);
+            var retainedIds = causeItemIds.Where(retained.Contains).ToList();
+
+            var edgesByEffect = retainedIds.Count > 0
+                ? (await Application.Repository.Activity.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(retainedIds))
+                    .GroupBy(e => e.EffectRunProfileExecutionItemId)
+                    .ToDictionary(g => g.Key, g => g.ToList())
+                : [];
+
+            var nextFrontier = new List<CausalChainMember>();
+            foreach (var member in frontier)
+            {
+                var causeItemId = member.RunProfileExecutionItemId!.Value;
+
+                if (!retained.Contains(causeItemId))
+                {
+                    // Expected rather than exceptional: causes are always older than their effects, so past
+                    // one retention window this is the normal end of a long chain.
+                    member.Resolution = CausalChainResolution.CauseNotRetained;
+                    continue;
+                }
+
+                if (!edgesByEffect.TryGetValue(causeItemId, out var edges))
+                {
+                    member.Resolution = CausalChainResolution.NoFurtherCauses;
+                    continue;
+                }
+
+                member.Resolution = CausalChainResolution.Resolved;
+                member.Causes.AddRange(GroupIntoCohorts(edges));
+                nextFrontier.AddRange(member.Causes.SelectMany(c => c.Members)
+                    .Where(m => m.RunProfileExecutionItemId.HasValue));
+            }
+
+            frontier = nextFrontier;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Groups edges into cohorts on the attribution tuple, plus the effect outcome they explain.
+    /// </summary>
+    /// <remarks>
+    /// The effect outcome is part of the key, not incidental: an item carrying several outcomes has several
+    /// independent stories, and merging their causes would attribute a change on one outcome to a cause
+    /// belonging to another. This is the PRD's edge-granularity resolution, applied.
+    ///
+    /// The reason element is the code, never the rendered sentence. Grouping on prose would be redundant with
+    /// the Connected System name the tuple already carries, and would change behaviour silently whenever the
+    /// wording changed.
+    /// </remarks>
+    private static List<CausalChainCohort> GroupIntoCohorts(List<CausalEdge> edges)
+    {
+        return edges
+            .GroupBy(e => (e.EffectSyncOutcomeId, e.EdgeType, e.ReasonCode, e.ConnectedSystemId, e.SyncRuleId))
+            .Select(g => new CausalChainCohort
+            {
+                EffectSyncOutcomeId = g.Key.EffectSyncOutcomeId,
+                EdgeType = g.Key.EdgeType,
+                ReasonCode = g.Key.ReasonCode,
+                ConnectedSystemId = g.Key.ConnectedSystemId,
+                // Names come off the first edge in the group: they are snapshots of the same system and rule,
+                // so any member carries the same value, and taking one avoids implying they could differ.
+                ConnectedSystemName = g.First().ConnectedSystemName,
+                SyncRuleId = g.Key.SyncRuleId,
+                SyncRuleName = g.First().SyncRuleName,
+                Members = g.Select(e => new CausalChainMember
+                {
+                    MetaverseObjectId = e.CauseMetaverseObjectId,
+                    ConnectedSystemObjectId = e.CauseConnectedSystemObjectId,
+                    PendingExportId = e.CausePendingExportId,
+                    RunProfileExecutionItemId = e.CauseRunProfileExecutionItemId,
+                    SyncOutcomeId = e.CauseSyncOutcomeId,
+                    DisplayName = e.CauseDisplayName,
+                    Occurred = e.Created,
+                    // A cause that named no item has nowhere to walk to, and nothing was lost in getting here,
+                    // so it is a complete ending rather than a truncated one.
+                    Resolution = e.CauseRunProfileExecutionItemId.HasValue
+                        ? CausalChainResolution.Resolved
+                        : CausalChainResolution.NoFurtherCauses
+                }).ToList()
+            })
+            .ToList();
+    }
     #endregion
 }

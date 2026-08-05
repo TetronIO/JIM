@@ -1538,6 +1538,42 @@ public class ActivityRepository : IActivityRepository
         };
     }
 
+    /// <summary>
+    /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223).
+    /// </summary>
+    public async Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds)
+    {
+        if (effectRunProfileExecutionItemIds.Count == 0)
+            return [];
+
+        var ids = effectRunProfileExecutionItemIds as List<Guid> ?? effectRunProfileExecutionItemIds.ToList();
+        return await Repository.Database.CausalEdges
+            .AsNoTracking()
+            .Where(e => ids.Contains(e.EffectRunProfileExecutionItemId))
+            .OrderBy(e => e.Created)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Returns which of the given Run Profile Execution Item ids still exist (#1223).
+    /// </summary>
+    public async Task<HashSet<Guid>> GetRetainedRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> runProfileExecutionItemIds)
+    {
+        if (runProfileExecutionItemIds.Count == 0)
+            return [];
+
+        var ids = runProfileExecutionItemIds as List<Guid> ?? runProfileExecutionItemIds.ToList();
+        // Ids only: the walk needs existence, not the items themselves, and materialising execution items to
+        // answer an existence question would load attribute graphs for every cause in a cascade.
+        var found = await Repository.Database.ActivityRunProfileExecutionItems
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.Id))
+            .Select(r => r.Id)
+            .ToListAsync();
+
+        return found.ToHashSet();
+    }
+
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations

@@ -240,6 +240,69 @@ public class CausalEdgeFlushDatabaseTests
         Assert.That(effectItem.CausalEdges, Is.Empty, "the buffer is emptied once written on this path too");
     }
 
+    /// <summary>
+    /// The two reads the upward walk is built on, against real PostgreSQL.
+    ///
+    /// Both are batched by id set, and both are load-bearing in a way a mocked test cannot show. The edge read
+    /// must return edges for every requested effect in one call, because the walk resolves a whole level at
+    /// once and a cascade cohort can hold thousands of members. The retention read must report only ids that
+    /// actually exist, because that is the sole thing distinguishing "nothing caused this" from "the cause has
+    /// aged out", and those mean opposite things to the reader.
+    /// </summary>
+    [Test]
+    public async Task CausalChainReads_BatchByIdSet_ReturnEdgesAndRetentionAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var firstEffect = NewRpei(activityId);
+        var secondEffect = NewRpei(activityId);
+        var uncausedItem = NewRpei(activityId);
+
+        firstEffect.CausalEdges.Add(NewEdge());
+        firstEffect.CausalEdges.Add(NewEdge());
+        secondEffect.CausalEdges.Add(NewEdge());
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([firstEffect, secondEffect, uncausedItem]);
+        }
+
+        var purgedItemId = Guid.NewGuid();
+
+        await using var verifyCtx = NewContext();
+        var verifyRepository = new PostgresDataRepository(verifyCtx);
+
+        var edges = await verifyRepository.Activity.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(
+            [firstEffect.Id, secondEffect.Id, uncausedItem.Id]);
+
+        Assert.That(edges, Has.Count.EqualTo(3), "one call must cover every requested effect, not just the first");
+        Assert.That(edges.Count(e => e.EffectRunProfileExecutionItemId == firstEffect.Id), Is.EqualTo(2));
+        Assert.That(edges.Count(e => e.EffectRunProfileExecutionItemId == uncausedItem.Id), Is.Zero);
+
+        var retained = await verifyRepository.Activity.GetRetainedRunProfileExecutionItemIdsAsync(
+            [firstEffect.Id, uncausedItem.Id, purgedItemId]);
+
+        Assert.That(retained, Does.Contain(firstEffect.Id));
+        Assert.That(retained, Does.Contain(uncausedItem.Id),
+            "an item with no edges is still retained; reporting it as purged would claim information was lost when none was");
+        Assert.That(retained, Does.Not.Contain(purgedItemId),
+            "an id that no longer exists is what a truncated chain looks like, and must be reported as absent");
+    }
+
+    /// <summary>
+    /// Neither read may issue a query for an empty id set: the walk calls them per level, and a level with
+    /// nothing to resolve is routine.
+    /// </summary>
+    [Test]
+    public async Task CausalChainReads_EmptyIdSet_ReturnEmptyWithoutQueryingAsync()
+    {
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        Assert.That(await repository.Activity.GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync([]), Is.Empty);
+        Assert.That(await repository.Activity.GetRetainedRunProfileExecutionItemIdsAsync([]), Is.Empty);
+    }
+
     private static CausalEdge NewEdge()
     {
         return new CausalEdge

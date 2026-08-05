@@ -112,6 +112,29 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
 
     /// <summary>
+    /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
+    /// upward walk can resolve a whole level of a cascade in one round trip.
+    /// </summary>
+    /// <remarks>
+    /// Batched by design: a cohort can hold thousands of members, and a walk that queried per member would
+    /// issue thousands of round trips to render one panel.
+    /// </remarks>
+    public Task<List<CausalEdge>> GetCausalEdgesByEffectRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> effectRunProfileExecutionItemIds);
+
+    /// <summary>
+    /// Returns which of the given Run Profile Execution Item ids still exist (#1223).
+    /// </summary>
+    /// <remarks>
+    /// The upward walk needs this to tell two situations apart that are otherwise identical: a cause with no
+    /// edges above it is a genuine root and the chain is complete, whereas a cause whose item has aged out of
+    /// history is a chain that was cut short. Both produce no further edges; only one of them lost
+    /// information, and reporting the second as the first would tell an administrator they had the whole story
+    /// when they did not.
+    /// </remarks>
+    public Task<HashSet<Guid>> GetRetainedRunProfileExecutionItemIdsAsync(IReadOnlyCollection<Guid> runProfileExecutionItemIds);
+
+
+    /// <summary>
     /// Gets all activities associated with a schedule execution.
     /// Used by the scheduler to determine step outcomes after worker tasks have been deleted.
     /// </summary>
