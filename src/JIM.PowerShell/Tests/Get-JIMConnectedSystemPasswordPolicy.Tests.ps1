@@ -90,3 +90,41 @@ Describe 'Set-JIMConnectedSystemObjectPassword -Generate' {
         $command.Parameters['Password'].ParameterType | Should -Be ([securestring])
     }
 }
+
+Describe 'Set-JIMMetaverseObjectPassword -Generate' {
+
+    BeforeAll {
+        $command = Get-Command Set-JIMMetaverseObjectPassword
+    }
+
+    It 'Should expose a Generate switch' {
+        $command.Parameters['Generate'].SwitchParameter | Should -BeTrue
+    }
+
+    <#
+        Which accounts and where the password comes from are two independent choices, and neither may be
+        inferred: defaulting the account choice would silently reset systems the caller never named, and
+        defaulting the password source would set one they did not choose. Four sets is what that costs.
+    #>
+    It 'Should let Generate combine with either way of choosing accounts' {
+        $generateSets = $command.Parameters['Generate'].ParameterSets.Keys
+
+        $generateSets | Should -Contain 'BySystemGeneratedPassword'
+        $generateSets | Should -Contain 'AllAccountsGeneratedPassword'
+    }
+
+    It 'Should not let Password and Generate be given together' {
+        $passwordSets = $command.Parameters['Password'].ParameterSets.Keys
+        $generateSets = $command.Parameters['Generate'].ParameterSets.Keys
+
+        ($passwordSets | Where-Object { $generateSets -contains $_ }) | Should -BeNullOrEmpty
+    }
+
+    It 'Should still require the accounts to be chosen when generating' {
+        $systemSets = $command.Parameters['ConnectedSystemId'].ParameterSets.Keys
+        $allSets = $command.Parameters['AllAccounts'].ParameterSets.Keys
+
+        $systemSets | Should -Contain 'BySystemGeneratedPassword'
+        $allSets | Should -Contain 'AllAccountsGeneratedPassword'
+    }
+}

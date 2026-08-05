@@ -524,6 +524,71 @@ public class SynchronisationController(
         return Ok(GeneratedPasswordResponse.FromGenerated(password, assessment, discoveredPolicy?.HasAnyDiscoveredConstraint == true));
     }
 
+
+    /// <summary>
+    /// Generate one password that satisfies every named Connected System
+    /// </summary>
+    /// <remarks>
+    /// The counterpart of the single-system generate, for setting one password across a person's accounts. JIM
+    /// reconciles the systems' discovered policies into one set of rules and generates against that: the longest
+    /// minimum length any of them demands, and only the character categories all of them count, since a category
+    /// one system does not recognise cannot help satisfy another's complexity rule.
+    ///
+    /// This is the case that most needs JIM rather than the caller: an administrator would otherwise have to
+    /// guess a password acceptable to the strictest of several systems whose policies they cannot see.
+    ///
+    /// Where no single password can satisfy them all, that is reported as a refusal rather than by handing back
+    /// a password that would be accepted on the first account and refused on the second, after the first has
+    /// already been changed. A system JIM could read nothing from is named in the response rather than passed
+    /// over: the password is about to be set there and JIM cannot promise it will be accepted.
+    ///
+    /// As with the single-system generate, the response body carries the password, is marked `no-store`, and
+    /// nothing about the value is written down or logged.
+    /// </remarks>
+    /// <param name="request">The Connected Systems the password has to work on.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="400">No Connected Systems were named, or their policies cannot be reconciled.</response>
+    /// <response code="404">One of the named Connected Systems does not exist.</response>
+    [HttpPost("connected-systems/generate-password", Name = "GeneratePasswordForSystems")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GeneratePasswordForSystemsAsync([FromBody] GeneratePasswordForSystemsRequest request)
+    {
+        if (request.ConnectedSystemIds.Count == 0)
+            return BadRequest(ApiErrorResponse.BadRequest("At least one Connected System is required."));
+
+        _logger.LogInformation("Generating a password against the reconciled policies of {Count} Connected Systems",
+            request.ConnectedSystemIds.Count);
+
+        var policies = new List<PasswordPolicyForSystem>();
+        foreach (var connectedSystemId in request.ConnectedSystemIds.Distinct())
+        {
+            var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (system == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+            policies.Add(new PasswordPolicyForSystem
+            {
+                ConnectedSystemName = system.Name,
+                Policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId)
+            });
+        }
+
+        var reconciliation = _application.PasswordGenerator.Reconcile(policies);
+        if (!reconciliation.IsUsable)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "No single password can satisfy every named Connected System: " + string.Join(" ", reconciliation.Conflicts)));
+
+        var password = _application.PasswordGenerator.Generate(reconciliation.Policy);
+        var assessment = _application.PasswordGenerator.Assess(reconciliation.Policy, targetPolicy: null);
+
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromReconciled(password, assessment, reconciliation));
+    }
+
     /// <summary>
     /// Set the password on a Connected System Object
     /// </summary>

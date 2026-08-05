@@ -215,4 +215,120 @@ public class SynchronisationControllerPasswordGenerationTests
     }
 
     #endregion
+
+    #region Generating across several systems
+
+    /// <summary>
+    /// Setting one password across a person's accounts is the case that most needs JIM to generate it: the
+    /// administrator would otherwise have to guess a password acceptable to the strictest of several systems
+    /// whose policies they cannot see. The generated password must satisfy all of them, not the first.
+    /// </summary>
+    [Test]
+    public async Task GeneratePasswordForSystems_SatisfiesTheStrictestOfThemAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(7))
+            .ReturnsAsync(new ConnectedSystem { Id = 7, Name = "Research LDAP" });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = ConnectedSystemId,
+            MinimumLength = 8,
+            RecognisedCharacterClasses = PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase |
+                                         PasswordCharacterClasses.Digit | PasswordCharacterClasses.Symbol
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(7)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = 7,
+            MinimumLength = 24,
+            RecognisedCharacterClasses = PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase |
+                                         PasswordCharacterClasses.Digit | PasswordCharacterClasses.Symbol
+        });
+
+        var result = await _controller.GeneratePasswordForSystemsAsync(
+            new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [ConnectedSystemId, 7] });
+        var response = (GeneratedPasswordResponse)((OkObjectResult)result).Value!;
+
+        Assert.That(response.Password!.Length, Is.GreaterThanOrEqualTo(24),
+            "the longest minimum any of them demands, or the shorter system's password fails on the longer one");
+    }
+
+    /// <summary>
+    /// Where no single password can satisfy every system, saying so beats handing back one that will be
+    /// refused on the second account after the first has already been changed.
+    /// </summary>
+    [Test]
+    public async Task GeneratePasswordForSystems_WhereThePoliciesCannotBeReconciled_SaysSoAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(7))
+            .ReturnsAsync(new ConnectedSystem { Id = 7, Name = "Research LDAP" });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = ConnectedSystemId,
+            MinimumLength = 8,
+            RecognisedCharacterClasses = PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(7)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = 7,
+            MinimumLength = 2000,
+            RequiredCharacterClassCount = 4,
+            RecognisedCharacterClasses = PasswordCharacterClasses.Uppercase
+        });
+
+        var result = await _controller.GeneratePasswordForSystemsAsync(
+            new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [ConnectedSystemId, 7] });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>(),
+            "a password that cannot work everywhere must not be handed back as though it will");
+    }
+
+    [Test]
+    public async Task GeneratePasswordForSystems_WithNoSystemsNamed_IsRejectedAsync()
+    {
+        var result = await _controller.GeneratePasswordForSystemsAsync(
+            new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [] });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GeneratePasswordForSystems_NamingASystemThatDoesNotExist_IsNotFoundAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(99)).ReturnsAsync((ConnectedSystem?)null);
+
+        var result = await _controller.GeneratePasswordForSystemsAsync(
+            new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [ConnectedSystemId, 99] });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    /// <summary>
+    /// A system JIM could read nothing from is named rather than passed over, because the caller is about to
+    /// set a password on it and JIM cannot promise it will be accepted.
+    /// </summary>
+    [Test]
+    public async Task GeneratePasswordForSystems_WhereOneSystemDisclosedNothing_NamesItAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(7))
+            .ReturnsAsync(new ConnectedSystem { Id = 7, Name = "Research LDAP" });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(ConnectedSystemId)).ReturnsAsync(new ConnectedSystemPasswordPolicy
+        {
+            ConnectedSystemId = ConnectedSystemId,
+            MinimumLength = 14,
+            RecognisedCharacterClasses = PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase |
+                                         PasswordCharacterClasses.Digit
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(7)).ReturnsAsync((ConnectedSystemPasswordPolicy?)null);
+
+        var result = await _controller.GeneratePasswordForSystemsAsync(
+            new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [ConnectedSystemId, 7] });
+        var response = (GeneratedPasswordResponse)((OkObjectResult)result).Value!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.Password, Is.Not.Null.And.Not.Empty);
+            Assert.That(response.SystemsWithNoDiscoveredPolicy, Does.Contain("Research LDAP"));
+        });
+    }
+
+    #endregion
 }

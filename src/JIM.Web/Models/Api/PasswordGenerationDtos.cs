@@ -161,6 +161,41 @@ public class GeneratedPasswordResponse
     /// </summary>
     public List<string> Problems { get; set; } = [];
 
+    /// <summary>
+    /// Where several systems were asked for at once: those JIM could read no policy from.
+    /// <para>
+    /// Named rather than passed over, because the caller is about to set this password on those systems and JIM
+    /// cannot promise it will be accepted there. Empty for a single-system generate.
+    /// </para>
+    /// </summary>
+    public List<string> SystemsWithNoDiscoveredPolicy { get; set; } = [];
+
+    /// <summary>
+    /// Where several systems were asked for at once: the rules the password had to satisfy, in the words the
+    /// portal uses, so a script can report what it generated against.
+    /// </summary>
+    public List<string> Constraints { get; set; } = [];
+
+    /// <summary>
+    /// Builds the response for several systems at once, from the reconciled policy their rules produced.
+    /// </summary>
+    public static GeneratedPasswordResponse FromReconciled(
+        string password,
+        PasswordGenerationAssessment assessment,
+        PasswordPolicyReconciliation reconciliation)
+    {
+        var response = FromGenerated(password, assessment, reconciliation.Constraints.Count > 0);
+        response.SystemsWithNoDiscoveredPolicy = [.. reconciliation.SystemsWithNoDiscoveredPolicy];
+        response.Constraints = [.. reconciliation.Constraints];
+
+        // A system that disclosed nothing may be stricter than the reconciled policy knows, so JIM must not
+        // claim the password satisfies what it cannot see.
+        if (reconciliation.SystemsWithNoDiscoveredPolicy.Count > 0 || reconciliation.MayBeStricterThanDiscovered)
+            response.SatisfiesDiscoveredPolicy = false;
+
+        return response;
+    }
+
     public static GeneratedPasswordResponse FromGenerated(
         string password,
         PasswordGenerationAssessment assessment,
@@ -176,4 +211,21 @@ public class GeneratedPasswordResponse
         SatisfiesDiscoveredPolicy = hasDiscoveredPolicy && assessment.IsUsable,
         Problems = [.. assessment.Problems]
     };
+}
+
+/// <summary>
+/// Asks for one password that every named Connected System will accept.
+/// <para>
+/// This is the case that most needs JIM to generate rather than the caller: setting one password across a
+/// person's accounts means satisfying the strictest of several systems at once, and an administrator cannot
+/// see those policies to reason about them. JIM can.
+/// </para>
+/// </summary>
+public class GeneratePasswordForSystemsRequest
+{
+    /// <summary>
+    /// The Connected Systems the password has to work on. At least one is required; JIM reconciles their
+    /// discovered policies into one set of rules and generates against that.
+    /// </summary>
+    public List<int> ConnectedSystemIds { get; set; } = [];
 }
