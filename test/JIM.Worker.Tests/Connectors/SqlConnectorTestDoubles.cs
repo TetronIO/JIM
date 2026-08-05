@@ -72,6 +72,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal FakeSqlCatalogue Catalogue { get; } = new();
 
     /// <summary>
+    /// The settings every connection was configured with before being opened, so a test can assert that
+    /// the Connector gives the dialect its chance to configure the connection object itself.
+    /// </summary>
+    internal List<SqlConnectionSettings> ConfiguredConnectionSettings { get; } = [];
+
+    /// <summary>
     /// Which dialect this stand-in speaks. Settable so a test can exercise the Oracle type-mapping
     /// opt-ins, which are the one place schema discovery's answer depends on the database server.
     /// </summary>
@@ -89,7 +95,7 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     public override bool SupportsPinnedServerCertificate => CanPinServerCertificate;
 
-    public override int GetDefaultPort(bool useTls) => 1433;
+    public override int GetDefaultPort(SqlConnectionEncryption encryption) => 1433;
 
     protected override char OpenQuote => '[';
 
@@ -115,6 +121,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         var connection = new FakeDbConnection(this, connectionString);
         OpenConnections.Add(connection);
         return connection;
+    }
+
+    public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ConfiguredConnectionSettings.Add(settings);
     }
 
     /// <summary>
@@ -210,7 +222,7 @@ internal static class SqlConnectorSettingValues
     /// <summary>
     /// A complete, valid Microsoft SQL Server configuration.
     /// </summary>
-    internal static List<ConnectedSystemSettingValue> CreateSqlServer(SqlConnector connector, bool useTls = false)
+    internal static List<ConnectedSystemSettingValue> CreateSqlServer(SqlConnector connector, bool encrypt = true)
     {
         var settingValues = Create(connector);
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
@@ -218,7 +230,25 @@ internal static class SqlConnectorSettingValues
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseName, "HR");
         SetString(settingValues, SqlConnectorConstants.SettingUsername, "jim_sync");
         SetEncrypted(settingValues, SqlConnectorConstants.SettingPassword, "sup3rs3cret");
-        SetCheckbox(settingValues, SqlConnectorConstants.SettingUseTls, useTls);
+        SetCheckbox(settingValues, SqlConnectorConstants.SettingSqlServerEncryptConnection, encrypt);
+        SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, SqlConnectorConstants.ObjectTypesExample);
+        return settingValues;
+    }
+
+    /// <summary>
+    /// A complete, valid Oracle Database configuration. A null encryption mode stands for an
+    /// administrator who never answered the question at all.
+    /// </summary>
+    internal static List<ConnectedSystemSettingValue> CreateOracle(SqlConnector connector, string? encryptionMode)
+    {
+        var settingValues = Create(connector);
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
+        SetString(settingValues, SqlConnectorConstants.SettingHost, "hr.example.com");
+        SetString(settingValues, SqlConnectorConstants.SettingOracleDatabaseIdentifiedBy, SqlConnectorConstants.OracleIdentifiedByServiceName);
+        SetString(settingValues, SqlConnectorConstants.SettingOracleServiceName, "HRPDB");
+        SetString(settingValues, SqlConnectorConstants.SettingUsername, "jim_sync");
+        SetEncrypted(settingValues, SqlConnectorConstants.SettingPassword, "sup3rs3cret");
+        SetString(settingValues, SqlConnectorConstants.SettingOracleEncryption, encryptionMode);
         SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, SqlConnectorConstants.ObjectTypesExample);
         return settingValues;
     }

@@ -71,6 +71,17 @@ internal interface ISqlProvider
     DbConnection CreateConnection(string connectionString);
 
     /// <summary>
+    /// Applies any configuration this dialect's driver takes on the connection object rather than in
+    /// its connection string, before the connection is opened.
+    /// <para>
+    /// Oracle Database's Native Network Encryption is the case this exists for: it is configured through
+    /// properties on the connection, not through a connection-string keyword, so a provider given only a
+    /// connection string could build a correct one and still open an unencrypted connection.
+    /// </para>
+    /// </summary>
+    void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings);
+
+    /// <summary>
     /// Creates a command on a connection, with any dialect-specific command configuration applied.
     /// </summary>
     DbCommand CreateCommand(DbConnection connection, string commandText);
@@ -81,10 +92,11 @@ internal interface ISqlProvider
     string ConnectivityTestCommandText { get; }
 
     /// <summary>
-    /// The listener port this dialect uses when an administrator leaves the port unset. Encrypted and
-    /// unencrypted transports do not always share one, so the answer depends on which is in use.
+    /// The listener port this dialect uses when an administrator leaves the port unset. The transport
+    /// decides it: Oracle Database listens for TCPS on a port of its own, while Microsoft SQL Server
+    /// negotiates TLS on the one port it already listens on.
     /// </summary>
-    int GetDefaultPort(bool useTls);
+    int GetDefaultPort(SqlConnectionEncryption encryption);
 
     /// <summary>
     /// What this dialect calls its encrypted transport, for the wording an administrator is shown when
