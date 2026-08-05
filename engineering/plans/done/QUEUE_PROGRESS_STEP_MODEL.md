@@ -1,6 +1,6 @@
 # Queue Progress: Uplift to the Step Model
 
-- **Status:** Doing (Phase 1 underway)
+- **Status:** Done
 - **Issue:** [#1162](https://github.com/TetronIO/JIM/issues/1162)
 - **Builds on:** [#454](https://github.com/TetronIO/JIM/issues/454) (Run Profile phases), design note [`engineering/notes/RUN_PROFILE_PHASES.md`](../../notes/RUN_PROFILE_PHASES.md)
 
@@ -208,7 +208,7 @@ Contrast measured on the running page against the composited group-header backgr
 
 Runtime-verified against a real Schedule with a parallel step group, executed on the full stack: `TotalSteps` recorded 3 for its four step rows, and the rail rendered its parallel step as one divided marker while naming the two sequential steps individually, which is only possible if the Activity projection ran and deduplicated against the queue's own tasks.
 
-### Phase 5: Surface parity (REST + PowerShell)
+### Phase 5: Surface parity (REST + PowerShell) ✅
 
 Required in the same PR: this is a read feature, so read parity applies.
 
@@ -217,7 +217,15 @@ Required in the same PR: this is a read feature, so read parity applies.
 - Tests: `test/JIM.Web.Api.Tests/` for the DTOs, Pester for the cmdlets.
 - Docs: update the REST and PowerShell reference pages under `docs/`.
 
-### Phase 6: Documentation and changelog
+#### Corrections to this plan's original shape
+
+**The worker-task read needed nothing.** `WorkerTasksController` returns `WorkerTaskHeader` directly, so Phase 2's `Steps` and Phase 4's Schedule scalars were already on the wire the moment they were added. They are pinned by tests rather than left implicit: the day that endpoint gains a hand-written response DTO, those fields are the ones most likely to be dropped, and their absence would be silent.
+
+**`ScheduleExecutionsController.GetStepStatus` was not folded onto the reader, and should not be.** It looked like a duplicate and is not. It produces one entry per Schedule **Step row**, naming each step and carrying its type, timings, errors and Activity id, and its status strings distinguish states the group-level reader deliberately collapses (`Completed with Warning`, `Completed with Error`). The reader produces one entry per step **group**, the unit an execution advances through. Replacing one with the other would have changed the response for existing callers to no benefit, so `Progress` was added alongside `Steps`, and both are documented as answering different questions.
+
+**The PowerShell sentence was built inside the Write-Progress helper, where nothing else could reach it.** `Get-JIMStepPositionDisplay` now composes it for `Get-JIMWorkerTask`, `Get-JIMScheduleExecution` and the live display alike. Each half degrades on its own terms: a Schedule Execution knows which step group it is on without knowing what to call it, and an older server can name a running step without reporting a position. Neither is invented to complete the sentence, and a task with no steps gets an empty display rather than a `Step of` skeleton.
+
+### Phase 6: Documentation and changelog ✅
 
 - `CHANGELOG.md` under `[Unreleased]` → `### Added` (user-facing UI change).
 - Public docs under `docs/` for the changed queue behaviour (`changelog-lint` enforces this for a `✨` entry).

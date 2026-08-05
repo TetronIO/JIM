@@ -140,6 +140,19 @@ A Connector can report how many objects it has read while it is still working, a
 
 The steps are also available to automation: the Activity progress endpoint reports the current step and its position in the run, and `Start-JIMRunProfile -Wait` and `Get-JIMActivity -Follow` display it as "Step 3 of 7: Saving changes".
 
+### The run's steps in the queue
+
+**Admin > Operations > Queue** shows the same run in miniature, so an administrator watching several at once does not have to open each in turn. Each row's Progress cell carries two things, one above the other:
+
+- **The run's steps**, as a row of segments, one per step, coloured by what happened to each: done, running, skipped, failed, or not reached yet.
+- **The running step's own progress bar**, with a caption naming the step the figures belong to ("Step 3 of 7: Saving changes - 12,480 / 40,000").
+
+The two measure different things on purpose: the segments say *where* in the run you are, the bar says *how much* of the step is done. The caption is what keeps them apart, which is why it names the step rather than just counting.
+
+A task that is not a Run Profile execution records no steps (clearing Connected System Objects, generating example data, a factory reset), and shows the bar and its message alone, as it always has.
+
+The full picture, with step names, durations and the messages beneath them, is on the Activity itself; the row's name links straight to it.
+
 ## Common workflows
 
 **Monitoring a Run Profile execution:**
