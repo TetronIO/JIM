@@ -1,6 +1,6 @@
 # Initial Password Generation and Delivery on Provisioning
 
-- **Status:** Doing (Phases 1 to 5 complete; Phase 6 part complete; Phase 7 outstanding)
+- **Status:** Doing (Phases 1 to 6 complete; Phase 7 outstanding)
 - **Note:** Phase 5 is closed. Its four unbuilt items were tracked as [#1221](https://github.com/TetronIO/JIM/issues/1221) and delivered in #1229 (release on configuration change, time-to-live expiry) and #1235 (both portal surfaces, with REST and PowerShell parity for the parked reporting). What remains is a read surface for the discovered policy, and the concept page that ties the whole feature together.
 - **Issue:** [#1121](https://github.com/TetronIO/JIM/issues/1121)
 - **Related:** [#1119](https://github.com/TetronIO/JIM/issues/1119) Password Synchronisation, [#1120](https://github.com/TetronIO/JIM/issues/1120) Defensive password filtering, [#618](https://github.com/TetronIO/JIM/issues/618) Email Notifications
@@ -250,15 +250,19 @@ Most failures never reach that question, though, and those are checkable without
 
 If a live test is ever revisited, the one route that carries its own authorisation is offering to set a password on **the signed-in administrator's own account**, since they are self-evidently entitled to change it. That has its own gap: an administrator using a dedicated admin account outside JIM's lifecycle management may have no Connected System Object to target.
 
-### Phase 6: REST API and PowerShell parity (part complete)
+### Phase 6: REST API and PowerShell parity ✅
 
 Endpoints and cmdlets for generator configuration, the on-demand generate affordance, discovered-policy read, and parked-item read plus manual release. ID-based routes for writes per the API identifier rules; Pester tests for the cmdlets.
 
 1. ✅ Generator configuration: `GET`/`PUT /sync-rules/{id}/initial-password`, `Get-JIMSyncRuleInitialPassword` and `Set-JIMSyncRuleInitialPassword`.
 2. ✅ Parked-item read: the same endpoint and cmdlet carry `parkedAccountCount`, `expiredAccountCount` and the reasons grouped as the portal groups them; `Get-JIMConnectedSystem -Id` carries the two counts per system. (#1235)
 3. ✅ Manual release, by a different route than planned: release is a consequence of saving a changed configuration, not a separate action. A standalone "release now" would let an administrator retry against settings the target has already refused, which is the loop parking exists to stop. `Set-JIMSyncRuleInitialPassword` therefore releases as a side effect, and that is documented on both surfaces. Revisit only if a real case appears for releasing without changing anything.
-4. ❌ Discovered-policy read: `ConnectedSystemServer.GetPasswordPolicyAsync` exists and the portal renders it, but nothing exposes it over REST or PowerShell. This is the one genuine parity gap left in the feature.
-5. ❌ On-demand generate affordance: deliberately absent from the API so far, because JIM's API never returns a password in a response body; the portal generates client-side against the same policy. If this is wanted for automation, the shape needs deciding first, not just implementing.
+4. ✅ Discovered-policy read: `GET /connected-systems/{id}/password-policy` and `Get-JIMConnectedSystemPasswordPolicy`. Every field is nullable because a directory withholds what a caller may not see by omitting it, so a null is "JIM could not read this" rather than "there is no such rule"; `hasAnyDiscoveredConstraint` is what distinguishes them.
+5. ✅ On-demand generate: `POST /connected-systems/{id}/generate-password`, and `Set-JIMConnectedSystemObjectPassword -Generate` over it. This is the only response body in JIM that carries a password, which is deliberate rather than a departure: what JIM never does is store one, or return one nobody asked for. Marked `no-store`, and the log records that a password was generated and for which system, never anything about the value.
+
+   **No standalone generate cmdlet, on purpose.** "Password" is not a JIM noun, so `New-JIMPassword` promises an object that does not exist, and the thing worth naming is not "a password" but "a password this target will accept", which no idiomatic name carries. `-Generate` says it without inventing one. A standalone call only earns its place when the value is needed *before* deciding what to do with it; revisit with a concrete case, and choose the name against that rather than in the abstract.
+
+   **Not on `Set-JIMMetaverseObjectPassword` yet.** That cmdlet fans out across several Connected Systems, so a correct generate there has to satisfy the *reconciled* policy across the selected accounts (`IPasswordGeneratorService.Reconcile`), not any one system's. Generating against a single system and setting it across several would produce a password the strictest of them may refuse, which is the failure this feature exists to prevent. It needs a reconciled-policy endpoint of its own.
 
 **Do not read #1204 as having covered this phase:** that PR delivered surface parity for *setting a password on an object* (`POST .../connector-space/{csoId}/password`, `Set-JIMConnectedSystemObjectPassword`, `Set-JIMMetaverseObjectPassword`), which is a different capability from configuring the generator or reading the discovered policy.
 
