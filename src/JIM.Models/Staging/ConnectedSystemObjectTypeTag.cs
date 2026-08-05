@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+
 namespace JIM.Models.Staging;
 
 /// <summary>
@@ -16,6 +18,13 @@ public class ConnectedSystemObjectTypeTag
 {
     public int Id { get; set; }
 
+    /// <summary>
+    /// The Object Type this tag classifies. Never serialised: a tag is only ever reached as a child of its
+    /// Object Type, so writing the parent back out would be a cycle. The OpenAPI schema generator has no cycle
+    /// breaking here and walks it to System.Text.Json's 256-level depth limit, which fails the whole document
+    /// and with it the jim.web image build.
+    /// </summary>
+    [JsonIgnore]
     public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; } = null!;
     public int ConnectedSystemObjectTypeId { get; set; }
 
