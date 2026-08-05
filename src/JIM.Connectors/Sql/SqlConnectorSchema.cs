@@ -277,21 +277,24 @@ internal sealed class SqlConnectorSchema
         if (anchorIndex.Count == 0)
             return;
 
-        foreach (var foreignKey in await ReadForeignKeysAsync(source.SchemaName, source.ObjectName))
+        // A foreign key earns a suggestion only where the column is not already configured as a
+        // Reference, its target is an Object Type's anchor, and the column actually surfaced as an
+        // attribute. Selecting those first keeps the loop to the ones that do.
+        var suggestions = (await ReadForeignKeysAsync(source.SchemaName, source.ObjectName))
+            .Where(foreignKey => !referenceColumns.ContainsKey(foreignKey.ColumnName))
+            .Select(foreignKey => new
+            {
+                ForeignKey = foreignKey,
+                ReferencedObjectTypeName = anchorIndex.GetValueOrDefault(
+                    AnchorKey(foreignKey.ReferencedSchema, foreignKey.ReferencedTable, foreignKey.ReferencedColumn)),
+                Attribute = objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, foreignKey.ColumnName, StringComparison.OrdinalIgnoreCase))
+            })
+            .Where(suggestion => suggestion.ReferencedObjectTypeName != null && suggestion.Attribute != null);
+
+        foreach (var suggestion in suggestions)
         {
-            // Already configured: there is nothing left to suggest.
-            if (referenceColumns.ContainsKey(foreignKey.ColumnName))
-                continue;
-
-            if (!anchorIndex.TryGetValue(AnchorKey(foreignKey.ReferencedSchema, foreignKey.ReferencedTable, foreignKey.ReferencedColumn), out var referencedObjectTypeName))
-                continue;
-
-            var attribute = objectType.Attributes.FirstOrDefault(a => string.Equals(a.Name, foreignKey.ColumnName, StringComparison.OrdinalIgnoreCase));
-            if (attribute == null)
-                continue;
-
-            attribute.Description =
-                $"Foreign key {foreignKey.ConstraintName} points at Object Type '{referencedObjectTypeName}'. To have JIM resolve it as a Reference, add this column to Object Type '{configuration.Name}' in {SqlConnectorConstants.SettingObjectTypes} with \"referencesObjectType\": \"{referencedObjectTypeName}\".";
+            suggestion.Attribute!.Description =
+                $"Foreign key {suggestion.ForeignKey.ConstraintName} points at Object Type '{suggestion.ReferencedObjectTypeName}'. To have JIM resolve it as a Reference, add this column to Object Type '{configuration.Name}' in {SqlConnectorConstants.SettingObjectTypes} with \"referencesObjectType\": \"{suggestion.ReferencedObjectTypeName}\".";
         }
     }
 
