@@ -200,7 +200,7 @@ internal class OracleProvider : SqlProviderBase
         ValidateKeysetPageRequest(request);
 
         var select = $"SELECT {BuildColumnList(request.SelectColumns)}";
-        var from = $"FROM {QualifyObjectName(request.SchemaName, request.ObjectName)}";
+        var from = $"FROM {BuildFromClause(request)}";
         var orderBy = BuildAnchorOrderByClause(request.AnchorColumns);
 
         // The row limiting clause accepts a bind variable, so the page size stays a bound value.
