@@ -211,7 +211,7 @@ When feature work surfaces something that must be solved to deliver the feature 
 3. **Implement the layer to full standard**: TDD, build/test gates, changelog and docs if user-facing. Being unplanned lowers no bars.
 4. **Open the layer's PR with its base set to the branch below** (`gh pr create --base feature/<feature>`), then link the chain into a stack: GitHub shows a banner on aligned chains offering to convert, or use the `gh stack` CLI (`gh extension install github/gh-stack`). Reviewers and history get one clean diff per concern.
 5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack of the layers above it (see "Restacking" below).
-6. **Land bottom-up.** Any PR can merge once everything below it is green; merging an upper PR merges all unmerged PRs below it **atomically, in order, each recorded individually** - so the normal move is to merge from the top when the objective is complete. Every PR in the stack is evaluated against `main`'s protections (all seven required checks), regardless of its direct base.
+6. **Land bottom-up.** Any PR can merge once everything below it is green; merging an upper PR merges all unmerged PRs below it **atomically, in order, each recorded individually** - so the normal move is to merge from the top when the objective is complete. Every PR in the stack is evaluated against `main`'s protections (every required check), regardless of its direct base.
 
 - **Auto-merge is not supported for stacked PRs.** Do not `gh pr merge --auto` a stack layer; wait for green, then merge (see `/pr-merge`).
 - **Linear history is required between layers, not between the bottom layer and `main`.** Never merge one layer into another; a layer is always rebased onto the layer below it. The bottom layer is an ordinary feature branch that happens to have a PR stacked on it, so it is brought up to date with `main` by merging, exactly as the next section prescribes. Verified on stack #1211: the bottom layer carried a merge commit from `origin/main`, and both PRs still reported `MERGEABLE`, rendered correctly in `gh stack view`, and merged bottom-up without complaint.
@@ -243,7 +243,9 @@ git merge origin/main      # then git push (no force needed)
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires nine status checks to pass before a merge is allowed: `build-and-test`, `database-tests`, `openapi-document`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+
+Read the list from the ruleset rather than from here if it matters; this line has gone stale before. `gh api repos/TetronIO/JIM/rulesets/12062449 --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'` answers it in one call.
 
 - Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
 - An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.

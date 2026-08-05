@@ -53,6 +53,48 @@ jobs:
         name: pester-test-results
         path: ./TestResults/pester-results.xml
 
+  openapi-document:
+    # Generate the OpenAPI document, and fail if it cannot be generated.
+    #
+    # The jim.web image bakes the document in at build time (the openapi-gen stage in
+    # src/JIM.Web/Dockerfile), so a document that cannot be generated is an image that
+    # cannot be built, and a release that cannot be cut. Generating it boots the app far
+    # enough to walk every route and every response type, which is why it catches a class
+    # of fault nothing else here can: duplicate route parameters, ambiguous templates,
+    # and reference cycles in the model graph. dotnet build stays clean through all of
+    # them, and unit tests call action methods directly, so they never touch routing or
+    # schema generation either.
+    #
+    # It is a required check because the alternative was demonstrated: #1238 shipped a
+    # cycle between ConnectedSystemObjectType and its tags, every check passed, and no
+    # release image could be built until it was found by hand days later. Local builds do
+    # not cover it either, deliberately: jim-build passes OPENAPI_STAGE=publish to skip
+    # the stage because it costs minutes.
+    #
+    # Its own job rather than a step in build-and-test: generation alone takes about five
+    # minutes (measured in both Debug and Release; it is the schema walk over the model
+    # graph, not the build), and it needs nothing the tests produce. Run alongside them
+    # it costs no wall clock; appended to them it would add five minutes to every PR.
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+    - name: Setup .NET
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      run: dotnet restore JIM.sln --locked-mode
+    - name: Build
+      run: dotnet build JIM.sln --no-restore
+    # The same script the devcontainer uses (jim-openapi-generate), so what CI proves and
+    # what a developer can reproduce are the same code path. -NoBuild reuses the build
+    # above. The output goes to the runner's temp directory: the document is a build
+    # artefact of the image, not a file this repository tracks.
+    - name: Generate the OpenAPI document
+      shell: pwsh
+      run: ./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath "${{ runner.temp }}/openapi-v1.json"
+
   database-tests:
     # Runs the RequiresPostgres NUnit tier (the "Database-backed component tests"
     # tier in engineering/TESTING_STRATEGY.md) against a real PostgreSQL service.
