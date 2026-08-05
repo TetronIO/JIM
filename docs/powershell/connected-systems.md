@@ -1292,7 +1292,7 @@ Sets the password on one Connected System Object.
 
 The password is written straight to the Connected System: nothing is staged as a Pending Export, nothing is retried, and JIM stores nothing. The attempt is recorded as an Activity against the object, carrying the outcome and, where the system refused, its verbatim reason.
 
-This is the automation counterpart of the **Set Password** action in the administration portal. You supply the password rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one. Use the portal when you want JIM to generate one that follows the discovered policy.
+This is the automation counterpart of the **Set Password** action in the administration portal. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
 
 ### Syntax
 

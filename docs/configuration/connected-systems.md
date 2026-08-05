@@ -112,6 +112,8 @@ Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdC
 
 Where a Connected System can accept passwords, its Schema tab carries a Password Channel panel. It has two jobs: showing you the password rules JIM read from the system itself, and letting you check the channel works before you rely on it.
 
+[Passwords](../concepts/passwords.md) explains the channel as a whole: why passwords do not travel through attribute flow, what discovery can and cannot tell you, and how a refused password is resolved.
+
 ### Discovered password policy
 
 JIM reads the target's password policy whenever it retrieves or refreshes the Connected System's schema, and records it, so that configuring a generated password does not mean retyping rules the system already publishes. If a policy is missing, **Refresh Schema** on the Schema tab reads it again. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
@@ -168,7 +170,7 @@ A Connected System that refuses the password says why, and the dialog stays open
 !!! note "Copying and your operating system's clipboard"
     Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
 
-The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, with one difference: you supply the password there rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one.
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; nothing is stored either way.
 
 ### One password across several Connected Systems
 

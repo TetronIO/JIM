@@ -16,9 +16,9 @@ function Set-JIMConnectedSystemObjectPassword {
         account whose provisioning password was parked, the person who never received theirs, and the reset
         that has to happen now.
 
-        You supply the password. JIM does not generate one here: doing so would mean returning a password in a
-        response body, which this API never does. Use the portal's Set Password dialog when you want JIM to
-        generate a password that follows the Connected System's discovered policy.
+        Supply the password with -Password, or use -Generate to have JIM produce one that follows the Connected
+        System's discovered policy. A generated password is returned once, on GeneratedPassword; JIM stores it
+        nowhere and cannot give it to you again.
 
         This is a password-reset primitive. Anyone who can call it can reset any account in this connector
         space, subject only to what the Connected System's own service account is permitted to do.

@@ -143,6 +143,8 @@ This applies wherever the deletion happens: during a Synchronisation Run Profile
 
 An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** section of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
 
+For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
+
 It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.

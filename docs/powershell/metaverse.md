@@ -900,7 +900,7 @@ Sets the same password on several of a person's accounts across Connected System
 
 Resolves the accounts a Metaverse Object is joined to and writes to each named Connected System in turn. There is no transaction across them: a run routinely ends with some accounts changed and others not, so every account's outcome is reported separately.
 
-You supply the password. JIM does not generate one here, because that would mean returning a password in a response body, which this API never does. Use the portal when you want JIM to generate one that satisfies every selected system's discovered policy at once.
+Supply the password with `-Password`, or have JIM generate one that satisfies every selected system's discovered policy at once with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
 
 ### Syntax
 

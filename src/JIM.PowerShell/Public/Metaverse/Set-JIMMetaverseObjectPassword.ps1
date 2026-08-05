@@ -15,9 +15,11 @@ function Set-JIMMetaverseObjectPassword {
         with some accounts changed and others not, so every account's outcome is reported separately. Where one
         refuses, the person is left with a different password there from the accounts that accepted it.
 
-        You supply the password. JIM does not generate one here, because that would mean returning a password in
-        a response body, which this API never does. Use the portal when you want JIM to generate one that
-        satisfies every selected system's discovered policy at once.
+        Supply the password with -Password, or use -Generate to have JIM produce one that satisfies every
+        selected system's discovered policy at once. Prefer -Generate here: one password has to satisfy the
+        strictest of several systems, and those policies are not something you can see in order to reason about
+        them. A generated password is returned once, on every outcome's GeneratedPassword property; JIM stores
+        it nowhere and cannot give it to you again.
 
         You must name the Connected Systems, or pass -AllAccounts. Setting a password everywhere by default
         would turn a reset in one system into a reset in all of them.
