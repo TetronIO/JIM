@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities.DTOs
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Transactional.DTOs
 @using JIM.Utilities;
 @using JIM.Web.Services
 @using System;
@@ -41,7 +42,7 @@
     </MudAlert>
 }
 
-<MudTable Items="@_connectedSystemHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+<MudTable Items="@_connectedSystemHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudSpacer />
@@ -94,6 +95,8 @@
                     </MudTooltip>
                 }
                 <ConfigurationDriftIndicator Status="@GetDrift(context.Id)" ConnectedSystemName="@context.Name" />
+                <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Id)"
+                                                   SubjectName="@context.Name" IsConnectedSystem="true" />
             </MudStack>
         </MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
@@ -118,6 +121,7 @@
 @code {
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
+    private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
     private string _searchString = "";
     private bool _dense;
 
@@ -136,11 +140,20 @@
         // One batched call for the whole page; the drift service issues a fixed number of queries regardless of how
         // many systems are listed, so this does not become an N+1.
         if (_connectedSystemHeaders.Count > 0)
-            _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(_connectedSystemHeaders.Select(cs => cs.Id).ToList());
+        {
+            var ids = _connectedSystemHeaders.Select(cs => cs.Id).ToList();
+            _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(ids);
+
+            // One grouped count for the whole page, for the same reason: a per-row query here would be an N+1.
+            _initialPasswordAttention = await jim.InitialPasswords.GetAttentionByConnectedSystemAsync(ids);
+        }
     }
 
     private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>
         _drift != null && _drift.TryGetValue(connectedSystemId, out var status) ? status : null;
+
+    private InitialPasswordAttention? GetInitialPasswordAttention(int connectedSystemId) =>
+        _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

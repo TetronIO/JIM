@@ -23,13 +23,13 @@ public class ScheduleStepProgress
     /// <summary>
     /// Where the step group as a whole has got to.
     /// </summary>
-    public ScheduleStepStatus Status { get; set; }
+    public ScheduleExecutionStepStatus Status { get; set; }
 
     /// <summary>
     /// Each concurrent task's own status, ordered for drawing rather than by task: see
     /// <see cref="ScheduleStepReading.OrderWedges"/> for why the order is load-bearing.
     /// </summary>
-    public IReadOnlyList<ScheduleStepStatus> TaskStatuses { get; set; } = [];
+    public IReadOnlyList<ScheduleExecutionStepStatus> TaskStatuses { get; set; } = [];
 
     /// <summary>
     /// Whether this step runs several tasks concurrently, and so is drawn divided rather than whole.

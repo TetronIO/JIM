@@ -10,6 +10,8 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
+using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Tasking;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -38,6 +40,7 @@ public class ScheduleExecutionProgressReadTests
     private Mock<ISchedulingRepository> _mockScheduling = null!;
     private Mock<IActivityRepository> _mockActivity = null!;
     private Mock<ITaskingRepository> _mockTasking = null!;
+    private Mock<IConnectedSystemRepository> _mockConnectedSystems = null!;
     private JimApplication _application = null!;
     private ScheduleExecutionsController _controller = null!;
 
@@ -51,10 +54,26 @@ public class ScheduleExecutionProgressReadTests
         _mockScheduling = new Mock<ISchedulingRepository>();
         _mockActivity = new Mock<IActivityRepository>();
         _mockTasking = new Mock<ITaskingRepository>();
+        _mockConnectedSystems = new Mock<IConnectedSystemRepository>();
 
         _mockRepository.Setup(r => r.Scheduling).Returns(_mockScheduling.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivity.Object);
         _mockRepository.Setup(r => r.Tasking).Returns(_mockTasking.Object);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystems.Object);
+
+        // The detail read resolves each Run Profile step's Connected System and Run Profile names.
+        _mockConnectedSystems.Setup(r => r.GetConnectedSystemHeadersAsync()).ReturnsAsync(
+        [
+            new ConnectedSystemHeader { Id = 1, Name = "Yellowstone APAC" },
+            new ConnectedSystemHeader { Id = 2, Name = "Glitterband EMEA" }
+        ]);
+        _mockConnectedSystems.Setup(r => r.GetConnectedSystemRunProfilesAsync(It.IsAny<int>())).ReturnsAsync(
+        [
+            new ConnectedSystemRunProfile { Id = 1, Name = "Full Import" },
+            new ConnectedSystemRunProfile { Id = 3, Name = "Full Sync" },
+            new ConnectedSystemRunProfile { Id = 7, Name = "Full Import" },
+            new ConnectedSystemRunProfile { Id = 9, Name = "Full Sync" }
+        ]);
 
         _application = new JimApplication(_mockRepository.Object);
         _controller = new ScheduleExecutionsController(
@@ -168,9 +187,9 @@ public class ScheduleExecutionProgressReadTests
         Assert.Multiple(() =>
         {
             Assert.That(dto.Progress!.Steps, Has.Count.EqualTo(3));
-            Assert.That(dto.Progress.Steps[0].Status, Is.EqualTo(ScheduleStepStatus.Failed));
-            Assert.That(dto.Progress.Steps[1].Status, Is.EqualTo(ScheduleStepStatus.Running));
-            Assert.That(dto.Progress.Steps[2].Status, Is.EqualTo(ScheduleStepStatus.Pending));
+            Assert.That(dto.Progress.Steps[0].Status, Is.EqualTo(ScheduleExecutionStepStatus.Failed));
+            Assert.That(dto.Progress.Steps[1].Status, Is.EqualTo(ScheduleExecutionStepStatus.Processing));
+            Assert.That(dto.Progress.Steps[2].Status, Is.EqualTo(ScheduleExecutionStepStatus.Waiting));
         });
     }
 
@@ -190,7 +209,7 @@ public class ScheduleExecutionProgressReadTests
             Assert.That(parallelStep.IsParallel, Is.True);
             Assert.That(parallelStep.TaskStatuses, Is.EqualTo(new[]
             {
-                ScheduleStepStatus.Failed, ScheduleStepStatus.Completed
+                ScheduleExecutionStepStatus.Failed, ScheduleExecutionStepStatus.Completed
             }), "Ordered by outcome, the same order the portal draws the wedges in");
         });
     }

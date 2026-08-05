@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
+using JIM.Models.Scheduling.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -219,4 +220,57 @@ public class ScheduleExecutionStepDto
     /// Only populated when the step has completed and an activity exists.
     /// </summary>
     public string? ActivityStatus { get; set; }
+
+    /// <summary>
+    /// The name of the Connected System for Run Profile steps.
+    /// </summary>
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// The Run Profile for Run Profile steps.
+    /// </summary>
+    public int? RunProfileId { get; set; }
+
+    /// <summary>
+    /// The name of the Run Profile for Run Profile steps. Run Profile steps carry no name of their own, so
+    /// <see cref="Name"/> reads "Step 1", "Step 2" for them; this is what identifies the work that ran.
+    /// </summary>
+    public string? RunProfileName { get; set; }
+
+    /// <summary>
+    /// Whether the execution was configured to carry on past this step if it failed.
+    /// </summary>
+    public bool ContinueOnFailure { get; set; }
+
+    /// <summary>
+    /// Creates a DTO from the application layer's assembled step state.
+    /// </summary>
+    /// <remarks>
+    /// The existing properties are emitted in their original declaration order and with their original values, so
+    /// this remains wire-compatible with clients written against the previous response; the properties above are
+    /// additive.
+    /// </remarks>
+    /// <param name="step">The assembled state of one step within a Schedule Execution.</param>
+    public static ScheduleExecutionStepDto FromModel(ScheduleExecutionStepState step)
+    {
+        return new ScheduleExecutionStepDto
+        {
+            StepIndex = step.StepIndex,
+            Name = step.Name,
+            StepType = step.StepType,
+            ExecutionMode = step.ExecutionMode,
+            ConnectedSystemId = step.ConnectedSystemId,
+            Status = step.Status.ToDisplayString(),
+            TaskId = step.TaskId,
+            StartedAt = step.StartedAt,
+            CompletedAt = step.CompletedAt,
+            ErrorMessage = step.ErrorMessage,
+            ActivityId = step.ActivityId,
+            ActivityStatus = step.ActivityStatus?.ToString(),
+            ConnectedSystemName = step.ConnectedSystemName,
+            RunProfileId = step.RunProfileId,
+            RunProfileName = step.RunProfileName,
+            ContinueOnFailure = step.ContinueOnFailure
+        };
+    }
 }

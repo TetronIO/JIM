@@ -178,7 +178,12 @@ public class ActivityRepository : IActivityRepository
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null)
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -232,6 +237,40 @@ public class ActivityRepository : IActivityRepository
             if (initiatorTypes.Count > 0)
                 query = query.Where(a => initiatorTypes.Contains(a.InitiatedByType));
         }
+
+        // Apply the Connected System filter, which matches the Activity's Target Context (the system the
+        // operation was performed against).
+        var connectedSystems = connectedSystemFilter?.ToList();
+        if (connectedSystems is { Count: > 0 })
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
+
+        // Apply the Run Profile filter, which matches the Activity's Target Name.
+        var runProfiles = runProfileFilter?.ToList();
+        if (runProfiles is { Count: > 0 })
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
+
+        // Apply the initiator-name filter. Distinct from initiatedById above: this is a case-insensitive
+        // partial match on the recorded name, for callers who know who they are looking for but not their id.
+        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
+        {
+            var filterLower = initiatedByFilter.ToLower();
+            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
+        }
+
+        // Apply the Schedule attribution filters. The attribution is denormalised onto the Activity, so both of
+        // these are plain indexed predicates rather than a join through Schedule Executions.
+        if (initiatedBySchedule == true)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId != null);
+        }
+        else if (initiatedBySchedule == false)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId == null);
+        }
+
+        var scheduleIds = scheduleFilter?.ToList();
+        if (scheduleIds is { Count: > 0 })
+            query = query.Where(a => a.ScheduledByScheduleId != null && scheduleIds.Contains(a.ScheduledByScheduleId!.Value));
 
         // Apply date-range filter (either bound may be open). Captured into non-nullable locals so the query
         // expressions carry plain DateTime values.
@@ -406,116 +445,6 @@ public class ActivityRepository : IActivityRepository
             .ToDictionaryAsync(x => x.ParentId, x => x.Count);
     }
 
-    /// <summary>
-    /// Retrieves a page's worth of worker task activities - operations executed by the worker service
-    /// such as Run Profile executions, data generation, and Connected System operations.
-    /// </summary>
-    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page,
-        int pageSize,
-        IEnumerable<string>? connectedSystemFilter = null,
-        IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
-        string? initiatedByFilter = null,
-        string? sortBy = null,
-        bool sortDescending = true,
-        bool? hasChildActivities = null)
-    {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
-
-        if (page < 1)
-            page = 1;
-
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
-
-        var query = BuildWorkerTaskQuery();
-
-        // Apply filters
-        var connectedSystems = connectedSystemFilter?.ToList();
-        if (connectedSystems is { Count: > 0 })
-            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
-
-        var runProfiles = runProfileFilter?.ToList();
-        if (runProfiles is { Count: > 0 })
-            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
-
-        var statuses = statusFilter?.ToList();
-        if (statuses is { Count: > 0 })
-            query = query.Where(a => statuses.Contains(a.Status));
-
-        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
-        {
-            var filterLower = initiatedByFilter.ToLower();
-            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
-        }
-
-        // Apply child activities filter
-        if (hasChildActivities == true)
-        {
-            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
-        }
-        else if (hasChildActivities == false)
-        {
-            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
-        }
-
-        // Apply sorting
-        query = sortBy?.ToLower() switch
-        {
-            "targetcontext" or "connectedsystem" => sortDescending
-                ? query.OrderByDescending(a => a.TargetContext)
-                : query.OrderBy(a => a.TargetContext),
-            "targettype" or "type" => sortDescending
-                ? query.OrderByDescending(a => a.TargetType)
-                : query.OrderBy(a => a.TargetType),
-            "targetname" or "target" => sortDescending
-                ? query.OrderByDescending(a => a.TargetName)
-                : query.OrderBy(a => a.TargetName),
-            "targetoperationtype" or "operation" => sortDescending
-                ? query.OrderByDescending(a => a.TargetOperationType)
-                : query.OrderBy(a => a.TargetOperationType),
-            "initiatedbyname" or "initiatedby" => sortDescending
-                ? query.OrderByDescending(a => a.InitiatedByName)
-                : query.OrderBy(a => a.InitiatedByName),
-            "status" => sortDescending
-                ? query.OrderByDescending(a => a.Status)
-                : query.OrderBy(a => a.Status),
-            "executiontime" => sortDescending
-                ? query.OrderByDescending(a => a.ExecutionTime)
-                : query.OrderBy(a => a.ExecutionTime),
-            _ => sortDescending
-                ? query.OrderByDescending(a => a.Created)
-                : query.OrderBy(a => a.Created)
-        };
-
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
-
-        var pagedResultSet = new PagedResultSet<Activity>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
-    }
-
     public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
     {
         var query = BuildWorkerTaskQuery();
@@ -534,16 +463,35 @@ public class ActivityRepository : IActivityRepository
             .OrderBy(name => name)
             .ToListAsync();
 
+        // One option per Schedule id, carrying the most recently recorded name: a Schedule renamed part-way through
+        // its history would otherwise yield two options sharing an id, which a MudSelect cannot represent.
+        var schedules = await query
+            .Where(a => a.ScheduledByScheduleId != null && a.ScheduledByScheduleName != null)
+            .GroupBy(a => a.ScheduledByScheduleId!.Value)
+            .Select(g => new ScheduleFilterOption
+            {
+                Id = g.Key,
+                Name = g.OrderByDescending(a => a.Created).Select(a => a.ScheduledByScheduleName!).First()
+            })
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
         return new ActivityFilterOptions
         {
             ConnectedSystems = connectedSystems,
-            RunProfiles = runProfiles
+            RunProfiles = runProfiles,
+            Schedules = schedules
         };
     }
 
     /// <summary>
     /// Builds the base query for worker task activities, filtering to parent activities
     /// with worker task target types and operation types.
+    ///
+    /// Only <see cref="GetWorkerTaskActivityFilterOptionsAsync"/> uses this now: the Worker Task Activity
+    /// *listing* is served by <see cref="GetActivitiesAsync"/>, to which Operations &gt; History passes the
+    /// same target types and operations as its typeFilter and operationFilter. Keep the two in step; the
+    /// drop-downs must offer exactly the values the list can return.
     /// </summary>
     private IQueryable<Activity> BuildWorkerTaskQuery()
     {

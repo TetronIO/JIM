@@ -44,6 +44,10 @@ public class ConfigurationChangePreviewDeltaResponse
 
     public string? NewValue { get; set; }
 
+    /// <summary>
+    /// What kind of edit this row describes, taking the same values as a group's own key. Per row, so a group that
+    /// covers a mixture of edits can still be read by the kind each object makes. Null where nothing recognised it.
+    /// </summary>
     public string? PatternKey { get; set; }
 
     public static ConfigurationChangePreviewDeltaResponse FromEntity(ConfigurationChangePreviewDelta delta)

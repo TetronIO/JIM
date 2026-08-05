@@ -24,6 +24,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
+| `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 
 ## Form action gating and input immediacy
 
@@ -56,7 +57,7 @@ Three interaction rules that have repeatedly regressed (multiple times each on a
 
 **Scope: this is about live filtering, not about the word "Search".** A field that is one criterion among several in a form the user submits with a button (Deleted Objects' query forms, the Logs filter behind **Refresh**) is not a search box; nothing filters as it is typed, so `Immediate` there changes nothing and `SearchField` would be the wrong component. Those are ordinary `MudTextField`s and carry a `@* search-convention: exempt - <why> *@` comment directly above, so the reason travels with the markup.
 
-`SearchFieldConventionTests` (in `test/JIM.Web.Components.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
+`SearchFieldConventionTests` (in `test/JIM.Web.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
 
 ## Live progress figures
 
@@ -76,7 +77,7 @@ The rule exists because the alternative shipped: the worker built progress messa
 All data tables should let users switch between normal and compact row spacing, persisted globally so the choice follows the user across every table.
 
 - Put `<TableDensityToggle @bind-Dense="_dense" />` as the **first** item in the table's `ToolBarContent`. If other controls sit to its left, follow it with a `<MudText Class="mx-2 mud-text-disabled">|</MudText>` separator.
-- On the `MudTable` / `MudSimpleTable`: set `Dense="@_dense"` and add the `dense-body-only` class, e.g. `Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")"`. The `dense-body-only` class keeps header rows at normal height while compacting body rows.
+- On the `MudTable` / `MudSimpleTable`: set `Dense="@_dense"`, and nothing else. The toggle only ever changes body-row spacing: `site.css` pins header cells to compact padding unconditionally (`.mud-table-root .mud-table-head .mud-table-cell`), so a header row is the same height in both states and no per-table class is involved. Do not make the `Class` attribute conditional on `_dense`; a ternary that varies the class list is a sign something is being styled that the density rule already owns. (A `dense-body-only` class was carried on fourteen tables for exactly this purpose and was never defined in any stylesheet; it was removed rather than implemented, because the global header rule already gives the intended result.)
 - The page owns a `private bool _dense;` field and loads the saved preference on first render, so the table paints at the correct density immediately:
   ```csharp
   protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -149,6 +150,19 @@ Three failure modes here are invisible to `dotnet build`, invisible to bUnit (wh
 ## Errors and stack traces
 - The **error message is the thing to read**; the stack trace is for the occasions it is not enough. Never render a stack trace unconditionally beside its message: it buries the sentence that actually answers the question, and stack traces routinely run to thousands of characters.
 - Use `<CollapsibleStackTrace StackTrace="@x" />` wherever a trace is available. It renders nothing when there is no trace, shows a "Show stack trace" toggle when there is, and only puts the trace in the DOM once it has been asked for. Do not hand-roll the toggle, and do not wrap it in an expansion panel of its own; that is what it already is.
+
+## Activity Schedule context
+
+An Activity that a Schedule produced carries `ScheduleExecutionId` and `ScheduleStepIndex`; anywhere an Activity is presented, say so and link back to the Schedule Execution that produced it. Use `<ActivityScheduleContext />` rather than hand-rolling it: the duplicated part is the load-and-derive logic (look up the execution, guard the nulls, turn the 0-based step index into the 1-based "step 3 of 6" a person reads, build the href), and the two call sites want different visual treatments.
+
+- It renders **nothing** when `ScheduleExecutionId` is null or the execution has since been pruned, so a call site can place it unconditionally without an `@if` of its own.
+- `Compact="false"` (the default) is a page-width `MudPaper Outlined` panel headed "Part of a Schedule", built to match the detail page's own panels (`Typo.h5` heading, `pa-4`); `Compact="true"` is a panel section matching the sibling `MudPaper` sections of the Operations History side panel. It is deliberately **not** an alert: the context is another section of the page, not a notice interrupting it.
+- **The page-width panel is a labelled multi-line field block, not one line of chips and links.** It uses the same `MudGrid Spacing="4"` / `MudItem xs="12" sm="6" md="4"` layout, uppercase `Typo.button` + `mud-text-secondary` labels and plain values as the Summary panel it sits directly beneath on `ActivityDetail`, so the two read as siblings rather than as two unrelated designs stacked on each other. The fields are **Schedule** (the name, linked to the Schedule Execution), **Step** ("3 of 6", 1-based, omitted entirely when the Activity carries no step index rather than rendered empty) and **Schedule Execution** (the run's status chip beside the "View Schedule Execution" link).
+- **The status chip must stay labelled.** The Activity page shows two chips: the Summary panel's `ActivityStatus` and this panel's `ScheduleExecutionStatus`. They describe different objects, and unlabelled a reader cannot tell which is which; the "Schedule Execution:" label is the only thing telling a reader that this one is the whole run's outcome, not this Activity's. The two enums used to disagree on the word for success ("Complete" beside "Completed"), which read as an outright contradiction; the Schedule Execution vocabulary was aligned onto `Complete` in #1196 as a deliberate breaking API change (the REST API serialises enums by name, `JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)` in `ApiJsonConfiguration.cs`, so the member name is the wire value). `ScheduleExecutionStatusWireContractTests` pins those names now; do not rename one again without the same deliberate decision, changelog entry and documentation sweep.
+- The compact treatment keeps the single-sentence form ("Part of &lt;Schedule&gt;, step 3 of 6"); it has no heading of its own and sits in a narrow side panel, so a field grid would not fit.
+- `Class` is the call site's to set, because only it knows the surrounding geometry. On `ActivityDetail` it sits directly below the Summary panel, so that is `mt-6` per the Panel spacing rules; inside the History panel's `gap-4` flex column it is nothing at all.
+- The component guards its own lookup on the loaded execution id. Anything that polls (the History tab does) would otherwise query the database on every tick.
+- Do **not** add it to `ActivityRunProfileExecutionItemDetail`: its subject is one object's per-item outcome, it is only ever reached from the Activity page whose panel already carries the context, and Schedule context two levels down is noise.
 
 ## Date and time display
 - **Relative** ("2 hours ago"): `dateTime.ToRelativeTime()`, e.g. as the primary text under a tooltip

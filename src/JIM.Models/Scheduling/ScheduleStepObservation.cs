@@ -38,6 +38,13 @@ public sealed class ScheduleStepObservation
     public Guid? ActivityId { get; init; }
 
     /// <summary>
+    /// The step's status where the caller has already derived it (a detail read assembles one per
+    /// Schedule Step before this is asked for the group view). Where it is null the status is derived
+    /// from the two records below, through the same rule.
+    /// </summary>
+    public ScheduleExecutionStepStatus? Status { get; init; }
+
+    /// <summary>
     /// The task's status while it is still in the queue, or null once it has been deleted.
     /// </summary>
     public WorkerTaskStatus? TaskStatus { get; init; }

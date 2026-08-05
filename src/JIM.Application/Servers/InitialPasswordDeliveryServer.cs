@@ -7,6 +7,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
 using Serilog;
 
@@ -69,6 +70,15 @@ public class InitialPasswordDeliveryServer
         ArgumentNullException.ThrowIfNull(connector);
 
         var result = new InitialPasswordRunResult();
+
+        // Before anything is fetched, so an account whose time ran out is not attempted one last time on its way
+        // out, and so a parked record whose administrator never came stops holding a needs-attention marker over
+        // work nobody is going to do.
+        result.ExpiredCount = await _syncRepo.ExpireInitialPasswordsAsync(connectedSystem.Id, DateTime.UtcNow);
+        if (result.ExpiredCount > 0)
+            Log.Warning("DeliverOutstandingAsync: {Count} accounts on {SystemName} were provisioned but never got an initial password " +
+                "within its time to live, and have been recorded as expired",
+                result.ExpiredCount, LogSanitiser.Sanitise(connectedSystem.Name));
 
         var outstanding = await _syncRepo.GetOutstandingInitialPasswordsAsync(connectedSystem.Id, MaximumAccountsPerPass);
         if (outstanding.Count == 0)
@@ -140,11 +150,77 @@ public class InitialPasswordDeliveryServer
 
         // Synchronisation Integrity: summary statistics at the end of every batch operation.
         Log.Information("DeliverOutstandingAsync: Initial passwords for {SystemName}: {Attempted} attempted, {Delivered} delivered, " +
-            "{Retrying} to retry, {Parked} parked for an administrator, {NoLongerApplicable} no longer applicable",
+            "{Retrying} to retry, {Parked} parked for an administrator, {NoLongerApplicable} no longer applicable, {Expired} expired",
             LogSanitiser.Sanitise(connectedSystem.Name), result.AttemptedCount, result.DeliveredCount,
-            result.RetryingCount, result.ParkedCount, result.NoLongerApplicableCount);
+            result.RetryingCount, result.ParkedCount, result.NoLongerApplicableCount, result.ExpiredCount);
 
         return result;
+    }
+
+    /// <summary>
+    /// Sets a Synchronisation Rule's parked accounts retrying, and returns how many were released.
+    /// <para>
+    /// This is the other half of parking. A policy rejection stops the retry loop because the same generator
+    /// configuration produces another password the target refuses for the same reason; the administrator
+    /// correcting that configuration is the event that makes another attempt worth making, and this is how that
+    /// event reaches the parked work. Without it, parking is a one-way door.
+    /// </para>
+    /// <para>
+    /// Releasing makes the accounts outstanding again rather than delivering to them here. Delivery needs an
+    /// open Connector connection, so it belongs to the export pass that already owns one; the released accounts
+    /// are picked up by the next run over that Connected System with no backoff to wait out. Nothing is
+    /// regenerated or invalidated in the meantime because no password was ever stored: each is generated at the
+    /// moment of delivery, so the retry uses the corrected configuration by construction.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose parked accounts to release.</param>
+    public async Task<int> ReleaseParkedForSyncRuleAsync(int syncRuleId)
+    {
+        var released = await _syncRepo.ReleaseParkedInitialPasswordsAsync(syncRuleId);
+
+        if (released > 0)
+            Log.Information("ReleaseParkedForSyncRuleAsync: {Count} accounts parked against Synchronisation Rule {SyncRuleId} " +
+                "have been released and will be attempted again on its Connected System's next export run", released, syncRuleId);
+
+        return released;
+    }
+
+    /// <summary>
+    /// How many accounts under each of these Synchronisation Rules are waiting on a person, for the indicator on
+    /// the Synchronisation Rules list.
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, so a list that
+    /// renders nothing for a settled rule can do so without asking twice.
+    /// </para>
+    /// </summary>
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        ArgumentNullException.ThrowIfNull(syncRuleIds);
+
+        return await _syncRepo.GetInitialPasswordAttentionBySyncRuleAsync(syncRuleIds);
+    }
+
+    /// <summary>
+    /// The Connected Systems counterpart of <see cref="GetAttentionBySyncRuleAsync"/>.
+    /// </summary>
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemIds);
+
+        return await _syncRepo.GetInitialPasswordAttentionByConnectedSystemAsync(connectedSystemIds);
+    }
+
+    /// <summary>
+    /// What the target said about the initial passwords parked against a Synchronisation Rule, grouped by reason
+    /// and with the biggest group first.
+    /// <para>
+    /// This is what an administrator acts on: the reason names the setting to change, and changing it is what
+    /// releases the accounts. Only parked records are reported, because saving releases only what is parked.
+    /// </para>
+    /// </summary>
+    public async Task<List<InitialPasswordRejection>> GetParkedReasonsAsync(int syncRuleId)
+    {
+        return await _syncRepo.GetParkedInitialPasswordReasonsAsync(syncRuleId);
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ public class ScheduleStepRailTests : JimComponentTestContext
     private const string StepSelector = "[data-testid='jim-schedule-step']";
     private const string LabelSelector = "[data-testid='jim-schedule-step-label']";
 
-    private static ScheduleStepProgress Step(int index, string name, ScheduleStepStatus status, params ScheduleStepStatus[] taskStatuses) => new()
+    private static ScheduleStepProgress Step(int index, string name, ScheduleExecutionStepStatus status, params ScheduleExecutionStepStatus[] taskStatuses) => new()
     {
         StepIndex = index,
         Name = name,
@@ -43,10 +43,10 @@ public class ScheduleStepRailTests : JimComponentTestContext
     public void ScheduleStepRail_ScheduleMidwayThrough_DrawsAMarkerPerStepCarryingItsOwnOutcome()
     {
         var cut = RenderRail(Progress(3,
-            Step(0, "HR Import", ScheduleStepStatus.Completed),
-            Step(1, "HR Sync", ScheduleStepStatus.Completed),
-            Step(2, "AD Import", ScheduleStepStatus.Running),
-            Step(3, "AD Export", ScheduleStepStatus.Pending)));
+            Step(0, "HR Import", ScheduleExecutionStepStatus.Completed),
+            Step(1, "HR Sync", ScheduleExecutionStepStatus.Completed),
+            Step(2, "AD Import", ScheduleExecutionStepStatus.Processing),
+            Step(3, "AD Export", ScheduleExecutionStepStatus.Waiting)));
 
         var statuses = cut.FindAll(StepSelector).Select(e => e.GetAttribute("data-status")).ToList();
 
@@ -59,8 +59,8 @@ public class ScheduleStepRailTests : JimComponentTestContext
         // The whole point of putting anything in the group header: a Schedule can be collapsed to one
         // row, and a failure inside it must still read.
         var cut = RenderRail(Progress(null,
-            Step(0, "HR Import", ScheduleStepStatus.Completed),
-            Step(1, "AD Import", ScheduleStepStatus.Failed)));
+            Step(0, "HR Import", ScheduleExecutionStepStatus.Completed),
+            Step(1, "AD Import", ScheduleExecutionStepStatus.Failed)));
 
         Assert.That(cut.FindAll($"{StepSelector}[data-status='failed']"), Has.Count.EqualTo(1));
     }
@@ -71,8 +71,8 @@ public class ScheduleStepRailTests : JimComponentTestContext
         // A Schedule can fan out across a dozen Connected Systems. The marker divides; the header does
         // not gain a row per task, which is what ruled out the alternatives.
         var cut = RenderRail(Progress(1,
-            Step(0, "3 in parallel", ScheduleStepStatus.Running,
-                ScheduleStepStatus.Completed, ScheduleStepStatus.Running, ScheduleStepStatus.Pending)));
+            Step(0, "3 in parallel", ScheduleExecutionStepStatus.Processing,
+                ScheduleExecutionStepStatus.Completed, ScheduleExecutionStepStatus.Processing, ScheduleExecutionStepStatus.Waiting)));
 
         var marker = cut.Find(StepSelector);
 
@@ -89,8 +89,8 @@ public class ScheduleStepRailTests : JimComponentTestContext
         // The rule ScheduleStepReading.OrderWedges exists for, checked where it is actually drawn: the
         // gradient starts at -90deg, so the first stop is the top of the disc.
         var cut = RenderRail(Progress(1,
-            Step(0, "2 in parallel", ScheduleStepStatus.Failed,
-                ScheduleStepStatus.Failed, ScheduleStepStatus.Running)));
+            Step(0, "2 in parallel", ScheduleExecutionStepStatus.Failed,
+                ScheduleExecutionStepStatus.Failed, ScheduleExecutionStepStatus.Processing)));
 
         var style = cut.Find(StepSelector).GetAttribute("style");
 
@@ -106,9 +106,9 @@ public class ScheduleStepRailTests : JimComponentTestContext
     {
         // The names are what make the rows underneath make sense, and a collapsed group has no rows.
         var cut = RenderRail(Progress(2,
-            Step(0, "HR Import", ScheduleStepStatus.Completed),
-            Step(1, "2 in parallel", ScheduleStepStatus.Running,
-                ScheduleStepStatus.Running, ScheduleStepStatus.Running)));
+            Step(0, "HR Import", ScheduleExecutionStepStatus.Completed),
+            Step(1, "2 in parallel", ScheduleExecutionStepStatus.Processing,
+                ScheduleExecutionStepStatus.Processing, ScheduleExecutionStepStatus.Processing)));
 
         var labels = cut.FindAll(LabelSelector).Select(e => e.TextContent.Trim()).ToList();
 

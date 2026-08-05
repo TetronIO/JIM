@@ -72,4 +72,97 @@ public class SyncRuleInitialPassword
     /// </para>
     /// </summary>
     public bool EnableAccount { get; set; } = true;
+
+    /// <summary>
+    /// A detached copy of everything <see cref="WouldDeliverTheSameAs"/> compares, for holding what was saved
+    /// while the editor mutates the live instance in place.
+    /// <para>
+    /// The portal needs this to tell an administrator, before they save, whether saving will release the accounts
+    /// parked against this rule. It cannot answer that by comparing the instance with itself, and re-reading the
+    /// saved row on every keystroke to find out would be a query per character typed.
+    /// </para>
+    /// <para>
+    /// Only the delivery settings are copied; the identity and navigation are deliberately left off, because this
+    /// is a value to compare against and never something to persist.
+    /// <c>SyncRuleInitialPasswordComparisonTests</c> fails if a setting is added and not copied here, which would
+    /// otherwise have the portal quietly stop offering the release for that setting.
+    /// </para>
+    /// </summary>
+    public SyncRuleInitialPassword SnapshotDeliverySettings()
+    {
+        return new SyncRuleInitialPassword
+        {
+            Enabled = Enabled,
+            Source = Source,
+            ExpiryBehaviour = ExpiryBehaviour,
+            EnableAccount = EnableAccount,
+            CustomPolicy = new PasswordGenerationPolicy
+            {
+                Style = CustomPolicy.Style,
+                Length = CustomPolicy.Length,
+                MinimumUppercase = CustomPolicy.MinimumUppercase,
+                MinimumLowercase = CustomPolicy.MinimumLowercase,
+                MinimumDigits = CustomPolicy.MinimumDigits,
+                MinimumSymbols = CustomPolicy.MinimumSymbols,
+                PermittedSymbols = CustomPolicy.PermittedSymbols,
+                WordCount = CustomPolicy.WordCount,
+                WordSeparator = CustomPolicy.WordSeparator,
+                WordCapitalisation = CustomPolicy.WordCapitalisation,
+                AppendedDigitCount = CustomPolicy.AppendedDigitCount,
+                AppendSymbol = CustomPolicy.AppendSymbol,
+                ExcludeAmbiguousCharacters = CustomPolicy.ExcludeAmbiguousCharacters
+            }
+        };
+    }
+
+    /// <summary>
+    /// Whether two configurations would produce the same delivery: the same password, applied the same way.
+    /// <para>
+    /// This decides whether saving a Synchronisation Rule releases the accounts parked against it. Parking stops
+    /// the retry loop because the target refused the password these settings produce, so only a change to the
+    /// settings makes another attempt worth making. Saving an unrelated part of the rule must not set those
+    /// accounts retrying against a configuration the target has already given its answer on: the retry would
+    /// fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
+    /// </para>
+    /// <para>
+    /// A null on either side is a real state, not a missing value; it means the rule does not set initial
+    /// passwords. Switching that on or off is itself a change of delivery.
+    /// </para>
+    /// <para>
+    /// Every setting that reaches the generator or the Connector is compared, and
+    /// <c>SyncRuleInitialPasswordComparisonCompletenessTests</c> fails if a property is added to this class or
+    /// to <see cref="PasswordGenerationPolicy"/> without being accounted for here. Without that guard a new
+    /// setting would silently stop releasing parked work, which is the failure this whole comparison exists to
+    /// prevent.
+    /// </para>
+    /// </summary>
+    public static bool WouldDeliverTheSameAs(SyncRuleInitialPassword? left, SyncRuleInitialPassword? right)
+    {
+        if (left == null || right == null)
+            return left == null && right == null;
+
+        if (left.Enabled != right.Enabled || left.Source != right.Source ||
+            left.ExpiryBehaviour != right.ExpiryBehaviour || left.EnableAccount != right.EnableAccount)
+            return false;
+
+        // Compared whatever the Source says, deliberately. An administrator can correct the custom settings
+        // while the rule is on Discovered and switch over afterwards, and the switch alone would then look like
+        // the only change; comparing both ways round means neither ordering loses the release.
+        var a = left.CustomPolicy;
+        var b = right.CustomPolicy;
+
+        return a.Style == b.Style &&
+               a.Length == b.Length &&
+               a.MinimumUppercase == b.MinimumUppercase &&
+               a.MinimumLowercase == b.MinimumLowercase &&
+               a.MinimumDigits == b.MinimumDigits &&
+               a.MinimumSymbols == b.MinimumSymbols &&
+               a.PermittedSymbols == b.PermittedSymbols &&
+               a.WordCount == b.WordCount &&
+               a.WordSeparator == b.WordSeparator &&
+               a.WordCapitalisation == b.WordCapitalisation &&
+               a.AppendedDigitCount == b.AppendedDigitCount &&
+               a.AppendSymbol == b.AppendSymbol &&
+               a.ExcludeAmbiguousCharacters == b.ExcludeAmbiguousCharacters;
+    }
 }

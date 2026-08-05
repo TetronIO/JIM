@@ -14,7 +14,7 @@ When a connector imports data from an external system, it does not write directl
 
 --8<-- "assets/diagrams/hub-and-spoke.svg"
 
-<p class="jim-diagram-caption">Connectors sit at JIM's edge, carrying data between Connected Systems and the synchronisation pipeline; every flow passes through the Metaverse, never directly between systems. Dashed elements indicate planned connectors.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
+<p class="jim-diagram-caption">Connectors sit at JIM's edge, carrying data between Connected Systems and the synchronisation pipeline; every flow passes through the Metaverse, never directly between systems. Dashed elements are not yet available.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 Each Connected System in JIM has:
 
@@ -36,9 +36,9 @@ JIM ships with the following built-in connectors:
 | [JIM LDAP Connector](jim-ldap-connector.md) | Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories | Full Import, Delta Import, Export |
 | [JIM SCIM 2.0 Client Connector](jim-scim-connector.md) | Any system exposing a SCIM 2.0 service provider interface (RFC 7643/7644) | Full Import, Delta Import, Export |
 
-## 🗺️ Planned Connectors
+## 🗺️ Upcoming Connectors
 
-For planned connectors including SQL databases, PowerShell, and REST APIs, see the [Roadmap](../reference/roadmap.md).
+The JIM SQL Connector is in development: one connector covering SQL Server, PostgreSQL, MySQL and Oracle, rather than one per database engine. PowerShell and REST API connectors are planned. See the [Roadmap](../reference/roadmap.md) for the full picture.
 
 ## 🧩 Custom Connectors
 

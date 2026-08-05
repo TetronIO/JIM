@@ -112,7 +112,7 @@ public class ScheduleExecutionsControllerTests
         var scheduleId = Guid.NewGuid();
         var executions = new List<ScheduleExecution>
         {
-            new() { Id = Guid.NewGuid(), ScheduleId = scheduleId, Status = ScheduleExecutionStatus.Completed, Schedule = new Schedule { Name = "Schedule 1" } },
+            new() { Id = Guid.NewGuid(), ScheduleId = scheduleId, Status = ScheduleExecutionStatus.Complete, Schedule = new Schedule { Name = "Schedule 1" } },
             new() { Id = Guid.NewGuid(), ScheduleId = scheduleId, Status = ScheduleExecutionStatus.InProgress, Schedule = new Schedule { Name = "Schedule 1" } }
         };
         var pagedResult = new PagedResultSet<ScheduleExecution>
@@ -302,7 +302,7 @@ public class ScheduleExecutionsControllerTests
         {
             Id = id,
             ScheduleId = scheduleId,
-            Status = ScheduleExecutionStatus.Completed,
+            Status = ScheduleExecutionStatus.Complete,
             TotalSteps = 1,
             CurrentStepIndex = 0,
             Schedule = new Schedule
@@ -676,7 +676,7 @@ public class ScheduleExecutionsControllerTests
         var execution = new ScheduleExecution
         {
             Id = id,
-            Status = ScheduleExecutionStatus.Completed
+            Status = ScheduleExecutionStatus.Complete
         };
 
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(id))

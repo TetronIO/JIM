@@ -24,7 +24,7 @@ function Get-JIMScheduleExecution {
         Filter executions by status:
         - Queued: Waiting to start
         - InProgress: Currently running
-        - Completed: Finished successfully
+        - Complete: Finished successfully
         - Failed: Finished with errors
         - Cancelled: Was cancelled
 
@@ -88,7 +88,7 @@ function Get-JIMScheduleExecution {
         [PSCustomObject]$InputObject,
 
         [Parameter(ParameterSetName = 'List')]
-        [ValidateSet('Queued', 'InProgress', 'Completed', 'Failed', 'Cancelled')]
+        [ValidateSet('Queued', 'InProgress', 'Complete', 'Failed', 'Cancelled')]
         [string]$Status,
 
         [Parameter(Mandatory, ParameterSetName = 'Active')]

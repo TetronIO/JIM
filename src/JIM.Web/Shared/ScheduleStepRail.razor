@@ -28,7 +28,7 @@
 
                 @if (i > 0)
                 {
-                    <span class="jim-schedule-leg @(Progress.Steps[i - 1].Status == ScheduleStepStatus.Completed ? "jim-schedule-leg--done" : "")"></span>
+                    <span class="jim-schedule-leg @(Modifier(Progress.Steps[i - 1].Status) == "completed" ? "jim-schedule-leg--done" : "")"></span>
                 }
 
                 <span class="jim-schedule-node jim-schedule-node--@Modifier(step.Status) @(step.IsParallel ? "jim-schedule-node--divided" : "")"
@@ -58,12 +58,17 @@
     [Parameter]
     public ScheduleExecutionProgress? Progress { get; set; }
 
-    private static string Modifier(ScheduleStepStatus status) => status switch
+    /// <summary>
+    /// The status vocabulary reduced to what a 12px marker can carry. The statuses themselves are the
+    /// ones the Schedule Execution detail page and the REST read use, so there is one derivation; this
+    /// is the appearance side of it, in the same spirit as RunPhaseVisuals for a run's own steps.
+    /// </summary>
+    private static string Modifier(ScheduleExecutionStepStatus status) => status switch
     {
-        ScheduleStepStatus.Running => "running",
-        ScheduleStepStatus.Completed => "completed",
-        ScheduleStepStatus.Failed => "failed",
-        ScheduleStepStatus.Cancelled => "cancelled",
+        ScheduleExecutionStepStatus.Processing => "running",
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning => "completed",
+        ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError => "failed",
+        ScheduleExecutionStepStatus.Cancelled or ScheduleExecutionStepStatus.Cancelling => "cancelled",
         _ => "pending"
     };
 
@@ -71,11 +76,11 @@
     /// A marker carries an icon only where it is drawn whole. A divided marker's wedges are a few
     /// degrees apiece and an icon laid over them would obscure the very thing it sits on.
     /// </summary>
-    private static string? Icon(ScheduleStepStatus status) => status switch
+    private static string? Icon(ScheduleExecutionStepStatus status) => status switch
     {
-        ScheduleStepStatus.Completed => Icons.Material.Filled.Check,
-        ScheduleStepStatus.Failed => Icons.Material.Filled.PriorityHigh,
-        ScheduleStepStatus.Cancelled => Icons.Material.Filled.Close,
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning => Icons.Material.Filled.Check,
+        ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError => Icons.Material.Filled.PriorityHigh,
+        ScheduleExecutionStepStatus.Cancelled or ScheduleExecutionStepStatus.Cancelling => Icons.Material.Filled.Close,
         _ => null
     };
 
@@ -108,12 +113,12 @@
     /// same state. Filling it grey instead made a step whose tasks had all yet to start read as a
     /// solid disc, heavier than the outlined marker beside it and easily taken for work already done.
     /// </summary>
-    private static string WedgeColour(ScheduleStepStatus status) => status switch
+    private static string WedgeColour(ScheduleExecutionStepStatus status) => status switch
     {
-        ScheduleStepStatus.Running => "var(--mud-palette-info)",
-        ScheduleStepStatus.Completed => "var(--mud-palette-success)",
-        ScheduleStepStatus.Failed => "var(--mud-palette-error)",
-        ScheduleStepStatus.Cancelled => "var(--mud-palette-warning)",
+        ScheduleExecutionStepStatus.Processing => "var(--mud-palette-info)",
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning => "var(--mud-palette-success)",
+        ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError => "var(--mud-palette-error)",
+        ScheduleExecutionStepStatus.Cancelled or ScheduleExecutionStepStatus.Cancelling => "var(--mud-palette-warning)",
         _ => "transparent"
     };
 }

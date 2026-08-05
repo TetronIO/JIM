@@ -75,75 +75,21 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     {
         _logger.LogTrace("Requested schedule execution {ExecutionId}", id);
 
-        var execution = await _application.Scheduler.GetScheduleExecutionWithScheduleAsync(id);
-        if (execution == null)
+        // The per-step assembly lives in SchedulerServer so this endpoint and the portal's Schedule Execution
+        // detail page cannot drift apart.
+        var detail = await _application.Scheduler.GetScheduleExecutionDetailAsync(id);
+        if (detail == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"Schedule execution not found: {id}" });
         }
 
-        var dto = ScheduleExecutionDetailDto.FromEntity(execution);
+        var dto = ScheduleExecutionDetailDto.FromEntity(detail.Execution);
+        dto.Steps.AddRange(detail.Steps.Select(ScheduleExecutionStepDto.FromModel));
 
-        // Get Activities for this execution (persist after worker task deletion)
-        var activities = await _application.Activities.GetActivitiesByScheduleExecutionAsync(id);
-        var activitiesByStep = activities.GroupBy(a => a.ScheduleStepIndex ?? -1)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        // Also get any still-active worker tasks (for in-progress status display)
-        var workerTasks = await _application.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
-        var tasksByStep = workerTasks.GroupBy(t => t.ScheduleStepIndex ?? -1)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        // How far through the Schedule this execution is, in step groups, read the same way the portal
-        // reads it (#1162). Built from the records already fetched above, so it costs no extra query.
-        dto.Progress = ScheduleStepReading.FromRecords(
-            workerTasks, activities, execution.TotalSteps, execution.CurrentStepIndex);
-
-        // Get the schedule steps for step names and types
-        if (execution.Schedule != null)
-        {
-            var steps = await _application.Scheduler.GetScheduleStepsAsync(execution.ScheduleId);
-            var stepsByIndex = steps.GroupBy(s => s.StepIndex)
-                .ToDictionary(g => g.Key, g => g.OrderBy(s => s.ConnectedSystemId).ToList());
-
-            // Get unique step indices in order
-            var uniqueStepIndices = stepsByIndex.Keys.OrderBy(i => i).ToList();
-
-            // Build step status list — one DTO per schedule step (parallel groups produce multiple entries)
-            foreach (var stepIndex in uniqueStepIndices)
-            {
-                var stepsAtIndex = stepsByIndex[stepIndex];
-                var stepActivities = activitiesByStep.GetValueOrDefault(stepIndex);
-                var stepTasks = tasksByStep.GetValueOrDefault(stepIndex);
-
-                foreach (var step in stepsAtIndex)
-                {
-                    // Match activity and task by ConnectedSystemId within this step index
-                    var activity = stepActivities?.FirstOrDefault(a => a.ConnectedSystemId == step.ConnectedSystemId)
-                                   ?? (stepsAtIndex.Count == 1 ? stepActivities?.FirstOrDefault() : null);
-                    var task = stepTasks?.FirstOrDefault(t => t is SynchronisationWorkerTask swt && swt.ConnectedSystemId == step.ConnectedSystemId)
-                               ?? (stepsAtIndex.Count == 1 ? stepTasks?.FirstOrDefault() : null);
-
-                    dto.Steps.Add(new ScheduleExecutionStepDto
-                    {
-                        StepIndex = stepIndex,
-                        Name = step.Name ?? $"Step {stepIndex + 1}",
-                        StepType = step.StepType,
-                        ExecutionMode = step.ExecutionMode,
-                        ConnectedSystemId = step.ConnectedSystemId,
-                        Status = GetStepStatus(task, activity, stepIndex, execution.CurrentStepIndex, execution.Status),
-                        TaskId = task?.Id,
-                        StartedAt = activity?.Executed,
-                        CompletedAt = activity?.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning
-                            or ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError or ActivityStatus.Cancelled
-                            ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
-                            : null,
-                        ErrorMessage = activity?.ErrorMessage,
-                        ActivityId = activity?.Id,
-                        ActivityStatus = activity?.Status.ToString()
-                    });
-                }
-            }
-        }
+        // How far through the Schedule this execution is, in step groups, read the same way the portal's
+        // queue reads it (#1162). Additional to Steps above, which is one entry per Schedule Step row,
+        // and derived from it, so the two accounts of the same execution cannot disagree.
+        dto.Progress = ScheduleStepReading.FromStepStates(detail.Steps, detail.Execution);
 
         return Ok(dto);
     }
@@ -203,54 +149,4 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         return Ok(dtos);
     }
 
-    /// <summary>
-    /// Determines the display status for a step based on its activity, task, and execution state.
-    /// Prefers Activity status (persists after task deletion) over WorkerTask status (ephemeral).
-    /// </summary>
-    private static string GetStepStatus(
-        WorkerTask? task,
-        Activity? activity,
-        int stepIndex,
-        int currentStepIndex,
-        ScheduleExecutionStatus executionStatus)
-    {
-        // If there's an active worker task, use its status
-        if (task != null)
-        {
-            return task.Status switch
-            {
-                WorkerTaskStatus.Queued => "Queued",
-                WorkerTaskStatus.Processing => "Processing",
-                WorkerTaskStatus.CancellationRequested => "Cancelling",
-                WorkerTaskStatus.WaitingForPreviousStep => "Waiting",
-                _ => "Unknown"
-            };
-        }
-
-        // If there's an activity (persists after worker task deletion), use its status
-        if (activity != null)
-        {
-            return activity.Status switch
-            {
-                ActivityStatus.InProgress => "Processing",
-                ActivityStatus.Complete => "Completed",
-                ActivityStatus.CompleteWithWarning => "Completed with Warning",
-                ActivityStatus.CompleteWithError => "Completed with Error",
-                ActivityStatus.FailedWithError => "Failed",
-                ActivityStatus.Cancelled => "Cancelled",
-                _ => "Unknown"
-            };
-        }
-
-        // No task or activity — infer status from execution position
-        if (stepIndex < currentStepIndex)
-        {
-            return "Completed";
-        }
-        if (stepIndex == currentStepIndex && executionStatus == ScheduleExecutionStatus.InProgress)
-        {
-            return "Waiting";
-        }
-        return "Pending";
-    }
 }

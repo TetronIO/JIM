@@ -107,42 +107,14 @@ public enum ScheduleIntervalUnit
 }
 
 /// <summary>
-/// Where one step of a Schedule Execution, or one task within a step that runs several concurrently,
-/// has got to (#1162). Deliberately coarser than the statuses it is derived from: a list view draws a
-/// few pixels per step, and the distinctions it can carry are "done", "went wrong", "happening now"
-/// and "not yet".
+/// The status of a Schedule Execution.
 /// </summary>
-public enum ScheduleStepStatus
-{
-    /// <summary>
-    /// Queued, or waiting for an earlier step to finish.
-    /// </summary>
-    Pending = 0,
-
-    /// <summary>
-    /// Running now.
-    /// </summary>
-    Running = 1,
-
-    /// <summary>
-    /// Finished, with or without warnings.
-    /// </summary>
-    Completed = 2,
-
-    /// <summary>
-    /// Finished with an error, or failed outright.
-    /// </summary>
-    Failed = 3,
-
-    /// <summary>
-    /// Cancelled, or in the middle of being cancelled.
-    /// </summary>
-    Cancelled = 4
-}
-
-/// <summary>
-/// The status of a schedule execution.
-/// </summary>
+/// <remarks>
+/// Every member name here is a published REST contract: the API serialises enums by name and rejects integers
+/// (<c>JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false)</c>, see <c>ApiJsonConfiguration</c>),
+/// so renaming a member breaks every client of the Schedule Execution endpoints and the PowerShell module's
+/// <c>-Status</c> filter. <c>ScheduleExecutionStatusWireContractTests</c> pins the names.
+/// </remarks>
 public enum ScheduleExecutionStatus
 {
     /// <summary>
@@ -156,9 +128,10 @@ public enum ScheduleExecutionStatus
     InProgress = 1,
 
     /// <summary>
-    /// Execution completed successfully.
+    /// Execution finished successfully. Named to match <c>ActivityStatus.Complete</c>: an Activity produced by a
+    /// Schedule shows both statuses side by side, and two spellings of the same outcome read as a contradiction.
     /// </summary>
-    Completed = 2,
+    Complete = 2,
 
     /// <summary>
     /// Execution failed with an error.
@@ -174,4 +147,67 @@ public enum ScheduleExecutionStatus
     /// Execution is paused and can be resumed.
     /// </summary>
     Paused = 5
+}
+
+/// <summary>
+/// The display status of an individual step within a Schedule Execution. Derived from the step's Worker Task while
+/// it is still live, from its Activity once the Worker Task has been deleted, and otherwise from the execution's own
+/// position. Worker Tasks are ephemeral and Activities are permanent, so the Activity is the durable source.
+/// </summary>
+public enum ScheduleExecutionStepStatus
+{
+    /// <summary>
+    /// The step has not been reached, and will not run if the execution has already stopped.
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// The step is waiting for a previous step to finish.
+    /// </summary>
+    Waiting = 1,
+
+    /// <summary>
+    /// The step has been queued for a worker to pick up.
+    /// </summary>
+    Queued = 2,
+
+    /// <summary>
+    /// The step is currently being processed by a worker.
+    /// </summary>
+    Processing = 3,
+
+    /// <summary>
+    /// Cancellation has been requested for the step but has not yet taken effect.
+    /// </summary>
+    Cancelling = 4,
+
+    /// <summary>
+    /// The step completed without errors or warnings.
+    /// </summary>
+    Completed = 5,
+
+    /// <summary>
+    /// The step completed, but at least one object raised a warning.
+    /// </summary>
+    CompletedWithWarning = 6,
+
+    /// <summary>
+    /// The step ran to completion, but at least one object raised an error.
+    /// </summary>
+    CompletedWithError = 7,
+
+    /// <summary>
+    /// The step failed outright and did not complete.
+    /// </summary>
+    Failed = 8,
+
+    /// <summary>
+    /// The step was cancelled by a user or by the system.
+    /// </summary>
+    Cancelled = 9,
+
+    /// <summary>
+    /// The step's status could not be determined.
+    /// </summary>
+    Unknown = 10
 }

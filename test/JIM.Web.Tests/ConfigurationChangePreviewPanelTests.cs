@@ -218,6 +218,43 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_GroupWithADetectedPattern_SaysWhatKindOfChangeItIs()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(38_900, attributeName: "Email", patternKey: PreviewPatternKeys.EmailDomainChanged));
+
+        var panel = RenderPanel();
+
+        // The point of Phase 4b: a collapsed group covering thousands of distinct value pairs is unreadable as
+        // values, and entirely readable as "they are all domain changes".
+        Assert.That(panel.Markup, Does.Contain("Email or UPN domain changed"));
+    }
+
+    [Test]
+    public void Panel_GroupWithNoDetectedPattern_ShowsNothingInItsPlace()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(38_900, attributeName: "Email"));
+
+        var panel = RenderPanel();
+
+        Assert.That(panel.Markup, Does.Not.Contain("domain changed"),
+            "no detector recognised this change, and a blank is the honest rendering of that");
+    }
+
+    [Test]
+    public void Panel_GroupWithAPatternThisBuildDoesNotKnow_ShowsNothingRatherThanTheRawKey()
+    {
+        GivenPreview(Complete);
+        GivenGroups(Group(12, attributeName: "Email", patternKey: "SomethingElseEntirely"));
+
+        var panel = RenderPanel();
+
+        Assert.That(panel.Markup, Does.Not.Contain("SomethingElseEntirely"),
+            "an internal identifier is not something to put in front of an administrator");
+    }
+
+    [Test]
     public void Panel_DrillDownOnOneOfSeveralValuePairGroups_NamesWhichOneIsOpen()
     {
         // Value-pair grouping puts several rows on screen that share a transition and a population and differ only
@@ -237,6 +274,24 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             Assert.That(heading, Does.Contain("@fabrikam.co.uk"));
             Assert.That(heading, Does.Contain("Email"));
         });
+    }
+
+    [Test]
+    public void Panel_DrillDownRowsWithDifferentPatterns_LabelsEachOne()
+    {
+        // A group that collapsed past the value-pair guard carries rows of more than one kind, so the group itself
+        // is unlabelled and the rows are where the distinction survives.
+        GivenPreview(Complete);
+        GivenGroups(Group(2, attributeName: "Email"));
+        GivenDeltas(
+            Delta("bob@contoso.com", "bob@fabrikam.com", PreviewPatternKeys.EmailDomainChanged),
+            Delta("bsmith", "svc-bsmith", PreviewPatternKeys.PrefixAdded));
+
+        var panel = RenderPanel();
+        panel.FindAll("tbody tr").First().Click();
+        panel.WaitForState(() => panel.Markup.Contains("Prefix added"), TimeSpan.FromSeconds(2));
+
+        Assert.That(panel.Markup, Does.Contain("Email or UPN domain changed"));
     }
 
     [Test]
@@ -372,6 +427,40 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         });
     }
 
+    [Test]
+    public void Panel_HostReRendersWithTheSamePreview_DoesNotReRead()
+    {
+        // Found by driving the portal (#1114): a host that binds OnPreviewChanged re-renders when the callback
+        // fires, because that is what an EventCallback does. A panel that re-read on every parameter set turned
+        // that into a loop, and the loop cancelled and restarted the reconciliation poll on each pass, so the
+        // poll's delay never elapsed. The panel sat on stage 1 for ever while the preview finished behind it.
+        GivenPreview(p => p.ValidationStatus = ConfigurationChangePreviewStageStatus.Complete,
+            a => a.Status = ActivityStatus.InProgress);
+        var panel = RenderPanel();
+        var readsAfterFirstLoad = ReadCount();
+
+        panel.Render();
+        panel.Render();
+
+        Assert.That(ReadCount(), Is.EqualTo(readsAfterFirstLoad),
+            "a parent re-render is not new information about the preview; the notification handler and the poll are what refresh it");
+    }
+
+    [Test]
+    public void Panel_PointedAtADifferentPreview_LoadsIt()
+    {
+        GivenPreview();
+        var panel = RenderPanel();
+        var otherActivityId = Guid.CreateVersion7();
+        _previewRepository.Setup(r => r.GetPreviewAsync(otherActivityId)).ReturnsAsync((ConfigurationChangePreview?)null);
+        var readsAfterFirstLoad = ReadCount();
+
+        panel.Render(p => p.Add(x => x.ActivityId, otherActivityId));
+
+        Assert.That(ReadCount(), Is.GreaterThan(readsAfterFirstLoad),
+            "the guard is about the same preview, not about never reading again; re-previewing must load the new one");
+    }
+
     #region Helpers
 
     private IRenderedComponent<ConfigurationChangePreviewPanel> RenderPanel()
@@ -414,11 +503,36 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         _activityRepository.Setup(r => r.GetActivityAsync(ActivityId)).ReturnsAsync(activity);
     }
 
+    private void GivenDeltas(params ConfigurationChangePreviewDelta[] deltas) =>
+        _previewRepository
+            .Setup(r => r.GetPreviewDeltasAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()))
+            .ReturnsAsync(new PagedResultSet<ConfigurationChangePreviewDelta>
+            {
+                Results = [.. deltas],
+                TotalResults = deltas.Length,
+                CurrentPage = 1,
+                PageSize = 25
+            });
+
+    private static ConfigurationChangePreviewDelta Delta(string oldValue, string newValue, string? patternKey) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        ActivityId = ActivityId,
+        TransitionType = ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+        ObjectDisplayName = "Bob Smith",
+        ObjectTypeName = "User",
+        AttributeName = "Email",
+        OldValue = oldValue,
+        NewValue = newValue,
+        PatternKey = patternKey
+    };
+
     private void GivenGroups(params ConfigurationChangePreviewGroup[] groups) =>
         _previewRepository.Setup(r => r.GetPreviewGroupsAsync(ActivityId)).ReturnsAsync([.. groups]);
 
     private static ConfigurationChangePreviewGroup Group(int objectCount, bool sampled = false,
-        string? attributeName = null, string? oldValue = null, string? newValue = null) => new()
+        string? attributeName = null, string? oldValue = null, string? newValue = null,
+        string? patternKey = null) => new()
     {
         Id = Guid.CreateVersion7(),
         ActivityId = ActivityId,
@@ -428,6 +542,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         AttributeName = attributeName,
         OldValue = oldValue,
         NewValue = newValue,
+        PatternKey = patternKey,
         ObjectCount = objectCount,
         DeltasSampled = sampled
     };

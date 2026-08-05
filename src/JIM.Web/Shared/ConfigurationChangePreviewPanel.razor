@@ -185,7 +185,7 @@
                         </div>
                         <MudTable T="ConfigurationChangePreviewGroup" Items="@_groups" Dense="@_dense" Hover="true"
                                   Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm" OnRowClick="OnGroupClicked"
-                                  RowClass="cursor-pointer" Class="@(_dense ? "mt-2 dense-body-only" : "mt-2")">
+                                  RowClass="cursor-pointer" Class="mt-2">
                             <HeaderContent>
                                 <MudTh><MudText Typo="Typo.button">Change</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Population</MudText></MudTh>
@@ -198,6 +198,14 @@
                                              Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)">
                                         @Helpers.GetOutcomeTypeDisplayName(context.TransitionType)
                                     </MudChip>
+                                    @* The pattern is what turns a transition into a sentence: "38,900 would have Email
+                                       changed" reads very differently from "38,900 would have their email domain changed".
+                                       Absent where no detector recognised the change, or where the group's deltas did not
+                                       all agree on one, and nothing is shown in its place. *@
+                                    @if (PreviewPatternKeys.GetDisplayName(context.PatternKey) is { Length: > 0 } patternName)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@patternName</MudText>
+                                    }
                                 </MudTd>
                                 <MudTd DataLabel="Population">
                                     @if (string.IsNullOrEmpty(DescribePopulation(context)))
@@ -284,7 +292,7 @@
                         <MudTable @ref="_deltasTable" T="ConfigurationChangePreviewDelta" ServerData="LoadDeltasAsync"
                                   Dense="@_dense" Hover="true" Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm"
                                   RowsPerPage="25" Loading="@_deltasLoading" LoadingProgressColor="Color.Primary"
-                                  Class="@(_dense ? "mt-2 dense-body-only jim-preview-deltas" : "mt-2 jim-preview-deltas")">
+                                  Class="mt-2 jim-preview-deltas">
                             <ToolBarContent>
                                 <MudSpacer />
                                 <SearchField Value="@_search" ValueChanged="OnSearchChanged" DebounceInterval="500"
@@ -300,7 +308,15 @@
                             <RowTemplate>
                                 <MudTd DataLabel="Object"><TextValueDisplay Value="@context.ObjectDisplayName" /></MudTd>
                                 <MudTd DataLabel="Type"><TextValueDisplay Value="@context.ObjectTypeName" /></MudTd>
-                                <MudTd DataLabel="Attribute"><TextValueDisplay Value="@context.AttributeName" /></MudTd>
+                                <MudTd DataLabel="Attribute">
+                                    <TextValueDisplay Value="@context.AttributeName" />
+                                    @* Per row as well as per group: a group that collapsed back to the attribute level
+                                       holds rows of several kinds, and this is where an administrator sees which is which. *@
+                                    @if (PreviewPatternKeys.GetDisplayName(context.PatternKey) is { Length: > 0 } deltaPatternName)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@deltaPatternName</MudText>
+                                    }
+                                </MudTd>
                                 <MudTd DataLabel="Current value"><TextValueDisplay Value="@context.OldValue" /></MudTd>
                                 <MudTd DataLabel="Proposed value"><TextValueDisplay Value="@context.NewValue" /></MudTd>
                             </RowTemplate>
@@ -359,6 +375,9 @@
     private ConfigurationChangePreviewGroup? _selectedGroup;
     private MudTable<ConfigurationChangePreviewDelta>? _deltasTable;
 
+    /// <summary>The preview this panel has loaded, so a parent re-render does not re-read the one it already has.</summary>
+    private Guid _loadedActivityId;
+
     private bool _loading = true;
     private bool _deltasLoading;
     private bool _cancelling;
@@ -409,8 +428,23 @@
         UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
     }
 
+    /// <summary>
+    /// Loads a preview once, when the panel is first given one or is pointed at a different one. Deliberately not
+    /// on every parameter set.
+    ///
+    /// A host that binds <see cref="OnPreviewChanged"/> re-renders when the callback fires, because that is what an
+    /// <c>EventCallback</c> does; re-reading on every parameter set would turn that into a loop, and the loop
+    /// starves the reconciliation poll below, whose delay is cancelled and restarted on each pass and so never
+    /// elapses. The panel would then sit on stage 1 for ever while the preview finished behind it. Refreshes are
+    /// the job of the notification handler and the poll, both of which run without the host's involvement; a parent
+    /// re-render is not new information about the preview.
+    /// </summary>
     protected override async Task OnParametersSetAsync()
     {
+        if (ActivityId == _loadedActivityId)
+            return;
+
+        _loadedActivityId = ActivityId;
         _loading = true;
         _selectedGroup = null;
         _search = string.Empty;
@@ -445,15 +479,14 @@
             {
                 _preview = null;
                 _activity = null;
-                await NotifyPreviewChangedAsync();
-                await InvokeAsync(StateHasChanged);
+                await PublishAsync();
                 return;
             }
 
             _preview = preview;
             _activity = await jim.Activities.GetActivityAsync(ActivityId);
-            _findings = Deserialise<PreviewValidationFinding>(preview.ValidationFindings);
-            _impactCounts = Deserialise<PreviewImpactCount>(preview.ImpactCounts);
+            _findings = preview.ReadValidationFindings();
+            _impactCounts = preview.ReadImpactCounts();
 
             // Groups are read but deliberately not rendered for a failed preview; keeping the read unconditional
             // means the failure branch is the only thing deciding what is shown.
@@ -464,13 +497,15 @@
             if (_selectedGroup != null && _groups.TrueForAll(g => g.Id != _selectedGroup.Id))
                 _selectedGroup = null;
 
-            await NotifyPreviewChangedAsync();
-            await InvokeAsync(StateHasChanged);
+            await PublishAsync();
         }
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
         {
             // A transient read failure, or the application scope disposed mid-refresh during navigation. The
             // reconciliation poll covers it; what must not happen is the panel tearing down over one bad read.
+            // Logged rather than swallowed silently: a panel that stops updating and says nothing anywhere is
+            // indistinguishable from a preview that never finished, and cost an afternoon to diagnose once.
+            Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: refresh of preview {ActivityId} failed", ActivityId);
         }
         finally
         {
@@ -478,11 +513,23 @@
         }
     }
 
-    private async Task NotifyPreviewChangedAsync()
+    /// <summary>
+    /// Renders what was just read, and tells the host about it, both on the renderer's Dispatcher.
+    ///
+    /// <see cref="OnPreviewChanged"/> is an <c>EventCallback</c>, so invoking it re-renders the host, and rendering
+    /// off the Dispatcher throws "The current thread is not associated with the Dispatcher". Every refresh that
+    /// matters comes from a background thread (the notification handler and the reconciliation poll), so raising it
+    /// outside <c>InvokeAsync</c> threw on every one of them, before the panel's own StateHasChanged, and the
+    /// exception was caught by the same handler that exists for transient read failures. The panel then sat on
+    /// whatever stage it had first read while the preview finished behind it, with nothing anywhere saying why.
+    /// </summary>
+    private async Task PublishAsync() => await InvokeAsync(async () =>
     {
         if (OnPreviewChanged.HasDelegate)
             await OnPreviewChanged.InvokeAsync(_preview);
-    }
+
+        StateHasChanged();
+    });
 
     private async Task<TableData<ConfigurationChangePreviewDelta>> LoadDeltasAsync(TableState state, CancellationToken token)
     {
@@ -582,6 +629,14 @@
                 {
                     break;
                 }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Sanctioned broad catch: this loop is the panel's only guarantee of eventual consistency, and
+                    // an exception escaping it kills the task silently, leaving the panel frozen on whatever stage
+                    // it last read. Log and keep polling. Cancellation is excluded because an abandoned poll must
+                    // stop rather than grind on, and it is handled above.
+                    Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: reconciliation poll for preview {ActivityId} failed", ActivityId);
+                }
             }
         }, token);
     }
@@ -610,25 +665,6 @@
             // Notification-triggered refreshes are best-effort; the reconciliation poll covers what they miss.
         }
     });
-
-    /// <summary>
-    /// Reads one of the preview's stored jsonb documents. An unreadable document yields an empty list rather than an
-    /// empty panel: the stage status already says what happened, and the rest of the preview is still worth reading.
-    /// </summary>
-    private static List<T> Deserialise<T>(string? document)
-    {
-        if (string.IsNullOrWhiteSpace(document))
-            return [];
-
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<List<T>>(document) ?? [];
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            return [];
-        }
-    }
 
     /// <summary>
     /// The attribute and value pair a group covers, for the drill-down heading. Value-pair grouping puts several

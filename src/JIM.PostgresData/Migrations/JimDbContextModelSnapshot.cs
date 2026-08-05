@@ -208,6 +208,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ScheduledByScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScheduledByScheduleName")
+                        .HasColumnType("text");
+
                     b.Property<string>("SecurityEventReason")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -303,6 +309,12 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
+                    b.HasIndex("ScheduleExecutionId")
+                        .HasDatabaseName("IX_Activities_ScheduleExecutionId");
+
+                    b.HasIndex("ScheduledByScheduleId")
+                        .HasDatabaseName("IX_Activities_ScheduledByScheduleId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -2150,7 +2162,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ScheduleId");
+                    b.HasIndex("ScheduleId", "QueuedAt")
+                        .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
 
                     b.HasIndex("Status", "QueuedAt")
                         .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
@@ -3011,6 +3024,35 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectTypeId");
 
                     b.ToTable("ConnectedSystemAttributes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectTypeId", "Key", "Value")
+                        .IsUnique();
+
+                    b.ToTable("ConnectedSystemObjectTypeTags");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
@@ -4704,6 +4746,17 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectType");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ConnectedSystemObjectType")
+                        .WithMany("Tags")
+                        .HasForeignKey("ConnectedSystemObjectTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystemObjectType");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
@@ -5116,6 +5169,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Attributes");
 
                     b.Navigation("ObjectMatchingRules");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>

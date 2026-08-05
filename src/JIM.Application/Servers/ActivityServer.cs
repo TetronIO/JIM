@@ -448,6 +448,11 @@ public class ActivityServer
     /// <param name="initiatorTypeFilter">Optional filter for initiator types (user / API key / system; additive/OR within filter).</param>
     /// <param name="createdFrom">Optional inclusive lower bound on the activity's Created time (UTC).</param>
     /// <param name="createdTo">Optional inclusive upper bound on the activity's Created time (UTC).</param>
+    /// <param name="connectedSystemFilter">Optional filter for Connected System names, matched against the activity's target context (additive/OR within filter).</param>
+    /// <param name="runProfileFilter">Optional filter for Run Profile names, matched against the activity's target name (additive/OR within filter).</param>
+    /// <param name="initiatedByFilter">Optional case-insensitive partial match on the initiator's name; distinct from <paramref name="initiatedById"/>, which matches an exact principal.</param>
+    /// <param name="initiatedBySchedule">Optional filter: true = only activities a Schedule produced, false = only those no Schedule produced, null = all.</param>
+    /// <param name="scheduleFilter">Optional filter for the ids of the Schedules that produced the activities (additive/OR within filter).</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
@@ -462,39 +467,18 @@ public class ActivityServer
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null)
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         return await Application.Repository.Activity.GetActivitiesAsync(
             page, pageSize, searchQuery, sortBy, sortDescending, initiatedById,
             operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities,
-            initiatorTypeFilter, createdFrom, createdTo);
-    }
-
-    /// <summary>
-    /// Retrieves a page's worth of worker task activities (Run Profile executions, data generation, system operations).
-    /// Filtered to show only activities related to worker tasks for the Operations page History tab.
-    /// </summary>
-    /// <param name="page">The page number (1-based).</param>
-    /// <param name="pageSize">The number of items per page.</param>
-    /// <param name="connectedSystemFilter">Optional filter for Connected System names (additive/OR within filter).</param>
-    /// <param name="runProfileFilter">Optional filter for Run Profile names (additive/OR within filter).</param>
-    /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
-    /// <param name="initiatedByFilter">Optional text search on initiator name.</param>
-    /// <param name="sortBy">Optional column to sort by.</param>
-    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
-    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page = 1,
-        int pageSize = 20,
-        IEnumerable<string>? connectedSystemFilter = null,
-        IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
-        string? initiatedByFilter = null,
-        string? sortBy = null,
-        bool sortDescending = true,
-        bool? hasChildActivities = null)
-    {
-        return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
-            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending, hasChildActivities);
+            initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter);
     }
 
     /// <summary>

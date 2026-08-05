@@ -112,7 +112,7 @@ flowchart TD
     %% --- Happy path ---
     AnyFailed -->|No| FindNext[Find next WaitingForPreviousStep<br/>step index]
     FindNext --> HasNext{Next step<br/>exists?}
-    HasNext -->|No| ExecComplete[Execution complete<br/>Status = Completed<br/>CompletedAt = UtcNow]
+    HasNext -->|No| ExecComplete[Execution complete<br/>Status = Complete<br/>CompletedAt = UtcNow]
     ExecComplete --> Done
 
     HasNext -->|Yes| Advance[Transition next step group:<br/>WaitingForPreviousStep --> Queued<br/>Update CurrentStepIndex]
@@ -164,13 +164,13 @@ stateDiagram-v2
 
     InProgress --> InProgress: Worker completes step<br/>Advances to next step group
 
-    InProgress --> Completed: Last step group completes<br/>No more waiting tasks
+    InProgress --> Complete: Last step group completes<br/>No more waiting tasks
 
     InProgress --> Failed: Step group has failures<br/>ContinueOnFailure = false
 
     InProgress --> Cancelled: User cancels execution<br/>All tasks deleted
 
-    Completed --> [*]
+    Complete --> [*]
     Failed --> [*]
     Cancelled --> [*]
 ```
@@ -204,7 +204,7 @@ A typical schedule with sequential and parallel steps:
 8. Second export completes → TryAdvance → transitions index 3 to Queued
 9. Worker dispatches BOTH index 3 tasks in parallel
 10. Both confirming imports complete → TryAdvance → no more steps
-11. Execution marked Completed
+11. Execution marked Complete
 
 ## Key Design Decisions
 

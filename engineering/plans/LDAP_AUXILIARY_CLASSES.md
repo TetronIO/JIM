@@ -74,7 +74,7 @@ TDD throughout: each phase's tests are written red-first. AD-path code (`GetSche
 ### Phase 7: Portal UI
 
 - `ConnectedSystemSchemaTab`: Auxiliary Classes panel per structural type (RFC-path systems only): merge switches, suggestion chips (DIT Content Rules + usage counts), discovery scope controls (quick sample with editable N / full scan), persisted status strip (never run / running with Activity link and cancel / last completed / cancelled-partial); Structural Carrier Class select on aux-typed types; merged rows appear in the existing attribute table via the existing Class column.
-- Follows `JIM.Web/CLAUDE.md` conventions (panel spacing, alerts, gating). `dotnet build` required; bUnit coverage in `test/JIM.Web.Components.Tests` where the scope rules allow.
+- Follows `JIM.Web/CLAUDE.md` conventions (panel spacing, alerts, gating). `dotnet build` required; bUnit coverage in `test/JIM.Web.Tests` where the scope rules allow.
 - The UI mock produced during design is the reference for placement and states.
 
 ### Phase 8: Surface parity (REST + PowerShell) and docs

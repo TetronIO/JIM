@@ -26,6 +26,35 @@ Cancelling the confirmation abandons the save. Nothing is written.
 
     Metaverse Object Type deletion settings are the exception: they take effect immediately. Objects that already satisfy a new deletion rule become eligible for deletion on the next synchronisation or housekeeping pass, with no further change made to them. The confirmation says so.
 
+## Previewing a change before you make it
+
+A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
+
+Previews are available where a surface has an evaluator for it. The first is a Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), which is the change most worth asking about, because it is the one that can make existing objects eligible for deletion the moment it is saved.
+
+A preview answers in stages, and each appears as it completes:
+
+| Stage | What it tells you |
+|---|---|
+| Validation | Whether the proposal can be applied at all. A blocking finding stops the preview; nothing further is evaluated, because counting the objects a change would affect is a statement about a change that will happen. |
+| Objects affected | How many objects would move through each transition. Exact counts over the whole population. |
+| Summary | The counts broken down by transition, object type, and the attribute and values involved. |
+| Object detail | The individual objects behind each summary row. |
+
+Where JIM recognises what kind of edit a summary row describes, it says so beside the row: "Email or UPN domain changed" rather than only "Email changed". The patterns it names are a domain change on an address or User Principal Name, a move to a different container, a change of letter case alone, and text added to or removed from the start or end of a value.
+
+A pattern only appears where **every** object in the row makes the same kind of edit. A row covering a mixture is left unnamed, and the objects behind it carry their own patterns in the drill-down. Nothing is shown where JIM does not recognise the change, which is the normal case for rows whose values are dates or identifiers.
+
+Three things are worth knowing before you act on a preview:
+
+- **A preview that failed shows nothing.** A part-way evaluation has seen an arbitrary subset of the objects, so its counts are real numbers about the wrong population. JIM withholds them rather than presenting them with a caveat beside them.
+- **Object detail may be a sample.** Each summary row keeps a capped number of detail rows by default; the row's own count is always exact. Where the cap applied, the drill-down is labelled as a sample, and you can ask for the full set when you start the preview.
+- **A preview describes the data as it stood.** An import that runs afterwards can move the answer. The panel says when the preview was evaluated so you can judge whether that matters.
+
+In the portal, previewing leaves the change unsaved: read the result, then save (or not). If you save, the confirmation states the preview's counts alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the settings after previewing and the preview is marked stale and contributes nothing to the confirmation, because it now describes a different change.
+
+Automation gets the same evaluation. Start a preview with [`New-JIMConfigurationChangePreview`](../powershell/previews.md), or `POST` to the surface's own preview endpoint in the [REST API](../../api/reference/), then pass the preview's Activity id back on the change itself so the audit records the link.
+
 ## Where the confirmation appears
 
 | Surface | Changes that can trigger it |
@@ -45,5 +74,7 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 ## See also
 
 - [Activities](activities.md) -- every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
+- [Preview cmdlets](../powershell/previews.md) -- starting, reading and cancelling a preview from PowerShell
+- [Metaverse](metaverse.md#previewing-a-deletion-settings-change) -- previewing a change to deletion settings
 - [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation) -- the changed-since indicator
 - [Service Settings](service-settings.md) -- switching configuration change tracking on or off

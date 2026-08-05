@@ -124,12 +124,18 @@ else
                                 </MudText>
                             </div>
                         </div>
-
                         <ScheduleStepRail Progress="@scheduleProgress" />
 
-                        @* Pushed right so it lands under the Actions column, in line with the per-task
+                        @* Pushed right so they land under the Actions column, in line with the per-task
                            cancel buttons in the rows below rather than adrift in the middle of the header. *@
-                        <div style="flex: 0 0 auto; margin-left: auto;">
+                        <div class="d-flex align-center gap-2" style="flex: 0 0 auto; margin-left: auto;">
+                            <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced" Arrow="true" Placement="Placement.Top">
+                                <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
+                                           StartIcon="@Icons.Material.Filled.OpenInNew"
+                                           Href="@($"/admin/operations/schedule-executions/{executionId}")">
+                                    View execution
+                                </MudButton>
+                            </MudTooltip>
                             <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
                                 <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
                                                OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
@@ -504,7 +510,7 @@ else
         }
         else
         {
-            Snackbar.Add("Could not cancel execution — it may have already completed.", Severity.Warning);
+            Snackbar.Add("Could not cancel execution; it may have already completed.", Severity.Warning);
         }
     }
 

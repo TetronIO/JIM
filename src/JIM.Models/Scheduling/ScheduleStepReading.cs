@@ -9,49 +9,77 @@ namespace JIM.Models.Scheduling;
 
 /// <summary>
 /// The rules for reading a Schedule Execution's progress out of the records it leaves behind (#1162).
-/// The Operations queue's group header, the Schedule Executions REST read and PowerShell all have to
-/// agree on what "step 2 of 5" means, so the derivation lives here rather than at each call site.
+/// The Operations queue's group header, the Schedule Execution detail page, the Schedule Executions
+/// REST read and PowerShell all have to agree on what "step 2 of 5" means and on how far a given step
+/// got, so the derivation lives here rather than at each call site.
 /// </summary>
 /// <remarks>
 /// The sibling of <see cref="RunPhaseReading"/> one level up: that reads the steps within a single Run
-/// Profile execution, this reads the steps of the Schedule running it.
+/// Profile execution, this reads the steps of the Schedule running it. The two are deliberately not
+/// parallel in construction. A run's phases are recorded rows; a Schedule step's evidence lives half
+/// in <see cref="WorkerTask"/> rows and half in <see cref="Activity"/> rows, because a task is deleted
+/// the moment its work finishes.
 /// </remarks>
 public static class ScheduleStepReading
 {
     /// <summary>
-    /// Where one task has got to, from whichever of its two records exist.
+    /// How far one step of a Schedule Execution got, from whichever of its two records exist.
     /// </summary>
     /// <remarks>
-    /// The precedence is not "newest record wins". An Activity that has reached a terminal status has
-    /// concluded, and outranks a Worker Task that has not yet been tidied away; an Activity that is
-    /// still in progress says less than the task beside it, which distinguishes waiting from running.
+    /// The single definition, shared by the detail read (which reports it per Schedule Step row, and
+    /// whose display strings are a published REST contract) and by the queue's group header (which
+    /// aggregates it per step group). Deriving it twice is how the two surfaces would come to disagree
+    /// about a step that is finishing at the moment they are each asked.
     /// </remarks>
-    public static ScheduleStepStatus StatusOf(ScheduleStepObservation observation)
+    /// <param name="taskStatus">The Worker Task's status, or null once it has been deleted.</param>
+    /// <param name="activityStatus">The Activity's status, or null before the step started.</param>
+    /// <param name="stepIndex">The step group this step belongs to.</param>
+    /// <param name="currentStepIndex">The step group the execution has reached.</param>
+    /// <param name="executionStatus">The execution's own status.</param>
+    public static ScheduleExecutionStepStatus StatusOf(
+        WorkerTaskStatus? taskStatus,
+        ActivityStatus? activityStatus,
+        int stepIndex,
+        int currentStepIndex,
+        ScheduleExecutionStatus executionStatus)
     {
-        if (observation.ActivityStatus is { } activityStatus && activityStatus is not (ActivityStatus.InProgress or ActivityStatus.NotSet))
+        // A Worker Task only still exists while the step is live, so it describes the step better than the
+        // in-progress Activity beside it.
+        if (taskStatus is { } task)
         {
-            return activityStatus switch
+            return task switch
             {
-                ActivityStatus.Complete or ActivityStatus.CompleteWithWarning => ScheduleStepStatus.Completed,
-                ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError => ScheduleStepStatus.Failed,
-                ActivityStatus.Cancelled => ScheduleStepStatus.Cancelled,
-                _ => ScheduleStepStatus.Pending
+                WorkerTaskStatus.Queued => ScheduleExecutionStepStatus.Queued,
+                WorkerTaskStatus.Processing => ScheduleExecutionStepStatus.Processing,
+                WorkerTaskStatus.CancellationRequested => ScheduleExecutionStepStatus.Cancelling,
+                WorkerTaskStatus.WaitingForPreviousStep => ScheduleExecutionStepStatus.Waiting,
+                _ => ScheduleExecutionStepStatus.Unknown
             };
         }
 
-        if (observation.TaskStatus is { } taskStatus)
+        if (activityStatus is { } activity)
         {
-            return taskStatus switch
+            return activity switch
             {
-                WorkerTaskStatus.Processing => ScheduleStepStatus.Running,
-                WorkerTaskStatus.CancellationRequested => ScheduleStepStatus.Cancelled,
-                _ => ScheduleStepStatus.Pending
+                ActivityStatus.InProgress => ScheduleExecutionStepStatus.Processing,
+                ActivityStatus.Complete => ScheduleExecutionStepStatus.Completed,
+                ActivityStatus.CompleteWithWarning => ScheduleExecutionStepStatus.CompletedWithWarning,
+                ActivityStatus.CompleteWithError => ScheduleExecutionStepStatus.CompletedWithError,
+                ActivityStatus.FailedWithError => ScheduleExecutionStepStatus.Failed,
+                ActivityStatus.Cancelled => ScheduleExecutionStepStatus.Cancelled,
+                _ => ScheduleExecutionStepStatus.Unknown
             };
         }
 
-        return observation.ActivityStatus == ActivityStatus.InProgress
-            ? ScheduleStepStatus.Running
-            : ScheduleStepStatus.Pending;
+        // Neither exists: infer from how far the execution got. A step beyond the current index on an execution
+        // that has stopped never ran, and reads as Pending.
+        if (stepIndex < currentStepIndex)
+            return ScheduleExecutionStepStatus.Completed;
+
+        if (stepIndex == currentStepIndex && executionStatus == ScheduleExecutionStatus.InProgress)
+            return ScheduleExecutionStepStatus.Waiting;
+
+        return ScheduleExecutionStepStatus.Pending;
     }
 
     /// <summary>
@@ -62,37 +90,58 @@ public static class ScheduleStepReading
     /// has some tasks done and others yet to start counts as under way rather than pending: reporting
     /// it as pending would walk the Schedule backwards on screen as each concurrent task landed.
     /// </remarks>
-    public static ScheduleStepStatus Aggregate(IReadOnlyCollection<ScheduleStepStatus> taskStatuses)
+    public static ScheduleExecutionStepStatus Aggregate(IReadOnlyCollection<ScheduleExecutionStepStatus> taskStatuses)
     {
         if (taskStatuses.Count == 0)
-            return ScheduleStepStatus.Pending;
+            return ScheduleExecutionStepStatus.Pending;
 
-        if (taskStatuses.Contains(ScheduleStepStatus.Failed))
-            return ScheduleStepStatus.Failed;
+        if (taskStatuses.Contains(ScheduleExecutionStepStatus.Failed))
+            return ScheduleExecutionStepStatus.Failed;
 
-        if (taskStatuses.Contains(ScheduleStepStatus.Running))
-            return ScheduleStepStatus.Running;
+        if (taskStatuses.Contains(ScheduleExecutionStepStatus.CompletedWithError))
+            return ScheduleExecutionStepStatus.CompletedWithError;
 
-        if (taskStatuses.Contains(ScheduleStepStatus.Cancelled))
-            return ScheduleStepStatus.Cancelled;
+        if (taskStatuses.Contains(ScheduleExecutionStepStatus.Cancelling))
+            return ScheduleExecutionStepStatus.Cancelling;
 
-        if (taskStatuses.All(s => s == ScheduleStepStatus.Completed))
-            return ScheduleStepStatus.Completed;
+        if (taskStatuses.Contains(ScheduleExecutionStepStatus.Processing))
+            return ScheduleExecutionStepStatus.Processing;
 
-        return taskStatuses.Contains(ScheduleStepStatus.Completed)
-            ? ScheduleStepStatus.Running
-            : ScheduleStepStatus.Pending;
+        if (taskStatuses.Contains(ScheduleExecutionStepStatus.Cancelled))
+            return ScheduleExecutionStepStatus.Cancelled;
+
+        if (taskStatuses.All(IsComplete))
+        {
+            return taskStatuses.Contains(ScheduleExecutionStepStatus.CompletedWithWarning)
+                ? ScheduleExecutionStepStatus.CompletedWithWarning
+                : ScheduleExecutionStepStatus.Completed;
+        }
+
+        // Part done and part still to start: the group has begun even though nothing is running this
+        // instant, and saying otherwise would walk the Schedule backwards as each task lands.
+        if (taskStatuses.Any(IsComplete))
+            return ScheduleExecutionStepStatus.Processing;
+
+        if (taskStatuses.Contains(ScheduleExecutionStepStatus.Queued))
+            return ScheduleExecutionStepStatus.Queued;
+
+        return taskStatuses.Contains(ScheduleExecutionStepStatus.Waiting)
+            ? ScheduleExecutionStepStatus.Waiting
+            : ScheduleExecutionStepStatus.Pending;
     }
 
+    private static bool IsComplete(ScheduleExecutionStepStatus status) => status is
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning;
+
     /// <summary>
-    /// A parallel step's task statuses in drawing order: failed, cancelled, completed, running, then
-    /// not started, clockwise from twelve o'clock.
+    /// A parallel step's task statuses in drawing order: what went wrong, then what was cancelled, then
+    /// what finished, then what is running, then what has yet to start, clockwise from twelve o'clock.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Load-bearing, and the least obvious thing here. A parallel step is drawn as one marker divided
     /// into a wedge per task. Ordering the wedges by task would scatter a single failure anywhere
-    /// around a 16px disc, and at one task in twelve it would be invisible; ordering by status means a
+    /// around a 16px disc, and at one task in twelve it would be invisible; ordering by outcome means a
     /// failure always starts at twelve o'clock and always reads.
     /// </para>
     /// <para>
@@ -103,16 +152,19 @@ public static class ScheduleStepReading
     /// grew a row per task, did not.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<ScheduleStepStatus> OrderWedges(IEnumerable<ScheduleStepStatus> taskStatuses) =>
+    public static IReadOnlyList<ScheduleExecutionStepStatus> OrderWedges(IEnumerable<ScheduleExecutionStepStatus> taskStatuses) =>
         taskStatuses.OrderBy(WedgeRank).ToList();
 
-    private static int WedgeRank(ScheduleStepStatus status) => status switch
+    private static int WedgeRank(ScheduleExecutionStepStatus status) => status switch
     {
-        ScheduleStepStatus.Failed => 0,
-        ScheduleStepStatus.Cancelled => 1,
-        ScheduleStepStatus.Completed => 2,
-        ScheduleStepStatus.Running => 3,
-        _ => 4
+        ScheduleExecutionStepStatus.Failed => 0,
+        ScheduleExecutionStepStatus.CompletedWithError => 1,
+        ScheduleExecutionStepStatus.Cancelled => 2,
+        ScheduleExecutionStepStatus.Cancelling => 3,
+        ScheduleExecutionStepStatus.CompletedWithWarning => 4,
+        ScheduleExecutionStepStatus.Completed => 5,
+        ScheduleExecutionStepStatus.Processing => 6,
+        _ => 7
     };
 
     /// <summary>
@@ -125,10 +177,12 @@ public static class ScheduleStepReading
     /// through), and a rail assembled only from what it can see would shorten as the run proceeded.
     /// </param>
     /// <param name="currentStepIndex">The step group the execution has reached (0-based).</param>
+    /// <param name="executionStatus">The execution's own status, for steps with no record of their own.</param>
     /// <param name="observations">Every task of the execution that either record still describes.</param>
     public static ScheduleExecutionProgress? Read(
         int totalSteps,
         int currentStepIndex,
+        ScheduleExecutionStatus executionStatus,
         IEnumerable<ScheduleStepObservation> observations)
     {
         var byStep = observations
@@ -151,13 +205,16 @@ public static class ScheduleStepReading
                 {
                     StepIndex = stepIndex,
                     Name = $"Step {stepIndex + 1}",
-                    Status = stepIndex < currentStepIndex ? ScheduleStepStatus.Completed : ScheduleStepStatus.Pending,
+                    Status = StatusOf(null, null, stepIndex, currentStepIndex, executionStatus),
                     TaskStatuses = []
                 });
                 continue;
             }
 
-            var taskStatuses = stepObservations.Select(StatusOf).ToList();
+            var taskStatuses = stepObservations
+                .Select(o => o.Status ?? StatusOf(o.TaskStatus, o.ActivityStatus, stepIndex, currentStepIndex, executionStatus))
+                .ToList();
+
             steps.Add(new ScheduleStepProgress
             {
                 StepIndex = stepIndex,
@@ -197,50 +254,36 @@ public static class ScheduleStepReading
     }
 
     /// <summary>
-    /// A Schedule Execution's shape from the records themselves, for callers holding the entities
-    /// rather than a queue's headers (the Schedule Executions REST read).
+    /// A Schedule Execution's shape from the per-step state a detail read has already assembled.
     /// </summary>
     /// <remarks>
-    /// One observation per task: a Worker Task carries its own Activity where it has started, and any
-    /// Activity not reached that way belongs to a task that has since been deleted. Matching them up
-    /// here rather than at the call site is what stops a task being counted twice.
+    /// Derived from <see cref="DTOs.ScheduleExecutionStepState"/> rather than from the Worker Tasks and
+    /// Activities behind it, for two reasons: the detail read has already paid for those queries and
+    /// already resolved each step's names, and deriving the group view from the row view makes it
+    /// impossible for a caller to be shown two accounts of the same execution that disagree.
     /// </remarks>
-    public static ScheduleExecutionProgress? FromRecords(
-        IReadOnlyCollection<WorkerTask> tasks,
-        IReadOnlyCollection<Activity> activities,
-        int totalSteps,
-        int currentStepIndex)
+    public static ScheduleExecutionProgress? FromStepStates(
+        IReadOnlyCollection<DTOs.ScheduleExecutionStepState> steps,
+        ScheduleExecution execution)
     {
-        var taskActivityIds = tasks
-            .Where(t => t.Activity != null)
-            .Select(t => t.Activity!.Id)
-            .ToHashSet();
+        var observations = steps.Select(s => new ScheduleStepObservation
+        {
+            StepIndex = s.StepIndex,
+            Name = LabelOf(s),
+            Status = s.Status
+        });
 
-        var fromTasks = tasks
-            .Where(t => t.ScheduleStepIndex.HasValue)
-            .Select(t => new ScheduleStepObservation
-            {
-                StepIndex = t.ScheduleStepIndex!.Value,
-                Name = t.Activity != null
-                    ? NameOf(t.Activity.TargetContext, t.Activity.TargetName, t.ScheduleStepIndex!.Value)
-                    : $"Step {t.ScheduleStepIndex!.Value + 1}",
-                ActivityId = t.Activity?.Id,
-                TaskStatus = t.Status,
-                ActivityStatus = t.Activity?.Status
-            });
-
-        var fromActivities = activities
-            .Where(a => a.ScheduleStepIndex.HasValue && !taskActivityIds.Contains(a.Id))
-            .Select(a => new ScheduleStepObservation
-            {
-                StepIndex = a.ScheduleStepIndex!.Value,
-                Name = NameOf(a.TargetContext, a.TargetName, a.ScheduleStepIndex!.Value),
-                ActivityId = a.Id,
-                ActivityStatus = a.Status
-            });
-
-        return Read(totalSteps, currentStepIndex, fromTasks.Concat(fromActivities));
+        return Read(execution.TotalSteps, execution.CurrentStepIndex, execution.Status, observations);
     }
+
+    /// <summary>
+    /// What to call one Schedule Step: the Connected System and Run Profile where it runs one, matching
+    /// how the Operations queue names the same task, and the step's stored name otherwise.
+    /// </summary>
+    private static string LabelOf(DTOs.ScheduleExecutionStepState step) =>
+        !string.IsNullOrEmpty(step.ConnectedSystemName) && !string.IsNullOrEmpty(step.RunProfileName)
+            ? $"{step.ConnectedSystemName} - {step.RunProfileName}"
+            : step.Name;
 
     /// <summary>
     /// A Schedule Execution's shape as the Operations queue sees it: the tasks of one Schedule
@@ -280,6 +323,9 @@ public static class ScheduleStepReading
             })
             .Concat(stepOutcomes.Where(o => o.ActivityId == null || !queuedActivityIds.Contains(o.ActivityId.Value)));
 
-        return Read(first.ScheduleTotalSteps ?? 0, first.ScheduleCurrentStepIndex ?? 0, observations);
+        // The queue only ever shows an execution that is still running, so its own status is InProgress
+        // by construction; a step group with no record of its own is therefore one still to come.
+        return Read(first.ScheduleTotalSteps ?? 0, first.ScheduleCurrentStepIndex ?? 0,
+            ScheduleExecutionStatus.InProgress, observations);
     }
 }

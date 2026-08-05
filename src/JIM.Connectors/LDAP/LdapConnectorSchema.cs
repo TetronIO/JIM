@@ -82,6 +82,12 @@ internal class LdapConnectorSchema
                 var name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? throw new Exception($"No name on object class entry: {entry.DistinguishedName}");
                 var objectType = new ConnectorSchemaObjectType(name);
 
+                // Report the class kind so the schema screen can tell a structural class from an auxiliary one.
+                var classification = LdapObjectTypeClassification.FromActiveDirectoryObjectClassCategory(
+                    LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "objectClassCategory"));
+                if (classification != null)
+                    objectType.Tags.Add(classification);
+
                 // now go and work out which attributes the object type has and add them to the object type
                 if (AddObjectTypeAttributes(objectType))
                 {
@@ -392,6 +398,11 @@ internal class LdapConnectorSchema
                     continue;
 
                 var objectType = new ConnectorSchemaObjectType(objectClassDef.Name!);
+
+                // Report the class kind so the schema screen can tell a structural class from an auxiliary one.
+                var classification = LdapObjectTypeClassification.FromRfc4512Kind(objectClassDef.Kind);
+                if (classification != null)
+                    objectType.Tags.Add(classification);
 
                 // Collect attributes by walking the class hierarchy (SUP chain)
                 var allMust = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

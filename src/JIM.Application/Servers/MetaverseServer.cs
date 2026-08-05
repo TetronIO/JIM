@@ -120,7 +120,12 @@ public class MetaverseServer
     /// <param name="objectType">The object type to update.</param>
     /// <param name="initiatedBy">The Metaverse Object that initiated the update (may be null for system-initiated).</param>
     /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview the administrator read before making this change, if any (#827). Recorded on
+    /// the Activity so the audit answers not only what changed but what the person making it was told it would do.
+    /// </param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -131,7 +136,8 @@ public class MetaverseServer
         {
             TargetName = objectType.Name,
             TargetType = ActivityTargetType.MetaverseObjectType,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -148,7 +154,12 @@ public class MetaverseServer
     /// <param name="objectType">The object type to update.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
     /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview the caller read before making this change, if any (#827). Recorded on the
+    /// Activity so the audit answers not only what changed but what the caller was told it would do.
+    /// </param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -159,7 +170,8 @@ public class MetaverseServer
         {
             TargetName = objectType.Name,
             TargetType = ActivityTargetType.MetaverseObjectType,
-            TargetOperationType = ActivityTargetOperationType.Update
+            TargetOperationType = ActivityTargetOperationType.Update,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 

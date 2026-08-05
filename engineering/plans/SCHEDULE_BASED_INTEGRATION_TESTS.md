@@ -56,7 +56,7 @@ Poll execution detail endpoint
   |     +-- If activityStatus is failure AND ContinueOnFailure=false:
   |           +-- Throw with step name, activityId, activityStatus, errorMessage
   |
-  +-- Check overall execution status (Completed/Failed/Cancelled)
+  +-- Check overall execution status (Complete/Failed/Cancelled)
   |     +-- If terminal: break loop, return execution
   |
   +-- Check timeout

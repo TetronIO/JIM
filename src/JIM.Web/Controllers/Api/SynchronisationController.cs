@@ -98,8 +98,10 @@ public class SynchronisationController(
         var pendingExportCount = await _application.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
         var objectCount = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
         var configurationDrift = await _application.ConfigurationDrift.GetConnectedSystemDriftAsync(connectedSystemId);
+        var initialPasswordAttention = await _application.InitialPasswords.GetAttentionByConnectedSystemAsync([connectedSystemId]);
 
-        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift));
+        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift,
+            initialPasswordAttention.GetValueOrDefault(connectedSystemId) ?? new InitialPasswordAttention()));
     }
 
     /// <summary>
@@ -2207,7 +2209,13 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
-        return Ok(SyncRuleInitialPasswordResponse.FromEntity(syncRule.InitialPassword));
+        // The parked work is reported with the settings that caused it: an administrator scripting a check across
+        // every rule wants the answer in the response they were already fetching, not a second call per rule.
+        var parkedReasons = await _application.InitialPasswords.GetParkedReasonsAsync(id);
+        var attention = await _application.InitialPasswords.GetAttentionBySyncRuleAsync([id]);
+
+        return Ok(SyncRuleInitialPasswordResponse.FromEntity(
+            syncRule.InitialPassword, parkedReasons, attention.GetValueOrDefault(id)));
     }
 
     /// <summary>

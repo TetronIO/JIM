@@ -203,6 +203,12 @@
         </MudGrid>
     </MudPaper>
 
+    @* Renders nothing unless a Schedule produced this Activity. Sits under the Summary panel: it is context
+       about where this Activity came from, not a notice that interrupts the page. *@
+    <ActivityScheduleContext ScheduleExecutionId="_activity.ScheduleExecutionId"
+                             ScheduleStepIndex="_activity.ScheduleStepIndex"
+                             Class="mt-6" />
+
     @* Where the run has got to: the steps (#454), and how far through the running step it is. One
        panel, because they answer the same question at two resolutions. The steps outlive the run;
        the counters below them only exist while it is in flight. *@
@@ -715,7 +721,7 @@
                   Hover="true"
                   Dense="@_dense"
                   Breakpoint="Breakpoint.Sm"
-                  Class="@(_dense ? "mt-3 mb-5 dense-body-only" : "mt-3 mb-5")"
+                  Class="mt-3 mb-5"
                   Outlined="true"
                   Elevation="0"
                   Loading="@_loading"
@@ -840,7 +846,7 @@
                   RowsPerPageChanged="OnRowsPerPageChanged"
                   Hover="true"
                   Dense="@_dense"
-                  Class="@(_dense ? "mt-3 dense-body-only" : "mt-3")"
+                  Class="mt-3"
                   Outlined="true"
                   Elevation="0"
                   Loading="@_childActivitiesLoading"

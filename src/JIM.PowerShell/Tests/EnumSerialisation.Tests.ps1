@@ -136,10 +136,10 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
                 Mock Invoke-JIMApi { [PSCustomObject]@{ items = @() } }
 
-                Get-JIMScheduleExecution -Status Completed | Out-Null
+                Get-JIMScheduleExecution -Status Complete | Out-Null
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
-                    $Endpoint -like '*status=Completed*'
+                    $Endpoint -like '*status=Complete*'
                 }
             }
         }
