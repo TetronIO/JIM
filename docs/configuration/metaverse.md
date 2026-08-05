@@ -33,6 +33,17 @@ When the rule is **When Authoritative Source Disconnected**, a **Deletion Trigge
 
 Systems you do not select as sources (typically targets) never block or trigger deletion in either mode. At least one source must be selected, and only contributing systems (systems with inbound Synchronisation Rules for the object type) are offered. A live summary beneath the settings restates the configured behaviour in plain language before you save. Configurations created before trigger modes existed keep the **Specific source(s) disconnect** behaviour they were built with; nothing changes on upgrade.
 
+#### Keeping a shadow system out of deletion decisions
+
+A common requirement is the opposite of selecting sources: a Connected System whose accounts should never keep an identity alive. A Service Desk system, for example, may create its own account for every Person, and those accounts should not delay deletion once the real identity sources have let the person go.
+
+JIM expresses this by selecting the systems that *should* govern the decision rather than excluding the ones that should not. Choose **When Authoritative Source Disconnected**, select the genuine sources (say the HR system and the corporate directory), and set the trigger to **All sources disconnect**. The Service Desk link then neither delays nor triggers deletion: once neither source retains a link, the Metaverse Object is deleted and the Service Desk account is deprovisioned along with every other target.
+
+Two consequences follow from expressing it this way round, and both are worth knowing before you configure it:
+
+- **A source you onboard later takes no part in deletion decisions until you add it to the list.** Adding a new authoritative system is therefore a two-step change: configure its Synchronisation Rules, then add it to the Deletion Trigger sources of every object type it feeds.
+- **A Metaverse Object that never joined any selected source is never deleted automatically.** An identity that exists only in the Service Desk system has no source to disconnect, so it stays until an administrator removes it, or until the object type's Deletion Rule changes.
+
 #### Grace period
 
 Rather than deleting immediately when the Deletion Rule triggers, a configurable **grace period** holds the object in a pending-deletion state first, giving administrators time to intervene if a deletion was triggered in error. The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe identities out.
