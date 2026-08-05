@@ -40,7 +40,14 @@ internal sealed class SqlConnectorSchema
     /// attribute value, so a composite key is projected as one attribute; the separator is a character
     /// no sane column name contains, which keeps the projection recognisable in the portal.
     /// </summary>
-    private const string ComposedAnchorSeparator = "+";
+    internal const string ComposedAnchorSeparator = "+";
+
+    /// <summary>
+    /// What a composite anchor's single projected attribute is called. Shared with import, which has to
+    /// compose exactly the attribute discovery declared, or the object has no external ID value.
+    /// </summary>
+    internal static string ComposedAnchorAttributeName(IReadOnlyList<string> anchorColumns) =>
+        string.Join(ComposedAnchorSeparator, anchorColumns);
 
     private readonly ISqlProvider _provider;
     private readonly DbConnection _connection;
@@ -157,7 +164,7 @@ internal sealed class SqlConnectorSchema
         if (anchorColumns.Count == 1)
             return objectType.Attributes.Single(attribute => string.Equals(attribute.Name, anchorColumns[0].Name, StringComparison.OrdinalIgnoreCase));
 
-        var composedName = string.Join(ComposedAnchorSeparator, configuration.AnchorColumns);
+        var composedName = ComposedAnchorAttributeName(configuration.AnchorColumns);
 
         if (objectType.Attributes.Any(attribute => string.Equals(attribute.Name, composedName, StringComparison.OrdinalIgnoreCase)))
             throw new SqlSchemaConfigurationException(

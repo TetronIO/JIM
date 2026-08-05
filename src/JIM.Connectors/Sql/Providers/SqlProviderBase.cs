@@ -160,10 +160,25 @@ internal abstract class SqlProviderBase : ISqlProvider
         if (request.AnchorColumns.Count == 0)
             throw new ArgumentException("A keyset page needs at least one anchor column to order and seek on.", nameof(request));
 
+        if (string.IsNullOrWhiteSpace(request.ObjectName) == string.IsNullOrWhiteSpace(request.SelectStatement))
+            throw new ArgumentException("A keyset page must read from exactly one source: a table or view, or a statement standing in for one.", nameof(request));
+
         if (!request.IsFirstPage && request.LastAnchorParameterNames.Count != request.AnchorColumns.Count)
             throw new ArgumentException(
                 $"A keyset page must supply one last-anchor parameter per anchor column: {request.AnchorColumns.Count} anchor column(s) but {request.LastAnchorParameterNames.Count} parameter(s).",
                 nameof(request));
+    }
+
+    /// <summary>
+    /// Renders what a keyset page reads from: a quoted, schema-qualified object name, or an
+    /// administrator-supplied statement wrapped as a named derived table. Identical in both dialects,
+    /// so it lives here rather than being written out twice.
+    /// </summary>
+    protected string BuildFromClause(SqlKeysetPageRequest request)
+    {
+        return string.IsNullOrWhiteSpace(request.SelectStatement)
+            ? QualifyObjectName(request.SchemaName, request.ObjectName!)
+            : $"({request.SelectStatement}) {QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}";
     }
 
     /// <summary>

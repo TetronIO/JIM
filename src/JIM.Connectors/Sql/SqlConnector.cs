@@ -24,11 +24,21 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
     private bool _disposed;
+
+    /// <summary>
+    /// What an open import session needs. Established once by <see cref="OpenImportConnection"/> and held
+    /// for the whole run, because JIM calls <see cref="ImportAsync"/> once per page against the same
+    /// Connector instance; released by <see cref="CloseImportConnection"/>.
+    /// </summary>
+    private DbConnection? _importConnection;
+    private ISqlProvider? _importProvider;
+    private SqlSchemaConfiguration? _importConfiguration;
+    private TimeZoneInfo _importDatabaseTimeZone = TimeZoneInfo.Utc;
 
     /// <summary>
     /// The server certificate this Connector has decided to accept in addition to the operating system's
@@ -297,6 +307,90 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
         var schema = new SqlConnectorSchema(provider, connection, configuration, BuildTypeMappingOptions(settings), logger);
         return await schema.GetSchemaAsync();
+    }
+    #endregion
+
+    #region IConnectorImportUsingCalls members
+    /// <summary>
+    /// Opens the connection this import run reads through, and resolves everything it will need for
+    /// every page: the dialect, the Object Types document, and how zoneless date and time columns are to
+    /// be interpreted.
+    /// </summary>
+    /// <param name="persistedConnectorData">
+    /// Unused by a Full Import, which reads everything there is rather than resuming from a watermark.
+    /// A Delta Import is where it earns its place.
+    /// </param>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document is unusable.</exception>
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(settingValues);
+        logger.Verbose($"OpenImportConnection() called for {Name}");
+
+        var provider = TryResolveProvider(settingValues)
+            ?? throw new InvalidSettingValuesException($"Choose a {SqlConnectorConstants.SettingDatabaseType} before running an import.");
+
+        // Parsed before connecting, for the same reason schema discovery does: a document that cannot be
+        // used makes the connection pointless, and the administrator's problem is the document either way.
+        var configuration = SqlSchemaConfiguration.Parse(GetString(settingValues, SqlConnectorConstants.SettingObjectTypes));
+        var databaseTimeZone = ResolveDatabaseTimeZone(settingValues);
+
+        _importConnection = OpenConnection(provider, BuildConnectionSettings(settingValues), settingValues, logger);
+        _importProvider = provider;
+        _importConfiguration = configuration;
+        _importDatabaseTimeZone = databaseTimeZone;
+    }
+
+    /// <summary>
+    /// Reads one page of objects per configured Object Type, from the connection
+    /// <see cref="OpenImportConnection"/> established.
+    /// </summary>
+    public Task<ConnectedSystemImportResult> ImportAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile,
+        List<ConnectedSystemPaginationToken> paginationTokens,
+        string? persistedConnectorData,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        IConnectorProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(runProfile);
+        logger.Verbose($"ImportAsync() called for {Name}");
+
+        if (_importConnection == null || _importProvider == null || _importConfiguration == null)
+            throw new InvalidOperationException("Must call OpenImportConnection() before ImportAsync()!");
+
+        var import = new SqlConnectorImport(_importProvider, _importConnection, _importConfiguration, _importDatabaseTimeZone,
+            connectedSystem, runProfile, paginationTokens, logger, cancellationToken, progress);
+
+        return runProfile.RunType switch
+        {
+            ConnectedSystemRunType.FullImport => import.GetFullImportObjectsAsync(),
+
+            // Delta Import is the next phase of this Connector's implementation plan; the capability is
+            // declared because the Connector will support it, and it is not reachable until then.
+            ConnectedSystemRunType.DeltaImport => throw new NotSupportedException("Delta Import is not yet implemented for the JIM SQL Connector."),
+            _ => throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}")
+        };
+    }
+
+    /// <summary>
+    /// Releases the import connection, whether the import succeeded or failed.
+    /// </summary>
+    /// <returns>
+    /// Always null: a Full Import has no state for JIM to carry into the next run, and a non-null return
+    /// would override state JIM already holds.
+    /// </returns>
+    public string? CloseImportConnection()
+    {
+        _importConnection?.Dispose();
+        _importConnection = null;
+        _importProvider = null;
+        _importConfiguration = null;
+        _importDatabaseTimeZone = TimeZoneInfo.Utc;
+
+        return null;
     }
     #endregion
 
@@ -594,6 +688,31 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     }
 
     /// <summary>
+    /// The time zone a zoneless date and time column is recorded in, as the administrator declared it.
+    /// Validated when the Connected System is saved, so a failure here means the setting changed to
+    /// something this deployment does not know since; the run fails rather than silently taking UTC and
+    /// moving every date by the offset.
+    /// </summary>
+    /// <exception cref="InvalidSettingValuesException">The configured time zone is not one this deployment recognises.</exception>
+    private static TimeZoneInfo ResolveDatabaseTimeZone(List<ConnectedSystemSettingValue> settingValues)
+    {
+        var timeZone = GetString(settingValues, SqlConnectorConstants.SettingDatabaseTimeZone);
+
+        if (string.IsNullOrWhiteSpace(timeZone))
+            return TimeZoneInfo.Utc;
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            throw new InvalidSettingValuesException(
+                $"{SqlConnectorConstants.SettingDatabaseTimeZone} '{timeZone}' is not a time zone this deployment recognises, so date and time columns carrying no offset cannot be interpreted.");
+        }
+    }
+
+    /// <summary>
     /// Works out how this Connected System's traffic is protected, from whichever encryption setting its
     /// database type asks for.
     /// <para>
@@ -785,6 +904,11 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
         if (disposing)
         {
+            // Belt and braces: the Worker closes an import connection explicitly, but a Connector
+            // disposed without that must not leave a session open on a customer's database.
+            _importConnection?.Dispose();
+            _importConnection = null;
+
             _trustedServerCertificateFile?.Dispose();
             _trustedServerCertificateFile = null;
         }

@@ -14,12 +14,25 @@ namespace JIM.Connectors.Sql.Providers;
 /// </summary>
 internal sealed record SqlKeysetPageRequest
 {
+    /// <summary>
+    /// The name an administrator-supplied statement is given when it stands in for a table, because a
+    /// derived table has to be named. Chosen so no real object collides with it.
+    /// </summary>
+    internal const string SourceAlias = "JIM_SOURCE";
+
     internal string? SchemaName { get; init; }
 
     /// <summary>
-    /// The primary table or view being read.
+    /// The primary table or view being read. Null when <see cref="SelectStatement"/> is supplied
+    /// instead; exactly one of the two is always set.
     /// </summary>
-    internal required string ObjectName { get; init; }
+    internal string? ObjectName { get; init; }
+
+    /// <summary>
+    /// An administrator-supplied SELECT statement standing in for a table or view, wrapped as a derived
+    /// table so the page is ordered, seeked and limited around it exactly as it would be around a table.
+    /// </summary>
+    internal string? SelectStatement { get; init; }
 
     internal required IReadOnlyList<string> SelectColumns { get; init; }
 

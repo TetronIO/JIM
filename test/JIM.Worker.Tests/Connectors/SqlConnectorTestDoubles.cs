@@ -5,11 +5,14 @@ using JIM.Connectors.Sql;
 using JIM.Connectors.Sql.Providers;
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using NUnit.Framework;
 using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -55,6 +58,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     /// asked for without a driver parsing it first.
     /// </summary>
     internal List<SqlConnectionSettings> BuiltConnectionSettings { get; } = [];
+
+    /// <summary>
+    /// Every connection this provider handed out, so a test can assert that one was released rather
+    /// than left open on the stand-in database.
+    /// </summary>
+    internal List<FakeDbConnection> OpenConnections { get; } = [];
 
     /// <summary>
     /// The tables, views, columns and foreign keys this stand-in database declares, which is what
@@ -107,7 +116,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         return $"Fake;Host={settings.Host}";
     }
 
-    public override DbConnection CreateConnection(string connectionString) => new FakeDbConnection(this, connectionString);
+    public override DbConnection CreateConnection(string connectionString)
+    {
+        var connection = new FakeDbConnection(this, connectionString);
+        OpenConnections.Add(connection);
+        return connection;
+    }
 
     public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
     {
@@ -115,13 +129,38 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         ConfiguredConnectionSettings.Add(settings);
     }
 
-    public override string BuildKeysetPageCommandText(SqlKeysetPageRequest request) => throw new NotSupportedException();
+    /// <summary>
+    /// The Microsoft SQL Server page shape, because this stand-in quotes and prefixes the way that
+    /// dialect does. The real dialects' generation is asserted in their own tests; what matters here is
+    /// that the Connector asks the provider for a page rather than writing SQL of its own.
+    /// </summary>
+    public override string BuildKeysetPageCommandText(SqlKeysetPageRequest request)
+    {
+        ValidateKeysetPageRequest(request);
+
+        var select = $"SELECT TOP ({GetParameterPlaceholder(request.PageSizeParameterName)}) {BuildColumnList(request.SelectColumns)}";
+        var from = $"FROM {BuildFromClause(request)}";
+        var orderBy = BuildAnchorOrderByClause(request.AnchorColumns);
+
+        return request.IsFirstPage
+            ? $"{select} {from} {orderBy}"
+            : $"{select} {from} WHERE {BuildKeysetPredicate(request.AnchorColumns, request.LastAnchorParameterNames)} {orderBy}";
+    }
 
     public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command) => throw new NotSupportedException();
 
-    public override Guid ConvertToGuid(object value) => throw new NotSupportedException();
+    public override Guid ConvertToGuid(object value)
+    {
+        return value switch
+        {
+            Guid guid => guid,
+            byte[] bytes => IdentifierParser.FromMicrosoftBytes(bytes),
+            string text => IdentifierParser.FromString(text),
+            _ => throw new ArgumentException($"Unexpected GUID value of type {value.GetType().Name}.", nameof(value))
+        };
+    }
 
-    public override object ConvertFromGuid(Guid value) => throw new NotSupportedException();
+    public override object ConvertFromGuid(Guid value) => value;
 
     // Catalogue queries are the real providers' own SQL, which no stand-in database could answer. These
     // stand in for them as recognisable tokens, so a test can still assert that discovery asked the
@@ -304,7 +343,30 @@ internal sealed class FakeSqlCatalogue
     internal IReadOnlyList<FakeCatalogueColumn>? GetSelectStatementColumns(string statement) =>
         _selectStatementColumns.TryGetValue(statement, out var columns) ? columns : null;
 
+    /// <summary>
+    /// The rows a table or view holds, which is what an import reads. Kept separate from the catalogue
+    /// entries above, because schema discovery and import ask this stand-in different questions.
+    /// </summary>
+    internal List<FakeSqlDataTable> DataTables { get; } = [];
+
+    internal void AddRows(string? schemaName, string objectName, string[] columns, params object?[][] rows)
+    {
+        DataTables.Add(new FakeSqlDataTable(schemaName, objectName, columns, [.. rows]));
+    }
+
     private static string Key(string? schemaName, string objectName) => $"{schemaName}.{objectName}";
+}
+
+/// <summary>
+/// A table or view holding rows, as an import reads it.
+/// </summary>
+internal sealed record FakeSqlDataTable(string? SchemaName, string ObjectName, string[] Columns, List<object?[]> Rows)
+{
+    internal int IndexOf(string columnName)
+    {
+        var ordinal = Array.FindIndex(Columns, column => string.Equals(column, columnName, StringComparison.OrdinalIgnoreCase));
+        return ordinal >= 0 ? ordinal : throw new IndexOutOfRangeException(columnName);
+    }
 }
 
 /// <summary>
@@ -354,6 +416,18 @@ internal sealed class FakeDbConnection : DbConnection
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
 
     protected override DbCommand CreateDbCommand() => new FakeDbCommand(_provider);
+
+    /// <summary>
+    /// Stated explicitly, so that "was this connection released?" is answered by this double rather than
+    /// by whatever the base class happens to do with Close on dispose.
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            Close();
+
+        base.Dispose(disposing);
+    }
 }
 
 /// <summary>
@@ -399,6 +473,12 @@ internal sealed class FakeDbCommand : DbCommand
     public override object? ExecuteScalar()
     {
         _provider.ExecutedCommandTexts.Add(CommandText);
+
+        // A count over a source this stand-in holds rows for; anything else is the connectivity query.
+        if (CommandText.StartsWith("SELECT COUNT", StringComparison.OrdinalIgnoreCase))
+            return ResolveDataTable()?.Rows.Count
+                ?? throw new FakeDbException($"This stand-in database has nothing to count for: {CommandText}");
+
         return _provider.ConnectivityTestResult;
     }
 
@@ -445,6 +525,10 @@ internal sealed class FakeDbCommand : DbCommand
             return FakeDbDataReader.ForStatementShape(selectStatementColumns);
         }
 
+        var dataTable = ResolveDataTable();
+        if (dataTable != null)
+            return ReadRows(dataTable);
+
         throw new FakeDbException($"This stand-in database has nothing to answer with for: {CommandText}");
     }
 
@@ -453,6 +537,166 @@ internal sealed class FakeDbCommand : DbCommand
         var index = DbParameterCollection.IndexOf(parameterName);
         return index < 0 ? null : DbParameterCollection[index].Value as string;
     }
+
+    #region Reading rows
+
+    /// <summary>
+    /// Which source this command reads, found by matching the dialect's own qualified name against the
+    /// command text. The longest match wins, so EMPLOYEE_PHONES is never mistaken for EMPLOYEES.
+    /// </summary>
+    private FakeSqlDataTable? ResolveDataTable()
+    {
+        FakeSqlDataTable? match = null;
+        var matchedLength = 0;
+
+        foreach (var dataTable in _provider.Catalogue.DataTables)
+        {
+            var qualifiedName = _provider.QualifyObjectName(dataTable.SchemaName, dataTable.ObjectName);
+            if (CommandText.Contains(qualifiedName, StringComparison.Ordinal) && qualifiedName.Length > matchedLength)
+            {
+                match = dataTable;
+                matchedLength = qualifiedName.Length;
+            }
+        }
+
+        return match;
+    }
+
+    /// <summary>
+    /// Answers a keyset page or a related-table gather from the rows this stand-in holds.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately the smallest interpreter that can answer both: it reads the ordering and the join
+    /// columns out of the generated command text, and takes every value from a bound parameter. What it
+    /// therefore proves is what these tests are about, that the Connector ordered by the anchor, bound
+    /// the previous page's boundary, and keyed the gather on the page's anchors. Whether the predicate
+    /// SQL itself is correct is a question for the providers' own tests, against a real dialect.
+    /// </remarks>
+    private DbDataReader ReadRows(FakeSqlDataTable dataTable)
+    {
+        var orderByColumns = ParseOrderByColumns();
+        return orderByColumns.Count > 0 ? ReadPage(dataTable, orderByColumns) : ReadRelatedRows(dataTable);
+    }
+
+    private DbDataReader ReadPage(FakeSqlDataTable dataTable, IReadOnlyList<string> anchorColumns)
+    {
+        var anchorOrdinals = anchorColumns.Select(dataTable.IndexOf).ToArray();
+        var lastAnchor = BoundValuesWithPrefix(SqlConnectorImport.AnchorParameterPrefix);
+
+        var rows = dataTable.Rows
+            .Where(row => lastAnchor.Count == 0 || CompareAnchors(row, anchorOrdinals, lastAnchor) > 0)
+            .ToList();
+
+        rows.Sort((left, right) => CompareRows(left, right, anchorOrdinals));
+
+        var pageSizeIndex = DbParameterCollection.IndexOf(SqlConnectorImport.PageSizeParameterName);
+        Assert.That(pageSizeIndex, Is.GreaterThanOrEqualTo(0), "A page must be limited by a bound page size, never by reading everything and discarding.");
+        var pageSize = Convert.ToInt32(DbParameterCollection[pageSizeIndex].Value, CultureInfo.InvariantCulture);
+
+        return FakeDbDataReader.ForRows(dataTable.Columns, rows.Take(pageSize));
+    }
+
+    private DbDataReader ReadRelatedRows(FakeSqlDataTable dataTable)
+    {
+        // Each bound join parameter is named for the page row and the anchor column it carries, so the
+        // tuples the Connector asked for can be reconstructed exactly.
+        var joinColumns = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match match in JoinPredicatePattern.Matches(CommandText))
+            joinColumns[match.Groups["parameter"].Value] = match.Groups["column"].Value;
+
+        Assert.That(joinColumns, Is.Not.Empty, "A related table must be gathered against the page's anchors, never read whole.");
+
+        // One tuple of (column ordinal, bound value) per anchor the page asked about, in column order.
+        var anchorTuples = joinColumns
+            .GroupBy(join => join.Key[..join.Key.LastIndexOf('_')])
+            .Select(group => group
+                .OrderBy(join => join.Key, StringComparer.Ordinal)
+                .Select(join => (Ordinal: dataTable.IndexOf(join.Value), Value: BoundValue(join.Key)))
+                .ToList());
+
+        var wanted = anchorTuples
+            .SelectMany(tuple => dataTable.Rows.Where(row => tuple.All(part => Equals(row[part.Ordinal], part.Value))))
+            .ToList();
+
+        return FakeDbDataReader.ForRows(dataTable.Columns, wanted);
+    }
+
+    /// <summary>
+    /// The columns the command orders by, which for a keyset page are exactly its anchor columns.
+    /// </summary>
+    private List<string> ParseOrderByColumns()
+    {
+        var index = CommandText.IndexOf("ORDER BY ", StringComparison.Ordinal);
+        if (index < 0)
+            return [];
+
+        return [.. CommandText[(index + "ORDER BY ".Length)..]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(column => column.Trim('[', ']'))];
+    }
+
+    private List<object?> BoundValuesWithPrefix(string prefix)
+    {
+        return [.. Enumerable.Range(0, DbParameterCollection.Count)
+            .Select(index => DbParameterCollection[index])
+            .Where(parameter => parameter.ParameterName.StartsWith(prefix, StringComparison.Ordinal))
+            .OrderBy(parameter => parameter.ParameterName, StringComparer.Ordinal)
+            .Select(parameter => parameter.Value == DBNull.Value ? null : parameter.Value)];
+    }
+
+    private object? BoundValue(string parameterName)
+    {
+        var index = DbParameterCollection.IndexOf(parameterName);
+        var value = index < 0 ? null : DbParameterCollection[index].Value;
+        return value == DBNull.Value ? null : value;
+    }
+
+    private static int CompareAnchors(object?[] row, int[] anchorOrdinals, IReadOnlyList<object?> lastAnchor)
+    {
+        for (var index = 0; index < anchorOrdinals.Length; index++)
+        {
+            var comparison = CompareValues(row[anchorOrdinals[index]], lastAnchor[index]);
+            if (comparison != 0)
+                return comparison;
+        }
+
+        return 0;
+    }
+
+    private static int CompareRows(object?[] left, object?[] right, int[] anchorOrdinals)
+    {
+        // The first anchor column that differs decides the order; all equal means the rows tie.
+        return anchorOrdinals
+            .Select(ordinal => CompareValues(left[ordinal], right[ordinal]))
+            .FirstOrDefault(comparison => comparison != 0);
+    }
+
+    private static int CompareValues(object? left, object? right)
+    {
+        if (left == null || right == null)
+            return left == null && right == null ? 0 : left == null ? -1 : 1;
+
+        // A numeric anchor read back out of a pagination token need not return as the CLR type the row
+        // holds (an int column's boundary parses back as an int, a decimal one as a decimal), so numbers
+        // are compared numerically rather than by type.
+        if (IsNumeric(left) && IsNumeric(right))
+            return Convert.ToDecimal(left, CultureInfo.InvariantCulture).CompareTo(Convert.ToDecimal(right, CultureInfo.InvariantCulture));
+
+        return Comparer<object>.Default.Compare(left, right);
+    }
+
+    private static bool IsNumeric(object value)
+    {
+        return Type.GetTypeCode(value.GetType()) is TypeCode.Byte or TypeCode.SByte or TypeCode.Int16 or TypeCode.UInt16
+            or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
+            or TypeCode.Single or TypeCode.Double or TypeCode.Decimal;
+    }
+
+    private static readonly Regex JoinPredicatePattern = new(
+        @"\[(?<column>[^\]]+)\]\s*=\s*@(?<parameter>" + SqlConnectorImport.JoinParameterPrefix + @"\d+_\d+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    #endregion
 }
 
 /// <summary>
@@ -610,6 +854,11 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
                 ++ordinal
             }).ToList());
     }
+
+    /// <summary>
+    /// A result set of table rows, as an import reads one.
+    /// </summary>
+    internal static FakeDbDataReader ForRows(string[] columnNames, IEnumerable<object?[]> rows) => new(columnNames, [.. rows]);
 
     internal static FakeDbDataReader ForStatementShape(IEnumerable<FakeCatalogueColumn> columns)
     {
