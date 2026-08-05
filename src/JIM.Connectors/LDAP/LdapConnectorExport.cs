@@ -203,16 +203,12 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Determines whether a Distinguished Name sits at or beneath a container, which is what selecting a container
-    /// means: its whole subtree is in scope.
+    /// means: its whole subtree is in scope. Delegated to the one containment rule the Connector exposes through
+    /// <see cref="JIM.Models.Interfaces.IConnectorContainment"/>, so what export refuses to write and what a
+    /// deselection preview counts as leaving scope cannot drift apart.
     /// </summary>
-    private static bool IsDnWithinContainer(string dn, string containerDn)
-    {
-        if (dn.Equals(containerDn, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // Compare on the comma boundary so OU=UsersArchive is not read as sitting inside OU=Users.
-        return dn.EndsWith("," + containerDn, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsDnWithinContainer(string dn, string containerDn) =>
+        LdapDistinguishedName.IsWithinContainer(dn, containerDn);
 
     private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport)
     {

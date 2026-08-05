@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -42,6 +42,15 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // one is created.
         _currentExport?.SetManagedScope(selectedContainerExternalIds);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same rule the export scope guard enforces, so a preview of a container deselection counts exactly the
+    /// objects export would refuse to write to once that deselection is saved. Deliberately free of connection
+    /// state: a preview asks this without ever opening a connection to the directory.
+    /// </remarks>
+    public bool IsWithinContainer(string? objectExternalId, string? containerExternalId) =>
+        LdapDistinguishedName.IsWithinContainer(objectExternalId, containerExternalId);
 
     /// <summary>
     /// The persisted connector state replayed by JIM at connection open (issue #230), including any

@@ -82,6 +82,56 @@ internal sealed class LdapDistinguishedName
     public override string ToString() => string.Join(",", Rdns.Select(r => r.Source));
 
     /// <summary>
+    /// Whether <paramref name="objectDn"/> is at or beneath <paramref name="containerDn"/>: the meaning of
+    /// selecting a container, and the single rule behind both the export scope guard (#1250) and the partition and
+    /// container deselection preview (#1251).
+    /// </summary>
+    /// <remarks>
+    /// Compared component by component rather than character by character. A character-level suffix match gets two
+    /// ordinary cases wrong in opposite and equally damaging directions: it reads "OU=UsersArchive,DC=x" as sitting
+    /// inside "OU=Users,DC=x", and it refuses "CN=a, OU=Users, DC=x" (the optional whitespace RFC 4514 permits and
+    /// directories emit inconsistently) as being outside it. Parsing costs a little more per call and is paid on a
+    /// preview's read path and an export's per-object check, neither of which is a synchronisation hot path.
+    ///
+    /// Anything unparseable answers <c>false</c>. That refuses an export and under-counts a preview, which are the
+    /// safe failures; the alternative is claiming an object is somewhere it may not be.
+    /// </remarks>
+    internal static bool IsWithinContainer(string? objectDn, string? containerDn)
+    {
+        if (!TryParse(objectDn, out var subject) || !TryParse(containerDn, out var container))
+            return false;
+
+        if (container.Rdns.Count > subject.Rdns.Count)
+            return false;
+
+        // Rdns are ordered leaf-first, so the container's components are the subject's outermost ones.
+        var offset = subject.Rdns.Count - container.Rdns.Count;
+        for (var i = 0; i < container.Rdns.Count; i++)
+            if (!RdnsNameTheSameEntry(subject.Rdns[offset + i], container.Rdns[i]))
+                return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Whether two Relative Distinguished Names name the same entry. Directories match Distinguished Names
+    /// case-insensitively, and a multi-valued RDN's components are a set, so "CN=x+OU=y" and "OU=y+CN=x" are one
+    /// name written two ways.
+    /// </summary>
+    private static bool RdnsNameTheSameEntry(LdapRelativeDistinguishedName subject, LdapRelativeDistinguishedName container)
+    {
+        if (subject.Components.Count != container.Components.Count)
+            return false;
+
+        return NormaliseComponents(subject).SequenceEqual(NormaliseComponents(container), StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> NormaliseComponents(LdapRelativeDistinguishedName rdn) =>
+        rdn.Components
+            .Select(component => $"{component.Type.ToLowerInvariant()}={component.Value.ToLowerInvariant()}")
+            .Order(StringComparer.Ordinal);
+
+    /// <summary>
     /// Splits a DN or RDN string on the given separator, ignoring separators that are escaped (preceded by an
     /// odd number of backslashes) or enclosed in RFC 2253 double quotes. Returns the verbatim substrings, so
     /// joining them back with the separator reproduces the original text.
