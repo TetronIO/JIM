@@ -313,13 +313,103 @@ public class OracleProviderTests
     }
 
     [Test]
-    public void BuildConnectionString_TlsEnabled_UsesTheEncryptedProtocol()
+    public void BuildConnectionString_Tcps_UsesTheEncryptedProtocol()
     {
-        var settings = new SqlConnectionSettings { Host = "oracle.example.local", Port = 2484, ServiceName = "HRPDB", UseTls = true };
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", Port = 2484, ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };
 
         var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
 
         Assert.That(builder.DataSource, Does.Contain("(PROTOCOL=TCPS)"), "Oracle Net expresses TLS as the TCPS protocol in the address descriptor.");
+    }
+
+    [Test]
+    public void BuildConnectionString_NativeNetworkEncryption_UsesTheOrdinaryListenerAndProtocol()
+    {
+        // Native Network Encryption is negotiated on an ordinary TCP connection to the ordinary
+        // listener; it is not TLS and has no separate listener of its own.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.OracleNativeNetworkEncryption };
+
+        var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(builder.DataSource, Does.Contain("(PROTOCOL=TCP)"));
+            Assert.That(builder.DataSource, Does.Not.Contain("TCPS"));
+            Assert.That(builder.DataSource, Does.Contain("(PORT=1521)"), "TCPS has its own listener port; Native Network Encryption uses the ordinary one.");
+        });
+    }
+
+    [Test]
+    public void GetDefaultPort_DependsOnWhetherTheTransportIsTcps()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.Tls), Is.EqualTo(2484), "TCPS listens on its own port.");
+            Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.OracleNativeNetworkEncryption), Is.EqualTo(1521));
+            Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.None), Is.EqualTo(1521));
+        });
+    }
+
+    [Test]
+    public void ConfigureConnection_NativeNetworkEncryption_RequiresStrongEncryptionAndIntegrityOnTheConnection()
+    {
+        // These are the driver's per-connection Oracle Advanced Networking settings. Their process-wide
+        // equivalents on OracleConfiguration are static, so one Connected System's choice would decide
+        // every other Connected System's connections; these instance properties do not.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.OracleNativeNetworkEncryption };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(connection.SqlNetEncryptionClient, Is.EqualTo("REQUIRED"),
+                "Anything weaker lets the connection fall back to plain text without saying so, which is exactly what Mandatory rules out on Microsoft SQL Server.");
+            Assert.That(connection.SqlNetEncryptionTypesClient, Is.EqualTo("AES256, AES192, AES128"),
+                "Naming only the AES algorithms is what keeps DES and RC4 out, whatever the driver's own weak-crypto default is.");
+            Assert.That(connection.SqlNetCryptoChecksumClient, Is.EqualTo("REQUIRED"),
+                "Encryption without integrity protection leaves the traffic malleable; Oracle estates configure the pair together.");
+            Assert.That(connection.SqlNetCryptoChecksumTypesClient, Is.EqualTo("SHA512, SHA384, SHA256"));
+        });
+    }
+
+    [Test]
+    public void ConfigureConnection_Tcps_LeavesTheNativeNetworkEncryptionSettingsUntouched()
+    {
+        // TCPS already encrypts the transport. Asking for Native Network Encryption on top of it is what
+        // SQLNET.IGNORE_ANO_ENCRYPTION_FOR_TCPS exists to unpick, and that setting is process-wide only;
+        // never asking for both avoids the interaction rather than reaching for a global to resolve it.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.Multiple(() =>
+        {
+            // An untouched setting reads back from the driver as null rather than as an empty string.
+            // Either way nothing has been asked for, which is what this asserts.
+            Assert.That(connection.SqlNetEncryptionClient, Is.Null.Or.Empty);
+            Assert.That(connection.SqlNetCryptoChecksumClient, Is.Null.Or.Empty);
+        });
+    }
+
+    [Test]
+    public void ConfigureConnection_NoEncryption_LeavesTheNativeNetworkEncryptionSettingsUntouched()
+    {
+        // Unset means the driver's own default, which accepts encryption a server insists on rather than
+        // refusing it. "None" is JIM declining to require encryption, not JIM refusing it.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.None };
+        using var connection = (OracleConnection)_provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        _provider.ConfigureConnection(connection, settings);
+
+        Assert.Multiple(() =>
+        {
+            // An untouched setting reads back from the driver as null rather than as an empty string.
+            // Either way nothing has been asked for, which is what this asserts.
+            Assert.That(connection.SqlNetEncryptionClient, Is.Null.Or.Empty);
+            Assert.That(connection.SqlNetCryptoChecksumClient, Is.Null.Or.Empty);
+        });
     }
 
     [Test]

@@ -44,7 +44,12 @@ internal class OracleProvider : SqlProviderBase
     /// </summary>
     public override string ConnectivityTestCommandText => "SELECT 1 FROM DUAL";
 
-    public override int GetDefaultPort(bool useTls) => useTls ? DefaultTlsPort : DefaultPort;
+    /// <summary>
+    /// TCPS listens on its own port; Native Network Encryption runs over the ordinary listener, so it
+    /// takes the same default port as an unencrypted connection.
+    /// </summary>
+    public override int GetDefaultPort(SqlConnectionEncryption encryption) =>
+        encryption == SqlConnectionEncryption.Tls ? DefaultTlsPort : DefaultPort;
 
     /// <summary>
     /// TCPS is what Oracle's own documentation and an Oracle administrator call the encrypted transport,
@@ -53,14 +58,17 @@ internal class OracleProvider : SqlProviderBase
     public override string SecureTransportName => "TCPS";
 
     /// <summary>
-    /// False, and this is a genuine limitation rather than a decision. ODP.NET exposes no server
-    /// certificate validation callback and no per-connection trust anchor: its only trust configuration
-    /// is an Oracle wallet (<c>WalletLocation</c>), or the Microsoft Certificate Store on Windows, and a
-    /// wallet can only be created with Oracle's own native tooling, which JIM neither ships nor can
-    /// generate from managed code. A TCPS connection therefore validates against the operating system's
-    /// bundle alone; a certificate added in Admin &gt; Certificates cannot be handed to the driver.
-    /// JIM still reports exactly which certificate was refused and why, so the administrator knows what
-    /// to install in the JIM container's own trust store or in a wallet.
+    /// False for now, pending verification against a real server rather than as a settled conclusion.
+    /// ODP.NET exposes no server certificate validation callback and no per-connection trust anchor; its
+    /// only trust configuration is an Oracle wallet (<c>WalletLocation</c>), or the Microsoft Certificate
+    /// Store on Windows. Whether JIM can supply that wallet from managed code is genuinely open: the
+    /// driver's wallet reader takes a wallet password and has a PEM code path, which points at ordinary
+    /// PKCS#12 rather than only the auto-login wallets Oracle's own native tooling produces, and .NET can
+    /// write both. Settling it needs a live TCPS listener, so it is a question for the integration test
+    /// phase. Until then a TCPS connection validates against the operating system's bundle alone, and JIM
+    /// reports exactly which certificate was refused and why, so an administrator knows what to install.
+    /// Native Network Encryption is unaffected: it uses no certificate at all, which is one reason it is
+    /// the default Oracle encryption mode JIM offers.
     /// </summary>
     public override bool SupportsPinnedServerCertificate => false;
 
@@ -144,6 +152,41 @@ internal class OracleProvider : SqlProviderBase
         return builder.ConnectionString;
     }
 
+    /// <summary>
+    /// Turns on Oracle Native Network Encryption for a Connected System configured to use it. It is not a
+    /// connection string keyword, so it is applied here, on the hook the Connector calls once the
+    /// connection is built and before it is opened.
+    /// <para>
+    /// These are the driver's per-connection Oracle Advanced Networking properties, deliberately in
+    /// preference to their equivalents on <c>OracleConfiguration</c>, which are static: setting those
+    /// would let one Connected System's choice decide how every other one connects. Nothing is written
+    /// for the other encryption modes, so TCPS keeps the transport it already has and a system configured
+    /// for no encryption is left alone.
+    /// </para>
+    /// </summary>
+    public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (settings.Encryption != SqlConnectionEncryption.OracleNativeNetworkEncryption)
+            return;
+
+        var oracleConnection = (OracleConnection)connection;
+
+        // REQUIRED rather than REQUESTED: a system an administrator has configured for encryption should
+        // fail to connect rather than quietly fall back to plain text against a server that will not.
+        oracleConnection.SqlNetEncryptionClient = "REQUIRED";
+
+        // Naming the AES algorithms explicitly is what keeps DES and RC4 out of the negotiation.
+        oracleConnection.SqlNetEncryptionTypesClient = "AES256, AES192, AES128";
+
+        // Encryption without integrity protection leaves the session malleable, and Oracle negotiates the
+        // two independently, so an estate configuring one configures both.
+        oracleConnection.SqlNetCryptoChecksumClient = "REQUIRED";
+        oracleConnection.SqlNetCryptoChecksumTypesClient = "SHA512, SHA384, SHA256";
+    }
+
     public override DbConnection CreateConnection(string connectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
@@ -169,8 +212,8 @@ internal class OracleProvider : SqlProviderBase
     /// </summary>
     private string BuildConnectDescriptor(SqlConnectionSettings settings)
     {
-        var protocol = settings.UseTls ? "TCPS" : "TCP";
-        var port = settings.Port ?? GetDefaultPort(settings.UseTls);
+        var protocol = settings.Encryption == SqlConnectionEncryption.Tls ? "TCPS" : "TCP";
+        var port = settings.Port ?? GetDefaultPort(settings.Encryption);
 
         string connectData;
         if (!string.IsNullOrWhiteSpace(settings.ServiceName))

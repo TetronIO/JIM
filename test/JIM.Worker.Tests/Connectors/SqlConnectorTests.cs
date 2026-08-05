@@ -159,6 +159,68 @@ public class SqlConnectorTests
     }
 
     [Test]
+    public void GetSettings_SqlServerEncryption_IsAnOnByDefaultCheckboxAskedOnlyOfSqlServer()
+    {
+        // Microsoft.Data.SqlClient has defaulted Encrypt to Mandatory since version 4.0, so a modern
+        // estate already encrypts. JIM matching that is what stops a new Connected System quietly being
+        // the least secure thing on the network. It stays administrator-controllable because an estate
+        // with a broken certificate estate has to be able to proceed deliberately.
+        var setting = GetSetting(SqlConnectorConstants.SettingSqlServerEncryptConnection);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox));
+            Assert.That(setting.DefaultCheckboxValue, Is.True, "Encryption is on unless an administrator turns it off.");
+            Assert.That(setting.RequiredWhenSetting, Is.EqualTo(SqlConnectorConstants.SettingDatabaseType));
+            Assert.That(setting.RequiredWhenValue, Is.EqualTo(SqlConnectorConstants.DatabaseTypeSqlServer));
+        });
+    }
+
+    [Test]
+    public void GetSettings_OracleEncryption_IsAModeDefaultingToNativeNetworkEncryption()
+    {
+        // TCPS needs a certificate and a separately configured listener, and is comparatively rare.
+        // Native Network Encryption needs neither and is how Oracle estates ordinarily encrypt client
+        // traffic, so offering only TCPS would push administrators towards the harder configuration.
+        var setting = GetSetting(SqlConnectorConstants.SettingOracleEncryption);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
+            Assert.That(setting.DropDownValues, Is.EquivalentTo(new[]
+            {
+                SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption,
+                SqlConnectorConstants.OracleEncryptionTcps,
+                SqlConnectorConstants.OracleEncryptionNone
+            }));
+            Assert.That(setting.DefaultStringValue, Is.EqualTo(SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption));
+            Assert.That(setting.RequiredWhenSetting, Is.EqualTo(SqlConnectorConstants.SettingDatabaseType));
+            Assert.That(setting.RequiredWhenValue, Is.EqualTo(SqlConnectorConstants.DatabaseTypeOracle));
+        });
+    }
+
+    [Test]
+    public void GetSettings_EachDialectIsAskedAboutEncryptionInItsOwnTerms()
+    {
+        // One checkbox cannot express both dialects: for Oracle Database it would have meant TCPS, which
+        // is not what an Oracle estate ordinarily runs.
+        var sqlServerValues = CreateSettingValues();
+        SetString(sqlServerValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
+
+        var oracleValues = CreateSettingValues();
+        SetString(oracleValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(IsRelevant(sqlServerValues, SqlConnectorConstants.SettingSqlServerEncryptConnection), Is.True);
+            Assert.That(IsRelevant(sqlServerValues, SqlConnectorConstants.SettingOracleEncryption), Is.False);
+
+            Assert.That(IsRelevant(oracleValues, SqlConnectorConstants.SettingOracleEncryption), Is.True);
+            Assert.That(IsRelevant(oracleValues, SqlConnectorConstants.SettingSqlServerEncryptConnection), Is.False);
+        });
+    }
+
+    [Test]
     public void GetSettings_OracleTypeMappingOptIns_AreCheckBoxesDefaultingToOff()
     {
         // Neither reinterpretation is inferable from the catalogue, so both start off: guessing would
@@ -310,19 +372,19 @@ public class SqlConnectorTests
     #region IConnectorSecureEndpoint members
 
     [Test]
-    public void ResolveSecureEndpoint_EncryptionDisabled_ReturnsNull()
+    public void ResolveSecureEndpoint_SqlServerEncryptionTurnedOff_ReturnsNull()
     {
         // The null answer is what stops the shared certificate diagnosis path probing a host that this
         // Connected System never connects to over TLS.
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
 
         Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Null);
     }
 
     [Test]
-    public void ResolveSecureEndpoint_EncryptionEnabled_ReturnsTheConfiguredHostAndPort()
+    public void ResolveSecureEndpoint_SqlServerEncrypted_ReturnsTheConfiguredHostAndPort()
     {
-        var settingValues = CreateSqlServerSettingValues(useTls: true);
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
         SetInt(settingValues, SqlConnectorConstants.SettingPort, 14330);
         SetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout, 45);
 
@@ -340,38 +402,68 @@ public class SqlConnectorTests
     }
 
     [Test]
-    public void ResolveSecureEndpoint_EncryptionEnabledWithNoPort_ReturnsTheDialectsDefaultPort()
+    public void ResolveSecureEndpoint_SqlServerLeftAtItsDefaults_ReturnsAnEndpoint()
     {
-        // The port is optional because the two dialects default differently, so the probe has to resolve
-        // the same port a connection would have used rather than guessing one.
-        var settingValues = CreateSqlServerSettingValues(useTls: true);
-        SetInt(settingValues, SqlConnectorConstants.SettingPort, null);
+        // Nothing was said about encryption, and the default is to encrypt, so there is a certificate
+        // to look at. Answering null here would silently skip the trust diagnosis on the common case.
+        var settingValues = CreateSettingValues();
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
+        SetString(settingValues, SqlConnectorConstants.SettingHost, "db.example.com");
 
-        Assert.That(_connector.ResolveSecureEndpoint(settingValues)?.Port, Is.EqualTo(1433));
+        Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Not.Null);
     }
 
     [Test]
-    public void ResolveSecureEndpoint_OracleWithNoPort_ReturnsTheOracleTcpsPort()
+    public void ResolveSecureEndpoint_OracleNativeNetworkEncryption_ReturnsNull()
     {
+        // Native Network Encryption is not TLS: it is negotiated inside the Oracle Net session and there
+        // is no server certificate at all. Probing for one would open a TLS handshake against a listener
+        // that never speaks TLS, and report a certificate problem where there is no certificate.
+        var settingValues = CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption);
+
+        Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Null);
+    }
+
+    [Test]
+    public void ResolveSecureEndpoint_OracleLeftAtItsDefaults_ReturnsNull()
+    {
+        // The default is Native Network Encryption, so the same reasoning applies without anyone
+        // choosing it.
         var settingValues = CreateSettingValues();
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
         SetString(settingValues, SqlConnectorConstants.SettingHost, "hr.example.com");
+
+        Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Null);
+    }
+
+    [Test]
+    public void ResolveSecureEndpoint_OracleNoEncryption_ReturnsNull()
+    {
+        var settingValues = CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionNone);
+
+        Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Null);
+    }
+
+    [Test]
+    public void ResolveSecureEndpoint_OracleTcpsWithNoPort_ReturnsTheOracleTcpsPort()
+    {
+        var settingValues = CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps);
         SetInt(settingValues, SqlConnectorConstants.SettingPort, null);
-        SetCheckbox(settingValues, SqlConnectorConstants.SettingUseTls, true);
 
         var endpoint = _connector.ResolveSecureEndpoint(settingValues);
 
+        Assert.That(endpoint, Is.Not.Null, "TCPS is genuinely TLS, so there is a server certificate to look at.");
         Assert.Multiple(() =>
         {
-            Assert.That(endpoint?.Port, Is.EqualTo(2484));
-            Assert.That(endpoint?.SecureTransportName, Is.EqualTo("TCPS"), "TCPS is what an Oracle administrator calls the encrypted transport.");
+            Assert.That(endpoint!.Port, Is.EqualTo(2484));
+            Assert.That(endpoint.SecureTransportName, Is.EqualTo("TCPS"), "TCPS is what an Oracle administrator calls the encrypted transport.");
         });
     }
 
     [Test]
     public void ResolveSecureEndpoint_NoHostSupplied_ReturnsNull()
     {
-        var settingValues = CreateSqlServerSettingValues(useTls: true);
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
         SetString(settingValues, SqlConnectorConstants.SettingHost, null);
 
         Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Null);
@@ -380,7 +472,7 @@ public class SqlConnectorTests
     [Test]
     public void ResolveSecureEndpoint_NoDatabaseTypeChosen_ReturnsNull()
     {
-        var settingValues = CreateSqlServerSettingValues(useTls: true);
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, null);
 
         Assert.That(_connector.ResolveSecureEndpoint(settingValues), Is.Null,
@@ -397,7 +489,7 @@ public class SqlConnectorTests
         var provider = new FakeSqlProvider();
         var connector = CreateConnectorWith(provider);
 
-        var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(useTls: false), _logger);
+        var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
 
         Assert.That(results, Is.Empty);
     }
@@ -408,7 +500,7 @@ public class SqlConnectorTests
         var provider = new FakeSqlProvider();
         var connector = CreateConnectorWith(provider);
 
-        connector.ValidateSettingValues(CreateSqlServerSettingValues(useTls: false), _logger);
+        connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
 
         Assert.That(provider.ExecutedCommandTexts, Is.EqualTo(new[] { provider.ConnectivityTestCommandText }),
             "The connectivity test is the cheapest statement the dialect offers, not one the Connector invents.");
@@ -420,7 +512,7 @@ public class SqlConnectorTests
         var failure = new FakeDbException("A network-related or instance-specific error occurred while establishing a connection.");
         var connector = CreateConnectorWith(new FakeSqlProvider { OpenFailure = failure });
 
-        var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(useTls: false), _logger);
+        var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
         Assert.Multiple(() =>
@@ -435,7 +527,7 @@ public class SqlConnectorTests
     public void ValidateSettingValues_RefusedCredentials_ReportsAFailureWithoutRepeatingThePassword()
     {
         var connector = CreateConnectorWith(new FakeSqlProvider { OpenFailure = new FakeDbException("Login failed for user 'jim_sync'.") });
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
         SetEncrypted(settingValues, SqlConnectorConstants.SettingPassword, "sup3rs3cret");
 
         var results = connector.ValidateSettingValues(settingValues, _logger);
@@ -453,7 +545,7 @@ public class SqlConnectorTests
     public void ValidateSettingValues_NoHostSupplied_ReportsAFailureRatherThanThrowing()
     {
         var connector = CreateConnectorWith(new FakeSqlProvider());
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
         SetString(settingValues, SqlConnectorConstants.SettingHost, null);
 
         var results = connector.ValidateSettingValues(settingValues, _logger);
@@ -466,7 +558,7 @@ public class SqlConnectorTests
     public void ValidateSettingValues_UnknownTimeZone_ReportsAFailureNamingTheSetting()
     {
         var connector = CreateConnectorWith(new FakeSqlProvider());
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseTimeZone, "Middle/Earth");
 
         var results = connector.ValidateSettingValues(settingValues, _logger);
@@ -484,7 +576,7 @@ public class SqlConnectorTests
     public void ValidateSettingValues_UtcTimeZone_IsAccepted()
     {
         var connector = CreateConnectorWith(new FakeSqlProvider());
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseTimeZone, "UTC");
 
         Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty);
@@ -496,14 +588,64 @@ public class SqlConnectorTests
         var provider = new FakeSqlProvider();
         var connector = CreateConnectorWith(provider);
 
-        connector.ValidateSettingValues(CreateSqlServerSettingValues(useTls: false), _logger);
+        connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
 
         Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1));
         Assert.Multiple(() =>
         {
-            Assert.That(provider.BuiltConnectionSettings[0].UseTls, Is.False);
+            Assert.That(provider.BuiltConnectionSettings[0].Encryption, Is.EqualTo(SqlConnectionEncryption.None));
             Assert.That(provider.BuiltConnectionSettings[0].PinnedServerCertificatePath, Is.Null);
         });
+    }
+
+    [Test]
+    public void ValidateSettingValues_SqlServerLeftAtItsDefaults_ConnectsEncrypted()
+    {
+        var provider = new FakeSqlProvider();
+        var connector = CreateConnectorWith(provider);
+        var settingValues = CreateSettingValues();
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
+        SetString(settingValues, SqlConnectorConstants.SettingHost, "db.example.com");
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseName, "HR");
+        SetString(settingValues, SqlConnectorConstants.SettingUsername, "jim_sync");
+        SetEncrypted(settingValues, SqlConnectorConstants.SettingPassword, "sup3rs3cret");
+
+        connector.ValidateSettingValues(settingValues, _logger);
+
+        Assert.That(provider.BuiltConnectionSettings.Single().Encryption, Is.EqualTo(SqlConnectionEncryption.Tls),
+            "An administrator who says nothing about encryption gets an encrypted connection.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_AnyConnection_LetsTheDialectConfigureItBeforeItIsOpened()
+    {
+        // Not every driver takes its settings in a connection string: Oracle Database's Native Network
+        // Encryption is configured on the connection object. Without this the Connector would build a
+        // correct connection string and then open an unencrypted connection.
+        var provider = new FakeSqlProvider();
+        var connector = CreateConnectorWith(provider);
+
+        connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: true), _logger);
+
+        Assert.That(provider.ConfiguredConnectionSettings, Has.Count.EqualTo(1));
+        Assert.That(provider.ConfiguredConnectionSettings[0], Is.SameAs(provider.BuiltConnectionSettings[0]));
+    }
+
+    // The expected value crosses as an int because the encryption mode is internal to JIM.Connectors:
+    // this fixture can see it through InternalsVisibleTo, but a public test method cannot name it in its
+    // own signature. Making the enum public purely to satisfy a test would leak an implementation detail.
+    [TestCase(SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption, (int)SqlConnectionEncryption.OracleNativeNetworkEncryption)]
+    [TestCase(SqlConnectorConstants.OracleEncryptionTcps, (int)SqlConnectionEncryption.Tls)]
+    [TestCase(SqlConnectorConstants.OracleEncryptionNone, (int)SqlConnectionEncryption.None)]
+    [TestCase(null, (int)SqlConnectionEncryption.OracleNativeNetworkEncryption)]
+    public void ValidateSettingValues_OracleEncryptionMode_ReachesTheProviderAsItself(string? mode, int expected)
+    {
+        var provider = new FakeSqlProvider();
+        var connector = CreateConnectorWith(provider);
+
+        connector.ValidateSettingValues(CreateOracleSettingValues(mode), _logger);
+
+        Assert.That(provider.BuiltConnectionSettings.Single().Encryption, Is.EqualTo((SqlConnectionEncryption)expected));
     }
 
     [Test]
@@ -511,7 +653,7 @@ public class SqlConnectorTests
     {
         var provider = new FakeSqlProvider();
         var connector = CreateConnectorWith(provider);
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
 
         connector.ValidateSettingValues(settingValues, _logger);
 
@@ -531,7 +673,7 @@ public class SqlConnectorTests
         // A document that cannot be parsed must never be saved: a Connected System configured from half
         // of one would import half its objects and call it a success.
         var connector = CreateConnectorWith(new FakeSqlProvider());
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
         SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, """{ "objectTypes": [ { "name": "Person" } ] }""");
 
         var results = connector.ValidateSettingValues(settingValues, _logger);
@@ -551,7 +693,7 @@ public class SqlConnectorTests
         var connector = CreateConnectorWith(new FakeSqlProvider());
 
         // The default setting values already carry the Description's example document.
-        Assert.That(connector.ValidateSettingValues(CreateSqlServerSettingValues(useTls: false), _logger), Is.Empty);
+        Assert.That(connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger), Is.Empty);
     }
 
     [Test]
@@ -560,7 +702,7 @@ public class SqlConnectorTests
         // "Required" is validated centrally before this method runs, so repeating it here would show an
         // administrator the same problem twice.
         var connector = CreateConnectorWith(new FakeSqlProvider());
-        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        var settingValues = CreateSqlServerSettingValues(encrypt: false);
         SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, null);
 
         Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty);
@@ -587,8 +729,11 @@ public class SqlConnectorTests
 
     private List<ConnectedSystemSettingValue> CreateSettingValues() => SqlConnectorSettingValues.Create(_connector);
 
-    private List<ConnectedSystemSettingValue> CreateSqlServerSettingValues(bool useTls) =>
-        SqlConnectorSettingValues.CreateSqlServer(_connector, useTls);
+    private List<ConnectedSystemSettingValue> CreateSqlServerSettingValues(bool encrypt) =>
+        SqlConnectorSettingValues.CreateSqlServer(_connector, encrypt);
+
+    private List<ConnectedSystemSettingValue> CreateOracleSettingValues(string? encryptionMode) =>
+        SqlConnectorSettingValues.CreateOracle(_connector, encryptionMode);
 
     private static void SetString(List<ConnectedSystemSettingValue> settingValues, string name, string? value) =>
         SqlConnectorSettingValues.SetString(settingValues, name, value);

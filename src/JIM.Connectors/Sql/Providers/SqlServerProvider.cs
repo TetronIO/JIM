@@ -29,7 +29,7 @@ internal class SqlServerProvider : SqlProviderBase
 
     public override string ConnectivityTestCommandText => "SELECT 1";
 
-    public override int GetDefaultPort(bool useTls) => DefaultPort;
+    public override int GetDefaultPort(SqlConnectionEncryption encryption) => DefaultPort;
 
     /// <summary>
     /// <c>Microsoft.Data.SqlClient</c> takes a path to a certificate file and accepts the server's
@@ -82,8 +82,11 @@ internal class SqlServerProvider : SqlProviderBase
             // SQL Server expresses a non-default port as a comma-separated suffix on the data source.
             DataSource = settings.Port.HasValue ? $"{settings.Host},{settings.Port.Value}" : settings.Host,
 
-            // Mandatory means the connection fails rather than silently falling back to plain text.
-            Encrypt = settings.UseTls ? SqlConnectionEncryptOption.Mandatory : SqlConnectionEncryptOption.Optional,
+            // Mandatory means the connection fails rather than silently falling back to plain text, and
+            // is what an administrator gets unless they turn encryption off: SqlClient itself has
+            // defaulted to it since version 4.0, so a modern estate is already encrypting. Optional is
+            // the deliberate opt-out, and still takes encryption where the server offers it.
+            Encrypt = settings.Encryption == SqlConnectionEncryption.Tls ? SqlConnectionEncryptOption.Mandatory : SqlConnectionEncryptOption.Optional,
 
             // Never true. A refused server certificate is surfaced to the administrator with its
             // details; trusting whatever the server presents would defeat the certificate store.

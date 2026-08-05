@@ -146,11 +146,29 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             new() { Name = "Transport Security", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new()
             {
-                Name = SqlConnectorConstants.SettingUseTls,
-                DefaultCheckboxValue = false,
-                Description = "Encrypt the connection to the database server, which JIM recommends for any system carrying identity data. The server's certificate is always validated: against the operating system's certificate bundle, and against any certificates added in Admin > Certificates. When a connection test fails on trust, JIM shows you the certificate the server presented so you can add it there. Oracle Database listens for encrypted connections on a separate TCPS port, usually 2484.",
+                Name = SqlConnectorConstants.SettingSqlServerEncryptConnection,
+                DefaultCheckboxValue = true,
+                Description = "Encrypt the connection to the database server. On by default, which is what a current SQL Server estate already does. The server's certificate is always validated: against the operating system's certificate bundle, and against any certificates added in Admin > Certificates. When a connection test fails on trust, JIM shows you the certificate the server presented so you can add it there.",
                 Category = ConnectedSystemSettingCategory.Connectivity,
-                Type = ConnectedSystemSettingType.CheckBox
+                Type = ConnectedSystemSettingType.CheckBox,
+                RequiredWhenSetting = SqlConnectorConstants.SettingDatabaseType,
+                RequiredWhenValue = SqlConnectorConstants.DatabaseTypeSqlServer
+            },
+            new()
+            {
+                Name = SqlConnectorConstants.SettingOracleEncryption,
+                DefaultStringValue = SqlConnectorConstants.DefaultOracleEncryption,
+                Description = "How the connection to Oracle Database is protected. Native Network Encryption encrypts the session on the ordinary listener with no certificate at either end, and is how Oracle estates usually encrypt client traffic. TCPS is TLS, needing a separately configured listener (usually port 2484) and a server certificate; where that certificate is not one the operating system already vouches for, add it in Admin > Certificates.",
+                Category = ConnectedSystemSettingCategory.Connectivity,
+                Type = ConnectedSystemSettingType.DropDown,
+                DropDownValues =
+                [
+                    SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption,
+                    SqlConnectorConstants.OracleEncryptionTcps,
+                    SqlConnectorConstants.OracleEncryptionNone
+                ],
+                RequiredWhenSetting = SqlConnectorConstants.SettingDatabaseType,
+                RequiredWhenValue = SqlConnectorConstants.DatabaseTypeOracle
             },
             new() { Name = SqlConnectorConstants.SettingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect.", DefaultIntValue = SqlConnectorConstants.DefaultConnectionTimeoutSeconds, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
@@ -325,7 +343,10 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     public SecureEndpoint? ResolveSecureEndpoint(List<ConnectedSystemSettingValue> settingValues)
     {
         // Nothing encrypted is being attempted, so there is no certificate to look at.
-        if (GetCheckbox(settingValues, SqlConnectorConstants.SettingUseTls) != true)
+        // Only a TLS-protected transport has a server certificate to look at. Oracle's Native Network
+        // Encryption encrypts the session without one, so returning an endpoint for it would send the
+        // shared diagnosis path hunting for a certificate that does not exist.
+        if (ResolveEncryption(settingValues) != SqlConnectionEncryption.Tls)
             return null;
 
         var host = GetString(settingValues, SqlConnectorConstants.SettingHost);
@@ -338,7 +359,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         if (provider == null)
             return null;
 
-        var port = GetInt(settingValues, SqlConnectorConstants.SettingPort) ?? provider.GetDefaultPort(true);
+        var port = GetInt(settingValues, SqlConnectorConstants.SettingPort) ?? provider.GetDefaultPort(SqlConnectionEncryption.Tls);
         var timeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds;
 
         return new SecureEndpoint(host, port, TimeSpan.FromSeconds(timeoutSeconds), "database server", provider.SecureTransportName);
@@ -384,7 +405,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         {
             return Open(provider, connectionSettings);
         }
-        catch (DbException ex) when (connectionSettings.UseTls)
+        catch (DbException ex) when (connectionSettings.Encryption == SqlConnectionEncryption.Tls)
         {
             // A driver reports a refused certificate as an ordinary connection failure, so before
             // reporting one, go and look at what the server actually presented. No further check that
@@ -468,6 +489,11 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
         try
         {
+            // Anything the dialect cannot express in a connection string is applied here, while the
+            // connection is built but not yet open. Oracle's Native Network Encryption is the case that
+            // needs it: without this the connection string would be correct and the session unencrypted.
+            provider.ConfigureConnection(connection, connectionSettings);
+
             connection.Open();
             return connection;
         }
@@ -562,9 +588,46 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             Sid = identifiedBy == SqlConnectorConstants.OracleIdentifiedBySid ? GetString(settingValues, SqlConnectorConstants.SettingOracleSid) : null,
             Username = username,
             Password = decryptedPassword,
-            UseTls = GetCheckbox(settingValues, SqlConnectorConstants.SettingUseTls) ?? false,
+            Encryption = ResolveEncryption(settingValues),
             ConnectionTimeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds
         };
+    }
+
+    /// <summary>
+    /// Works out how this Connected System's traffic is protected, from whichever encryption setting its
+    /// database type asks for.
+    /// <para>
+    /// The two are asked separately because the answers are not the same shape: SQL Server has one
+    /// encrypted transport and so takes a checkbox, while Oracle has two unrelated mechanisms whose
+    /// choice decides which listener and port the connection goes to. Both default to encrypted, so a
+    /// Connected System is never quietly the least protected thing on the network.
+    /// </para>
+    /// </summary>
+    private static SqlConnectionEncryption ResolveEncryption(List<ConnectedSystemSettingValue> settingValues)
+    {
+        var databaseType = GetString(settingValues, SqlConnectorConstants.SettingDatabaseType);
+
+        if (databaseType == SqlConnectorConstants.DatabaseTypeOracle)
+        {
+            // A Connected System created before this setting existed has no stored value, so an absent
+            // one means the default rather than no encryption.
+            var oracleEncryption = GetString(settingValues, SqlConnectorConstants.SettingOracleEncryption);
+            if (string.IsNullOrWhiteSpace(oracleEncryption))
+                oracleEncryption = SqlConnectorConstants.DefaultOracleEncryption;
+
+            return oracleEncryption switch
+            {
+                SqlConnectorConstants.OracleEncryptionTcps => SqlConnectionEncryption.Tls,
+                SqlConnectorConstants.OracleEncryptionNone => SqlConnectionEncryption.None,
+                _ => SqlConnectionEncryption.OracleNativeNetworkEncryption
+            };
+        }
+
+        // Microsoft SQL Server, and the fallback while a database type has not been chosen yet: encrypted
+        // unless an administrator has deliberately cleared the checkbox.
+        return GetCheckbox(settingValues, SqlConnectorConstants.SettingSqlServerEncryptConnection) == false
+            ? SqlConnectionEncryption.None
+            : SqlConnectionEncryption.Tls;
     }
 
     /// <summary>
