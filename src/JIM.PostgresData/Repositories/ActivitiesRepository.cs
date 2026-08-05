@@ -612,11 +612,7 @@ public class ActivityRepository : IActivityRepository
             .ToDictionary(g => g.Key, g => g.Select(r => new ScheduleStepObservation
             {
                 StepIndex = r.StepIndex,
-                // Named the way the queue names the same task, so a step reads identically either side
-                // of its Worker Task being deleted.
-                Name = string.IsNullOrEmpty(r.TargetContext)
-                    ? r.TargetName ?? $"Step {r.StepIndex + 1}"
-                    : $"{r.TargetContext} - {r.TargetName}",
+                Name = ScheduleStepReading.NameOf(r.TargetContext, r.TargetName, r.StepIndex),
                 ActivityId = r.ActivityId,
                 ActivityStatus = r.Status
             }).ToList());

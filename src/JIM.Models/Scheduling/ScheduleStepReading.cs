@@ -184,6 +184,65 @@ public static class ScheduleStepReading
     }
 
     /// <summary>
+    /// What to call the task an Activity describes: the same "Connected System - Run Profile" the
+    /// Operations queue names a Worker Task with, so a step reads identically either side of its task
+    /// being deleted, falling back to its position where the Activity names nothing.
+    /// </summary>
+    public static string NameOf(string? targetContext, string? targetName, int stepIndex)
+    {
+        if (string.IsNullOrEmpty(targetName))
+            return $"Step {stepIndex + 1}";
+
+        return string.IsNullOrEmpty(targetContext) ? targetName : $"{targetContext} - {targetName}";
+    }
+
+    /// <summary>
+    /// A Schedule Execution's shape from the records themselves, for callers holding the entities
+    /// rather than a queue's headers (the Schedule Executions REST read).
+    /// </summary>
+    /// <remarks>
+    /// One observation per task: a Worker Task carries its own Activity where it has started, and any
+    /// Activity not reached that way belongs to a task that has since been deleted. Matching them up
+    /// here rather than at the call site is what stops a task being counted twice.
+    /// </remarks>
+    public static ScheduleExecutionProgress? FromRecords(
+        IReadOnlyCollection<WorkerTask> tasks,
+        IReadOnlyCollection<Activity> activities,
+        int totalSteps,
+        int currentStepIndex)
+    {
+        var taskActivityIds = tasks
+            .Where(t => t.Activity != null)
+            .Select(t => t.Activity!.Id)
+            .ToHashSet();
+
+        var fromTasks = tasks
+            .Where(t => t.ScheduleStepIndex.HasValue)
+            .Select(t => new ScheduleStepObservation
+            {
+                StepIndex = t.ScheduleStepIndex!.Value,
+                Name = t.Activity != null
+                    ? NameOf(t.Activity.TargetContext, t.Activity.TargetName, t.ScheduleStepIndex!.Value)
+                    : $"Step {t.ScheduleStepIndex!.Value + 1}",
+                ActivityId = t.Activity?.Id,
+                TaskStatus = t.Status,
+                ActivityStatus = t.Activity?.Status
+            });
+
+        var fromActivities = activities
+            .Where(a => a.ScheduleStepIndex.HasValue && !taskActivityIds.Contains(a.Id))
+            .Select(a => new ScheduleStepObservation
+            {
+                StepIndex = a.ScheduleStepIndex!.Value,
+                Name = NameOf(a.TargetContext, a.TargetName, a.ScheduleStepIndex!.Value),
+                ActivityId = a.Id,
+                ActivityStatus = a.Status
+            });
+
+        return Read(totalSteps, currentStepIndex, fromTasks.Concat(fromActivities));
+    }
+
+    /// <summary>
     /// A Schedule Execution's shape as the Operations queue sees it: the tasks of one Schedule
     /// Execution that are still queued, plus what its finished tasks left behind.
     /// </summary>
