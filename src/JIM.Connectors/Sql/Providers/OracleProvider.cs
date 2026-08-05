@@ -123,7 +123,13 @@ internal class OracleProvider : SqlProviderBase
 
         var builder = new OracleConnectionStringBuilder
         {
-            DataSource = BuildConnectDescriptor(settings)
+            DataSource = BuildConnectDescriptor(settings),
+
+            // Off deliberately, matching Microsoft SQL Server. JIM opens one connection per operation
+            // and holds it for that operation's lifetime, rather than one per object, so a pool saves
+            // handshakes JIM was never going to make, while leaving sessions open on a customer's
+            // database long after a run has finished.
+            Pooling = false
         };
 
         if (!string.IsNullOrWhiteSpace(settings.Username))

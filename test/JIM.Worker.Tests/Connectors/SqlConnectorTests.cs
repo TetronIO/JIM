@@ -290,6 +290,21 @@ public class SqlConnectorTests
         });
     }
 
+    [Test]
+    public void GetSettings_ObjectTypes_IsARequiredTextSettingInTheSchemaCategoryCarryingAnExample()
+    {
+        var setting = GetSetting(SqlConnectorConstants.SettingObjectTypes);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(setting.Required, Is.True, "A Connected System with no object types can do nothing at all.");
+            Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Schema));
+            Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.Text), "The document is multi-line, so it needs a Text setting rather than a String one.");
+            Assert.That(setting.Description, Does.Contain("objectTypes"), "The Description is where an administrator finds the shape and an example to copy.");
+            Assert.That(setting.Description, Does.Contain("anchorColumns"));
+        });
+    }
+
     #endregion
 
     #region IConnectorSecureEndpoint members
@@ -510,6 +525,47 @@ public class SqlConnectorTests
         });
     }
 
+    [Test]
+    public void ValidateSettingValues_AMalformedObjectTypesDocument_IsRefusedAtSaveTime()
+    {
+        // A document that cannot be parsed must never be saved: a Connected System configured from half
+        // of one would import half its objects and call it a success.
+        var connector = CreateConnectorWith(new FakeSqlProvider());
+        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, """{ "objectTypes": [ { "name": "Person" } ] }""");
+
+        var results = connector.ValidateSettingValues(settingValues, _logger);
+
+        Assert.That(results, Is.Not.Empty);
+        var result = results.Single(r => r.SettingValue?.Setting.Name == SqlConnectorConstants.SettingObjectTypes);
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("Person"), "The message names the object type at fault, not just the document.");
+        });
+    }
+
+    [Test]
+    public void ValidateSettingValues_AWellFormedObjectTypesDocument_IsAccepted()
+    {
+        var connector = CreateConnectorWith(new FakeSqlProvider());
+
+        // The default setting values already carry the Description's example document.
+        Assert.That(connector.ValidateSettingValues(CreateSqlServerSettingValues(useTls: false), _logger), Is.Empty);
+    }
+
+    [Test]
+    public void ValidateSettingValues_NoObjectTypesDocument_IsLeftToTheGenericRequiredCheck()
+    {
+        // "Required" is validated centrally before this method runs, so repeating it here would show an
+        // administrator the same problem twice.
+        var connector = CreateConnectorWith(new FakeSqlProvider());
+        var settingValues = CreateSqlServerSettingValues(useTls: false);
+        SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, null);
+
+        Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty);
+    }
+
     #endregion
 
     #region Helpers
@@ -529,76 +585,25 @@ public class SqlConnectorTests
         return setting!;
     }
 
-    /// <summary>
-    /// Materialises the Connector's declared settings the way JIM does when a Connected System is
-    /// created, so a test sees the same defaults an administrator would.
-    /// </summary>
-    private List<ConnectedSystemSettingValue> CreateSettingValues()
-    {
-        return _connector.GetSettings().Select(setting =>
-        {
-            var definitionSetting = new ConnectorDefinitionSetting
-            {
-                Name = setting.Name,
-                Description = setting.Description,
-                Category = setting.Category,
-                Type = setting.Type,
-                DefaultCheckboxValue = setting.DefaultCheckboxValue,
-                DefaultStringValue = setting.DefaultStringValue,
-                DefaultIntValue = setting.DefaultIntValue,
-                DropDownValues = setting.DropDownValues,
-                Required = setting.Required,
-                RequiredGroup = setting.RequiredGroup,
-                RequiredGroupCardinality = setting.RequiredGroupCardinality,
-                RequiredWhenSetting = setting.RequiredWhenSetting,
-                RequiredWhenValue = setting.RequiredWhenValue
-            };
+    private List<ConnectedSystemSettingValue> CreateSettingValues() => SqlConnectorSettingValues.Create(_connector);
 
-            var settingValue = new ConnectedSystemSettingValue { Setting = definitionSetting };
-
-            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: { } defaultCheckboxValue })
-                settingValue.CheckboxValue = defaultCheckboxValue;
-
-            if (definitionSetting.Type is ConnectedSystemSettingType.String or ConnectedSystemSettingType.DropDown or ConnectedSystemSettingType.File &&
-                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
-                settingValue.StringValue = definitionSetting.DefaultStringValue;
-
-            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: { } defaultIntValue })
-                settingValue.IntValue = defaultIntValue;
-
-            return settingValue;
-        }).ToList();
-    }
-
-    /// <summary>
-    /// A complete, valid Microsoft SQL Server configuration.
-    /// </summary>
-    private List<ConnectedSystemSettingValue> CreateSqlServerSettingValues(bool useTls)
-    {
-        var settingValues = CreateSettingValues();
-        SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
-        SetString(settingValues, SqlConnectorConstants.SettingHost, "db.example.com");
-        SetString(settingValues, SqlConnectorConstants.SettingDatabaseName, "HR");
-        SetString(settingValues, SqlConnectorConstants.SettingUsername, "jim_sync");
-        SetEncrypted(settingValues, SqlConnectorConstants.SettingPassword, "sup3rs3cret");
-        SetCheckbox(settingValues, SqlConnectorConstants.SettingUseTls, useTls);
-        return settingValues;
-    }
+    private List<ConnectedSystemSettingValue> CreateSqlServerSettingValues(bool useTls) =>
+        SqlConnectorSettingValues.CreateSqlServer(_connector, useTls);
 
     private static void SetString(List<ConnectedSystemSettingValue> settingValues, string name, string? value) =>
-        Find(settingValues, name).StringValue = value;
+        SqlConnectorSettingValues.SetString(settingValues, name, value);
 
     private static void SetEncrypted(List<ConnectedSystemSettingValue> settingValues, string name, string? value) =>
-        Find(settingValues, name).StringEncryptedValue = value;
+        SqlConnectorSettingValues.SetEncrypted(settingValues, name, value);
 
     private static void SetInt(List<ConnectedSystemSettingValue> settingValues, string name, int? value) =>
-        Find(settingValues, name).IntValue = value;
+        SqlConnectorSettingValues.SetInt(settingValues, name, value);
 
     private static void SetCheckbox(List<ConnectedSystemSettingValue> settingValues, string name, bool value) =>
-        Find(settingValues, name).CheckboxValue = value;
+        SqlConnectorSettingValues.SetCheckbox(settingValues, name, value);
 
     private static ConnectedSystemSettingValue Find(List<ConnectedSystemSettingValue> settingValues, string name) =>
-        settingValues.Single(sv => sv.Setting.Name == name);
+        SqlConnectorSettingValues.Find(settingValues, name);
 
     private static bool IsRelevant(List<ConnectedSystemSettingValue> settingValues, string name) =>
         ConnectorSettingValidator.IsConditionMet(settingValues, Find(settingValues, name).Setting);

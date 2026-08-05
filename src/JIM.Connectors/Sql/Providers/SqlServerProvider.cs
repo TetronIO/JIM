@@ -88,7 +88,15 @@ internal class SqlServerProvider : SqlProviderBase
             // Never true. A refused server certificate is surfaced to the administrator with its
             // details; trusting whatever the server presents would defeat the certificate store.
             TrustServerCertificate = false,
-            ApplicationName = ApplicationName
+            ApplicationName = ApplicationName,
+
+            // Off deliberately, and off for both dialects. JIM opens one connection per operation and
+            // holds it for that operation's lifetime, rather than one per object, so a pool saves
+            // handshakes JIM was never going to make. What it costs is real: the pool is process-wide
+            // and outlives the Connector that filled it, leaving sessions open on a customer's database
+            // long after a run, and a pooled connection can re-handshake against the trust anchor file
+            // this Connector deletes when it is disposed.
+            Pooling = false
         };
 
         if (!string.IsNullOrWhiteSpace(settings.DatabaseName))

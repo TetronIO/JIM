@@ -321,6 +321,17 @@ public class SqlServerProviderTests
     }
 
     [Test]
+    public void BuildConnectionString_Always_DisablesConnectionPooling()
+    {
+        var settings = new SqlConnectionSettings { Host = "sql.example.local", DatabaseName = "HR" };
+
+        var builder = new SqlConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+        Assert.That(builder.Pooling, Is.False,
+            "A pool outlives the Connector that filled it: it holds sessions open on the database long after a run, and can re-handshake using a trust anchor file JIM has already deleted.");
+    }
+
+    [Test]
     public void BuildConnectionString_NoPort_OmitsThePortSuffix()
     {
         var settings = new SqlConnectionSettings { Host = "sql.example.local", DatabaseName = "HR" };

@@ -1,8 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Sql;
 using JIM.Connectors.Sql.Providers;
 using JIM.Models.Core;
+using JIM.Models.Staging;
+using NUnit.Framework;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
@@ -52,7 +56,19 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     /// </summary>
     internal List<SqlConnectionSettings> BuiltConnectionSettings { get; } = [];
 
-    public override SqlDatabaseType DatabaseType => SqlDatabaseType.SqlServer;
+    /// <summary>
+    /// The tables, views, columns and foreign keys this stand-in database declares, which is what
+    /// schema discovery reads. Empty unless a test populates it.
+    /// </summary>
+    internal FakeSqlCatalogue Catalogue { get; } = new();
+
+    /// <summary>
+    /// Which dialect this stand-in speaks. Settable so a test can exercise the Oracle type-mapping
+    /// opt-ins, which are the one place schema discovery's answer depends on the database server.
+    /// </summary>
+    internal SqlDatabaseType DialectUnderTest { get; init; } = SqlDatabaseType.SqlServer;
+
+    public override SqlDatabaseType DatabaseType => DialectUnderTest;
 
     public override string DisplayName => "Fake Database";
 
@@ -70,7 +86,11 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     protected override char CloseQuote => ']';
 
-    public override DbParameter CreateParameter(string parameterName, object? value) => throw new NotSupportedException();
+    public override DbParameter CreateParameter(string parameterName, object? value)
+    {
+        SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
+        return new FakeDbParameter { ParameterName = parameterName, Value = value ?? DBNull.Value };
+    }
 
     public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType) => throw new NotSupportedException();
 
@@ -91,15 +111,170 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     public override object ConvertFromGuid(Guid value) => throw new NotSupportedException();
 
-    public override string TablesCommandText => throw new NotSupportedException();
+    // Catalogue queries are the real providers' own SQL, which no stand-in database could answer. These
+    // stand in for them as recognisable tokens, so a test can still assert that discovery asked the
+    // dialect for its catalogue rather than inventing a query of its own.
+    public override string TablesCommandText => "FAKE CATALOGUE: TABLES";
 
-    public override string ViewsCommandText => throw new NotSupportedException();
+    public override string ViewsCommandText => "FAKE CATALOGUE: VIEWS";
 
-    public override string ColumnsCommandText => throw new NotSupportedException();
+    public override string ColumnsCommandText => "FAKE CATALOGUE: COLUMNS";
 
-    public override string PrimaryKeyColumnsCommandText => throw new NotSupportedException();
+    public override string PrimaryKeyColumnsCommandText => "FAKE CATALOGUE: PRIMARY KEY COLUMNS";
 
-    public override string ForeignKeyColumnsCommandText => throw new NotSupportedException();
+    public override string ForeignKeyColumnsCommandText => "FAKE CATALOGUE: FOREIGN KEY COLUMNS";
+}
+
+/// <summary>
+/// Materialises the JIM SQL Connector's declared settings the way JIM does when a Connected System is
+/// created, so a test sees the same defaults an administrator would, and supplies values for them.
+/// </summary>
+internal static class SqlConnectorSettingValues
+{
+    internal static List<ConnectedSystemSettingValue> Create(SqlConnector connector)
+    {
+        return connector.GetSettings().Select(setting =>
+        {
+            var definitionSetting = new ConnectorDefinitionSetting
+            {
+                Name = setting.Name,
+                Description = setting.Description,
+                Category = setting.Category,
+                Type = setting.Type,
+                DefaultCheckboxValue = setting.DefaultCheckboxValue,
+                DefaultStringValue = setting.DefaultStringValue,
+                DefaultIntValue = setting.DefaultIntValue,
+                DropDownValues = setting.DropDownValues,
+                Required = setting.Required,
+                RequiredGroup = setting.RequiredGroup,
+                RequiredGroupCardinality = setting.RequiredGroupCardinality,
+                RequiredWhenSetting = setting.RequiredWhenSetting,
+                RequiredWhenValue = setting.RequiredWhenValue
+            };
+
+            var settingValue = new ConnectedSystemSettingValue { Setting = definitionSetting };
+
+            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: { } defaultCheckboxValue })
+                settingValue.CheckboxValue = defaultCheckboxValue;
+
+            if (definitionSetting.Type is ConnectedSystemSettingType.String or ConnectedSystemSettingType.DropDown or ConnectedSystemSettingType.File &&
+                !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
+                settingValue.StringValue = definitionSetting.DefaultStringValue;
+
+            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: { } defaultIntValue })
+                settingValue.IntValue = defaultIntValue;
+
+            return settingValue;
+        }).ToList();
+    }
+
+    /// <summary>
+    /// A complete, valid Microsoft SQL Server configuration.
+    /// </summary>
+    internal static List<ConnectedSystemSettingValue> CreateSqlServer(SqlConnector connector, bool useTls = false)
+    {
+        var settingValues = Create(connector);
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
+        SetString(settingValues, SqlConnectorConstants.SettingHost, "db.example.com");
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseName, "HR");
+        SetString(settingValues, SqlConnectorConstants.SettingUsername, "jim_sync");
+        SetEncrypted(settingValues, SqlConnectorConstants.SettingPassword, "sup3rs3cret");
+        SetCheckbox(settingValues, SqlConnectorConstants.SettingUseTls, useTls);
+        SetString(settingValues, SqlConnectorConstants.SettingObjectTypes, SqlConnectorConstants.ObjectTypesExample);
+        return settingValues;
+    }
+
+    internal static void SetString(List<ConnectedSystemSettingValue> settingValues, string name, string? value) =>
+        Find(settingValues, name).StringValue = value;
+
+    internal static void SetEncrypted(List<ConnectedSystemSettingValue> settingValues, string name, string? value) =>
+        Find(settingValues, name).StringEncryptedValue = value;
+
+    internal static void SetInt(List<ConnectedSystemSettingValue> settingValues, string name, int? value) =>
+        Find(settingValues, name).IntValue = value;
+
+    internal static void SetCheckbox(List<ConnectedSystemSettingValue> settingValues, string name, bool value) =>
+        Find(settingValues, name).CheckboxValue = value;
+
+    internal static ConnectedSystemSettingValue Find(List<ConnectedSystemSettingValue> settingValues, string name) =>
+        settingValues.Single(sv => sv.Setting.Name == name);
+}
+
+/// <summary>
+/// A column as a schema catalogue would report it.
+/// </summary>
+internal sealed record FakeCatalogueColumn(
+    string Name,
+    string DataTypeName,
+    int? Precision = null,
+    int? Scale = null,
+    int? MaxLength = null,
+    bool IsNullable = true);
+
+/// <summary>
+/// A foreign key column as a schema catalogue would report it.
+/// </summary>
+internal sealed record FakeCatalogueForeignKey(
+    string ConstraintName,
+    string ColumnName,
+    string? ReferencedSchema,
+    string ReferencedTable,
+    string ReferencedColumn);
+
+/// <summary>
+/// The tables, views, columns and foreign keys a <see cref="FakeSqlProvider"/> answers catalogue
+/// queries from, plus the columns any administrator-supplied SELECT statement returns.
+/// </summary>
+internal sealed class FakeSqlCatalogue
+{
+    private readonly Dictionary<string, List<FakeCatalogueColumn>> _columns = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<FakeCatalogueForeignKey>> _foreignKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<FakeCatalogueColumn>> _selectStatementColumns = new(StringComparer.Ordinal);
+
+    internal List<(string? SchemaName, string ObjectName)> Tables { get; } = [];
+
+    internal List<(string? SchemaName, string ObjectName)> Views { get; } = [];
+
+    internal void AddTable(string? schemaName, string objectName, params FakeCatalogueColumn[] columns)
+    {
+        Tables.Add((schemaName, objectName));
+        _columns[Key(schemaName, objectName)] = [.. columns];
+    }
+
+    internal void AddView(string? schemaName, string objectName, params FakeCatalogueColumn[] columns)
+    {
+        Views.Add((schemaName, objectName));
+        _columns[Key(schemaName, objectName)] = [.. columns];
+    }
+
+    internal void AddForeignKey(string? schemaName, string objectName, FakeCatalogueForeignKey foreignKey)
+    {
+        var key = Key(schemaName, objectName);
+        if (!_foreignKeys.TryGetValue(key, out var foreignKeys))
+            _foreignKeys[key] = foreignKeys = [];
+
+        foreignKeys.Add(foreignKey);
+    }
+
+    /// <summary>
+    /// Declares what an administrator-supplied SELECT statement returns. Keyed on the statement itself,
+    /// because that is all discovery has to go on for a query with no catalogue entry.
+    /// </summary>
+    internal void AddSelectStatement(string statement, params FakeCatalogueColumn[] columns)
+    {
+        _selectStatementColumns[statement] = [.. columns];
+    }
+
+    internal IReadOnlyList<FakeCatalogueColumn> GetColumns(string? schemaName, string objectName) =>
+        _columns.TryGetValue(Key(schemaName, objectName), out var columns) ? columns : [];
+
+    internal IReadOnlyList<FakeCatalogueForeignKey> GetForeignKeys(string? schemaName, string objectName) =>
+        _foreignKeys.TryGetValue(Key(schemaName, objectName), out var foreignKeys) ? foreignKeys : [];
+
+    internal IReadOnlyList<FakeCatalogueColumn>? GetSelectStatementColumns(string statement) =>
+        _selectStatementColumns.TryGetValue(statement, out var columns) ? columns : null;
+
+    private static string Key(string? schemaName, string objectName) => $"{schemaName}.{objectName}";
 }
 
 /// <summary>
@@ -201,18 +376,62 @@ internal sealed class FakeDbCommand : DbCommand
     {
     }
 
-    protected override DbParameter CreateDbParameter() => throw new NotSupportedException();
+    protected override DbParameter CreateDbParameter() => new FakeDbParameter();
 
-    protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => throw new NotSupportedException();
+    /// <summary>
+    /// Answers a schema-catalogue query, or an administrator-supplied SELECT statement, from the
+    /// provider's stand-in catalogue. Which query it is, is decided by matching the command text against
+    /// the dialect's own catalogue command texts, which is exactly the coupling under test: discovery
+    /// must ask the provider rather than write SQL of its own.
+    /// </summary>
+    protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+    {
+        _provider.ExecutedCommandTexts.Add(CommandText);
+        var catalogue = _provider.Catalogue;
+
+        if (CommandText == _provider.TablesCommandText)
+            return FakeDbDataReader.ForObjects(catalogue.Tables);
+
+        if (CommandText == _provider.ViewsCommandText)
+            return FakeDbDataReader.ForObjects(catalogue.Views);
+
+        if (CommandText == _provider.ColumnsCommandText)
+            return FakeDbDataReader.ForColumns(catalogue.GetColumns(GetBoundValue(SqlCatalogueParameters.SchemaName), GetBoundValue(SqlCatalogueParameters.ObjectName)!));
+
+        if (CommandText == _provider.ForeignKeyColumnsCommandText)
+            return FakeDbDataReader.ForForeignKeys(catalogue.GetForeignKeys(GetBoundValue(SqlCatalogueParameters.SchemaName), GetBoundValue(SqlCatalogueParameters.ObjectName)!));
+
+        if (CommandText == _provider.PrimaryKeyColumnsCommandText)
+            return FakeDbDataReader.Empty();
+
+        var selectStatementColumns = catalogue.GetSelectStatementColumns(CommandText);
+        if (selectStatementColumns != null)
+        {
+            // A statement with no catalogue entry is read for its shape alone, so it must never be asked
+            // for rows.
+            Assert.That(behavior.HasFlag(CommandBehavior.SchemaOnly), Is.True,
+                "An administrator-supplied SELECT statement is executed only to learn its columns, so it must be run schema-only.");
+
+            return FakeDbDataReader.ForStatementShape(selectStatementColumns);
+        }
+
+        throw new FakeDbException($"This stand-in database has nothing to answer with for: {CommandText}");
+    }
+
+    private string? GetBoundValue(string parameterName)
+    {
+        var index = DbParameterCollection.IndexOf(parameterName);
+        return index < 0 ? null : DbParameterCollection[index].Value as string;
+    }
 }
 
 /// <summary>
-/// The empty parameter collection a <see cref="FakeDbCommand"/> carries. Nothing in the connectivity
-/// path binds a parameter, so this exists only to satisfy the base class.
+/// The parameter collection a <see cref="FakeDbCommand"/> carries, which supports lookup by name so a
+/// catalogue query's bound schema and object names can be read back.
 /// </summary>
 internal sealed class FakeDbParameterCollection : DbParameterCollection
 {
-    private readonly List<object> _parameters = [];
+    private readonly List<DbParameter> _parameters = [];
 
     public override int Count => _parameters.Count;
 
@@ -220,7 +439,7 @@ internal sealed class FakeDbParameterCollection : DbParameterCollection
 
     public override int Add(object value)
     {
-        _parameters.Add(value);
+        _parameters.Add((DbParameter)value);
         return _parameters.Count - 1;
     }
 
@@ -230,31 +449,229 @@ internal sealed class FakeDbParameterCollection : DbParameterCollection
 
     public override bool Contains(object value) => _parameters.Contains(value);
 
-    public override bool Contains(string value) => false;
+    public override bool Contains(string value) => IndexOf(value) >= 0;
 
     public override void CopyTo(Array array, int index) => throw new NotSupportedException();
 
     public override System.Collections.IEnumerator GetEnumerator() => _parameters.GetEnumerator();
 
-    public override int IndexOf(object value) => _parameters.IndexOf(value);
+    public override int IndexOf(object value) => _parameters.IndexOf((DbParameter)value);
 
-    public override int IndexOf(string parameterName) => -1;
+    public override int IndexOf(string parameterName) =>
+        _parameters.FindIndex(parameter => string.Equals(parameter.ParameterName, parameterName, StringComparison.OrdinalIgnoreCase));
 
-    public override void Insert(int index, object value) => _parameters.Insert(index, value);
+    public override void Insert(int index, object value) => _parameters.Insert(index, (DbParameter)value);
 
-    public override void Remove(object value) => _parameters.Remove(value);
+    public override void Remove(object value) => _parameters.Remove((DbParameter)value);
 
     public override void RemoveAt(int index) => _parameters.RemoveAt(index);
 
-    public override void RemoveAt(string parameterName) => throw new NotSupportedException();
+    public override void RemoveAt(string parameterName) => _parameters.RemoveAt(IndexOf(parameterName));
 
-    protected override DbParameter GetParameter(int index) => throw new NotSupportedException();
+    protected override DbParameter GetParameter(int index) => _parameters[index];
 
-    protected override DbParameter GetParameter(string parameterName) => throw new NotSupportedException();
+    protected override DbParameter GetParameter(string parameterName) => _parameters[IndexOf(parameterName)];
 
-    protected override void SetParameter(int index, DbParameter value) => throw new NotSupportedException();
+    protected override void SetParameter(int index, DbParameter value) => _parameters[index] = value;
 
-    protected override void SetParameter(string parameterName, DbParameter value) => throw new NotSupportedException();
+    protected override void SetParameter(string parameterName, DbParameter value) => _parameters[IndexOf(parameterName)] = value;
+}
+
+/// <summary>
+/// A bound parameter. Values only ever arrive here, never in command text, which is the contract the
+/// catalogue queries are asserted against.
+/// </summary>
+internal sealed class FakeDbParameter : DbParameter
+{
+    public override DbType DbType { get; set; }
+
+    public override ParameterDirection Direction { get; set; } = ParameterDirection.Input;
+
+    public override bool IsNullable { get; set; } = true;
+
+    [AllowNull]
+    public override string ParameterName { get; set; } = string.Empty;
+
+    public override int Size { get; set; }
+
+    [AllowNull]
+    public override string SourceColumn { get; set; } = string.Empty;
+
+    public override bool SourceColumnNullMapping { get; set; }
+
+    public override object? Value { get; set; }
+
+    public override void ResetDbType()
+    {
+    }
+}
+
+/// <summary>
+/// A result set of rows in memory, shaped like the one a schema catalogue would return. It also reports
+/// its column schema, which is how the shape of an administrator-supplied SELECT statement is read.
+/// </summary>
+internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
+{
+    private readonly string[] _columnNames;
+    private readonly List<object?[]> _rows;
+    private readonly List<DbColumn> _columnSchema;
+    private int _rowIndex = -1;
+
+    private FakeDbDataReader(string[] columnNames, List<object?[]> rows, List<DbColumn>? columnSchema = null)
+    {
+        _columnNames = columnNames;
+        _rows = rows;
+        _columnSchema = columnSchema ?? [];
+    }
+
+    internal static FakeDbDataReader Empty() => new([], []);
+
+    internal static FakeDbDataReader ForObjects(IEnumerable<(string? SchemaName, string ObjectName)> objects)
+    {
+        return new FakeDbDataReader(
+            [SqlCatalogueColumns.SchemaName, SqlCatalogueColumns.ObjectName],
+            objects.Select(o => new object?[] { o.SchemaName, o.ObjectName }).ToList());
+    }
+
+    internal static FakeDbDataReader ForColumns(IEnumerable<FakeCatalogueColumn> columns)
+    {
+        var ordinal = 0;
+        return new FakeDbDataReader(
+        [
+            SqlCatalogueColumns.ColumnName,
+            SqlCatalogueColumns.DataTypeName,
+            SqlCatalogueColumns.MaxLength,
+            SqlCatalogueColumns.NumericPrecision,
+            SqlCatalogueColumns.NumericScale,
+            SqlCatalogueColumns.IsNullable,
+            SqlCatalogueColumns.OrdinalPosition
+        ],
+            columns.Select(column => new object?[]
+            {
+                column.Name,
+                column.DataTypeName,
+                column.MaxLength,
+                column.Precision,
+                column.Scale,
+                column.IsNullable ? "YES" : "NO",
+                ++ordinal
+            }).ToList());
+    }
+
+    internal static FakeDbDataReader ForForeignKeys(IEnumerable<FakeCatalogueForeignKey> foreignKeys)
+    {
+        var ordinal = 0;
+        return new FakeDbDataReader(
+        [
+            SqlCatalogueColumns.ConstraintName,
+            SqlCatalogueColumns.ColumnName,
+            SqlCatalogueColumns.ReferencedSchema,
+            SqlCatalogueColumns.ReferencedTable,
+            SqlCatalogueColumns.ReferencedColumn,
+            SqlCatalogueColumns.OrdinalPosition
+        ],
+            foreignKeys.Select(foreignKey => new object?[]
+            {
+                foreignKey.ConstraintName,
+                foreignKey.ColumnName,
+                foreignKey.ReferencedSchema,
+                foreignKey.ReferencedTable,
+                foreignKey.ReferencedColumn,
+                ++ordinal
+            }).ToList());
+    }
+
+    internal static FakeDbDataReader ForStatementShape(IEnumerable<FakeCatalogueColumn> columns)
+    {
+        var columnSchema = columns.Select(column => (DbColumn)new FakeDbColumn(column)).ToList();
+        return new FakeDbDataReader(columnSchema.Select(column => column.ColumnName).ToArray(), [], columnSchema);
+    }
+
+    public ReadOnlyCollection<DbColumn> GetColumnSchema() => new(_columnSchema);
+
+    public override int FieldCount => _columnNames.Length;
+
+    public override bool HasRows => _rows.Count > 0;
+
+    public override bool IsClosed => false;
+
+    public override int Depth => 0;
+
+    public override int RecordsAffected => -1;
+
+    public override object this[int ordinal] => GetValue(ordinal);
+
+    public override object this[string name] => GetValue(GetOrdinal(name));
+
+    public override bool Read() => ++_rowIndex < _rows.Count;
+
+    public override Task<bool> ReadAsync(CancellationToken cancellationToken) => Task.FromResult(Read());
+
+    public override bool NextResult() => false;
+
+    public override int GetOrdinal(string name)
+    {
+        var ordinal = Array.FindIndex(_columnNames, columnName => string.Equals(columnName, name, StringComparison.OrdinalIgnoreCase));
+        return ordinal >= 0 ? ordinal : throw new IndexOutOfRangeException(name);
+    }
+
+    public override string GetName(int ordinal) => _columnNames[ordinal];
+
+    public override object GetValue(int ordinal) => _rows[_rowIndex][ordinal] ?? DBNull.Value;
+
+    public override bool IsDBNull(int ordinal) => _rows[_rowIndex][ordinal] == null;
+
+    public override string GetString(int ordinal) => (string)GetValue(ordinal);
+
+    public override int GetInt32(int ordinal) => Convert.ToInt32(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override long GetInt64(int ordinal) => Convert.ToInt64(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override bool GetBoolean(int ordinal) => Convert.ToBoolean(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override byte GetByte(int ordinal) => Convert.ToByte(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length) => throw new NotSupportedException();
+
+    public override char GetChar(int ordinal) => Convert.ToChar(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length) => throw new NotSupportedException();
+
+    public override string GetDataTypeName(int ordinal) => GetFieldType(ordinal).Name;
+
+    public override DateTime GetDateTime(int ordinal) => Convert.ToDateTime(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override decimal GetDecimal(int ordinal) => Convert.ToDecimal(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override double GetDouble(int ordinal) => Convert.ToDouble(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override Type GetFieldType(int ordinal) => GetValue(ordinal).GetType();
+
+    public override float GetFloat(int ordinal) => Convert.ToSingle(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override Guid GetGuid(int ordinal) => (Guid)GetValue(ordinal);
+
+    public override short GetInt16(int ordinal) => Convert.ToInt16(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+
+    public override int GetValues(object[] values) => throw new NotSupportedException();
+
+    public override System.Collections.IEnumerator GetEnumerator() => _rows.GetEnumerator();
+}
+
+/// <summary>
+/// A column of a result set, as a driver reports one for a statement that has no catalogue entry.
+/// </summary>
+internal sealed class FakeDbColumn : DbColumn
+{
+    internal FakeDbColumn(FakeCatalogueColumn column)
+    {
+        ColumnName = column.Name;
+        DataTypeName = column.DataTypeName;
+        NumericPrecision = column.Precision;
+        NumericScale = column.Scale;
+        ColumnSize = column.MaxLength;
+        AllowDBNull = column.IsNullable;
+    }
 }
 
 /// <summary>

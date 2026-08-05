@@ -50,6 +50,12 @@ public static class SqlConnectorConstants
 
     #endregion
 
+    #region Schema settings
+
+    public const string SettingObjectTypes = "Object Types";
+
+    #endregion
+
     #region Database Type drop-down values
 
     public const string DatabaseTypeSqlServer = "Microsoft SQL Server";
@@ -80,6 +86,36 @@ public static class SqlConnectorConstants
     /// answer that never silently shifts a value by an hour twice a year.
     /// </summary>
     public const string DefaultDatabaseTimeZone = "UTC";
+
+    /// <summary>
+    /// A complete, valid Object Types document, shown in that setting's Description so an administrator
+    /// starts from something that works rather than from an empty box. It is parsed by the Connector's
+    /// own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// </summary>
+    public const string ObjectTypesExample = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "V_EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "columns": [
+                { "name": "MANAGER_EMPLOYEE_ID", "referencesObjectType": "Person" }
+              ],
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_ID" ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
 
     #endregion
 }
