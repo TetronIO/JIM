@@ -557,10 +557,12 @@ Get-JIMConnectorDefinition |
 
 Retrieves the object types and their attributes for a Connected System.
 
+Object Types the Connected System classified as internal (a directory's own configuration and operational classes) are omitted by default, matching what the portal's Schema tab shows. Pass `-IncludeInternal` to return them as well. An Object Type that is already selected is always returned, whatever its classification.
+
 ### Syntax
 
 ```powershell
-Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
+Get-JIMConnectedSystemObjectType -ConnectedSystemId <int> [-IncludeInternal]
 ```
 
 ### Parameters
@@ -568,15 +570,22 @@ Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `IncludeInternal` | `switch` | No | Off | Also return Object Types the Connected System classified as internal. |
 
 ### Output
 
 Object type definitions with their attributes, selection state, and external ID configuration.
 
+Each Object Type also carries `Tags`, the classification key/value pairs the Connected System reported (for example `class-kind` = `structural`, `visibility` = `internal`), and `IsInternal`, derived from them.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"
 Get-JIMConnectedSystemObjectType -ConnectedSystemId 3
+```
+
+```powershell title="Include the directory's own internal object types"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 3 -IncludeInternal
 ```
 
 ```powershell title="Pipeline from Get-JIMConnectedSystem"

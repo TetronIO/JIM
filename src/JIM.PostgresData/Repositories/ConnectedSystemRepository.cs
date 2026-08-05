@@ -252,6 +252,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // callers that care about presentation order sort in the UI/API layer where it matters.
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)
@@ -554,6 +555,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var current = await Repository.Database.ConnectedSystemObjectTypes
             .AsTracking()
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Where(ot => ot.ConnectedSystemId == connectedSystem.Id)
             .ToListAsync();
         var currentById = current.ToDictionary(ot => ot.Id);
@@ -562,9 +564,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             if (incomingType.Id != 0 && currentById.TryGetValue(incomingType.Id, out var trackedType))
             {
-                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes.
+                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes and tags.
                 Repository.Database.Entry(trackedType).CurrentValues.SetValues(incomingType);
                 ReconcileAttributes(trackedType, incomingType);
+                ReconcileObjectTypeTags(trackedType, incomingType);
             }
             else
             {
@@ -630,6 +633,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Reconciles the classification tags of a tracked object type against the supplied (detached) object type:
+    /// tags the Connector no longer reports are deleted, and newly reported ones inserted.
+    /// </summary>
+    /// <remarks>
+    /// Unlike attributes (see <see cref="ReconcileAttributes"/>), removals ARE performed here. Tags are
+    /// connector-owned classification carrying no configuration an administrator can invest in and nothing else
+    /// references, so a stale tag is simply wrong rather than something to preserve; leaving one behind would let a
+    /// type keep claiming a classification the Connected System no longer gives it. Matched on key and value
+    /// together, which is the unique index's shape: an unchanged classification is left alone rather than being
+    /// deleted and re-inserted with a new Id on every refresh.
+    /// </remarks>
+    private void ReconcileObjectTypeTags(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
+    {
+        var incomingClassifications = incomingType.Tags.Select(t => (t.Key, t.Value)).ToHashSet();
+        var trackedClassifications = trackedType.Tags.Select(t => (t.Key, t.Value)).ToHashSet();
+
+        // ToList first: removing from the DbSet triggers navigation fixup on trackedType.Tags, which would
+        // otherwise be modified while being enumerated.
+        var staleTags = trackedType.Tags.Where(t => !incomingClassifications.Contains((t.Key, t.Value))).ToList();
+        Repository.Database.ConnectedSystemObjectTypeTags.RemoveRange(staleTags);
+
+        foreach (var newTag in incomingType.Tags.Where(t => !trackedClassifications.Contains((t.Key, t.Value))))
+        {
+            // Link to the tracked object type rather than setting the FK scalar, so EF inserts against that type.
+            // trackedType is already tracked, so Add does not drag a detached graph in.
+            newTag.Id = 0;
+            newTag.ConnectedSystemObjectType = trackedType;
+            Repository.Database.ConnectedSystemObjectTypeTags.Add(newTag);
+        }
+    }
+
+    /// <summary>
     /// Recursively processes containers: adds new ones (Id=0) and updates existing ones
     /// that may be detached from the current DbContext.
     /// </summary>
@@ -661,6 +696,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
     }
@@ -2790,7 +2826,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Object Types
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
-    /// Includes Attributes.
+    /// Includes Attributes and classification Tags.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
@@ -2798,6 +2834,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(q => q.Attributes)
+            .Include(q => q.Tags)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)

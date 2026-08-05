@@ -3026,6 +3026,35 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemAttributes");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConnectedSystemObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectTypeId", "Key", "Value")
+                        .IsUnique();
+
+                    b.ToTable("ConnectedSystemObjectTypeTags");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
                 {
                     b.Property<int>("Id")
@@ -4717,6 +4746,17 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectType");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectTypeTag", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ConnectedSystemObjectType")
+                        .WithMany("Tags")
+                        .HasForeignKey("ConnectedSystemObjectTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystemObjectType");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
@@ -5129,6 +5169,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Attributes");
 
                     b.Navigation("ObjectMatchingRules");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartition", b =>

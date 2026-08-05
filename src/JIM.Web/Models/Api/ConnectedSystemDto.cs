@@ -122,6 +122,22 @@ public class ConnectedSystemObjectTypeDto
     public bool Selected { get; set; }
     public bool RemoveContributedAttributesOnObsoletion { get; set; }
     public int AttributeCount { get; set; }
+
+    /// <summary>
+    /// How the Connected System classified this object type, as open key/value tags. A directory connector reports
+    /// the class kind (structural, auxiliary, abstract) and, for classes the directory keeps for its own
+    /// configuration or operation, a visibility of "internal". An object type carrying no tags is unclassified,
+    /// which means "show it".
+    /// </summary>
+    public List<ConnectedSystemObjectTypeTagDto> Tags { get; set; } = [];
+
+    /// <summary>
+    /// Whether the Connected System reported this object type as one it uses internally. Derived from
+    /// <see cref="Tags"/>, and offered here so callers can filter on it without matching tag strings themselves.
+    /// The portal hides these object types by default.
+    /// </summary>
+    public bool IsInternal { get; set; }
+
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
     public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity)
@@ -134,11 +150,24 @@ public class ConnectedSystemObjectTypeDto
             Selected = entity.Selected,
             RemoveContributedAttributesOnObsoletion = entity.RemoveContributedAttributesOnObsoletion,
             AttributeCount = entity.Attributes?.Count ?? 0,
+            Tags = entity.Tags
+                .Select(tag => new ConnectedSystemObjectTypeTagDto { Key = tag.Key, Value = tag.Value })
+                .ToList(),
+            IsInternal = entity.IsInternal(),
             Attributes = entity.Attributes?
                 .Select(ConnectedSystemAttributeDto.FromEntity)
                 .ToList()
         };
     }
+}
+
+/// <summary>
+/// API representation of a classification tag on a ConnectedSystemObjectType.
+/// </summary>
+public class ConnectedSystemObjectTypeTagDto
+{
+    public string Key { get; set; } = null!;
+    public string Value { get; set; } = null!;
 }
 
 /// <summary>
