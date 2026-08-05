@@ -78,8 +78,18 @@ Describe 'Set-JIMConnectedSystemObjectPassword -Generate' {
         ($passwordSets | Where-Object { $generateSets -contains $_ }) | Should -BeNullOrEmpty
     }
 
-    It 'Should still require a password when neither is given' {
-        { Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id ([guid]::NewGuid()) -Force -ErrorAction Stop } | Should -Throw
+    <#
+        Deliberately NOT tested by invoking the cmdlet with neither parameter. Password is mandatory in the
+        default set, so PowerShell's binder prompts for it rather than failing, and a prompt hangs a CI run:
+        this exact test passed locally under `pwsh -NonInteractive` (where the binder throws instead) and hung
+        the build-and-test job, which does not pass that switch. That the binder enforces mandatory parameters
+        is PowerShell's behaviour to test, not JIM's; what is JIM's is the attribute that declares it.
+    #>
+    It 'Should make the supplied password mandatory in its own set, so it cannot be omitted silently' {
+        $attribute = $command.Parameters['Password'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'SuppliedPassword' }
+
+        $attribute.Mandatory | Should -BeTrue
     }
 
     <#
