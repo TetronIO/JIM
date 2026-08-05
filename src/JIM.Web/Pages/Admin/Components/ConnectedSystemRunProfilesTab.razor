@@ -73,6 +73,13 @@
                     @if (context.Partition != null)
                     {
                         <span class="jim-code-inline">@context.Partition.Name</span>
+                        @if (context.TargetsADeselectedPartition())
+                        {
+                            <MudTooltip Text="This partition is no longer selected, so it is not managed by JIM and this Run Profile cannot run. Select the partition again on the Partitions &amp; Containers tab, or point this Run Profile at a selected partition."
+                                        Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Not selected</MudChip>
+                            </MudTooltip>
+                        }
                     }
                     else
                     {

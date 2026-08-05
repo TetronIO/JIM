@@ -176,6 +176,61 @@ public class SynchronisationControllerRunProfileTests
         Assert.That(dto.FilePath, Is.EqualTo("/data/export.csv"));
     }
 
+    /// <summary>
+    /// A Run Profile aimed at a partition the administrator has deselected cannot run. Automation has to be able to
+    /// see that without executing it and reading the failure, which is the whole point of surfacing it here rather
+    /// than only in the portal.
+    /// </summary>
+    [Test]
+    public async Task GetRunProfilesAsync_RunProfileTargetsDeselectedPartition_FlagsItAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 10,
+            Name = "Retired Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            Partition = new ConnectedSystemPartition { Id = 7, Name = "DC=retired,DC=local", Selected = false }
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.First();
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.TargetsDeselectedPartition, Is.True);
+    }
+
+    [Test]
+    public async Task GetRunProfilesAsync_RunProfileTargetsSelectedPartition_IsNotFlaggedAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 10,
+            Name = "Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            Partition = new ConnectedSystemPartition { Id = 7, Name = "DC=resurgam,DC=local", Selected = true }
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.First();
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.TargetsDeselectedPartition, Is.False);
+    }
+
     [Test]
     public async Task GetRunProfilesAsync_WithEmptyRunProfiles_ReturnsEmptyList()
     {

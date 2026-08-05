@@ -102,6 +102,27 @@ public class ConnectedSystemTargetPartitionTests
     }
 
     [Test]
+    public void TargetsADeselectedPartition_RunProfileAlone_DeselectedPartition_IsTrue()
+    {
+        // The form used where only the Run Profile has been loaded (its Partition navigation carries the stored
+        // Selected value). It cannot see a partition dropped from the hierarchy, which is why the Connected System
+        // overload exists; for the surfaces that display Run Profiles, the loaded navigation is what they have.
+        Assert.That(RunProfile(Partition(1, "corp", false)).TargetsADeselectedPartition(), Is.True);
+    }
+
+    [Test]
+    public void TargetsADeselectedPartition_RunProfileAlone_SelectedPartition_IsFalse()
+    {
+        Assert.That(RunProfile(Partition(1, "corp", true)).TargetsADeselectedPartition(), Is.False);
+    }
+
+    [Test]
+    public void TargetsADeselectedPartition_RunProfileAlone_NoPartitionTargeted_IsFalse()
+    {
+        Assert.That(RunProfile(null).TargetsADeselectedPartition(), Is.False);
+    }
+
+    [Test]
     public void TargetsADeselectedPartition_PartitionRemovedFromTheDirectory_IsTrue()
     {
         // The Run Profile still references a partition the hierarchy no longer carries: equally inoperable, and the

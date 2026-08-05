@@ -212,6 +212,26 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
+    /// Determines whether a Run Profile targets a partition that is no longer selected, using only the Run Profile
+    /// and its loaded <see cref="ConnectedSystemRunProfile.Partition"/> navigation.
+    /// </summary>
+    /// <remarks>
+    /// This is the form for surfaces that list Run Profiles and hold no Connected System hierarchy: the REST DTO,
+    /// the portal's Run Profiles tab, and PowerShell. It answers the same question as the
+    /// <see cref="TargetsADeselectedPartition(ConnectedSystem, ConnectedSystemRunProfile)"/> overload for the case
+    /// they can see, and it cannot detect a partition dropped from the hierarchy altogether; prefer the overload
+    /// wherever the Connected System is already in hand, as the Run Profile execution gate does.
+    /// Requires the <see cref="ConnectedSystemRunProfile.Partition"/> navigation to have been loaded; callers that
+    /// project Run Profiles without it will always read <c>false</c>.
+    /// </remarks>
+    public static bool TargetsADeselectedPartition(this ConnectedSystemRunProfile runProfile)
+    {
+        ArgumentNullException.ThrowIfNull(runProfile);
+
+        return runProfile.Partition is { Selected: false };
+    }
+
+    /// <summary>
     /// Counts every container in the tree rooted at the supplied collection, including nested descendants.
     /// </summary>
     private static int CountContainersRecursively(IEnumerable<ConnectedSystemContainer> containers)
