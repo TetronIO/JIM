@@ -404,6 +404,12 @@ internal class LdapConnectorSchema
                 if (classification != null)
                     objectType.Tags.Add(classification);
 
+                // Report the directory's own configuration and operational classes as internal, so the schema screen
+                // can put them out of the way. They are still discovered, stored and selectable.
+                var visibility = LdapObjectTypeClassification.FromRfc4512Definition(objectClassDef.Oid, objectClassDef.IsObsolete);
+                if (visibility != null)
+                    objectType.Tags.Add(visibility);
+
                 // Collect attributes by walking the class hierarchy (SUP chain)
                 var allMust = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var allMay = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

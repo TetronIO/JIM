@@ -225,6 +225,51 @@ public class ConnectedSystemObjectTypeTagPersistenceDatabaseTests
             "A factory reset must remove object type classifications along with the rest of the customer's data.");
     }
 
+    [Test]
+    public async Task GetObjectTypesAsync_ForAnInternalObjectType_ReportsItInternalAsync()
+    {
+        // The object types list is what the REST API returns and what PowerShell filters on, and it is a different
+        // query to the one the portal uses. A missing Include there would leave every object type looking
+        // unclassified, so the API and PowerShell would quietly stop hiding anything while the portal carried on
+        // hiding it: a divergence no unit test can see, because the in-memory provider populates navigation
+        // properties whether the query asked for them or not.
+        var systemId = await SeedAsync();
+
+        var detachedSystem = await LoadDetachedAsync(systemId);
+        detachedSystem.ObjectTypes!.Single().Tags =
+        [
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassKind, Value = ObjectTypeTags.Values.ClassKindStructural },
+            new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.Visibility, Value = ObjectTypeTags.Values.VisibilityInternal }
+        ];
+        await SaveSchemaAsync(detachedSystem);
+
+        await using var readContext = NewContext();
+        var readRepository = new PostgresDataRepository(readContext);
+        var objectTypes = await readRepository.ConnectedSystems.GetObjectTypesAsync(systemId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(objectTypes.Single().Tags, Has.Count.EqualTo(2), "The list query must load the classification tags.");
+            Assert.That(objectTypes.Single().IsInternal(), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task GetObjectTypesAsync_ForAnUnclassifiedObjectType_DoesNotReportItInternalAsync()
+    {
+        var systemId = await SeedAsync();
+
+        await using var readContext = NewContext();
+        var readRepository = new PostgresDataRepository(readContext);
+        var objectTypes = await readRepository.ConnectedSystems.GetObjectTypesAsync(systemId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(objectTypes.Single().Tags, Is.Empty);
+            Assert.That(objectTypes.Single().IsInternal(), Is.False);
+        });
+    }
+
     /// <summary>
     /// Loads the Connected System in its own scope and lets that scope go, so what the caller holds is detached,
     /// exactly as the portal does.

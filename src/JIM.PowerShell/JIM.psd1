@@ -57,6 +57,7 @@
         'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMConnectedSystemCapability',
+        'Get-JIMConnectedSystemPasswordPolicy',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 

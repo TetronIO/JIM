@@ -249,6 +249,10 @@
 
             @* ─── Object type discovery & selection ─── *@
             <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="Object Types">
+                @{
+                    var visibleObjectTypeCount = GetVisibleObjectTypes().Count();
+                    var hiddenInternalCount = GetHiddenInternalObjectTypeCount();
+                }
                 <MudText Typo="Typo.subtitle1" Class="mb-1">Choose which object types JIM should manage</MudText>
                 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
                     Each type you select gets its own tab above, where you choose the attributes to import or export. To maximise system performance, select only the types you actually need.
@@ -270,7 +274,7 @@
                             <MudChip Value="false"
                                      Color="Color.Default"
                                      Variant="@(!_objectTypeSelectedFilter ? Variant.Outlined : Variant.Text)">
-                                All (@ConnectedSystem.ObjectTypes.Count)
+                                All (@visibleObjectTypeCount)
                             </MudChip>
                             <MudChip Value="true"
                                      Color="Color.Primary"
@@ -316,8 +320,42 @@
                         }
                     </MudGrid>
                     <MudText Typo="Typo.body1" Class="mt-4 mud-text-secondary d-block" Align="Align.Center">
-                        Showing @discoveryObjectTypes.Count of @ConnectedSystem.ObjectTypes.Count object types
+                        Showing @discoveryObjectTypes.Count of @visibleObjectTypeCount object types
                     </MudText>
+                }
+
+                @* Internal object types are hidden rather than discarded, so the count and the way back are stated
+                   plainly. Nothing here changes what was discovered or what is stored. *@
+                @if (hiddenInternalCount > 0)
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+                        <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                            <span class="flex-grow-1">
+                                @hiddenInternalCount internal object @(hiddenInternalCount == 1 ? "type is" : "types are") hidden.
+                                These are classes the Connected System uses for its own configuration or operation.
+                            </span>
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Inherit"
+                                       StartIcon="@Icons.Material.Filled.Visibility"
+                                       OnClick="@(() => _showInternalObjectTypes = true)">
+                                Show internal object types
+                            </MudButton>
+                        </div>
+                    </MudAlert>
+                }
+                else if (_showInternalObjectTypes && AnyInternalObjectTypes())
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+                        <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                            <span class="flex-grow-1">Internal object types are shown.</span>
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Inherit"
+                                       StartIcon="@Icons.Material.Filled.VisibilityOff"
+                                       OnClick="@(() => _showInternalObjectTypes = false)">
+                                Hide internal object types
+                            </MudButton>
+                        </div>
+                    </MudAlert>
                 }
             </MudTabPanel>
 
@@ -659,6 +697,10 @@
     private int _activeSchemaTabIndex;
     private string _objectTypeSearchString = "";
     private bool _objectTypeSelectedFilter;
+
+    // Object types the Connected System classified as internal are held back until asked for. Not persisted as a
+    // user preference: it is a per-visit "let me look at the plumbing", not a standing choice about every system.
+    private bool _showInternalObjectTypes;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
     private bool _selectedObjectTypeHasReadOnlyAttributes;
@@ -848,12 +890,52 @@
         ConnectedSystem.ObjectTypes?.Where(ot => ot.Selected).OrderBy(ot => ot.Name).ToList() ?? new List<ConnectedSystemObjectType>();
 
     /// <summary>
+    /// The object types the discovery grid will consider before the administrator's own search and All / Selected
+    /// filter narrow it further: everything the Connected System reported, less the ones it classified as internal.
+    /// </summary>
+    /// <remarks>
+    /// A directory publishes its own configuration and operational classes in the same schema as the classes an
+    /// administrator manages; on a stock OpenLDAP those account for well over a third of what is discovered. Hiding
+    /// them is presentation only: they are still imported, still stored, and one click away.
+    /// <para>
+    /// A Selected object type is never hidden, whatever its classification. An administrator who has deliberately
+    /// chosen to manage a class must always be able to see that they have.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ConnectedSystemObjectType> GetVisibleObjectTypes()
+    {
+        var objectTypes = ConnectedSystem.ObjectTypes?.AsEnumerable() ?? Enumerable.Empty<ConnectedSystemObjectType>();
+        return _showInternalObjectTypes ? objectTypes : objectTypes.Where(ot => ot.Selected || !ot.IsInternal());
+    }
+
+    /// <summary>
+    /// How many internal object types the current view is holding back, which is what the disclosure below the grid
+    /// reports. Zero while internal types are being shown.
+    /// </summary>
+    private int GetHiddenInternalObjectTypeCount()
+    {
+        return _showInternalObjectTypes
+            ? 0
+            : ConnectedSystem.ObjectTypes?.Count(ot => !ot.Selected && ot.IsInternal()) ?? 0;
+    }
+
+    /// <summary>
+    /// Whether the Connected System reported any internal object types at all. Distinguishes "none are hidden
+    /// because they are being shown" from "none are hidden because there are none", so the way back is only offered
+    /// where there is something to go back to.
+    /// </summary>
+    private bool AnyInternalObjectTypes()
+    {
+        return ConnectedSystem.ObjectTypes?.Any(ot => ot.IsInternal()) ?? false;
+    }
+
+    /// <summary>
     /// The object types shown in the discovery grid, after applying the name search and the All / Selected filter.
     /// Selected types are ordered first so the current selection stays visible as the list is filtered.
     /// </summary>
     private IEnumerable<ConnectedSystemObjectType> GetFilteredDiscoveryObjectTypes()
     {
-        var objectTypes = ConnectedSystem.ObjectTypes?.AsEnumerable() ?? Enumerable.Empty<ConnectedSystemObjectType>();
+        var objectTypes = GetVisibleObjectTypes();
 
         if (_objectTypeSelectedFilter)
             objectTypes = objectTypes.Where(ot => ot.Selected);

@@ -31,12 +31,22 @@ Describe 'Set-JIMMetaverseObjectPassword' {
             $command = Get-Command Set-JIMMetaverseObjectPassword
         }
 
-        # Setting a password everywhere by default would turn a reset in one system into a reset in all of them.
+        <#
+            Setting a password everywhere by default would turn a reset in one system into a reset in all of
+            them. Asserted against the parameters rather than against set names, because the sets were split
+            per password source when -Generate arrived (BySystem became BySystemSuppliedPassword and
+            BySystemGeneratedPassword) and this test pinned the old names; the requirement is that choosing
+            the accounts is mandatory in every set, not what those sets happen to be called.
+        #>
         It 'Should require either named Connected Systems or an explicit AllAccounts' {
-            $command.ParameterSets.Name | Should -Contain 'BySystem'
-            $command.ParameterSets.Name | Should -Contain 'AllAccounts'
-            ($command.ParameterSets | Where-Object Name -eq 'BySystem').Parameters |
-                Where-Object { $_.Name -eq 'ConnectedSystemId' } | Select-Object -ExpandProperty IsMandatory | Should -Be $true
+            $accountChoosers = @('ConnectedSystemId', 'AllAccounts')
+
+            foreach ($set in $command.ParameterSets) {
+                $mandatory = $set.Parameters |
+                    Where-Object { $_.Name -in $accountChoosers -and $_.IsMandatory }
+
+                $mandatory | Should -Not -BeNullOrEmpty -Because "parameter set '$($set.Name)' must make the caller choose which accounts to touch"
+            }
         }
 
         It 'Should take the password as a SecureString' {
