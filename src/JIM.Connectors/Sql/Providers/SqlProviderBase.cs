@@ -40,7 +40,7 @@ internal abstract class SqlProviderBase : ISqlProvider
 
     public abstract string ConnectivityTestCommandText { get; }
 
-    public abstract int GetDefaultPort(bool useTls);
+    public abstract int GetDefaultPort(SqlConnectionEncryption encryption);
 
     /// <summary>
     /// "TLS" is what most dialects call it; a dialect with its own name for the encrypted transport
@@ -100,6 +100,14 @@ internal abstract class SqlProviderBase : ISqlProvider
     public abstract string BuildConnectionString(SqlConnectionSettings settings);
 
     public abstract DbConnection CreateConnection(string connectionString);
+
+    /// <summary>
+    /// Nothing by default: most drivers take everything they need in the connection string, and a
+    /// provider only overrides this where its driver genuinely does not.
+    /// </summary>
+    public virtual void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+    }
 
     public virtual DbCommand CreateCommand(DbConnection connection, string commandText)
     {
