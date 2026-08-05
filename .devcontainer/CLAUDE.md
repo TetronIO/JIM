@@ -43,6 +43,8 @@
 - `jim-build-worker` - Rebuild and restart only jim.worker. Incremental (same caveat as `jim-build-web`).
 - `jim-build-scheduler` - Rebuild and restart only jim.scheduler. Incremental (same caveat as `jim-build-web`).
 
+**Every `jim-build*` command skips the OpenAPI stage.** They pass `OPENAPI_STAGE=publish`, which swaps out the Dockerfile's `openapi-gen` stage; a release build leaves it at its default and bakes a freshly generated document into the image. Generation takes about five minutes, hence the local skip, but it means **a successful `jim-build` is not evidence that the image can be built for release**. #1238 landed a serialisation cycle that failed generation, and neither a local build nor any check at the time would show it. Two things cover it now: the `openapi-document` CI job (required, so a PR cannot merge past it), and `jim-openapi-generate` (`scripts/Generate-OpenApiDoc.ps1`) to reproduce a failure here. Add `-NoBuild` when the solution is already built. Neither needs Docker, a database or Keycloak.
+
 **Reset:**
 - `jim-reset` - Reset JIM (delete database & logs volumes)
 
