@@ -52,6 +52,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     /// </summary>
     internal List<SqlConnectionSettings> BuiltConnectionSettings { get; } = [];
 
+    /// <summary>
+    /// The settings every connection was configured with before being opened, so a test can assert that
+    /// the Connector gives the dialect its chance to configure the connection object itself.
+    /// </summary>
+    internal List<SqlConnectionSettings> ConfiguredConnectionSettings { get; } = [];
+
     public override SqlDatabaseType DatabaseType => SqlDatabaseType.SqlServer;
 
     public override string DisplayName => "Fake Database";
@@ -64,7 +70,7 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     public override bool SupportsPinnedServerCertificate => CanPinServerCertificate;
 
-    public override int GetDefaultPort(bool useTls) => 1433;
+    public override int GetDefaultPort(SqlConnectionEncryption encryption) => 1433;
 
     protected override char OpenQuote => '[';
 
@@ -82,6 +88,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     }
 
     public override DbConnection CreateConnection(string connectionString) => new FakeDbConnection(this, connectionString);
+
+    public override void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ConfiguredConnectionSettings.Add(settings);
+    }
 
     public override string BuildKeysetPageCommandText(SqlKeysetPageRequest request) => throw new NotSupportedException();
 

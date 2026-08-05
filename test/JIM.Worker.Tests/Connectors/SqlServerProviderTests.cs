@@ -302,7 +302,7 @@ public class SqlServerProviderTests
             DatabaseName = "HR",
             Username = "jim_reader",
             Password = "s3cret",
-            UseTls = true,
+            Encryption = SqlConnectionEncryption.Tls,
             ConnectionTimeoutSeconds = 20
         };
 
@@ -317,6 +317,35 @@ public class SqlServerProviderTests
             Assert.That(builder.ConnectTimeout, Is.EqualTo(20));
             Assert.That(builder.Encrypt, Is.EqualTo(SqlConnectionEncryptOption.Mandatory), "TLS enabled means encryption is required, not merely offered.");
             Assert.That(builder.TrustServerCertificate, Is.False, "A blanket trust-server-certificate toggle is explicitly not an acceptable substitute for real trust anchors.");
+        });
+    }
+
+    [Test]
+    public void BuildConnectionString_EncryptionTurnedOff_StillNeverTrustsWhateverTheServerPresents()
+    {
+        // An administrator can decline to require encryption, but that is never allowed to become a
+        // decision to trust any certificate: the two are separate, and only the first is theirs to make.
+        var settings = new SqlConnectionSettings { Host = "sql.example.local", DatabaseName = "HR", Encryption = SqlConnectionEncryption.None };
+
+        var builder = new SqlConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(builder.Encrypt, Is.EqualTo(SqlConnectionEncryptOption.Optional),
+                "Declining to require encryption still takes it where the server offers it; Optional is not the same as refusing it.");
+            Assert.That(builder.TrustServerCertificate, Is.False);
+        });
+    }
+
+    [Test]
+    public void GetDefaultPort_WhicheverEncryption_IsTheSinglePortSqlServerListensOn()
+    {
+        // SQL Server negotiates TLS on the same port rather than offering a second one, which is where
+        // it differs from Oracle Database's separate TCPS listener.
+        Assert.Multiple(() =>
+        {
+            Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.Tls), Is.EqualTo(1433));
+            Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.None), Is.EqualTo(1433));
         });
     }
 
