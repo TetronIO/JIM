@@ -606,16 +606,17 @@ internal sealed class FakeDbCommand : DbCommand
 
         Assert.That(joinColumns, Is.Not.Empty, "A related table must be gathered against the page's anchors, never read whole.");
 
-        var wanted = new List<object?[]>();
-        foreach (var group in joinColumns.GroupBy(join => join.Key[..join.Key.LastIndexOf('_')]))
-        {
-            var tuple = group
+        // One tuple of (column ordinal, bound value) per anchor the page asked about, in column order.
+        var anchorTuples = joinColumns
+            .GroupBy(join => join.Key[..join.Key.LastIndexOf('_')])
+            .Select(group => group
                 .OrderBy(join => join.Key, StringComparer.Ordinal)
                 .Select(join => (Ordinal: dataTable.IndexOf(join.Value), Value: BoundValue(join.Key)))
-                .ToList();
+                .ToList());
 
-            wanted.AddRange(dataTable.Rows.Where(row => tuple.All(part => Equals(row[part.Ordinal], part.Value))));
-        }
+        var wanted = anchorTuples
+            .SelectMany(tuple => dataTable.Rows.Where(row => tuple.All(part => Equals(row[part.Ordinal], part.Value))))
+            .ToList();
 
         return FakeDbDataReader.ForRows(dataTable.Columns, wanted);
     }
@@ -664,14 +665,10 @@ internal sealed class FakeDbCommand : DbCommand
 
     private static int CompareRows(object?[] left, object?[] right, int[] anchorOrdinals)
     {
-        foreach (var ordinal in anchorOrdinals)
-        {
-            var comparison = CompareValues(left[ordinal], right[ordinal]);
-            if (comparison != 0)
-                return comparison;
-        }
-
-        return 0;
+        // The first anchor column that differs decides the order; all equal means the rows tie.
+        return anchorOrdinals
+            .Select(ordinal => CompareValues(left[ordinal], right[ordinal]))
+            .FirstOrDefault(comparison => comparison != 0);
     }
 
     private static int CompareValues(object? left, object? right)

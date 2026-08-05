@@ -618,53 +618,39 @@ public class SqlConnectorImportTests
             return Task.CompletedTask;
         });
 
-        var connector = new SqlConnector { ProviderFactory = _ => provider };
-        try
-        {
-            connector.OpenImportConnection(SettingValues(connector, document), null, _logger);
+        // Disposal releases the import connection, so the Connector needs no explicit close here.
+        using var connector = new SqlConnector { ProviderFactory = _ => provider };
+        connector.OpenImportConnection(SettingValues(connector, document), null, _logger);
 
-            var result = await connector.ImportAsync(connectedSystem, RunProfile(10), [], null, _logger, cancellation.Token, progress);
+        var result = await connector.ImportAsync(connectedSystem, RunProfile(10), [], null, _logger, cancellation.Token, progress);
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(result.ImportObjects.Select(importObject => importObject.ObjectType), Is.All.EqualTo("Person"),
-                    "A cancelled run stops at the next page boundary rather than reading everything it was asked for.");
-                Assert.That(provider.ExecutedCommandTexts.Any(text => text.Contains("[GROUPS]", StringComparison.Ordinal) && !text.StartsWith("SELECT COUNT", StringComparison.Ordinal)), Is.False);
-            });
-        }
-        finally
+        Assert.Multiple(() =>
         {
-            connector.CloseImportConnection();
-            connector.Dispose();
-        }
+            Assert.That(result.ImportObjects.Select(importObject => importObject.ObjectType), Is.All.EqualTo("Person"),
+                "A cancelled run stops at the next page boundary rather than reading everything it was asked for.");
+            Assert.That(provider.ExecutedCommandTexts.Any(text => text.Contains("[GROUPS]", StringComparison.Ordinal) && !text.StartsWith("SELECT COUNT", StringComparison.Ordinal)), Is.False);
+        });
     }
 
     [Test]
     public void CloseImportConnection_AfterAFailedImport_ReleasesTheConnectionAndLeavesPersistedStateAlone()
     {
         var provider = new FakeSqlProvider();
-        var connector = new SqlConnector { ProviderFactory = _ => provider };
+        // Disposal is the backstop; what this asserts is that closing the import connection released it.
+        using var connector = new SqlConnector { ProviderFactory = _ => provider };
+        connector.OpenImportConnection(SettingValues(connector, PersonDocument), null, _logger);
 
-        try
+        // Nothing registered in the stand-in database, so the import fails the way a dropped table does.
+        Assert.That(async () => await connector.ImportAsync(PersonSystem(), RunProfile(10), [], null, _logger, CancellationToken.None, new RecordingConnectorProgress()),
+            Throws.InstanceOf<Exception>());
+
+        Assert.Multiple(() =>
         {
-            connector.OpenImportConnection(SettingValues(connector, PersonDocument), null, _logger);
-
-            // Nothing registered in the stand-in database, so the import fails the way a dropped table does.
-            Assert.That(async () => await connector.ImportAsync(PersonSystem(), RunProfile(10), [], null, _logger, CancellationToken.None, new RecordingConnectorProgress()),
-                Throws.InstanceOf<Exception>());
-
-            Assert.Multiple(() =>
-            {
-                Assert.That(connector.CloseImportConnection(), Is.Null,
-                    "Nothing needs persisting for a Full Import, and a non-null return would override state JIM already holds.");
-                Assert.That(provider.OpenConnections.All(connection => connection.State == System.Data.ConnectionState.Closed), Is.True,
-                    "A failed import must still release its connection, or a run leaves a session open on the customer's database.");
-            });
-        }
-        finally
-        {
-            connector.Dispose();
-        }
+            Assert.That(connector.CloseImportConnection(), Is.Null,
+                "Nothing needs persisting for a Full Import, and a non-null return would override state JIM already holds.");
+            Assert.That(provider.OpenConnections.All(connection => connection.State == System.Data.ConnectionState.Closed), Is.True,
+                "A failed import must still release its connection, or a run leaves a session open on the customer's database.");
+        });
     }
 
     #endregion
@@ -715,32 +701,24 @@ public class SqlConnectorImportTests
     {
         var progress = new RecordingConnectorProgress();
         var pages = new List<ConnectedSystemImportResult>();
-        var connector = new SqlConnector { ProviderFactory = _ => provider };
+        // Disposal releases the import connection, so the Connector needs no explicit close here.
+        using var connector = new SqlConnector { ProviderFactory = _ => provider };
+        connector.OpenImportConnection(SettingValues(connector, objectTypesDocument, databaseTimeZone), null, _logger);
 
-        try
+        var runProfile = RunProfile(pageSize);
+        var paginationTokens = new List<ConnectedSystemPaginationToken>();
+        var initialPage = true;
+
+        while (initialPage || paginationTokens.Count > 0)
         {
-            connector.OpenImportConnection(SettingValues(connector, objectTypesDocument, databaseTimeZone), null, _logger);
+            initialPage = false;
 
-            var runProfile = RunProfile(pageSize);
-            var paginationTokens = new List<ConnectedSystemPaginationToken>();
-            var initialPage = true;
+            var result = await connector.ImportAsync(connectedSystem, runProfile, paginationTokens, null, _logger, CancellationToken.None, progress);
+            pages.Add(result);
+            paginationTokens = result.PaginationTokens;
 
-            while (initialPage || paginationTokens.Count > 0)
-            {
-                initialPage = false;
-
-                var result = await connector.ImportAsync(connectedSystem, runProfile, paginationTokens, null, _logger, CancellationToken.None, progress);
-                pages.Add(result);
-                paginationTokens = result.PaginationTokens;
-
-                Assert.That(pages, Has.Count.LessThanOrEqualTo(callLimit),
-                    "The import never stopped returning pagination tokens, which is an infinite import.");
-            }
-        }
-        finally
-        {
-            connector.CloseImportConnection();
-            connector.Dispose();
+            Assert.That(pages, Has.Count.LessThanOrEqualTo(callLimit),
+                "The import never stopped returning pagination tokens, which is an infinite import.");
         }
 
         return new SqlImportRun(pages, progress);

@@ -828,7 +828,7 @@ internal sealed record SqlImportPagePosition
 
         if (parsed?.Anchor == null || parsed.Anchor.Count != plan.AnchorColumns.Count)
             throw new InvalidDataException(
-                $"Object Type '{plan.Name}' was replayed a pagination token holding {parsed?.Anchor.Count ?? 0} anchor value(s), but its anchor has {plan.AnchorColumns.Count} column(s). The configuration changed mid-run; run a Full Import again.");
+                $"Object Type '{plan.Name}' was replayed a pagination token holding {parsed?.Anchor?.Count ?? 0} anchor value(s), but its anchor has {plan.AnchorColumns.Count} column(s). The configuration changed mid-run; run a Full Import again.");
 
         return new SqlImportPagePosition { LastAnchor = parsed.Anchor, PageNumber = parsed.Page };
     }
