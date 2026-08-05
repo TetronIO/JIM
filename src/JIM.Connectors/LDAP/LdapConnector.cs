@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -25,6 +25,23 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private ICredentialProtection? _credentialProtection;
     private LdapTrustedCertificateDirectory? _trustDirectory;
     private LdapConnectorExport? _currentExport;
+
+    /// <summary>
+    /// The containers JIM manages, supplied via <see cref="IConnectorManagedScope"/>. Empty until JIM states a
+    /// scope, which it does not do when the Connected System has no container selections, so an unset scope
+    /// permits every write.
+    /// </summary>
+    private IReadOnlyList<string> _managedScope = [];
+
+    /// <inheritdoc />
+    public void SetManagedScope(IReadOnlyList<string> selectedContainerExternalIds)
+    {
+        _managedScope = selectedContainerExternalIds;
+
+        // Applies immediately when an export is already under way, and is otherwise handed to the exporter when
+        // one is created.
+        _currentExport?.SetManagedScope(selectedContainerExternalIds);
+    }
 
     /// <summary>
     /// The persisted connector state replayed by JIM at connection open (issue #230), including any
@@ -886,6 +903,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md.
         var executor = new LdapOperationExecutor(_connection);
         _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
+        _currentExport.SetManagedScope(_managedScope);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 

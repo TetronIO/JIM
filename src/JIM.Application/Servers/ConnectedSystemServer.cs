@@ -1883,7 +1883,7 @@ public class ConnectedSystemServer
         if (connector is not IConnectorPasswordManagement passwordConnector)
             throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support setting passwords, so there is no password channel to check.");
 
-        var containerExternalIds = GetSelectedContainerExternalIds(connectedSystem);
+        var containerExternalIds = connectedSystem.GetSelectedContainerExternalIds();
         Log.Debug("RunPasswordPreflightAsync: Checking the password channel for Connected System {ConnectedSystemId} against {ContainerCount} selected container(s).",
             connectedSystem.Id, containerExternalIds.Count);
 
@@ -2313,36 +2313,6 @@ public class ConnectedSystemServer
             : null;
     }
 
-    /// <summary>
-    /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy.
-    /// <para>
-    /// These are where JIM would be provisioning, and so where rights actually need to hold. Permissions are
-    /// commonly granted on one part of a target and not another, so a rights check run anywhere else answers a
-    /// question nobody asked.
-    /// </para>
-    /// </summary>
-    private static List<string> GetSelectedContainerExternalIds(ConnectedSystem connectedSystem)
-    {
-        var selected = new List<string>();
-        if (connectedSystem.Partitions == null)
-            return selected;
-
-        foreach (var container in connectedSystem.Partitions
-                     .Where(p => p.Selected && p.Containers != null)
-                     .SelectMany(p => p.Containers!))
-            CollectSelectedContainers(container, selected);
-
-        return selected;
-    }
-
-    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<string> selected)
-    {
-        if (container.Selected && !string.IsNullOrEmpty(container.ExternalId))
-            selected.Add(container.ExternalId);
-
-        foreach (var child in container.ChildContainers)
-            CollectSelectedContainers(child, selected);
-    }
     #endregion
 
     #region Connected System Directory Servers

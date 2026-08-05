@@ -147,10 +147,93 @@ internal class LdapConnectorExport
         return results;
     }
 
+    // The container Distinguished Names the administrator has selected on this Connected System, or empty when JIM
+    // has not stated a scope (a Connected System with no container selections, or a caller that does not supply one).
+    private IReadOnlyList<string> _managedScope = [];
+
+    /// <summary>
+    /// Tells the Connector which containers the administrator manages, so it can refuse to write outside them.
+    /// </summary>
+    /// <remarks>
+    /// An empty or unset scope means "not stated" and permits everything, so a Connected System with no container
+    /// selections behaves exactly as it always has.
+    /// </remarks>
+    internal void SetManagedScope(IReadOnlyList<string> selectedContainerExternalIds)
+    {
+        _managedScope = selectedContainerExternalIds;
+    }
+
+    /// <summary>
+    /// Returns an error result when an export would write outside the managed scope, or null when it is permitted.
+    /// </summary>
+    /// <remarks>
+    /// Container selection is the administrator's statement of what JIM manages, and export used to ignore it: an
+    /// Export Attribute Flow that moves an account into an unselected container wrote it somewhere JIM cannot read
+    /// back, so the change was never confirmed, the next Full Import treated the object as deleted, and the
+    /// following synchronisation disconnected it, then deleted or re-provisioned it. Refusing the write per object
+    /// leaves everything else in the run to proceed, and puts the configuration error where somebody will see it.
+    /// A container the Connector created during this run counts as in scope: JIM selects it as soon as the run ends.
+    /// </remarks>
+    private ConnectedSystemExportResult? CheckTargetIsWithinManagedScope(string? targetDn)
+    {
+        if (_managedScope.Count == 0 || string.IsNullOrEmpty(targetDn))
+            return null;
+
+        if (IsWithinManagedScope(targetDn))
+            return null;
+
+        var message = $"Cannot write to '{targetDn}': it is outside the containers selected for this Connected System, " +
+                      "so JIM would not be able to import the object back and would treat it as deleted on the next Full Import. " +
+                      "Select the container on the Partitions & Containers tab, or change the Attribute Flow that produced this " +
+                      "Distinguished Name.";
+
+        _logger.Warning("LdapConnectorExport: Refused an export to '{Dn}' because it is outside the selected containers", LogSanitiser.Sanitise(targetDn));
+        return ConnectedSystemExportResult.Failed(message, ConnectedSystemExportErrorType.OutsideManagedScope);
+    }
+
+    private bool IsWithinManagedScope(string targetDn)
+    {
+        foreach (var scopeDn in _managedScope)
+        {
+            if (IsDnWithinContainer(targetDn, scopeDn))
+                return true;
+        }
+
+        // A container created during this run is selected by JIM the moment the run finishes, so an object being
+        // provisioned into one it has just created is in scope even though the stored selection has yet to catch up.
+        foreach (var createdDn in _createdContainerExternalIds)
+        {
+            if (IsDnWithinContainer(targetDn, createdDn))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determines whether a Distinguished Name sits at or beneath a container, which is what selecting a container
+    /// means: its whole subtree is in scope.
+    /// </summary>
+    private static bool IsDnWithinContainer(string dn, string containerDn)
+    {
+        if (dn.Equals(containerDn, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Compare on the comma boundary so OU=UsersArchive is not read as sitting inside OU=Users.
+        return dn.EndsWith("," + containerDn, StringComparison.OrdinalIgnoreCase);
+    }
+
     private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
+
+        var scopeFailure = CheckTargetIsWithinManagedScope(GetExportDestinationDistinguishedName(pendingExport));
+        if (scopeFailure != null)
+        {
+            pendingExport.Status = PendingExportStatus.Failed;
+            return scopeFailure;
+        }
 
         ConnectedSystemExportResult result;
         switch (pendingExport.ChangeType)
@@ -620,6 +703,13 @@ internal class LdapConnectorExport
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
+
+        var scopeFailure = CheckTargetIsWithinManagedScope(GetExportDestinationDistinguishedName(pendingExport));
+        if (scopeFailure != null)
+        {
+            pendingExport.Status = PendingExportStatus.Failed;
+            return scopeFailure;
+        }
 
         var result = pendingExport.ChangeType switch
         {
@@ -1736,6 +1826,24 @@ internal class LdapConnectorExport
                 attrChange.StringValue = substitutedValue;
                 break;
         }
+    }
+
+    /// <summary>
+    /// Returns the Distinguished Name this export would write to: the destination of a rename where one is being
+    /// performed, the new object's own Distinguished Name on a create, otherwise the object's current one.
+    /// </summary>
+    /// <remarks>
+    /// It is the destination that matters for scope, not the origin. An object being moved back INTO managed scope
+    /// is exactly the fix an administrator would apply, and must not be refused; an object being moved out of it is
+    /// the failure this check exists for.
+    /// </remarks>
+    private static string? GetExportDestinationDistinguishedName(PendingExport pendingExport)
+    {
+        if (pendingExport.ChangeType == PendingExportChangeType.Create)
+            return GetDistinguishedNameForCreate(pendingExport);
+
+        var newDn = GetNewDistinguishedName(pendingExport);
+        return !string.IsNullOrEmpty(newDn) ? newDn : GetDistinguishedNameForUpdate(pendingExport);
     }
 
     private static string? GetDistinguishedNameForCreate(PendingExport pendingExport)

@@ -232,6 +232,40 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
+    /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy
+    /// beneath every selected partition.
+    /// </summary>
+    /// <remarks>
+    /// This is the scope JIM manages, and it answers two questions that must not diverge: where a rights check
+    /// should be run, and where an export is permitted to write. Selecting a container selects its subtree, so a
+    /// caller comparing against this list should treat a descendant identifier as in scope.
+    /// </remarks>
+    public static List<string> GetSelectedContainerExternalIds(this ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var selected = new List<string>();
+        if (connectedSystem.Partitions == null)
+            return selected;
+
+        foreach (var container in connectedSystem.Partitions
+                     .Where(p => p.Selected && p.Containers != null)
+                     .SelectMany(p => p.Containers!))
+            CollectSelectedContainers(container, selected);
+
+        return selected;
+    }
+
+    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<string> selected)
+    {
+        if (container.Selected && !string.IsNullOrEmpty(container.ExternalId))
+            selected.Add(container.ExternalId);
+
+        foreach (var child in container.ChildContainers)
+            CollectSelectedContainers(child, selected);
+    }
+
+    /// <summary>
     /// Counts every container in the tree rooted at the supplied collection, including nested descendants.
     /// </summary>
     private static int CountContainersRecursively(IEnumerable<ConnectedSystemContainer> containers)
