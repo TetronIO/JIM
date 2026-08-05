@@ -162,6 +162,56 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
+    /// Returns the partitions a Run Profile execution may read from: the partition the Run Profile targets when it
+    /// targets one, otherwise every selected partition. Either way only selected partitions are returned.
+    /// </summary>
+    /// <remarks>
+    /// A partition's <see cref="ConnectedSystemPartition.Selected"/> flag is the administrator's statement of what
+    /// JIM manages, and it binds regardless of how a Run Profile is pointed. Targeting used to bypass the flag, so
+    /// deselecting a partition was a no-op for a Run Profile that named it and a mass obsoletion for one that did
+    /// not; the same tick meant opposite things depending on which Run Profile ran next. Every caller that decides
+    /// what to read must come through here so that cannot diverge again.
+    /// </remarks>
+    public static IEnumerable<ConnectedSystemPartition> GetTargetPartitions(
+        this ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(runProfile);
+
+        if (connectedSystem.Partitions == null)
+            return [];
+
+        if (runProfile.Partition == null)
+            return connectedSystem.Partitions.Where(p => p.Selected);
+
+        // Resolve the targeted partition against the Connected System's own hierarchy rather than trusting the
+        // Run Profile's copy: the hierarchy is what a refresh updates, and the Run Profile may reference a partition
+        // that has since been deselected or removed from the directory.
+        return connectedSystem.Partitions.Where(p => p.Id == runProfile.Partition.Id && p.Selected);
+    }
+
+    /// <summary>
+    /// Determines whether a Run Profile is left inoperable by the current partition selections: it targets a
+    /// partition that is deselected, or one the hierarchy no longer carries.
+    /// </summary>
+    /// <remarks>
+    /// A Run Profile that targets no partition is never inoperable by this measure; it follows whatever is selected.
+    /// </remarks>
+    public static bool TargetsADeselectedPartition(
+        this ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(runProfile);
+
+        if (runProfile.Partition == null)
+            return false;
+
+        return !connectedSystem.GetTargetPartitions(runProfile).Any();
+    }
+
+    /// <summary>
     /// Counts every container in the tree rooted at the supplied collection, including nested descendants.
     /// </summary>
     private static int CountContainersRecursively(IEnumerable<ConnectedSystemContainer> containers)
