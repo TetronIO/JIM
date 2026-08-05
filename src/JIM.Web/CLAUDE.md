@@ -57,7 +57,7 @@ Three interaction rules that have repeatedly regressed (multiple times each on a
 
 **Scope: this is about live filtering, not about the word "Search".** A field that is one criterion among several in a form the user submits with a button (Deleted Objects' query forms, the Logs filter behind **Refresh**) is not a search box; nothing filters as it is typed, so `Immediate` there changes nothing and `SearchField` would be the wrong component. Those are ordinary `MudTextField`s and carry a `@* search-convention: exempt - <why> *@` comment directly above, so the reason travels with the markup.
 
-`SearchFieldConventionTests` (in `test/JIM.Web.Components.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
+`SearchFieldConventionTests` (in `test/JIM.Web.Tests/`) sweeps every `.razor` file under `src/JIM.Web` and fails the build for a search-shaped `MudTextField` that is neither migrated nor exempted, so a new page cannot quietly reintroduce a blur-only box.
 
 ## Live progress figures
 
@@ -77,7 +77,7 @@ The rule exists because the alternative shipped: the worker built progress messa
 All data tables should let users switch between normal and compact row spacing, persisted globally so the choice follows the user across every table.
 
 - Put `<TableDensityToggle @bind-Dense="_dense" />` as the **first** item in the table's `ToolBarContent`. If other controls sit to its left, follow it with a `<MudText Class="mx-2 mud-text-disabled">|</MudText>` separator.
-- On the `MudTable` / `MudSimpleTable`: set `Dense="@_dense"` and add the `dense-body-only` class, e.g. `Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")"`. The `dense-body-only` class keeps header rows at normal height while compacting body rows.
+- On the `MudTable` / `MudSimpleTable`: set `Dense="@_dense"`, and nothing else. The toggle only ever changes body-row spacing: `site.css` pins header cells to compact padding unconditionally (`.mud-table-root .mud-table-head .mud-table-cell`), so a header row is the same height in both states and no per-table class is involved. Do not make the `Class` attribute conditional on `_dense`; a ternary that varies the class list is a sign something is being styled that the density rule already owns. (A `dense-body-only` class was carried on fourteen tables for exactly this purpose and was never defined in any stylesheet; it was removed rather than implemented, because the global header rule already gives the intended result.)
 - The page owns a `private bool _dense;` field and loads the saved preference on first render, so the table paints at the correct density immediately:
   ```csharp
   protected override async Task OnAfterRenderAsync(bool firstRender)

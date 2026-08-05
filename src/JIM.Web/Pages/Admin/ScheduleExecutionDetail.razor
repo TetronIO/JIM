@@ -147,7 +147,7 @@
     @* MudTable keys each row on its item internally, so the loop's own @key moves with the rows. *@
     <MudTable Items="@_detail.Steps" T="ScheduleExecutionStepState"
               Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm"
-              Class="@(_dense ? "mt-6 dense-body-only" : "mt-6")"
+              Class="mt-6"
               Outlined="true" Elevation="0">
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" />
