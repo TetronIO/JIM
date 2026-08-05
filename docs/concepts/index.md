@@ -22,7 +22,7 @@ The **Joiner/Mover/Leaver** lifecycle is the core automation model for identity 
 
 ## 🔑 Passwords
 
-JIM sets passwords on the accounts it manages through a **password channel** that runs parallel to attribute flow and never through it: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface.
+Where a Connector supports it and you have configured it, JIM can set passwords on the accounts it manages. It does so through a **password channel** that runs parallel to attribute flow and never through it: nothing is held in the Metaverse, staged as a Pending Export, or read back. The [Passwords](passwords.md) page covers how JIM discovers what a target will accept, where a password comes from, what happens to an account whose password a target refuses, and the security rules that hold across every surface.
 
 ## 🧮 Expressions
 

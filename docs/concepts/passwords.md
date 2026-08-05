@@ -1,6 +1,10 @@
 # Passwords
 
-JIM sets passwords on the accounts it manages, and never reads one back. This page explains the channel that does it, how JIM knows what a target will accept, where a password comes from, and what happens when a target refuses one.
+JIM can set passwords on the accounts it manages, and never reads one back.
+
+Whether it does is entirely up to you. A Connected System is only a candidate if its Connector supports setting passwords at all, and even then JIM sets nothing until an administrator configures it: initial passwords are off on every Synchronisation Rule until switched on, and everything else here happens because somebody asked for it, account by account.
+
+This page explains the channel that does the setting, how JIM knows what a target will accept, where a password comes from, and what happens when a target refuses one.
 
 Everything here concerns writing a password **to** a Connected System. Synchronising a password *between* systems is a separate capability that is not yet available.
 
