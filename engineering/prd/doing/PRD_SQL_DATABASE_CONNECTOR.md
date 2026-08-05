@@ -69,9 +69,9 @@ The integration test infrastructure already anticipates this connector: dormant 
 | INT/SMALLINT/TINYINT | Number | |
 | BIGINT | LongNumber | |
 | BIT/BOOLEAN | Boolean | Oracle NUMBER(1) opt-in via configuration |
-| DATETIME/DATETIME2/TIMESTAMP/DATE | DateTime | Zoneless values interpreted per requirement 9 |
+| DATETIME/DATETIME2/TIMESTAMP/DATE | DateTime | Zoneless values interpreted per requirement 9. Exception (2026-08-04): SQL Server's `timestamp`/`rowversion` is a row version of eight opaque bytes, not a point in time, and maps to Binary; Oracle's TIMESTAMP is a genuine DateTime |
 | DATETIMEOFFSET/TIMESTAMP WITH TIME ZONE | DateTime | Normalised to UTC |
-| UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | |
+| UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | "With GUID content" is not inferable from the catalogue, since RAW(16) holds digests as often as GUIDs. Oracle RAW(16) is therefore an opt-in per Connected System (2026-08-04), defaulting to Binary, symmetric with the NUMBER(1) opt-in above; only exactly 16 bytes qualify. Oracle stores GUIDs big-endian (RFC 4122), so conversion goes through `IdentifierParser.FromRfc4122Bytes` |
 | VARBINARY/BLOB/RAW | Binary | |
 | DECIMAL/NUMERIC/MONEY | Decimal | Type delivered by prerequisite #1046 |
 | FLOAT/REAL | Decimal | Approximate binary types; documented precision caveat (decided 2026-07-30, as #1046 closed without recording it): binary-to-decimal round-trips are not bit-exact, and a Text mapping would reintroduce the lexicographic-comparison defect #1046 exists to fix |
