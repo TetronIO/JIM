@@ -163,6 +163,19 @@ Phase 1d collapses confirming-import hops by default as low-signal, which govern
 
 Consequence for Phase 1d: the "Caused by" affordance has **two** sources, and must render them as one story. Same-item causes come from the outcome tree already on the page; cross-item causes come from edges. The cohort model applies to both.
 
+#### Runtime validation
+
+Phase 1b was validated on the full stack, not just by tests, because the flush ordering, the transaction boundaries and the four persistence paths are exactly what unit tests mock away.
+
+| Seam | Evidence |
+|---|---|
+| Reference recall | Integration Scenario 8 (`LeaverCohort`, OpenLDAP, Small): 4 edges, `Tina Adams (S8-99)` to Project-Pulse, Project-Gateway, Project-Horizon and Project-Catalyst, reason `AllAuthoritativeSourcesDisconnected`, Connected System `Yellowstone APAC`. **This is the PRD's worked example reproduced end to end**: the Project-Pulse Pending Export that previously had no cause at all now resolves to a deletion on a different object, in a different Activity, on a different Connected System |
+| Grace-period deletion | Forced on the live stack by scheduling a deletion whose grace period had elapsed: 7 edges written inside a `Metaverse Object Housekeeping` Activity, carrying the reason code from the decision-time snapshot and resolving the causing `MvoDeleted` outcome that was persisted **in the same batch**. Proves both the EF persistence path's drain and the cause-side reference resolution |
+| Export to confirming import | 141 edges across both scenario runs, every one carrying its Pending Export id and its `ExportConfirmed` outcome |
+| Standalone deprovisioning | Correctly wrote **none**: all 12 `DeprovisionQueued` outcomes in Scenario 4 nested under `MvoDeleted`, so the fallback never fired. Verified by querying outcome parentage rather than assuming |
+
+Not exercised at runtime: a cohort with more than one member. Every runtime cohort was of size one (one deleted object per referencing group). The multi-member case, and the accumulation across pages that it depends on, is covered by unit tests that fail with 4 of 10 if accumulation regresses to last-write-wins.
+
 ### Phase 1c: Application read path
 
 - A server method on `JimApplication` returning the cohort walk for a given Run Profile Execution Item, bounded by a maximum depth.
