@@ -34,9 +34,42 @@ public static class SqlConnectorConstants
 
     public const string SettingPassword = "Password";
 
-    public const string SettingUseTls = "Encrypt Connection";
+    /// <summary>
+    /// Microsoft SQL Server encryption. A checkbox rather than a mode list because SQL Server has only
+    /// the one encrypted transport, and it is on unless an administrator turns it off.
+    /// </summary>
+    public const string SettingSqlServerEncryptConnection = "Encrypt Connection";
+
+    /// <summary>
+    /// Oracle encryption. A list rather than a checkbox because Oracle has two unrelated mechanisms, and
+    /// which one an estate runs decides the listener and port a connection goes to.
+    /// </summary>
+    public const string SettingOracleEncryption = "Oracle Encryption";
 
     public const string SettingConnectionTimeout = "Connection Timeout";
+
+    #endregion
+
+    #region Oracle Encryption drop-down values
+
+    /// <summary>
+    /// Oracle Advanced Networking encryption negotiated inside the Oracle Net session on the ordinary
+    /// listener, needing no certificate at either end. The default because it is how Oracle estates
+    /// ordinarily encrypt client traffic.
+    /// </summary>
+    public const string OracleEncryptionNativeNetworkEncryption = "Native Network Encryption";
+
+    /// <summary>
+    /// TLS over Oracle Net, on a separately configured listener and port, with a server certificate.
+    /// </summary>
+    public const string OracleEncryptionTcps = "TCPS (TLS)";
+
+    public const string OracleEncryptionNone = "None";
+
+    /// <summary>
+    /// What an Oracle Connected System encrypts with unless an administrator chooses otherwise.
+    /// </summary>
+    public const string DefaultOracleEncryption = OracleEncryptionNativeNetworkEncryption;
 
     #endregion
 

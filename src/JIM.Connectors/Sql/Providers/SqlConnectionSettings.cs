@@ -48,11 +48,11 @@ internal sealed record SqlConnectionSettings
     internal string? Password { get; init; }
 
     /// <summary>
-    /// Whether the connection must be encrypted in transit. Server certificate trust is resolved
-    /// against the operating system bundle plus Admin &gt; Certificates; there is deliberately no
-    /// blanket trust-server-certificate option.
+    /// How the connection is protected in transit. Where that is TLS, server certificate trust is
+    /// resolved against the operating system bundle plus Admin &gt; Certificates; there is deliberately
+    /// no blanket trust-server-certificate option.
     /// </summary>
-    internal bool UseTls { get; init; }
+    internal SqlConnectionEncryption Encryption { get; init; }
 
     internal int? ConnectionTimeoutSeconds { get; init; }
 
@@ -70,6 +70,6 @@ internal sealed record SqlConnectionSettings
 
     public override string ToString()
     {
-        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), UseTls = {UseTls}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, PinnedServerCertificatePath = {PinnedServerCertificatePath} }}";
+        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), Encryption = {Encryption}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, PinnedServerCertificatePath = {PinnedServerCertificatePath} }}";
     }
 }

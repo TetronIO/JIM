@@ -131,11 +131,51 @@ public class SqlConnectorCertificateTrustTests
         var provider = new FakeSqlProvider { OpenFailure = new FakeDbException("Login timeout expired.") };
         using var connector = CreateConnector(provider, SoundCertificateReading(), trustedCertificate: _serverCertificate);
         var settingValues = CreateSettingValues();
-        settingValues.Single(sv => sv.Setting.Name == SqlConnectorConstants.SettingUseTls).CheckboxValue = false;
+        settingValues.Single(sv => sv.Setting.Name == SqlConnectorConstants.SettingSqlServerEncryptConnection).CheckboxValue = false;
 
         connector.ValidateSettingValues(settingValues, _logger);
 
         Assert.That(connector.ServerCertificateReads, Is.Zero);
+    }
+
+    [Test]
+    public void ValidateSettingValues_OracleNativeNetworkEncryption_NeverLooksAtACertificateAtAll()
+    {
+        // Native Network Encryption is encrypted, but it is not TLS: the session is negotiated inside
+        // Oracle Net and no certificate is ever presented. Treating "encrypted" as "has a certificate"
+        // would have JIM probe a listener that does not speak TLS and report a certificate problem where
+        // there is no certificate.
+        var provider = new FakeSqlProvider { OpenFailure = new FakeDbException("ORA-12570: Network Session: Unexpected packet read error") };
+        using var connector = CreateConnector(provider, SoundCertificateReading(), trustedCertificate: _serverCertificate);
+
+        var results = connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption), _logger);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(connector.ServerCertificateReads, Is.Zero);
+            Assert.That(results[0].ErrorMessage, Does.Contain("ORA-12570"), "The driver's own account is what reaches the administrator.");
+        });
+    }
+
+    [Test]
+    public void ValidateSettingValues_OracleTcps_StillLooksAtTheCertificate()
+    {
+        // TCPS is genuinely TLS, so the diagnosis path is exactly as relevant as it is for an encrypted
+        // Microsoft SQL Server connection.
+        var provider = new FakeSqlProvider
+        {
+            CanPinServerCertificate = false,
+            OpenFailure = new FakeDbException("ORA-29024: Certificate validation failure")
+        };
+        using var connector = CreateConnector(provider, UntrustedCertificateReading(), trustedCertificate: null);
+
+        var results = connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps), _logger);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(connector.ServerCertificateReads, Is.EqualTo(1));
+            Assert.That(results[0].Exception, Is.TypeOf<ServerCertificateRejectedException>());
+        });
     }
 
     [Test]
@@ -277,7 +317,27 @@ public class SqlConnectorCertificateTrustTests
             Setting(SqlConnectorConstants.SettingDatabaseName, ConnectedSystemSettingType.String, stringValue: "HR"),
             Setting(SqlConnectorConstants.SettingUsername, ConnectedSystemSettingType.String, stringValue: "jim_sync"),
             Setting(SqlConnectorConstants.SettingPassword, ConnectedSystemSettingType.StringEncrypted, encryptedValue: "sup3rs3cret"),
-            Setting(SqlConnectorConstants.SettingUseTls, ConnectedSystemSettingType.CheckBox, checkboxValue: true),
+            Setting(SqlConnectorConstants.SettingSqlServerEncryptConnection, ConnectedSystemSettingType.CheckBox, checkboxValue: true),
+            Setting(SqlConnectorConstants.SettingConnectionTimeout, ConnectedSystemSettingType.Integer, intValue: 5),
+            Setting(SqlConnectorConstants.SettingDatabaseTimeZone, ConnectedSystemSettingType.String, stringValue: SqlConnectorConstants.DefaultDatabaseTimeZone)
+        ];
+    }
+
+    /// <summary>
+    /// A complete Oracle Database configuration on the named encryption mode.
+    /// </summary>
+    private static List<ConnectedSystemSettingValue> CreateOracleSettingValues(string encryptionMode)
+    {
+        return
+        [
+            Setting(SqlConnectorConstants.SettingDatabaseType, ConnectedSystemSettingType.DropDown, stringValue: SqlConnectorConstants.DatabaseTypeOracle),
+            Setting(SqlConnectorConstants.SettingHost, ConnectedSystemSettingType.String, stringValue: "hr.example.com"),
+            Setting(SqlConnectorConstants.SettingPort, ConnectedSystemSettingType.Integer),
+            Setting(SqlConnectorConstants.SettingOracleDatabaseIdentifiedBy, ConnectedSystemSettingType.DropDown, stringValue: SqlConnectorConstants.OracleIdentifiedByServiceName),
+            Setting(SqlConnectorConstants.SettingOracleServiceName, ConnectedSystemSettingType.String, stringValue: "HRPDB"),
+            Setting(SqlConnectorConstants.SettingUsername, ConnectedSystemSettingType.String, stringValue: "jim_sync"),
+            Setting(SqlConnectorConstants.SettingPassword, ConnectedSystemSettingType.StringEncrypted, encryptedValue: "sup3rs3cret"),
+            Setting(SqlConnectorConstants.SettingOracleEncryption, ConnectedSystemSettingType.DropDown, stringValue: encryptionMode),
             Setting(SqlConnectorConstants.SettingConnectionTimeout, ConnectedSystemSettingType.Integer, intValue: 5),
             Setting(SqlConnectorConstants.SettingDatabaseTimeZone, ConnectedSystemSettingType.String, stringValue: SqlConnectorConstants.DefaultDatabaseTimeZone)
         ];
