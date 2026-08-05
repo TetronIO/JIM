@@ -120,7 +120,8 @@ public class JimApplication : IDisposable
         ConfigurationChangePreviews = new ConfigurationChangePreviewServer(this,
             previewAdapters ?? new ConfigurationChangePreviewAdapterRegistry(
             [
-                new MetaverseObjectTypeDeletionSettingsPreviewAdapter(this)
+                new MetaverseObjectTypeDeletionSettingsPreviewAdapter(this),
+                new ConnectedSystemScopeSelectionPreviewAdapter(this, new SyncEngine())
             ]));
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
