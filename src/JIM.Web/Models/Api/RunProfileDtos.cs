@@ -41,6 +41,16 @@ public class RunProfileDto
     public string? PartitionName { get; set; }
 
     /// <summary>
+    /// True when this Run Profile targets a partition that is no longer selected on the Connected System, which
+    /// makes the Run Profile inoperable: a deselected partition is not managed by JIM, so executing this Run
+    /// Profile is refused rather than reading scope the administrator has withdrawn.
+    /// </summary>
+    /// <remarks>
+    /// Always false for a Run Profile that targets no partition; such a Run Profile follows whatever is selected.
+    /// </remarks>
+    public bool TargetsDeselectedPartition { get; set; }
+
+    /// <summary>
     /// File path for file-based connectors.
     /// </summary>
     public string? FilePath { get; set; }
@@ -64,6 +74,7 @@ public class RunProfileDto
             RunType = runProfile.RunType,
             PageSize = runProfile.PageSize,
             PartitionName = runProfile.Partition?.Name,
+            TargetsDeselectedPartition = runProfile.TargetsADeselectedPartition(),
             FilePath = runProfile.FilePath,
             VerifyImportContentHashes = runProfile.VerifyImportContentHashes
         };

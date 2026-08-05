@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using JIM.Connectors;
 using JIM.Models.Activities;
@@ -2823,6 +2824,7 @@ public class ConnectedSystemServer
         var existingPartitionLookup = (connectedSystem.Partitions ?? new List<ConnectedSystemPartition>())
             .ToDictionary(p => p.ExternalId, StringComparer.OrdinalIgnoreCase);
         var existingContainerLookup = BuildContainerLookup(connectedSystem.Partitions);
+        var existingContainerStableIdLookup = BuildContainerStableIdLookup(connectedSystem.Partitions);
 
         // Track which existing partitions we've matched
         var matchedPartitionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2857,7 +2859,8 @@ public class ConnectedSystemServer
                     discovered.Containers,
                     null, // parent ExternalId for root containers
                     result,
-                    existingContainerLookup);
+                    existingContainerLookup,
+                    existingContainerStableIdLookup);
             }
             else
             {
@@ -2936,6 +2939,44 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Builds a lookup of existing containers keyed on the Connected System's own immutable identifier, for those
+    /// that carry one.
+    /// </summary>
+    /// <remarks>
+    /// This is what lets a rename or a move be recognised as such. Keying identity on the Distinguished Name alone
+    /// meant either operation presented as a removal plus an addition, and the re-added container arrived
+    /// unselected: import scope narrowed because somebody tidied an OU name, and the next Full Import obsoleted
+    /// everything beneath it. Containers enumerated before stable identifiers were recorded have none until their
+    /// next hierarchy refresh, so the Distinguished Name lookup remains the fallback.
+    /// </remarks>
+    private static Dictionary<string, ConnectedSystemContainer> BuildContainerStableIdLookup(IEnumerable<ConnectedSystemPartition>? partitions)
+    {
+        var lookup = new Dictionary<string, ConnectedSystemContainer>(StringComparer.OrdinalIgnoreCase);
+        if (partitions == null) return lookup;
+
+        foreach (var partition in partitions.Where(p => p.Containers != null))
+            FlattenContainersIntoStableIdLookup(partition.Containers!, lookup);
+
+        return lookup;
+    }
+
+    /// <summary>
+    /// Recursively flattens the container hierarchy into a lookup keyed on stable identifier, skipping containers
+    /// that do not have one.
+    /// </summary>
+    private static void FlattenContainersIntoStableIdLookup(IEnumerable<ConnectedSystemContainer> containers, Dictionary<string, ConnectedSystemContainer> lookup)
+    {
+        foreach (var container in containers)
+        {
+            if (!string.IsNullOrEmpty(container.StableId))
+                lookup.TryAdd(container.StableId, container);
+
+            if (container.ChildContainers.Count > 0)
+                FlattenContainersIntoStableIdLookup(container.ChildContainers, lookup);
+        }
+    }
+
+    /// <summary>
     /// Recursively flattens container hierarchy into a lookup dictionary.
     /// </summary>
     private static void FlattenContainersIntoLookup(IEnumerable<ConnectedSystemContainer> containers, Dictionary<string, ConnectedSystemContainer> lookup)
@@ -2951,6 +2992,27 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Resolves a discovered container to the stored container it is, preferring the Connected System's own
+    /// immutable identifier and falling back to the Distinguished Name.
+    /// </summary>
+    /// <remarks>
+    /// Order matters and is the whole point: the Distinguished Name changes on rename and move, the stable
+    /// identifier does not. Falling back keeps containers stored before stable identifiers existed, and Connectors
+    /// that cannot supply one, working exactly as before.
+    /// </remarks>
+    private static bool TryResolveExistingContainer(
+        ConnectorContainer discovered,
+        Dictionary<string, ConnectedSystemContainer> globalLookup,
+        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup,
+        [NotNullWhen(true)] out ConnectedSystemContainer? existing)
+    {
+        if (!string.IsNullOrEmpty(discovered.StableId) && globalStableIdLookup.TryGetValue(discovered.StableId, out existing))
+            return true;
+
+        return globalLookup.TryGetValue(discovered.Id, out existing);
+    }
+
+    /// <summary>
     /// Recursively merges discovered containers with existing ones.
     /// </summary>
     private static void MergeContainersRecursive(
@@ -2958,15 +3020,26 @@ public class ConnectedSystemServer
         List<ConnectorContainer> discoveredContainers,
         string? parentExternalId,
         HierarchyRefreshResult result,
-        Dictionary<string, ConnectedSystemContainer> globalLookup)
+        Dictionary<string, ConnectedSystemContainer> globalLookup,
+        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup)
     {
         var matchedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var discovered in discoveredContainers)
         {
-            if (globalLookup.TryGetValue(discovered.Id, out var existing))
+            if (TryResolveExistingContainer(discovered, globalLookup, globalStableIdLookup, out var existing))
             {
                 matchedIds.Add(discovered.Id);
+
+                // Record the identifier the first time the Connector supplies one, so a container selected before
+                // stable identifiers existed survives its next rename.
+                if (string.IsNullOrEmpty(existing.StableId) && !string.IsNullOrEmpty(discovered.StableId))
+                    existing.StableId = discovered.StableId;
+
+                // Adopt the current Distinguished Name. This is only ever different when the container was matched
+                // on its stable identifier, which is precisely the rename or move that used to read as a removal.
+                if (!string.Equals(existing.ExternalId, discovered.Id, StringComparison.OrdinalIgnoreCase))
+                    existing.ExternalId = discovered.Id;
 
                 // Check for rename
                 if (!string.Equals(existing.Name, discovered.Name, StringComparison.Ordinal))
@@ -3002,13 +3075,20 @@ public class ConnectedSystemServer
                     discovered.ChildContainers,
                     discovered.Id,
                     result,
-                    globalLookup);
+                    globalLookup,
+                    globalStableIdLookup);
             }
             else
             {
                 // NEW container - add it
                 var newContainer = BuildConnectedSystemContainerTree(discovered);
                 existingContainers.Add(newContainer);
+
+                // Record it as present, or the cleanup pass below deletes it again in this same refresh: it is not in
+                // matchedIds, and "not matched" is how that pass recognises a container that has left the directory.
+                // A container created since the last refresh was therefore reported as added and then silently
+                // dropped, so it never appeared on the Partitions & Containers tab to be selected.
+                matchedIds.Add(discovered.Id);
 
                 result.AddedContainers.Add(new HierarchyChangeItem
                 {
@@ -3176,6 +3256,7 @@ public class ConnectedSystemServer
         var connectedSystemContainer = new ConnectedSystemContainer
         {
             ExternalId = connectorContainer.Id,
+            StableId = connectorContainer.StableId,
             Name = connectorContainer.Name,
             Description = connectorContainer.Description,
             Hidden = connectorContainer.Hidden

@@ -404,20 +404,30 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Returns the partitions to import from. If the Run Profile specifies a partition, only that
-    /// partition is returned. Otherwise, all selected partitions on the Connected System are returned.
+    /// Returns the partitions to import from: the partition the Run Profile targets when it targets one, otherwise
+    /// every selected partition. Only selected partitions are ever returned.
     /// </summary>
+    /// <remarks>
+    /// The decision itself lives in <see cref="ConnectedSystemExtensions.GetTargetPartitions"/> so that the Connector,
+    /// the Run Profile validation in JIM.Application and the portal cannot answer "what does this Run Profile read?"
+    /// three different ways. This Connector previously returned a targeted partition without consulting its Selected
+    /// flag, which made deselecting a partition a no-op for any Run Profile that named it.
+    /// </remarks>
     private IEnumerable<ConnectedSystemPartition> GetTargetPartitions()
     {
+        var targets = _connectedSystem.GetTargetPartitions(_connectedSystemRunProfile).ToList();
+
         if (_connectedSystemRunProfile.Partition != null)
         {
-            _logger.Debug("GetTargetPartitions: Run Profile targets specific partition: {PartitionName}",
-                LogSanitiser.Sanitise(_connectedSystemRunProfile.Partition.Name));
-            return [_connectedSystemRunProfile.Partition];
+            _logger.Debug("GetTargetPartitions: Run Profile targets partition {PartitionName}; {Count} partition(s) in scope after applying selection",
+                LogSanitiser.Sanitise(_connectedSystemRunProfile.Partition.Name), targets.Count);
+        }
+        else
+        {
+            _logger.Debug("GetTargetPartitions: No partition specified on Run Profile, importing from all {Count} selected partition(s)", targets.Count);
         }
 
-        _logger.Debug("GetTargetPartitions: No partition specified on Run Profile, importing from all selected partitions");
-        return _connectedSystem.Partitions!.Where(p => p.Selected);
+        return targets;
     }
 
     /// <summary>

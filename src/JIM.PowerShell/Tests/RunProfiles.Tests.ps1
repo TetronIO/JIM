@@ -70,6 +70,12 @@ Describe 'Get-JIMRunProfile' {
         It 'Should have examples' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
+
+        It 'Should document the targetsDeselectedPartition output property' {
+            # An operator scripting against JIM has to be able to find the Run Profiles that partition
+            # deselection has left inoperable without executing them and reading the failure.
+            ($help.returnValues | Out-String) | Should -Match 'targetsDeselectedPartition'
+        }
     }
 }
 
