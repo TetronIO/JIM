@@ -193,21 +193,12 @@ internal class LdapConnectorExport
 
     private bool IsWithinManagedScope(string targetDn)
     {
-        foreach (var scopeDn in _managedScope)
-        {
-            if (IsDnWithinContainer(targetDn, scopeDn))
-                return true;
-        }
+        if (_managedScope.Any(scopeDn => IsDnWithinContainer(targetDn, scopeDn)))
+            return true;
 
         // A container created during this run is selected by JIM the moment the run finishes, so an object being
         // provisioned into one it has just created is in scope even though the stored selection has yet to catch up.
-        foreach (var createdDn in _createdContainerExternalIds)
-        {
-            if (IsDnWithinContainer(targetDn, createdDn))
-                return true;
-        }
-
-        return false;
+        return _createdContainerExternalIds.Any(createdDn => IsDnWithinContainer(targetDn, createdDn));
     }
 
     /// <summary>
