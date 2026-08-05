@@ -302,6 +302,17 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void BuildConnectionString_Always_DisablesConnectionPooling()
+    {
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", Port = 1521, ServiceName = "HRPDB" };
+
+        var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
+
+        Assert.That(builder.Pooling, Is.False,
+            "A pool outlives the Connector that filled it: it holds sessions open on the database long after a run, and JIM opens one connection per operation rather than one per object, so pooling buys nothing to offset that.");
+    }
+
+    [Test]
     public void BuildConnectionString_Tcps_UsesTheEncryptedProtocol()
     {
         var settings = new SqlConnectionSettings { Host = "oracle.example.local", Port = 2484, ServiceName = "HRPDB", Encryption = SqlConnectionEncryption.Tls };

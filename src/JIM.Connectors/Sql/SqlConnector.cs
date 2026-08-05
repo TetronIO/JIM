@@ -24,7 +24,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -32,8 +32,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
     /// <summary>
     /// The server certificate this Connector has decided to accept in addition to the operating system's
-    /// own trust anchors, materialised for the driver. Held for the Connector's lifetime rather than the
-    /// connection's: a pooled connection can re-establish itself at any point and needs the file again.
+    /// own trust anchors, materialised for the driver. Held for the Connector's lifetime rather than any
+    /// one connection's: a Connector opens several over its life (a settings test, a schema discovery, a
+    /// run), and each of them needs the file again.
     /// </summary>
     private SqlTrustedServerCertificateFile? _trustedServerCertificateFile;
 
@@ -205,9 +206,40 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
                 Description = "Oracle Database holds GUIDs in RAW(16) columns, but so it does digests and other binary values, and the catalogue cannot tell them apart. Turn this on if RAW(16) columns in this database hold GUIDs; leave it off and they import as binary values.",
                 Category = ConnectedSystemSettingCategory.General,
                 Type = ConnectedSystemSettingType.CheckBox
+            },
+
+            new() { Name = "Object Type Configuration", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.Heading },
+            new()
+            {
+                Name = SqlConnectorConstants.SettingObjectTypes,
+                Required = true,
+                Description = ObjectTypesSettingDescription,
+                Category = ConnectedSystemSettingCategory.Schema,
+                Type = ConnectedSystemSettingType.Text
             }
         };
     }
+
+    /// <summary>
+    /// The Object Types setting's description: what the document says, and a complete example to start
+    /// from. Long, deliberately. It is the only place an administrator writing the document by hand can
+    /// learn its shape from inside JIM, and an empty box with no example is the worst first experience
+    /// this Connector could offer.
+    /// </summary>
+    /// <remarks>
+    /// The example itself lives in <see cref="SqlConnectorConstants.ObjectTypesExample"/> and is parsed
+    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// </remarks>
+    private static string ObjectTypesSettingDescription =>
+        "Which Connected System Object Types this database holds, and where each one's objects come from, as a JSON document. " +
+        "Each object type needs a 'name' and 'anchorColumns' (the column or columns whose values identify a row), and exactly one source: " +
+        "a 'table' (a table or a view, optionally qualified with a 'schema') or a 'select' statement where a view cannot be created. " +
+        "'columns' declares what a column's type cannot say, which today means naming the object type a column's values point at ('referencesObjectType'); " +
+        "JIM never guesses that from a foreign key, but it does suggest one where the database declares it. " +
+        "'relatedTables' turns a table of one row per value into a multi-valued attribute: name the attribute, its 'valueColumn', and the 'joinColumns' " +
+        "that join a row back to its parent (one per anchor column, in the same order), plus 'referencesObjectType' where those values are references, as group membership is. " +
+        "Every other column is discovered and typed automatically. Example:" + Environment.NewLine + Environment.NewLine +
+        SqlConnectorConstants.ObjectTypesExample;
 
     /// <summary>
     /// Validates SqlConnector setting values using custom business logic.
@@ -224,12 +256,47 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         if (timeZoneResult != null)
             response.Add(timeZoneResult);
 
+        var objectTypesResult = ValidateObjectTypes(settingValues);
+        if (objectTypesResult != null)
+            response.Add(objectTypesResult);
+
         // validate that we can actually reach the database with the supplied setting values
         var connectivityResult = TestDatabaseConnectivity(settingValues, logger);
         if (connectivityResult != null)
             response.Add(connectivityResult);
 
         return response;
+    }
+    #endregion
+
+    #region IConnectorSchema members
+    /// <summary>
+    /// Discovers the schema of the object types this Connected System is configured for: their columns
+    /// typed by the dialect's own mapping, their related tables as multi-valued attributes, and their
+    /// anchors as recommended external IDs.
+    /// </summary>
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document is unusable, or names something the database does not have.</exception>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing.</exception>
+    public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        logger.Verbose($"GetSchemaAsync() called for {Name}");
+
+        var provider = TryResolveProvider(settings)
+            ?? throw new InvalidSettingValuesException($"Choose a {SqlConnectorConstants.SettingDatabaseType} before discovering the schema.");
+
+        // Parsed before anything is connected to: a document that cannot be used makes the connection
+        // pointless, and the administrator's problem is the document either way.
+        var configuration = SqlSchemaConfiguration.Parse(GetString(settings, SqlConnectorConstants.SettingObjectTypes));
+        var connectionSettings = BuildConnectionSettings(settings);
+
+        // Schema discovery runs on a Blazor Server circuit, and opening a connection is synchronous all
+        // the way down (including the certificate-trust retry), so it goes to the thread pool rather
+        // than blocking the circuit. Everything after it is genuinely asynchronous.
+        using var connection = await Task.Run(() => OpenConnection(provider, connectionSettings, settings, logger));
+
+        var schema = new SqlConnectorSchema(provider, connection, configuration, BuildTypeMappingOptions(settings), logger);
+        return await schema.GetSchemaAsync();
     }
     #endregion
 
@@ -593,6 +660,47 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
                 Exception = ex
             };
         }
+    }
+
+    /// <summary>
+    /// Checks that the Object Types document can be used, so that a Connected System is never saved
+    /// with configuration that schema discovery would then refuse. A missing document is left alone:
+    /// the setting is required, and the generic validator has already said so.
+    /// </summary>
+    private static ConnectorSettingValueValidationResult? ValidateObjectTypes(List<ConnectedSystemSettingValue> settingValues)
+    {
+        var settingValue = settingValues.SingleOrDefault(sv => sv.Setting.Name == SqlConnectorConstants.SettingObjectTypes);
+        if (settingValue == null || string.IsNullOrWhiteSpace(settingValue.StringValue))
+            return null;
+
+        try
+        {
+            SqlSchemaConfiguration.Parse(settingValue.StringValue);
+            return null;
+        }
+        catch (SqlSchemaConfigurationException ex)
+        {
+            return new ConnectorSettingValueValidationResult
+            {
+                IsValid = false,
+                ErrorMessage = ex.Message,
+                SettingValue = settingValue,
+                Exception = ex
+            };
+        }
+    }
+
+    /// <summary>
+    /// The per-Connected System choices that change how a column's SQL type maps onto a JIM attribute
+    /// type. Both are Oracle-only opt-ins, and both are off unless an administrator turned them on.
+    /// </summary>
+    private static SqlTypeMappingOptions BuildTypeMappingOptions(List<ConnectedSystemSettingValue> settingValues)
+    {
+        return new SqlTypeMappingOptions
+        {
+            TreatSingleDigitNumberAsBoolean = GetCheckbox(settingValues, SqlConnectorConstants.SettingTreatNumber1AsBoolean) ?? false,
+            TreatRaw16AsGuid = GetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid) ?? false
+        };
     }
 
     /// <summary>
