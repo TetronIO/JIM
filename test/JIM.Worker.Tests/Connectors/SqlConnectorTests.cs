@@ -535,9 +535,7 @@ public class SqlConnectorTests
     /// </summary>
     private List<ConnectedSystemSettingValue> CreateSettingValues()
     {
-        var settingValues = new List<ConnectedSystemSettingValue>();
-
-        foreach (var setting in _connector.GetSettings())
+        return _connector.GetSettings().Select(setting =>
         {
             var definitionSetting = new ConnectorDefinitionSetting
             {
@@ -558,20 +556,18 @@ public class SqlConnectorTests
 
             var settingValue = new ConnectedSystemSettingValue { Setting = definitionSetting };
 
-            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: not null })
-                settingValue.CheckboxValue = definitionSetting.DefaultCheckboxValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue: { } defaultCheckboxValue })
+                settingValue.CheckboxValue = defaultCheckboxValue;
 
             if (definitionSetting.Type is ConnectedSystemSettingType.String or ConnectedSystemSettingType.DropDown or ConnectedSystemSettingType.File &&
                 !string.IsNullOrEmpty(definitionSetting.DefaultStringValue))
                 settingValue.StringValue = definitionSetting.DefaultStringValue;
 
-            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: not null })
-                settingValue.IntValue = definitionSetting.DefaultIntValue.Value;
+            if (definitionSetting is { Type: ConnectedSystemSettingType.Integer, DefaultIntValue: { } defaultIntValue })
+                settingValue.IntValue = defaultIntValue;
 
-            settingValues.Add(settingValue);
-        }
-
-        return settingValues;
+            return settingValue;
+        }).ToList();
     }
 
     /// <summary>

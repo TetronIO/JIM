@@ -61,7 +61,7 @@ internal sealed class SqlTrustedServerCertificateFile : IDisposable
         RemoveAbandonedFiles(logger);
 
         using var certificate = X509CertificateLoader.LoadCertificate(derEncodedCertificate);
-        var filePath = Path.Combine(Path.GetTempPath(), $"{FileNamePrefix}{Guid.NewGuid():N}.pem");
+        var filePath = Path.Join(Path.GetTempPath(), $"{FileNamePrefix}{Guid.NewGuid():N}.pem");
         var trustedCertificateFile = new SqlTrustedServerCertificateFile(filePath);
 
         try
