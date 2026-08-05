@@ -259,9 +259,33 @@ Each wave is one or more GitHub issues drafted for sign-off before filing. Each 
         - **Omitted means "keep the stored value"** on the REST and PowerShell preview surfaces, matching the update surfaces exactly. A preview whose omitted fields meant something different from the update's would answer a question about a change nobody was proposing, with the same confidence as a correct one.
         - **A stale preview states nothing.** The editor compares the form against the proposal the visible preview was run for and withholds its counts from the save confirmation the moment they diverge, alongside the same withholding for a failed or still-running preview (`ConfigurationChangePreviewCounts`). A number on a confirmation dialog is read as an answer whatever caveats sit beside it.
         - Two **panel defects only runtime verification could find**: `OnPreviewChanged` was raised off the renderer's Dispatcher, so every background refresh threw and was swallowed by the transient-read-failure handler, freezing the panel on stage 1; and with that fixed, re-reading on every parameter set turned the callback into a render loop that starved the reconciliation poll. Both now have bUnit coverage, and both swallow sites log.
-- [ ] **Wave 2:** G4 partition/container deselection.
+- [ ] **Wave 2:** G4 partition/container deselection. Scope-change behaviour audited before design; see [Partition and Container scope changes: what happens today](#partition-and-container-scope-changes-what-happens-today) below.
 - [ ] **Wave 3:** G1/G2 (Synchronisation Rule scope and Attribute Flow changes; the heaviest evaluation, fully dependent on #288).
 - [ ] **Wave 4:** G6 and remaining toggles; re-scope #204, #134/#809, #421, and #91 mode 2 as adapter issues.
+
+### Partition and Container scope changes: what happens today
+
+Audit of the G4 surface against the code, done before designing the adapter so that the adapter covers the gaps rather than restating what already works. Container and partition selection currently means "the scope JIM **reads**"; several rows below only make sense if it means "the scope JIM **manages**", which is the design question Wave 2 has to settle.
+
+Verified in `SyncImportTaskProcessor` (deletion detection at `:529`, scope predicate at `:534`, obsoletion at `:1202`), `LdapConnectorExport`, `SyncExportTaskProcessor` (container auto-selection), and `ContainerSelectionClassificationTests`.
+
+| # | Scenario | What happens today | Handled | Risk if not |
+|---|---|---|---|---|
+| 1 | Export provisions to a container that does not exist, "Create containers as needed?" on | Connector creates the container; JIM then auto-selects it (`RefreshAndAutoSelectContainersWithTriadAsync`), so the object imports back | Yes | - |
+| 2 | Same, setting off | Directory rejects the write; reported as an export error against the object | Yes | - |
+| 3 | Export writes to an existing but **deselected** container (an Export Attribute Flow moves the Distinguished Name, e.g. on disable) | Export succeeds. The object is outside import scope, so the Pending Export is never confirmed, and the next whole-scope Full Import obsoletes the Connected System Object. Depending on `OutboundDeprovisionAction`, the directory object is then orphaned and collides with a re-provision, or is deleted and recreated each cycle | **No** | Silent churn loop; JIM deletes or duplicates objects it exported itself. The inverse of row 1, for containers JIM did not create |
+| 4 | Administrator deselects a container holding Connected System Objects; the partition is still covered by a Full Import | Objects are absent from the import, marked `Obsolete`, Pending Exports cleaned up; next synchronisation disconnects, recalls attributes, deletes the Connected System Object, and may make the Metaverse Object deletion-eligible. The save asks for acknowledgement and is classified Destructive | Partial | Acknowledgement states the consequence but no number. This is the count G4 exists to supply |
+| 5 | Administrator deselects a whole partition; the only Full Import Run Profile targets that partition | Deletion detection is scoped to the Run Profile's partition, and that Run Profile no longer runs, so nothing is obsoleted. Objects simply stop updating | **No** | Silent staleness rather than destruction. Reads as "nothing happened" until something else triggers a whole-scope import |
+| 6 | Administrator deselects a whole partition; a Full Import Run Profile with no partition targeting exists | Deletion scope is the whole Connected System, so every object in the deselected partition is obsoleted at once | **No** | Mass deprovisioning. Identical tick box to row 5, opposite outcome, decided by Run Profile shape the administrator is not looking at |
+| 7 | Any deselection, but only Delta Import Run Profiles run afterwards | Delta Imports do no deletion detection by design, so nothing is obsoleted until the next Full Import | **No** | The consequence detaches from the action in time; the eventual Full Import gets blamed for a change made weeks earlier |
+| 8 | An import returns zero objects | Deletion detection is skipped entirely (`totalObjectsImported > 0` guard) | Yes | - |
+| 9 | Container renamed in the directory, picked up by a hierarchy refresh | Classified as not destructive; no false alarm | Yes | - |
+| 10 | Administrator selects a previously deselected container (widening scope) | Acknowledgement requested, classified non-destructive; nothing existing is at risk | Yes | - |
+| 11 | A selected container disappears from the directory | Hierarchy refresh flags it, and the Partitions tab warns that selected items were removed | Yes | - |
+
+Rows 4 to 7 are the adapter's remit: same tick box, four different outcomes, none of them stated up front. **Row 3 is not a preview gap but a correctness gap in the export path**, and is therefore a stacked-PR layer beneath the adapter rather than part of it: export currently treats import scope as none of its business, which is what turns a routine Distinguished Name flow into object churn. Whether to enforce "JIM only exports where it can read back" is a behaviour change for anyone relying on today's silence, and needs a decision before Wave 2 starts.
+
+Row 7 also constrains the adapter's wording: the preview states what a Full Import *would* do, so it must not imply the change takes effect immediately.
 
 ## Success Criteria
 
