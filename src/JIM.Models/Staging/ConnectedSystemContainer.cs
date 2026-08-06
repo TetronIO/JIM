@@ -34,6 +34,20 @@ public class ConnectedSystemContainer
     public string ExternalId { get; set; } = null!;
 
     /// <summary>
+    /// The Connected System's own immutable identifier for this container, where the Connector can supply one:
+    /// objectGUID on Active Directory, entryUUID on OpenLDAP. Null for containers enumerated before stable
+    /// identifiers were recorded, and for Connectors that have none to give.
+    /// </summary>
+    /// <remarks>
+    /// This is what container identity is keyed on during a hierarchy refresh, because <see cref="ExternalId"/> is
+    /// the Distinguished Name and therefore changes on every rename and move. Matching on the Distinguished Name
+    /// alone read those as a removal plus an addition, and the re-added container arrived unselected, quietly taking
+    /// its objects out of import scope and obsoleting them on the next Full Import. Populated on the next hierarchy
+    /// refresh for containers that predate it; the merge falls back to the Distinguished Name until then.
+    /// </remarks>
+    public string? StableId { get; set; }
+
+    /// <summary>
     /// The human-readable name for the container.
     /// </summary>
     public string Name { get; set; } = null!;

@@ -286,7 +286,7 @@ Set the Host setting to `dc01.corp.local`. The name now resolves inside the cont
 
 ### Setting Passwords
 
-Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel, with two rules specific to directories.
+Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel ([Passwords](../concepts/passwords.md) covers that channel across all Connectors), with two rules specific to directories.
 
 **Use LDAPS.** A password set puts the password on the wire, so an unencrypted connection exposes it to anyone on the network path. JIM will not stop you: if "Use Secure Connection (LDAPS)?" is off, passwords are still set and a warning is written to the service log on every run, because some deployments genuinely cannot offer TLS on their directory and locking them out of password management entirely helps nobody. It is your decision, and enabling LDAPS is strongly recommended.
 

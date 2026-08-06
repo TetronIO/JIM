@@ -26,6 +26,22 @@ Controls how many objects are processed per batch during execution. Larger batch
 
 For connectors that expose multiple partitions (for example LDAP) or that operate on files (the file connector), the Run Profile pins the operation to a specific scope. A connector can have several Run Profiles of the same run type, each scoped to a different partition or file.
 
+A Run Profile that targets no partition reads from every partition currently selected on the Connected System, so it follows your selections automatically.
+
+### When a targeted partition is deselected
+
+Selecting a partition on the Connected System's Partitions & Containers tab is how you tell JIM which parts of a directory it manages, and that decision binds every Run Profile. If you deselect a partition that a Run Profile targets, that Run Profile becomes **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than reading scope you have withdrawn. The Run Profiles tab marks it **Not selected** beside the partition name, the REST API returns `targetsDeselectedPartition` on the Run Profile, and `Get-JIMRunProfile` surfaces the same property, so you can find every affected Run Profile before a scheduled run reaches one:
+
+```powershell
+Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object targetsDeselectedPartition
+```
+
+To resolve it, either select the partition again, or edit the Run Profile to target a partition that is selected. Deleting the Run Profile is also valid where the partition has genuinely been retired.
+
+!!! warning "Deselecting a partition or container changes what a Full Import considers deleted"
+
+    A Full Import treats any object it does not find as deleted from the Connected System, which marks the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls their contributed attribute values. Narrowing import scope therefore has consequences well beyond "JIM stops reading these objects". Review the scope change before saving it.
+
 ## Verification Mode (Full Import)
 
 Full Import automatically skips loading and comparing objects whose content has not changed since the last import, using a stored content hash (see [how Full Import detects unchanged objects](../concepts/synchronisation-pipeline.md#how-full-import-detects-unchanged-objects)). This is transparent and needs no configuration.
