@@ -2605,6 +2605,260 @@ html[lang] .jim-schema-change-table td {
     }
 }
 
+/* ─── Run steps in a table cell (#1162) ───
+   The Operations queue's Progress cell: the whole run as a row of segments, the running step's own
+   bar beneath it, and a caption naming the step the figures measure. The Activity page's rail says
+   the same thing with labels, icons and durations; this is what survives at row height. */
+.jim-queue-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+/* Whatever comes first in the cell carries the alignment offset, so its centre lands on the centre
+   of the first line of text in every other column and the rail rules straight across the table.
+   8px is half the difference between the rendered text line and the 6px rail, measured off the page
+   rather than derived: the computed line box is a little over the nominal 20px, and 7px left the
+   rail a pixel high.
+   An offset rather than a one-line-tall box: a box would centre the rail inside it and leave the
+   same dead space underneath, opening up the gap to the bar for no alignment gain. */
+.jim-queue-progress-first {
+    padding-top: 8px;
+}
+
+.jim-queue-steps {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+/* Sized by share rather than by width, so a six-step export and an eight-step import both fill the
+   column and neither reads as the longer run purely by being wider. */
+/* A step not reached yet has to be legible without shouting, and the two requirements pull apart
+   across the themes. Measured on the running page, in order: --mud-palette-lines-default (the
+   divider colour, tuned for hairlines) gave 1.45:1 on the dark table surface, and
+   --mud-palette-text-disabled 2.24:1, both under the 3:1 that meaningful non-text UI needs
+   (WCAG 1.4.11) - and how many segments are still grey is precisely what says how much of the run
+   is left. --mud-palette-text-secondary fixed the dark theme at 6.13:1 but reached 7.53:1 in the
+   light one, where it out-weighed the green of a finished step and inverted the hierarchy.
+   One fixed neutral satisfies both by construction: measured 3.45:1 on the light surface and
+   4.88:1 on the dark, recessive against the green of a finished step in each. Deliberately not a
+   palette token, because a token that adapts per theme is what created the problem. */
+:root {
+    --jim-run-step-pending: #8a8a8a;
+}
+.jim-queue-step {
+    flex: 1 1 0;
+    min-width: 10px;
+    height: 6px;
+    border-radius: 2px;
+    background-color: var(--jim-run-step-pending);
+}
+
+/* Not reached yet is the rail's resting state, so this restates the base rule above. Written out
+   rather than left implicit because every other status has a rule, and a modifier with none reads
+   as an omission. */
+.jim-queue-step--pending {
+    background-color: var(--jim-run-step-pending);
+}
+
+.jim-queue-step--completed {
+    background-color: var(--mud-palette-success);
+}
+
+.jim-queue-step--failed {
+    background-color: var(--mud-palette-error);
+}
+
+/* Hatched rather than a colour of its own: a skipped step is the absence of work, and giving it a
+   fourth solid colour would make a Delta Import's rail look busier than an import that did more. */
+.jim-queue-step--skipped {
+    background-image: repeating-linear-gradient(45deg,
+        var(--mud-palette-text-disabled) 0 2px,
+        transparent 2px 4px);
+    background-color: transparent;
+    opacity: 0.55;
+}
+
+/* Striped end to end rather than part-filled: how far through the step the run is belongs to the
+   bar underneath, and saying it twice in two geometries reads as two different facts. */
+.jim-queue-step--active {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 28%, transparent);
+    background-image: repeating-linear-gradient(45deg,
+        var(--mud-palette-info) 0 4px,
+        color-mix(in srgb, var(--mud-palette-info) 45%, transparent) 4px 8px);
+    background-size: 11.31px 11.31px;
+    animation: jim-queue-step-stripes 1s linear infinite;
+}
+
+@keyframes jim-queue-step-stripes {
+    from { background-position: 0 0; }
+    to { background-position: 11.31px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jim-queue-step--active {
+        animation: none;
+    }
+}
+
+.jim-queue-progress-bar {
+    display: flex;
+    align-items: center;
+}
+
+/* A task with no steps has its bar first, and the bar is 4px where the rail is 6px, so it needs a
+   pixel more offset to put its centre on the same line. Measured, not derived. */
+.jim-queue-progress-bar.jim-queue-progress-first {
+    padding-top: 9px;
+}
+
+.jim-queue-progress-caption {
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.4;
+}
+
+/* Tabular figures so the count does not shift the caption's remaining words sideways on every
+   poll, which is about once a second while a run is in flight. */
+.jim-queue-progress-count {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Every cell hangs from the top of the row, so the rails line up across the table rather than
+   floating at a height that shifts with each cell's contents. Scoped to the queue's own table so
+   no other table's vertical centring is disturbed. */
+.jim-queue-table-active td {
+    vertical-align: top;
+}
+
+/* ─── A Schedule Execution's steps in a queue group header (#1162) ───
+   One marker per step group, joined by legs, with the step names underneath. The unit here is honest
+   in a way the per-task rail's is not: one segment is one whole Run Profile execution, and there is
+   no comparably-sized alternative to divide the Schedule into. */
+.jim-schedule-rail-block {
+    flex: 1 1 auto;
+    min-width: 12rem;
+    max-width: 26rem;
+}
+
+.jim-schedule-rail {
+    display: flex;
+    align-items: center;
+}
+
+/* The unstyled state is the pending one: a hollow ring, which every modifier below then overrides. So
+   jim-schedule-node--pending is emitted by the component and has no rule here, deliberately. It is the one
+   modifier that should NOT be added if a sweep for classes named in Razor but missing from this file reports
+   it; the others would each render as an unstyled div, which is the fault such a sweep is looking for. */
+.jim-schedule-node {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    border: 1.5px solid var(--jim-run-step-pending);
+    color: var(--mud-palette-surface);
+}
+
+/* The icon rides inside a 12px marker, so it is sized against the marker rather than left at the
+   inherited font size, which would overflow it. */
+.jim-schedule-node .mud-icon-root {
+    width: 9px;
+    height: 9px;
+    font-size: 9px;
+}
+
+.jim-schedule-node--completed {
+    background-color: var(--mud-palette-success);
+    border-color: var(--mud-palette-success);
+}
+
+.jim-schedule-node--failed {
+    background-color: var(--mud-palette-error);
+    border-color: var(--mud-palette-error);
+}
+
+.jim-schedule-node--cancelled {
+    background-color: var(--mud-palette-warning);
+    border-color: var(--mud-palette-warning);
+}
+
+/* A halo rather than a pulse. The worker activity bar immediately above the group header shimmers
+   while tasks are processing, and a second animation beside it would leave two things competing for
+   one glance; a static ring says "here" just as well and survives prefers-reduced-motion untouched. */
+.jim-schedule-node--running {
+    background-color: var(--mud-palette-info);
+    border-color: var(--mud-palette-info);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mud-palette-info) 22%, transparent);
+}
+
+/* A step running several tasks concurrently is drawn as one marker divided into a wedge per task,
+   painted by an inline conic gradient the component builds (the wedge count is a property of the
+   Schedule, not of this stylesheet). Larger than a whole marker because it is carrying more.
+   It keeps the outline every marker has, rather than relying on the gradient to reach the edge: a
+   step whose tasks have all yet to start has nothing but empty wedges, and without the ring there
+   would be nothing there at all. */
+.jim-schedule-node--divided {
+    width: 16px;
+    height: 16px;
+    border-color: var(--jim-run-step-pending);
+}
+
+.jim-schedule-leg {
+    flex: 1 1 28px;
+    min-width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    background-color: var(--jim-run-step-pending);
+}
+
+.jim-schedule-leg--done {
+    background-color: var(--mud-palette-success);
+}
+
+/* Each name has to sit under the marker it belongs to, which equal shares do not achieve: the markers
+   are spaced from the first to the last, so they sit at 0%, 50% and 100% of a three-step rail, while
+   equal-share labels centre at 17%, 50% and 83%. On a short rail that drift puts the last name nearer
+   its neighbour's marker than its own, which is worse than no name at all when the question being
+   asked is which step failed.
+   Half a share to each end label, aligned outwards, puts every name back under its marker: the ends
+   line up with the rail's ends, and each middle label centres on (0.5 + k) of the remaining shares,
+   which is exactly where its marker is. */
+.jim-schedule-labels {
+    display: flex;
+    margin-top: 0.25rem;
+}
+
+.jim-schedule-labels span {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 0.7rem;
+    text-align: center;
+    color: var(--mud-palette-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jim-schedule-labels span:first-child {
+    flex: 0.5 1 0;
+    text-align: left;
+}
+
+.jim-schedule-labels span:last-child {
+    flex: 0.5 1 0;
+    text-align: right;
+}
+
+/* A Schedule of one step has one marker, drawn at the left where the rail begins. */
+.jim-schedule-labels span:only-child {
+    flex: 1 1 0;
+    text-align: left;
+}
+
 /* ─── Live progress metrics beneath a run's steps ───
    The percentage rides beside the bar; the numbers behind it sit underneath as a labelled
    readout. Fixed-width columns and tabular figures keep the row still while the digits change,

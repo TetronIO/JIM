@@ -7,6 +7,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -529,6 +530,40 @@ public class ActivityRepository : IActivityRepository
             .OrderBy(a => a.ScheduleStepIndex)
             .ThenBy(a => a.Created)
             .ToListAsync();
+    }
+
+    public async Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds)
+    {
+        if (scheduleExecutionIds.Count == 0)
+            return [];
+
+        var rows = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId.HasValue &&
+                        scheduleExecutionIds.Contains(a.ScheduleExecutionId.Value) &&
+                        a.ScheduleStepIndex.HasValue)
+            .OrderBy(a => a.ScheduleStepIndex)
+            .ThenBy(a => a.Created)
+            .Select(a => new
+            {
+                ScheduleExecutionId = a.ScheduleExecutionId!.Value,
+                StepIndex = a.ScheduleStepIndex!.Value,
+                ActivityId = a.Id,
+                a.TargetContext,
+                a.TargetName,
+                a.Status
+            })
+            .ToListAsync();
+
+        return rows
+            .GroupBy(r => r.ScheduleExecutionId)
+            .ToDictionary(g => g.Key, g => g.Select(r => new ScheduleStepObservation
+            {
+                StepIndex = r.StepIndex,
+                Name = ScheduleStepReading.NameOf(r.TargetContext, r.TargetName, r.StepIndex),
+                ActivityId = r.ActivityId,
+                ActivityStatus = r.Status
+            }).ToList());
     }
 
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)

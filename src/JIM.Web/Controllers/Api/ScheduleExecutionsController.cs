@@ -86,6 +86,11 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         var dto = ScheduleExecutionDetailDto.FromEntity(detail.Execution);
         dto.Steps.AddRange(detail.Steps.Select(ScheduleExecutionStepDto.FromModel));
 
+        // How far through the Schedule this execution is, in step groups, read the same way the portal's
+        // queue reads it (#1162). Additional to Steps above, which is one entry per Schedule Step row,
+        // and derived from it, so the two accounts of the same execution cannot disagree.
+        dto.Progress = ScheduleStepReading.FromStepStates(detail.Steps, detail.Execution);
+
         return Ok(dto);
     }
 

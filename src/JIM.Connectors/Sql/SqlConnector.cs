@@ -39,6 +39,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     private ISqlProvider? _importProvider;
     private SqlSchemaConfiguration? _importConfiguration;
     private TimeZoneInfo _importDatabaseTimeZone = TimeZoneInfo.Utc;
+    private SqlDeltaImportMode _importDeltaMode = SqlDeltaImportMode.NotSet;
 
     /// <summary>
     /// The server certificate this Connector has decided to accept in addition to the operating system's
@@ -226,6 +227,19 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
                 Description = ObjectTypesSettingDescription,
                 Category = ConnectedSystemSettingCategory.Schema,
                 Type = ConnectedSystemSettingType.Text
+            },
+
+            new() { Name = "Delta Import", Category = ConnectedSystemSettingCategory.Schema, Type = ConnectedSystemSettingType.Heading },
+            new()
+            {
+                // Deliberately not required: a Connected System that only runs Full Imports is not
+                // obliged to answer this, and defaulting it would have JIM read changes from a table
+                // nobody has said exists.
+                Name = SqlConnectorConstants.SettingDeltaImportMode,
+                Description = DeltaImportModeSettingDescription,
+                Category = ConnectedSystemSettingCategory.Schema,
+                Type = ConnectedSystemSettingType.DropDown,
+                DropDownValues = new List<string> { SqlConnectorConstants.DeltaImportModeChangeLogTable, SqlConnectorConstants.DeltaImportModeWatermarkColumn }
             }
         };
     }
@@ -250,6 +264,25 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         "that join a row back to its parent (one per anchor column, in the same order), plus 'referencesObjectType' where those values are references, as group membership is. " +
         "Every other column is discovered and typed automatically. Example:" + Environment.NewLine + Environment.NewLine +
         SqlConnectorConstants.ObjectTypesExample;
+
+    /// <summary>
+    /// The Delta Import Mode setting's description: what each mode reads, what each one can and cannot
+    /// observe, and what each needs adding to the Object Types document.
+    /// </summary>
+    /// <remarks>
+    /// The example lives in <see cref="SqlConnectorConstants.DeltaConfigurationExample"/> and is parsed
+    /// by the Connector's own unit tests, so it cannot drift out of step with what the parser accepts.
+    /// </remarks>
+    private static string DeltaImportModeSettingDescription =>
+        "How a Delta Import finds out what has changed. Leave this unanswered where this Connected System only runs Full Imports. " +
+        $"'{SqlConnectorConstants.DeltaImportModeChangeLogTable}' reads a table or view your database maintains, holding one row per change with the object's anchor, " +
+        "a change type and a monotonic sequence or timestamp. It is the recommended mode, and the only one that observes a deletion. " +
+        "Add a 'changeLog' to every object type naming that table, the columns carrying the anchor, the sequence column, the change type column, " +
+        "and which of your own change-type values mean a create, an update and a deletion. " +
+        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn'. " +
+        "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
+        "so deletions are found only by a Full Import. Example:" + Environment.NewLine + Environment.NewLine +
+        SqlConnectorConstants.DeltaConfigurationExample;
 
     /// <summary>
     /// Validates SqlConnector setting values using custom business logic.
@@ -317,8 +350,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     /// be interpreted.
     /// </summary>
     /// <param name="persistedConnectorData">
-    /// Unused by a Full Import, which reads everything there is rather than resuming from a watermark.
-    /// A Delta Import is where it earns its place.
+    /// The watermark the last run left behind, which a Delta Import reads its changes from. A Full
+    /// Import reads everything there is regardless, but still records a new one where this Connected
+    /// System is configured for Delta Imports, so that the next one has a baseline.
     /// </param>
     /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
     /// <exception cref="SqlSchemaConfigurationException">The Object Types document is unusable.</exception>
@@ -339,6 +373,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         _importProvider = provider;
         _importConfiguration = configuration;
         _importDatabaseTimeZone = databaseTimeZone;
+        _importDeltaMode = ResolveDeltaImportMode(settingValues);
     }
 
     /// <summary>
@@ -361,16 +396,13 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         if (_importConnection == null || _importProvider == null || _importConfiguration == null)
             throw new InvalidOperationException("Must call OpenImportConnection() before ImportAsync()!");
 
-        var import = new SqlConnectorImport(_importProvider, _importConnection, _importConfiguration, _importDatabaseTimeZone,
-            connectedSystem, runProfile, paginationTokens, logger, cancellationToken, progress);
+        var import = new SqlConnectorImport(_importProvider, _importConnection, _importConfiguration, _importDatabaseTimeZone, _importDeltaMode,
+            connectedSystem, runProfile, paginationTokens, persistedConnectorData, logger, cancellationToken, progress);
 
         return runProfile.RunType switch
         {
             ConnectedSystemRunType.FullImport => import.GetFullImportObjectsAsync(),
-
-            // Delta Import is the next phase of this Connector's implementation plan; the capability is
-            // declared because the Connector will support it, and it is not reachable until then.
-            ConnectedSystemRunType.DeltaImport => throw new NotSupportedException("Delta Import is not yet implemented for the JIM SQL Connector."),
+            ConnectedSystemRunType.DeltaImport => import.GetDeltaImportObjectsAsync(),
             _ => throw new InvalidDataException($"Unsupported import run-type: {runProfile.RunType}")
         };
     }
@@ -379,8 +411,9 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     /// Releases the import connection, whether the import succeeded or failed.
     /// </summary>
     /// <returns>
-    /// Always null: a Full Import has no state for JIM to carry into the next run, and a non-null return
-    /// would override state JIM already holds.
+    /// Always null. The only state this Connector carries between runs is the Delta Import watermark,
+    /// and that is returned from the first page of the run itself so JIM saves it only once every page
+    /// has been read. Returning it here would save it whether the run finished or not.
     /// </returns>
     public string? CloseImportConnection()
     {
@@ -389,6 +422,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         _importProvider = null;
         _importConfiguration = null;
         _importDatabaseTimeZone = TimeZoneInfo.Utc;
+        _importDeltaMode = SqlDeltaImportMode.NotSet;
 
         return null;
     }
@@ -782,9 +816,24 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     }
 
     /// <summary>
+    /// How this Connected System's Delta Imports find out what has changed, or
+    /// <see cref="SqlDeltaImportMode.NotSet"/> where nobody has said. Not set is an answer rather than a
+    /// failure: a Connected System that only runs Full Imports never needs one.
+    /// </summary>
+    private static SqlDeltaImportMode ResolveDeltaImportMode(List<ConnectedSystemSettingValue> settingValues)
+    {
+        return GetString(settingValues, SqlConnectorConstants.SettingDeltaImportMode) switch
+        {
+            SqlConnectorConstants.DeltaImportModeChangeLogTable => SqlDeltaImportMode.ChangeLogTable,
+            SqlConnectorConstants.DeltaImportModeWatermarkColumn => SqlDeltaImportMode.WatermarkColumn,
+            _ => SqlDeltaImportMode.NotSet
+        };
+    }
+
+    /// <summary>
     /// Checks that the Object Types document can be used, so that a Connected System is never saved
-    /// with configuration that schema discovery would then refuse. A missing document is left alone:
-    /// the setting is required, and the generic validator has already said so.
+    /// with configuration that schema discovery or a Delta Import would then refuse. A missing document
+    /// is left alone: the setting is required, and the generic validator has already said so.
     /// </summary>
     private static ConnectorSettingValueValidationResult? ValidateObjectTypes(List<ConnectedSystemSettingValue> settingValues)
     {
@@ -794,7 +843,16 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
         try
         {
-            SqlSchemaConfiguration.Parse(settingValue.StringValue);
+            var configuration = SqlSchemaConfiguration.Parse(settingValue.StringValue);
+
+            // The document is written without reference to the mode, so whether it can serve the one
+            // that is configured is a question only asked once both are in hand. Asked here, and not
+            // when a Delta Import runs, because an administrator finds out at the keyboard rather than
+            // from an overnight run.
+            var deltaImportMode = ResolveDeltaImportMode(settingValues);
+            if (deltaImportMode != SqlDeltaImportMode.NotSet)
+                configuration.ValidateDeltaImportMode(deltaImportMode);
+
             return null;
         }
         catch (SqlSchemaConfigurationException ex)

@@ -85,10 +85,10 @@
     private RenderFragment<IStepContext> LabelTemplate => step => __builder =>
     {
         var phase = PhaseFor(step);
-        var outcome = OutcomeTooltip(phase);
+        var outcome = RunPhaseVisuals.OutcomeTooltip(phase);
         <MudTooltip Text="@outcome" Disabled="@(outcome.Length == 0)" Arrow="true" Placement="Placement.Top">
-            <div class="jim-phase-h-label jim-phase-h-label--@StatusModifier(phase?.Status ?? ActivityPhaseStatus.Pending)">
-                <MudIcon Icon="@StatusIcon(phase)" Size="Size.Small" />
+            <div class="jim-phase-h-label jim-phase-h-label--@RunPhaseVisuals.StatusModifier(phase?.Status ?? ActivityPhaseStatus.Pending)">
+                <MudIcon Icon="@RunPhaseVisuals.StatusIcon(phase)" Size="Size.Small" />
             </div>
         </MudTooltip>
     };
@@ -96,7 +96,7 @@
     private RenderFragment<IStepContext> TitleTemplate => step => __builder =>
     {
         var phase = PhaseFor(step);
-        <div class="jim-phase-h-title jim-phase-h-title--@StatusModifier(phase?.Status ?? ActivityPhaseStatus.Pending)">
+        <div class="jim-phase-h-title jim-phase-h-title--@RunPhaseVisuals.StatusModifier(phase?.Status ?? ActivityPhaseStatus.Pending)">
             <MudText Typo="Typo.body2" Class="jim-phase-step-name">@step.Title</MudText>
             @* Only the duration earns a second line. What a skipped or failed step means is carried
                by its marker's colour, its icon and a tooltip, rather than a caption under every
@@ -113,52 +113,12 @@
     private RenderFragment<IStepContext> ConnectorTemplate => step => __builder =>
     {
         var phase = PhaseFor(step);
-        var fill = ConnectorFill(phase);
+        var fill = RunPhaseVisuals.FillPercent(phase, StepProgress);
         <div class="jim-phase-h-connector">
             <div class="jim-phase-h-connector-track">
                 <div class="jim-phase-h-connector-fill @(phase?.Status == ActivityPhaseStatus.Active ? "jim-phase-h-connector-fill--active" : "")"
                      style="@($"width: {fill.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%;")"></div>
             </div>
         </div>
-    };
-
-    private double ConnectorFill(ActivityPhase? phase) => phase?.Status switch
-    {
-        ActivityPhaseStatus.Completed or ActivityPhaseStatus.Skipped or ActivityPhaseStatus.Failed => 100d,
-        ActivityPhaseStatus.Active => Math.Clamp((StepProgress ?? 0d) * 100d, 0d, 100d),
-        _ => 0d
-    };
-
-    /// <summary>
-    /// What an unusual outcome means, for the marker's tooltip. Empty where the step's own state
-    /// needs no explaining.
-    /// </summary>
-    private static string OutcomeTooltip(ActivityPhase? phase) => phase?.Status switch
-    {
-        ActivityPhaseStatus.Skipped => "Not needed for this run",
-        ActivityPhaseStatus.Failed => "The run failed at this step",
-        _ => string.Empty
-    };
-
-    private static string StatusModifier(ActivityPhaseStatus status) => status switch
-    {
-        ActivityPhaseStatus.Active => "active",
-        ActivityPhaseStatus.Completed => "completed",
-        ActivityPhaseStatus.Skipped => "skipped",
-        ActivityPhaseStatus.Failed => "failed",
-        _ => "pending"
-    };
-
-    /// <summary>
-    /// A finished step shows the outcome; every other state shows what the step is for, so the rail
-    /// can be scanned by shape rather than read.
-    /// </summary>
-    private static string StatusIcon(ActivityPhase? phase) => phase?.Status switch
-    {
-        null => Icons.Material.Filled.RadioButtonUnchecked,
-        ActivityPhaseStatus.Completed => Icons.Material.Filled.Check,
-        ActivityPhaseStatus.Skipped => Icons.Material.Filled.Remove,
-        ActivityPhaseStatus.Failed => Icons.Material.Filled.PriorityHigh,
-        _ => RunPhaseIcons.ForPhase(phase.Key)
     };
 }

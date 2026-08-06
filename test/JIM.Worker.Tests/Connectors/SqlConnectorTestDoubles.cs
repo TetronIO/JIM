@@ -54,6 +54,12 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal List<string> ExecutedCommandTexts { get; } = [];
 
     /// <summary>
+    /// When set, every command beyond this many fails, which is how a database that goes away part way
+    /// through a run is expressed here.
+    /// </summary>
+    internal int? FailAfterCommandCount { get; set; }
+
+    /// <summary>
     /// Every connection string built through this provider, so a test can assert what the Connector
     /// asked for without a driver parsing it first.
     /// </summary>
@@ -140,11 +146,10 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
         var select = $"SELECT TOP ({GetParameterPlaceholder(request.PageSizeParameterName)}) {BuildColumnList(request.SelectColumns)}";
         var from = $"FROM {BuildFromClause(request)}";
+        var where = BuildKeysetWhereClause(request);
         var orderBy = BuildAnchorOrderByClause(request.AnchorColumns);
 
-        return request.IsFirstPage
-            ? $"{select} {from} {orderBy}"
-            : $"{select} {from} WHERE {BuildKeysetPredicate(request.AnchorColumns, request.LastAnchorParameterNames)} {orderBy}";
+        return $"{select} {from}{where} {orderBy}";
     }
 
     public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command) => throw new NotSupportedException();
@@ -466,20 +471,47 @@ internal sealed class FakeDbCommand : DbCommand
 
     public override int ExecuteNonQuery()
     {
-        _provider.ExecutedCommandTexts.Add(CommandText);
+        Record();
         return 0;
     }
 
     public override object? ExecuteScalar()
     {
-        _provider.ExecutedCommandTexts.Add(CommandText);
+        Record();
 
-        // A count over a source this stand-in holds rows for; anything else is the connectivity query.
+        var dataTable = ResolveDataTable();
+
+        // A count over a source this stand-in holds rows for, honouring any watermark the command
+        // restricted it to, so that a Delta Import's expected count is the one it actually reads.
         if (CommandText.StartsWith("SELECT COUNT", StringComparison.OrdinalIgnoreCase))
-            return ResolveDataTable()?.Rows.Count
-                ?? throw new FakeDbException($"This stand-in database has nothing to count for: {CommandText}");
+            return dataTable == null
+                ? throw new FakeDbException($"This stand-in database has nothing to count for: {CommandText}")
+                : FilterByChangeColumn(dataTable, dataTable.Rows).Count;
+
+        // The highest value a column holds, which is where a Delta Import's watermark comes from.
+        var maxColumn = MaxColumnPattern.Match(CommandText);
+        if (maxColumn.Success)
+        {
+            if (dataTable == null)
+                throw new FakeDbException($"This stand-in database has nothing to read a maximum from for: {CommandText}");
+
+            var ordinal = dataTable.IndexOf(maxColumn.Groups["column"].Value);
+            return dataTable.Rows.Count == 0 ? null : dataTable.Rows.Max(row => row[ordinal]);
+        }
 
         return _provider.ConnectivityTestResult;
+    }
+
+    /// <summary>
+    /// Records what this command was asked to run, and fails where the stand-in database has been told
+    /// to stop answering.
+    /// </summary>
+    private void Record()
+    {
+        _provider.ExecutedCommandTexts.Add(CommandText);
+
+        if (_provider.FailAfterCommandCount is { } limit && _provider.ExecutedCommandTexts.Count > limit)
+            throw new FakeDbException("The connection to the stand-in database was lost.");
     }
 
     public override void Prepare()
@@ -496,7 +528,7 @@ internal sealed class FakeDbCommand : DbCommand
     /// </summary>
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
     {
-        _provider.ExecutedCommandTexts.Add(CommandText);
+        Record();
         var catalogue = _provider.Catalogue;
 
         if (CommandText == _provider.TablesCommandText)
@@ -583,7 +615,7 @@ internal sealed class FakeDbCommand : DbCommand
         var anchorOrdinals = anchorColumns.Select(dataTable.IndexOf).ToArray();
         var lastAnchor = BoundValuesWithPrefix(SqlConnectorImport.AnchorParameterPrefix);
 
-        var rows = dataTable.Rows
+        var rows = FilterByChangeColumn(dataTable, dataTable.Rows)
             .Where(row => lastAnchor.Count == 0 || CompareAnchors(row, anchorOrdinals, lastAnchor) > 0)
             .ToList();
 
@@ -692,9 +724,33 @@ internal sealed class FakeDbCommand : DbCommand
             or TypeCode.Single or TypeCode.Double or TypeCode.Decimal;
     }
 
+    /// <summary>
+    /// Applies the watermark a Delta Import restricted its read to, so that a test can tell a command
+    /// that asked for changes from one that read everything.
+    /// </summary>
+    private List<object?[]> FilterByChangeColumn(FakeSqlDataTable dataTable, IEnumerable<object?[]> rows)
+    {
+        var changePredicate = ChangePredicatePattern.Match(CommandText);
+        if (!changePredicate.Success)
+            return [.. rows];
+
+        var ordinal = dataTable.IndexOf(changePredicate.Groups["column"].Value);
+        var watermark = BoundValue(SqlConnectorImport.WatermarkParameterName);
+
+        return [.. rows.Where(row => CompareValues(row[ordinal], watermark) > 0)];
+    }
+
     private static readonly Regex JoinPredicatePattern = new(
         @"\[(?<column>[^\]]+)\]\s*=\s*@(?<parameter>" + SqlConnectorImport.JoinParameterPrefix + @"\d+_\d+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ChangePredicatePattern = new(
+        @"\[(?<column>[^\]]+)\]\s*>\s*@" + SqlConnectorImport.WatermarkParameterName,
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex MaxColumnPattern = new(
+        @"^SELECT MAX\(\[(?<column>[^\]]+)\]\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     #endregion
 }

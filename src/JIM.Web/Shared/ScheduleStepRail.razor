@@ -1,0 +1,124 @@
+@using System.Globalization
+@using JIM.Models.Scheduling
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Schedule Execution behind a group of queue rows, drawn as the journey it is: a marker per step
+   group, joined by legs, with the step names underneath (#1162). The group header spans all six
+   columns and had only arithmetic to offer before this ("6 tasks across 6 steps, 1 processing,
+   3 queued, 2 waiting"), which needs adding up before it says how far the Schedule has to go.
+
+   A step running several tasks concurrently is drawn as one marker divided into a wedge per task, so
+   the group header's height never moves with the fan-out. The wedges are ordered by status rather
+   than by task; ScheduleStepReading.OrderWedges carries the reasoning, and it is the rule that keeps
+   a lone failure visible at a dozen parallel tasks.
+
+   Deliberately still: the worker activity bar directly above this shimmers while tasks are
+   processing, and a second animation beside it would leave two things competing for the same glance.
+   The running marker's halo says the same thing without moving. *@
+
+@if (Progress != null)
+{
+    <div class="jim-schedule-rail-block" data-testid="jim-schedule-rail">
+        <div class="jim-schedule-rail">
+            @for (var i = 0; i < Progress.Steps.Count; i++)
+            {
+                var step = Progress.Steps[i];
+
+                @if (i > 0)
+                {
+                    <span class="jim-schedule-leg @(Modifier(Progress.Steps[i - 1].Status) == "completed" ? "jim-schedule-leg--done" : "")"></span>
+                }
+
+                <span class="jim-schedule-node jim-schedule-node--@Modifier(step.Status) @(step.IsParallel ? "jim-schedule-node--divided" : "")"
+                      style="@WedgeStyle(step)"
+                      data-testid="jim-schedule-step"
+                      data-status="@Modifier(step.Status)">
+                    @if (!step.IsParallel && Icon(step.Status) is { } icon)
+                    {
+                        <MudIcon Icon="@icon" />
+                    }
+                </span>
+            }
+        </div>
+        <div class="jim-schedule-labels">
+            @foreach (var step in Progress.Steps)
+            {
+                <span data-testid="jim-schedule-step-label">@step.Name</span>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The Schedule Execution's shape, or null where there is nothing to draw.
+    /// </summary>
+    [Parameter]
+    public ScheduleExecutionProgress? Progress { get; set; }
+
+    /// <summary>
+    /// The status vocabulary reduced to what a 12px marker can carry. The statuses themselves are the
+    /// ones the Schedule Execution detail page and the REST read use, so there is one derivation; this
+    /// is the appearance side of it, in the same spirit as RunPhaseVisuals for a run's own steps.
+    /// </summary>
+    private static string Modifier(ScheduleExecutionStepStatus status) => status switch
+    {
+        ScheduleExecutionStepStatus.Processing => "running",
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning => "completed",
+        ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError => "failed",
+        ScheduleExecutionStepStatus.Cancelled or ScheduleExecutionStepStatus.Cancelling => "cancelled",
+        _ => "pending"
+    };
+
+    /// <summary>
+    /// A marker carries an icon only where it is drawn whole. A divided marker's wedges are a few
+    /// degrees apiece and an icon laid over them would obscure the very thing it sits on.
+    /// </summary>
+    private static string? Icon(ScheduleExecutionStepStatus status) => status switch
+    {
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning => Icons.Material.Filled.Check,
+        ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError => Icons.Material.Filled.PriorityHigh,
+        ScheduleExecutionStepStatus.Cancelled or ScheduleExecutionStepStatus.Cancelling => Icons.Material.Filled.Close,
+        _ => null
+    };
+
+    /// <summary>
+    /// The wedges of a parallel step, as a conic gradient starting at twelve o'clock.
+    /// </summary>
+    /// <remarks>
+    /// Built here rather than in CSS because the number of wedges is the number of concurrent tasks,
+    /// which is a property of the Schedule rather than of the stylesheet. A step running one task
+    /// takes no inline style and is painted entirely by its status modifier.
+    /// </remarks>
+    private static string? WedgeStyle(ScheduleStepProgress step)
+    {
+        if (!step.IsParallel)
+            return null;
+
+        var degreesPerTask = 360d / step.TaskStatuses.Count;
+        var stops = step.TaskStatuses.Select((status, index) =>
+        {
+            var from = (index * degreesPerTask).ToString("0.##", CultureInfo.InvariantCulture);
+            var to = ((index + 1) * degreesPerTask).ToString("0.##", CultureInfo.InvariantCulture);
+            return $"{WedgeColour(status)} {from}deg {to}deg";
+        });
+
+        return $"background: conic-gradient(from -90deg, {string.Join(", ", stops)});";
+    }
+
+    /// <summary>
+    /// A task not started yet leaves its wedge empty, matching the outline a whole marker uses for the
+    /// same state. Filling it grey instead made a step whose tasks had all yet to start read as a
+    /// solid disc, heavier than the outlined marker beside it and easily taken for work already done.
+    /// </summary>
+    private static string WedgeColour(ScheduleExecutionStepStatus status) => status switch
+    {
+        ScheduleExecutionStepStatus.Processing => "var(--mud-palette-info)",
+        ScheduleExecutionStepStatus.Completed or ScheduleExecutionStepStatus.CompletedWithWarning => "var(--mud-palette-success)",
+        ScheduleExecutionStepStatus.Failed or ScheduleExecutionStepStatus.CompletedWithError => "var(--mud-palette-error)",
+        ScheduleExecutionStepStatus.Cancelled or ScheduleExecutionStepStatus.Cancelling => "var(--mud-palette-warning)",
+        _ => "transparent"
+    };
+}

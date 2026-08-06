@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.Sql.Providers;
+using JIM.Models.Enums;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -113,6 +114,9 @@ internal sealed record SqlSchemaConfiguration
 
         var anchorColumns = ReadAnchorColumns(document, name);
 
+        if (!string.IsNullOrWhiteSpace(document.WatermarkColumn))
+            ValidateIdentifier(document.WatermarkColumn, name, "watermarkColumn");
+
         return new SqlObjectTypeConfiguration
         {
             Name = name,
@@ -121,8 +125,133 @@ internal sealed record SqlSchemaConfiguration
             SelectStatement = hasSelect ? document.Select!.Trim() : null,
             AnchorColumns = anchorColumns,
             Columns = ReadColumns(document, name),
-            RelatedTables = ReadRelatedTables(document, name, anchorColumns.Count)
+            RelatedTables = ReadRelatedTables(document, name, anchorColumns.Count),
+            WatermarkColumn = string.IsNullOrWhiteSpace(document.WatermarkColumn) ? null : document.WatermarkColumn,
+            ChangeLog = ReadChangeLog(document.ChangeLog, name, anchorColumns.Count)
         };
+    }
+
+    /// <summary>
+    /// Reads an object type's change-log configuration. Validated whichever Delta Import mode is
+    /// configured, so a document that could not work in Change-Log Table mode is refused at save time
+    /// rather than on the night the mode is switched on.
+    /// </summary>
+    private static SqlChangeLogConfiguration? ReadChangeLog(ChangeLogDocument? document, string objectTypeName, int anchorColumnCount)
+    {
+        if (document == null)
+            return null;
+
+        ValidateIdentifier(document.Table, objectTypeName, "changeLog.table");
+        ValidateIdentifier(document.SequenceColumn, objectTypeName, "changeLog.sequenceColumn");
+        ValidateIdentifier(document.ChangeTypeColumn, objectTypeName, "changeLog.changeTypeColumn");
+
+        if (!string.IsNullOrWhiteSpace(document.Schema))
+            ValidateIdentifier(document.Schema, objectTypeName, "changeLog.schema");
+
+        if (document.AnchorColumns == null || document.AnchorColumns.Count != anchorColumnCount)
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{objectTypeName}' identifies its change-log rows by {document.AnchorColumns?.Count ?? 0} column(s), but the object type's anchor has {anchorColumnCount}. " +
+                "A change attributed by part of an anchor belongs to some other object, so 'changeLog.anchorColumns' must name one column per anchor column, in the same order.");
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var anchorColumn in document.AnchorColumns)
+        {
+            ValidateIdentifier(anchorColumn, objectTypeName, "changeLog.anchorColumns");
+
+            if (!seen.Add(anchorColumn!))
+                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' lists change-log anchor column '{anchorColumn}' more than once.");
+        }
+
+        return new SqlChangeLogConfiguration
+        {
+            SchemaName = string.IsNullOrWhiteSpace(document.Schema) ? null : document.Schema,
+            TableName = document.Table!,
+            AnchorColumns = [.. document.AnchorColumns.Select(anchorColumn => anchorColumn!)],
+            SequenceColumn = document.SequenceColumn!,
+            ChangeTypeColumn = document.ChangeTypeColumn!,
+            ChangeTypes = ReadChangeTypes(document, objectTypeName)
+        };
+    }
+
+    /// <summary>
+    /// Turns the customer's own change-type vocabulary into what each value means to JIM.
+    /// </summary>
+    private static Dictionary<string, ObjectChangeType> ReadChangeTypes(ChangeLogDocument document, string objectTypeName)
+    {
+        var changeTypes = new Dictionary<string, ObjectChangeType>(StringComparer.OrdinalIgnoreCase);
+
+        AddChangeTypeValues(changeTypes, document.CreateValues, ObjectChangeType.Added, objectTypeName, "createValues");
+        AddChangeTypeValues(changeTypes, document.UpdateValues, ObjectChangeType.Updated, objectTypeName, "updateValues");
+        AddChangeTypeValues(changeTypes, document.DeleteValues, ObjectChangeType.Deleted, objectTypeName, "deleteValues");
+
+        // Deletions are the whole reason this mode is the recommended one, and a change log with no way
+        // of stating one detects strictly less than a watermark column does at more cost.
+        if (!changeTypes.ContainsValue(ObjectChangeType.Deleted))
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{objectTypeName}' has a change log with no 'deleteValues'. Observing deletions is what a change-log table is for; if this database cannot record them, use Watermark Column mode instead.");
+
+        if (!changeTypes.ContainsValue(ObjectChangeType.Added) && !changeTypes.ContainsValue(ObjectChangeType.Updated))
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{objectTypeName}' has a change log with neither 'createValues' nor 'updateValues', so nothing but deletions could ever be imported from it.");
+
+        return changeTypes;
+    }
+
+    private static void AddChangeTypeValues(
+        Dictionary<string, ObjectChangeType> changeTypes,
+        List<string?>? values,
+        ObjectChangeType changeType,
+        string objectTypeName,
+        string fieldName)
+    {
+        if (values == null)
+            return;
+
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has an empty value in 'changeLog.{fieldName}'. A change-log row's change type is matched against these exactly, so a blank one could never match.");
+
+            var trimmed = value.Trim();
+
+            // Values are matched without regard to case, so a value meaning two things is ambiguous even
+            // where the two spellings differ, and guessing which the administrator meant is not JIM's to do.
+            if (changeTypes.TryGetValue(trimmed, out var existing))
+                throw new SqlSchemaConfigurationException(
+                    $"Object Type '{objectTypeName}' has change-log value '{trimmed}' meaning both {existing} and {changeType}. Each value can only mean one kind of change.");
+
+            changeTypes[trimmed] = changeType;
+        }
+    }
+
+    /// <summary>
+    /// Checks that every configured Object Type carries what the chosen Delta Import mode needs, which
+    /// the parser cannot do on its own: the document is written without reference to the mode, and the
+    /// same document is valid under one mode and unusable under the other.
+    /// </summary>
+    /// <remarks>
+    /// Every object type has to be covered, not just some. A Delta Import that silently skips an object
+    /// type reports success while leaving that type's objects to drift, and no administrator would read
+    /// a green Activity as "except for Groups".
+    /// </remarks>
+    /// <exception cref="SqlSchemaConfigurationException">An Object Type has nothing for this mode to read.</exception>
+    internal void ValidateDeltaImportMode(SqlDeltaImportMode mode)
+    {
+        foreach (var objectType in ObjectTypes)
+        {
+            switch (mode)
+            {
+                case SqlDeltaImportMode.ChangeLogTable when objectType.ChangeLog == null:
+                    throw new SqlSchemaConfigurationException(
+                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeChangeLogTable}', but Object Type '{objectType.Name}' has no 'changeLog'. " +
+                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every object type needs one.");
+
+                case SqlDeltaImportMode.WatermarkColumn when objectType.WatermarkColumn == null:
+                    throw new SqlSchemaConfigurationException(
+                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' has no 'watermarkColumn'. " +
+                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every object type needs one.");
+            }
+        }
     }
 
     private static List<string> ReadAnchorColumns(ObjectTypeDocument document, string objectTypeName)
@@ -304,6 +433,30 @@ internal sealed record SqlSchemaConfiguration
         public List<ColumnDocument>? Columns { get; set; }
 
         public List<RelatedTableDocument>? RelatedTables { get; set; }
+
+        public string? WatermarkColumn { get; set; }
+
+        public ChangeLogDocument? ChangeLog { get; set; }
+    }
+
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    private sealed class ChangeLogDocument
+    {
+        public string? Schema { get; set; }
+
+        public string? Table { get; set; }
+
+        public List<string?>? AnchorColumns { get; set; }
+
+        public string? SequenceColumn { get; set; }
+
+        public string? ChangeTypeColumn { get; set; }
+
+        public List<string?>? CreateValues { get; set; }
+
+        public List<string?>? UpdateValues { get; set; }
+
+        public List<string?>? DeleteValues { get; set; }
     }
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Enums;
+
 namespace JIM.Connectors.Sql;
 
 /// <summary>
@@ -59,10 +61,64 @@ internal sealed record SqlObjectTypeConfiguration
     internal IReadOnlyList<SqlRelatedTableConfiguration> RelatedTables { get; init; } = [];
 
     /// <summary>
+    /// The column on this object type's own source whose value moves whenever a row changes: a
+    /// last-modified timestamp, or a version. Read by Delta Imports in Watermark Column mode, and
+    /// ignored by every other mode.
+    /// </summary>
+    internal string? WatermarkColumn { get; init; }
+
+    /// <summary>
+    /// Where this object type's changes are recorded, for Delta Imports in Change-Log Table mode.
+    /// </summary>
+    internal SqlChangeLogConfiguration? ChangeLog { get; init; }
+
+    /// <summary>
     /// Whether objects of this type come from a statement rather than a table or view, which is what
     /// decides how discovery learns the shape and whether constraint metadata exists at all.
     /// </summary>
     internal bool IsCustomSelect => SelectStatement != null;
+}
+
+/// <summary>
+/// A customer-maintained table or view recording what has happened to an object type's objects: one row
+/// per change, carrying the anchor, what kind of change it was, and where it sits in a monotonic
+/// sequence.
+/// </summary>
+/// <remarks>
+/// This is the only delta mechanism that observes a deletion, because it is the only one where the
+/// record of a change outlives the row the change happened to. Everything about it is the customer's to
+/// design, including what they call a create, an update and a deletion, which is why the vocabulary is
+/// declared rather than assumed.
+/// </remarks>
+internal sealed record SqlChangeLogConfiguration
+{
+    internal string? SchemaName { get; init; }
+
+    internal required string TableName { get; init; }
+
+    /// <summary>
+    /// The columns carrying the changed object's anchor, one per the object type's own anchor columns
+    /// and in the same order. Joining on fewer would attribute a change to some other object.
+    /// </summary>
+    internal IReadOnlyList<string> AnchorColumns { get; init; } = [];
+
+    /// <summary>
+    /// The monotonic sequence or timestamp that orders the change log and positions the watermark. It
+    /// has to be monotonic: a value that can go backwards would leave changes behind the watermark and
+    /// therefore unread for ever.
+    /// </summary>
+    internal required string SequenceColumn { get; init; }
+
+    /// <summary>
+    /// The column saying what kind of change a row records.
+    /// </summary>
+    internal required string ChangeTypeColumn { get; init; }
+
+    /// <summary>
+    /// What each of the customer's own change-type values means, matched without regard to case. A value
+    /// that is not in here is one the configuration does not account for, and errors that one object.
+    /// </summary>
+    internal required IReadOnlyDictionary<string, ObjectChangeType> ChangeTypes { get; init; }
 }
 
 /// <summary>
