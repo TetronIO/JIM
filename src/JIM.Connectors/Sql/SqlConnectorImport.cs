@@ -2,7 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.Sql.Providers;
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Utilities;
@@ -10,13 +13,15 @@ using Serilog;
 using System.Data.Common;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace JIM.Connectors.Sql;
 
 /// <summary>
-/// Reads objects out of a database for a Full Import: a page of rows at a time per configured Object
-/// Type, ordered and seeked on the anchor, with each object type's multi-valued attributes gathered from
-/// its related tables in one query per page.
+/// Reads objects out of a database: everything there is for a Full Import, and only what has changed
+/// for a Delta Import. Either way a page of rows at a time per configured Object Type, ordered and
+/// seeked on the anchor, with each object type's multi-valued attributes gathered from its related
+/// tables in one query per page.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -54,6 +59,11 @@ internal sealed class SqlConnectorImport
     internal const string JoinParameterPrefix = "jimJoin";
 
     /// <summary>
+    /// The bind variable carrying the watermark a Delta Import reads changes beyond.
+    /// </summary>
+    internal const string WatermarkParameterName = "jimWatermark";
+
+    /// <summary>
     /// How many bind variables one related-table gather may carry. Microsoft SQL Server caps a statement
     /// at 2,100 parameters, so a large page size against a composite anchor would otherwise fail at the
     /// server; a page beyond this is gathered in more than one query rather than one per row.
@@ -67,6 +77,8 @@ internal sealed class SqlConnectorImport
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
+    private readonly SqlDeltaImportMode _deltaMode;
+    private readonly string? _persistedConnectorData;
     private readonly ILogger _logger;
     private readonly CancellationToken _cancellationToken;
     private readonly IConnectorProgress _progress;
@@ -76,9 +88,11 @@ internal sealed class SqlConnectorImport
         DbConnection connection,
         SqlSchemaConfiguration configuration,
         TimeZoneInfo databaseTimeZone,
+        SqlDeltaImportMode deltaMode,
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         List<ConnectedSystemPaginationToken> paginationTokens,
+        string? persistedConnectorData,
         ILogger logger,
         CancellationToken cancellationToken,
         IConnectorProgress progress)
@@ -87,9 +101,11 @@ internal sealed class SqlConnectorImport
         _connection = connection;
         _configuration = configuration;
         _databaseTimeZone = databaseTimeZone;
+        _deltaMode = deltaMode;
         _connectedSystem = connectedSystem;
         _runProfile = runProfile;
         _paginationTokens = paginationTokens;
+        _persistedConnectorData = persistedConnectorData;
         _logger = logger;
         _cancellationToken = cancellationToken;
         _progress = progress;
@@ -108,10 +124,19 @@ internal sealed class SqlConnectorImport
             return result;
         }
 
-        // Only on the initial call: the count is the whole run's, JIM keeps it, and asking again on
-        // every page would make an expensive query the price of paging.
+        // Only on the initial call: both of these are the whole run's, JIM keeps them, and asking again
+        // on every page would make an expensive query the price of paging.
         if (_paginationTokens.Count == 0)
+        {
+            // A Full Import is how a Delta Import's baseline is established, so where this Connected
+            // System is configured for one, it records where the changes stood before a single row was
+            // read. Reading first would leave anything changed during the run behind the watermark and
+            // therefore unread for ever.
+            if (_deltaMode != SqlDeltaImportMode.NotSet)
+                result.PersistedConnectorData = (await CaptureWatermarkAsync(plans)).Serialise();
+
             await ReportExpectedObjectCountAsync(plans);
+        }
 
         var objectsRead = 0;
 
@@ -153,6 +178,583 @@ internal sealed class SqlConnectorImport
 
         return result;
     }
+
+    #region Delta import
+
+    /// <summary>
+    /// Reads what has changed since JIM last looked, in whichever way this Connected System is
+    /// configured to find out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The watermark is captured before a single change is read, and returned from the first page
+    /// only.</b> JIM replays the run's original watermark to every page and saves the new one after the
+    /// last page, so a run that dies half way through re-reads its changes rather than skipping them.
+    /// A later page returning a watermark of its own would move the run's own starting point mid-run.
+    /// </para>
+    /// <para>
+    /// <b>Nothing is read up to an upper bound.</b> A change arriving while the run is in flight is read
+    /// by this run or the next one, and possibly both; re-importing an object that has not changed since
+    /// costs a comparison and produces no change, whereas an upper bound would silently drop anything
+    /// committed inside it. The same trade the LDAP Connector makes, for the same reason.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="CannotPerformDeltaImportException">No Delta Import Mode has been chosen, so there is nothing to read changes from.</exception>
+    internal async Task<ConnectedSystemImportResult> GetDeltaImportObjectsAsync()
+    {
+        if (_deltaMode == SqlDeltaImportMode.NotSet)
+            throw new CannotPerformDeltaImportException(
+                $"No {SqlConnectorConstants.SettingDeltaImportMode} has been chosen for this Connected System, so JIM has no way of finding out what has changed. " +
+                "Choose one, and configure it in the Object Types document.");
+
+        var plans = BuildPlans();
+
+        if (plans.Count == 0)
+        {
+            _logger.Warning("SqlConnectorImport: no configured Object Type has been selected for synchronisation, so there is nothing to import");
+            return new ConnectedSystemImportResult();
+        }
+
+        var previous = SqlConnectorWatermark.TryRead(_persistedConnectorData);
+
+        if (previous == null)
+            return await FallBackToFullImportAsync(string.IsNullOrWhiteSpace(_persistedConnectorData)
+                ? "JIM holds no watermark for this Connected System, and a Delta Import reads its changes from one"
+                : "the watermark JIM holds for this Connected System cannot be read");
+
+        if (previous.Mode != _deltaMode)
+            return await FallBackToFullImportAsync(
+                $"the {SqlConnectorConstants.SettingDeltaImportMode} has changed since the watermark JIM holds was written, and a watermark taken from one mechanism says nothing about another");
+
+        var result = new ConnectedSystemImportResult();
+
+        if (_paginationTokens.Count == 0)
+        {
+            await _progress.EnterPhaseAsync(SqlConnectorPhases.QueryChanges, "Querying changes...");
+
+            result.PersistedConnectorData = (await CaptureWatermarkAsync(plans)).Serialise();
+            await ReportExpectedChangeCountAsync(plans, previous);
+        }
+
+        var objectsRead = 0;
+
+        foreach (var plan in plans)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                _logger.Debug("SqlConnectorImport: cancellation requested. Stopping between pages");
+                return result;
+            }
+
+            var token = _paginationTokens.SingleOrDefault(paginationToken => paginationToken.Name == plan.TokenName);
+
+            // No token on a subsequent call means this object type was drained by an earlier one.
+            if (_paginationTokens.Count > 0 && token == null)
+                continue;
+
+            var page = SqlDeltaPagePosition.FromToken(token, plan);
+
+            await _progress.EnterPhaseAsync(SqlConnectorPhases.Fetch, $"Fetching changed {plan.Name} objects (page {page.PageNumber})...");
+
+            var watermark = previous.ObjectTypes.GetValueOrDefault(plan.Name);
+            var deltaPage = _deltaMode == SqlDeltaImportMode.ChangeLogTable
+                ? await ReadChangeLogPageAsync(plan, page, watermark)
+                : await ReadWatermarkColumnPageAsync(plan, page, watermark);
+
+            result.ImportObjects.AddRange(deltaPage.ImportObjects);
+            objectsRead += deltaPage.ImportObjects.Count;
+
+            // One call drains a page per configured Object Type, so the Activity's counters move while
+            // the call is still in flight rather than only when it returns.
+            await _progress.ReportObjectsReadAsync(objectsRead);
+
+            if (deltaPage.NextPosition != null)
+                result.PaginationTokens.Add(deltaPage.NextPosition.ToToken(plan));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Runs a Full Import in place of the Delta Import that was asked for, and says so.
+    /// </summary>
+    /// <remarks>
+    /// A missing or unusable watermark is a state problem with exactly one remedy, and it is one JIM can
+    /// apply itself: a Full Import delivers the right data and leaves the baseline the next Delta Import
+    /// needs. Refusing would fail the run and leave an administrator to do by hand what JIM has just
+    /// worked out is needed. A missing Delta Import Mode is refused instead, because that is a question
+    /// nobody has answered rather than a state to recover from, and a scheduled Delta Import quietly
+    /// costing a Full Import every cycle would hide it for ever.
+    /// <para>
+    /// The Full Import narrates its counting step, which a Delta Import never declared. The narration
+    /// still reaches the Activity; only the stepper stays on the steps this run said it would perform,
+    /// which is better than every Delta Import carrying a step it almost never reaches.
+    /// </para>
+    /// </remarks>
+    private async Task<ConnectedSystemImportResult> FallBackToFullImportAsync(string reason)
+    {
+        _logger.Warning("SqlConnectorImport: a Delta Import was requested, but {Reason}. Falling back to a Full Import to establish a baseline", reason);
+
+        var result = await GetFullImportObjectsAsync();
+
+        result.WarningMessage =
+            $"A Delta Import was requested, but {reason}. A Full Import was performed instead, which has established the watermark, so the next Delta Import should run normally.";
+        result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
+
+        return result;
+    }
+
+    #endregion
+
+    #region Delta import: change-log table
+
+    /// <summary>
+    /// Reads a page of an object type's change log, and turns it into the objects those changes are
+    /// about: a deletion carries the anchor alone, and everything else is read back from the object
+    /// type's own source as it now stands.
+    /// </summary>
+    private async Task<SqlDeltaPage> ReadChangeLogPageAsync(SqlImportPlan plan, SqlDeltaPagePosition page, SqlDeltaValue? watermark)
+    {
+        var changeLog = RequireChangeLog(plan);
+        var keysetColumns = BuildChangeLogKeysetColumns(plan, changeLog);
+
+        var selectColumns = keysetColumns.Select(keysetColumn => keysetColumn.Name)
+            .Append(changeLog.ChangeTypeColumn)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var request = new SqlKeysetPageRequest
+        {
+            SchemaName = changeLog.SchemaName,
+            ObjectName = changeLog.TableName,
+            SelectColumns = selectColumns,
+            AnchorColumns = [.. keysetColumns.Select(keysetColumn => keysetColumn.Name)],
+            PageSizeParameterName = PageSizeParameterName,
+            LastAnchorParameterNames = page.IsFirstPage ? [] : [.. Enumerable.Range(0, keysetColumns.Count).Select(AnchorParameterName)],
+            ChangeColumn = watermark == null ? null : changeLog.SequenceColumn,
+            ChangeParameterName = watermark == null ? null : WatermarkParameterName
+        };
+
+        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, selectColumns);
+        var changes = CollapseChanges(plan, changeLog, rows, selectColumns);
+
+        // A deletion has no row left to read, and a change type the configuration does not account for
+        // has nothing to say what to read it as; both are answered by the anchor alone.
+        var importObjects = changes
+            .Where(change => change.ChangeType == ObjectChangeType.Deleted || change.UnmappedChangeType != null)
+            .Select(change => BuildChangedObjectIdentity(plan, changeLog, change))
+            .ToList();
+
+        // An unmapped value leaves the change type unset, so this is everything the anchor alone did not
+        // already answer.
+        var changed = changes.Where(change => change.ChangeType is ObjectChangeType.Added or ObjectChangeType.Updated).ToList();
+        importObjects.AddRange(await ReadChangedObjectsAsync(plan, changed));
+
+        return new SqlDeltaPage(
+            importObjects,
+            rows.Count == _runProfile.PageSize ? page.Advance(DescribeKeyset(plan, keysetColumns, rows[^1], selectColumns)) : null);
+    }
+
+    /// <summary>
+    /// The columns a change-log page is ordered and seeked on: the sequence first, because that is the
+    /// order changes happened in, then the anchor so that two changes sharing a sequence value still
+    /// have a total order and neither is read twice nor skipped.
+    /// </summary>
+    private static List<SqlDeltaKeysetColumn> BuildChangeLogKeysetColumns(SqlImportPlan plan, SqlChangeLogConfiguration changeLog)
+    {
+        // The sequence column belongs to the change log, which is not part of the Connected System's
+        // schema, so its type is read from the value the database returns rather than declared.
+        var keysetColumns = new List<SqlDeltaKeysetColumn> { new(changeLog.SequenceColumn, null) };
+
+        keysetColumns.AddRange(changeLog.AnchorColumns.Select((anchorColumn, index) =>
+            new SqlDeltaKeysetColumn(anchorColumn, plan.AnchorColumns[index].Type)));
+
+        return keysetColumns;
+    }
+
+    /// <summary>
+    /// Reduces a page of change-log rows to one entry per object: the last change a page records for an
+    /// object is what that object's fate now is, and importing the earlier ones as well would be work
+    /// that the later one immediately undoes.
+    /// </summary>
+    private List<SqlChangeLogEntry> CollapseChanges(
+        SqlImportPlan plan,
+        SqlChangeLogConfiguration changeLog,
+        IReadOnlyList<object?[]> rows,
+        IReadOnlyList<string> selectColumns)
+    {
+        var changeTypeOrdinal = IndexOfColumn(selectColumns, changeLog.ChangeTypeColumn);
+        var anchorOrdinals = changeLog.AnchorColumns.Select(anchorColumn => IndexOfColumn(selectColumns, anchorColumn)).ToArray();
+
+        var entries = new List<SqlChangeLogEntry>(rows.Count);
+        var latestByAnchor = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var row in rows)
+        {
+            var anchorValues = anchorOrdinals.Select(ordinal => row[ordinal]).ToArray();
+            var anchorKey = ComposeChangeAnchorKey(plan, changeLog, anchorValues);
+            var rawChangeType = row[changeTypeOrdinal];
+
+            // A change type is what a row is for, so a NULL one is as unusable as an unrecognised value
+            // and is reported the same way.
+            var changeTypeValue = rawChangeType == null ? null : Convert.ToString(rawChangeType, CultureInfo.InvariantCulture);
+            var mapped = changeTypeValue != null && changeLog.ChangeTypes.TryGetValue(changeTypeValue, out var changeType);
+
+            latestByAnchor[anchorKey] = entries.Count;
+            entries.Add(new SqlChangeLogEntry(
+                anchorKey,
+                anchorValues,
+                mapped ? changeLog.ChangeTypes[changeTypeValue!] : ObjectChangeType.NotSet,
+                mapped ? null : changeTypeValue ?? "NULL"));
+        }
+
+        return [.. entries.Where((entry, index) => latestByAnchor[entry.AnchorKey] == index)];
+    }
+
+    /// <summary>
+    /// The changed object's anchor as one string, rendered exactly as the object type's own anchor is so
+    /// that the two identify the same object.
+    /// </summary>
+    /// <exception cref="InvalidDataException">A change-log row does not say which object it is about, which no amount of reading further can recover from.</exception>
+    private static string ComposeChangeAnchorKey(SqlImportPlan plan, SqlChangeLogConfiguration changeLog, IReadOnlyList<object?> anchorValues)
+    {
+        var parts = new string[anchorValues.Count];
+
+        for (var index = 0; index < anchorValues.Count; index++)
+        {
+            var value = anchorValues[index] ?? throw new InvalidDataException(
+                $"Object Type '{plan.Name}' has a change-log row with a NULL value in anchor column '{changeLog.AnchorColumns[index]}', so there is no way to tell which object it is about.");
+
+            parts[index] = SqlAnchorValue.ToTokenString(value, plan.AnchorColumns[index].Type);
+        }
+
+        return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
+    }
+
+    /// <summary>
+    /// Builds what JIM needs to act on a change with no row behind it: the object type and the anchor,
+    /// which together are enough to find the Connected System Object the change is about.
+    /// </summary>
+    private ConnectedSystemImportObject BuildChangedObjectIdentity(SqlImportPlan plan, SqlChangeLogConfiguration changeLog, SqlChangeLogEntry entry)
+    {
+        var importObject = new ConnectedSystemImportObject
+        {
+            ObjectType = plan.Name,
+            ChangeType = entry.ChangeType
+        };
+
+        if (plan.ComposedAnchorName != null)
+        {
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+            {
+                Name = plan.ComposedAnchorName,
+                Type = AttributeDataType.Text,
+                StringValues = [entry.AnchorKey]
+            });
+        }
+        else
+        {
+            var anchorColumn = plan.AnchorColumns[0];
+            var attribute = new ConnectedSystemImportObjectAttribute { Name = anchorColumn.Name, Type = anchorColumn.Type };
+            ApplyTypedValue(attribute, anchorColumn.Type, entry.AnchorValues[0]!);
+            importObject.Attributes.Add(attribute);
+        }
+
+        if (entry.UnmappedChangeType != null)
+        {
+            importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
+            importObject.ErrorMessage =
+                $"Column '{changeLog.ChangeTypeColumn}' holds '{entry.UnmappedChangeType}', which the change-log configuration for Object Type '{plan.Name}' does not account for. " +
+                "Add it to 'createValues', 'updateValues' or 'deleteValues'.";
+
+            _logger.Warning("SqlConnectorImport: Object Type {ObjectType} has a change-log row whose {Column} value is not configured", plan.Name, changeLog.ChangeTypeColumn);
+        }
+
+        return importObject;
+    }
+
+    /// <summary>
+    /// Reads the objects a page's creates and updates are about, as they now stand, in one query per
+    /// batch of anchors rather than one per object.
+    /// </summary>
+    /// <remarks>
+    /// A change whose row is no longer there produces nothing. The row was deleted after its change was
+    /// logged, so the change log holds a deletion for it further on; emitting a half-built object now
+    /// would be worse than waiting one page for the truth.
+    /// </remarks>
+    private async Task<List<ConnectedSystemImportObject>> ReadChangedObjectsAsync(SqlImportPlan plan, IReadOnlyList<SqlChangeLogEntry> changes)
+    {
+        if (changes.Count == 0)
+            return [];
+
+        var changeTypesByAnchor = changes.ToDictionary(change => change.AnchorKey, change => change.ChangeType, StringComparer.Ordinal);
+        var rows = await ReadRowsByAnchorAsync(plan, [.. changes.Select(change => change.AnchorValues)]);
+
+        if (rows.Count < changes.Count)
+            _logger.Debug("SqlConnectorImport: Object Type {ObjectType} has {MissingCount} change(s) whose row is no longer in the source; their deletions will arrive from the change log",
+                plan.Name, changes.Count - rows.Count);
+
+        var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
+        await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
+
+        for (var index = 0; index < importObjects.Count; index++)
+            importObjects[index].ChangeType = changeTypesByAnchor[anchorKeys[index]];
+
+        return importObjects;
+    }
+
+    /// <summary>
+    /// Reads the rows a set of anchors identifies, in batches small enough that no dialect refuses the
+    /// statement for the number of bind variables it carries.
+    /// </summary>
+    private async Task<List<object?[]>> ReadRowsByAnchorAsync(SqlImportPlan plan, IReadOnlyList<object?[]> anchors)
+    {
+        var rows = new List<object?[]>(anchors.Count);
+        var anchorsPerQuery = Math.Max(1, MaxJoinParametersPerQuery / plan.AnchorColumns.Count);
+
+        for (var offset = 0; offset < anchors.Count; offset += anchorsPerQuery)
+        {
+            var batch = anchors.Skip(offset).Take(anchorsPerQuery).ToList();
+
+            using var command = _provider.CreateCommand(_connection, BuildAnchorLookupCommandText(plan, batch.Count));
+
+            for (var anchorIndex = 0; anchorIndex < batch.Count; anchorIndex++)
+            {
+                for (var columnIndex = 0; columnIndex < plan.AnchorColumns.Count; columnIndex++)
+                    command.Parameters.Add(_provider.CreateParameter(JoinParameterName(anchorIndex, columnIndex), batch[anchorIndex][columnIndex]));
+            }
+
+            rows.AddRange(await ReadRowsAsync(command, plan.SelectColumns));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Selects the rows a set of anchors identifies. Standard SQL in both dialects, built from the
+    /// quoting and parameter rendering the provider seam supplies; values are never interpolated.
+    /// </summary>
+    private string BuildAnchorLookupCommandText(SqlImportPlan plan, int anchorCount)
+    {
+        var columns = plan.SelectColumns.Select(_provider.QuoteIdentifier);
+
+        var predicates = Enumerable.Range(0, anchorCount).Select(anchorIndex =>
+        {
+            var terms = plan.AnchorColumns.Select((anchorColumn, columnIndex) =>
+                $"{_provider.QuoteIdentifier(anchorColumn.Name)} = {_provider.GetParameterPlaceholder(JoinParameterName(anchorIndex, columnIndex))}");
+
+            return $"({string.Join(" AND ", terms)})";
+        });
+
+        return $"SELECT {string.Join(", ", columns)} FROM {BuildFromClause(plan)} WHERE {string.Join(" OR ", predicates)}";
+    }
+
+    #endregion
+
+    #region Delta import: watermark column
+
+    /// <summary>
+    /// Reads a page of the rows whose own last-modified or version column has moved beyond the watermark.
+    /// </summary>
+    /// <remarks>
+    /// <b>This mode cannot observe a deletion, and nothing here is going to change that.</b> A row that
+    /// has been deleted has no column left to move, so its absence never reaches the predicate; the same
+    /// goes for a row that has fallen out of a view. Deletions need the change-log table, or a periodic
+    /// Full Import. Every change is reported as an update, because a last-modified column cannot tell a
+    /// create from one; JIM creates the Connected System Object where it holds none.
+    /// </remarks>
+    private async Task<SqlDeltaPage> ReadWatermarkColumnPageAsync(SqlImportPlan plan, SqlDeltaPagePosition page, SqlDeltaValue? watermark)
+    {
+        var watermarkColumn = RequireWatermarkColumn(plan);
+        var keysetColumns = plan.AnchorColumns.Select(anchorColumn => new SqlDeltaKeysetColumn(anchorColumn.Name, anchorColumn.Type)).ToList();
+
+        var request = new SqlKeysetPageRequest
+        {
+            SchemaName = plan.Configuration.SchemaName,
+            ObjectName = plan.Configuration.TableName,
+            SelectStatement = plan.Configuration.SelectStatement,
+            SelectColumns = plan.SelectColumns,
+            AnchorColumns = [.. keysetColumns.Select(keysetColumn => keysetColumn.Name)],
+            PageSizeParameterName = PageSizeParameterName,
+            LastAnchorParameterNames = page.IsFirstPage ? [] : [.. Enumerable.Range(0, keysetColumns.Count).Select(AnchorParameterName)],
+            ChangeColumn = watermark == null ? null : watermarkColumn,
+            ChangeParameterName = watermark == null ? null : WatermarkParameterName
+        };
+
+        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, plan.SelectColumns);
+
+        var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
+        await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
+
+        foreach (var importObject in importObjects)
+            importObject.ChangeType = ObjectChangeType.Updated;
+
+        return new SqlDeltaPage(
+            importObjects,
+            rows.Count == _runProfile.PageSize ? page.Advance(DescribeKeyset(plan, keysetColumns, rows[^1], plan.SelectColumns)) : null);
+    }
+
+    #endregion
+
+    #region Delta import: watermarks, counting and paging mechanics
+
+    /// <summary>
+    /// Asks each object type's change source where it currently stands, which is what the next Delta
+    /// Import will read from.
+    /// </summary>
+    private async Task<SqlConnectorWatermark> CaptureWatermarkAsync(IReadOnlyList<SqlImportPlan> plans)
+    {
+        var watermark = new SqlConnectorWatermark { Mode = _deltaMode };
+
+        foreach (var plan in plans)
+        {
+            var (source, changeColumn) = ResolveChangeSource(plan);
+
+            using var command = _provider.CreateCommand(_connection, $"SELECT MAX({_provider.QuoteIdentifier(changeColumn)}) FROM {source}");
+            var value = await command.ExecuteScalarAsync(_cancellationToken);
+
+            // No highest value at all is what an empty change log, or a source nothing has been written
+            // to, looks like. Recording nothing for it means the next run reads from the beginning,
+            // which is the only answer that cannot miss a change.
+            var described = SqlConnectorWatermark.Describe(value);
+            if (described != null)
+                watermark.ObjectTypes[plan.Name] = described;
+        }
+
+        return watermark;
+    }
+
+    /// <summary>
+    /// Asks the database how much this Delta Import is about to read, which is what turns the fetch into
+    /// a percentage and a time remaining rather than a number counting up.
+    /// </summary>
+    /// <remarks>
+    /// In change-log mode this counts change rows rather than objects, so it is an upper bound: an
+    /// object changed three times is three rows and one object. Counting objects instead would need a
+    /// DISTINCT over a composite anchor, which the two dialects do not express the same way, for a
+    /// number that is already right in the overwhelmingly common case.
+    /// </remarks>
+    private async Task ReportExpectedChangeCountAsync(IReadOnlyList<SqlImportPlan> plans, SqlConnectorWatermark previous)
+    {
+        long expected = 0;
+        foreach (var plan in plans)
+            expected += await CountChangesAsync(plan, previous.ObjectTypes.GetValueOrDefault(plan.Name));
+
+        _logger.Debug("SqlConnectorImport: expecting up to {ExpectedObjectCount} changed object(s) across {ObjectTypeCount} Object Type(s)", expected, plans.Count);
+
+        await _progress.ReportExpectedObjectCountAsync(expected > int.MaxValue ? int.MaxValue : (int)expected);
+    }
+
+    private async Task<long> CountChangesAsync(SqlImportPlan plan, SqlDeltaValue? watermark)
+    {
+        var (source, changeColumn) = ResolveChangeSource(plan);
+
+        var commandText = watermark == null
+            ? $"SELECT COUNT(*) FROM {source}"
+            : $"SELECT COUNT(*) FROM {source} WHERE {_provider.QuoteIdentifier(changeColumn)} > {_provider.GetParameterPlaceholder(WatermarkParameterName)}";
+
+        using var command = _provider.CreateCommand(_connection, commandText);
+
+        if (watermark != null)
+            command.Parameters.Add(_provider.CreateParameter(WatermarkParameterName, BindDeltaValue(plan, watermark, "watermark")));
+
+        var count = await command.ExecuteScalarAsync(_cancellationToken);
+
+        return count == null || count == DBNull.Value ? 0 : Convert.ToInt64(count, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// What this object type's changes are read from, and the column that orders them, for whichever
+    /// mode is configured.
+    /// </summary>
+    private (string Source, string ChangeColumn) ResolveChangeSource(SqlImportPlan plan)
+    {
+        if (_deltaMode != SqlDeltaImportMode.ChangeLogTable)
+            return (BuildFromClause(plan), RequireWatermarkColumn(plan));
+
+        var changeLog = RequireChangeLog(plan);
+        return (_provider.QualifyObjectName(changeLog.SchemaName, changeLog.TableName), changeLog.SequenceColumn);
+    }
+
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document has nothing for the configured mode to read. Refused when the Connected System is saved; this is the backstop for configuration changed since.</exception>
+    private static SqlChangeLogConfiguration RequireChangeLog(SqlImportPlan plan) =>
+        plan.Configuration.ChangeLog ?? throw new SqlSchemaConfigurationException(
+            $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeChangeLogTable}', but Object Type '{plan.Name}' has no 'changeLog' in {SqlConnectorConstants.SettingObjectTypes}.");
+
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document has nothing for the configured mode to read.</exception>
+    private static string RequireWatermarkColumn(SqlImportPlan plan) =>
+        plan.Configuration.WatermarkColumn ?? throw new SqlSchemaConfigurationException(
+            $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{plan.Name}' has no 'watermarkColumn' in {SqlConnectorConstants.SettingObjectTypes}.");
+
+    /// <summary>
+    /// Runs one page of a Delta Import's keyset read, binding the run's watermark and the position the
+    /// previous page ended at.
+    /// </summary>
+    private async Task<List<object?[]>> ReadDeltaPageAsync(
+        SqlImportPlan plan,
+        SqlKeysetPageRequest request,
+        SqlDeltaPagePosition page,
+        SqlDeltaValue? watermark,
+        IReadOnlyList<string> columns)
+    {
+        using var command = _provider.CreateCommand(_connection, _provider.BuildKeysetPageCommandText(request));
+        command.Parameters.Add(_provider.CreateParameter(PageSizeParameterName, _runProfile.PageSize));
+
+        if (request.HasChangeFilter)
+            command.Parameters.Add(_provider.CreateParameter(WatermarkParameterName, BindDeltaValue(plan, watermark!, "watermark")));
+
+        for (var index = 0; index < page.Position.Count; index++)
+            command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindDeltaValue(plan, page.Position[index], "pagination token")));
+
+        return await ReadRowsAsync(command, columns);
+    }
+
+    /// <summary>
+    /// Turns a value carried between pages, or between runs, back into what a predicate compares against.
+    /// </summary>
+    /// <exception cref="InvalidDataException">The value cannot be read for the type it was written with, which would otherwise resume from the wrong place.</exception>
+    private object BindDeltaValue(SqlImportPlan plan, SqlDeltaValue deltaValue, string description)
+    {
+        if (!SqlAnchorValue.TryFromTokenString(deltaValue.Value, deltaValue.Type, out var value) || value == null)
+            throw new InvalidDataException(
+                $"Object Type '{plan.Name}' was replayed a {description} whose value '{deltaValue.Value}' cannot be read as a {deltaValue.Type}. Run a Full Import to re-establish the baseline.");
+
+        // The byte order a GUID is bound in is dialect-specific, so it goes back through the provider
+        // rather than being handed to the driver as it came out of the token.
+        return deltaValue.Type == AttributeDataType.Guid ? _provider.ConvertFromGuid((Guid)value) : value;
+    }
+
+    /// <summary>
+    /// Describes where a page ended, so the next one resumes immediately after it.
+    /// </summary>
+    /// <exception cref="InvalidDataException">A page ended on a row with nothing to resume from, which would restart the read from the beginning for ever.</exception>
+    private static List<SqlDeltaValue> DescribeKeyset(
+        SqlImportPlan plan,
+        IReadOnlyList<SqlDeltaKeysetColumn> keysetColumns,
+        object?[] lastRow,
+        IReadOnlyList<string> columns)
+    {
+        return [.. keysetColumns.Select(keysetColumn =>
+        {
+            var value = lastRow[IndexOfColumn(columns, keysetColumn.Name)] ?? throw new InvalidDataException(
+                $"Object Type '{plan.Name}' read a page ending on a row with a NULL value in '{keysetColumn.Name}', which orders the page, so there is nothing to resume the next one from.");
+
+            return keysetColumn.Type == null
+                ? SqlConnectorWatermark.Describe(value)!
+                : new SqlDeltaValue(SqlAnchorValue.ToTokenString(value, keysetColumn.Type.Value), keysetColumn.Type.Value);
+        })];
+    }
+
+    private static int IndexOfColumn(IReadOnlyList<string> columns, string columnName)
+    {
+        for (var index = 0; index < columns.Count; index++)
+            if (string.Equals(columns[index], columnName, StringComparison.OrdinalIgnoreCase))
+                return index;
+
+        throw new SqlSchemaConfigurationException($"Column '{columnName}' was not returned by the query that was supposed to read it.");
+    }
+
+    #endregion
 
     #region Planning
 
@@ -332,10 +934,19 @@ internal sealed class SqlConnectorImport
         for (var index = 0; index < page.LastAnchor.Count; index++)
             command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindAnchorValue(plan, index, page.LastAnchor[index])));
 
+        return await ReadRowsAsync(command, plan.SelectColumns);
+    }
+
+    /// <summary>
+    /// Materialises a result set as rows in the caller's column order, so that everything downstream
+    /// addresses a row by the position it asked for rather than by whatever ordinal the driver used.
+    /// </summary>
+    private async Task<List<object?[]>> ReadRowsAsync(DbCommand command, IReadOnlyList<string> columns)
+    {
         var rows = new List<object?[]>();
 
         using var reader = await command.ExecuteReaderAsync(_cancellationToken);
-        var ordinals = plan.SelectColumns.Select(reader.GetOrdinal).ToArray();
+        var ordinals = columns.Select(reader.GetOrdinal).ToArray();
 
         while (await reader.ReadAsync(_cancellationToken))
         {
@@ -847,3 +1458,79 @@ internal sealed record SqlImportPagePosition
 /// A pagination token's contents as they are written and read back.
 /// </summary>
 internal sealed record SqlImportPageToken(List<string> Anchor, int Page);
+
+/// <summary>
+/// A column a Delta Import's page is ordered and seeked on, and the type its values are carried as. A
+/// null type means the column is not part of the Connected System's schema (a change log's own columns
+/// are not), so its type is read from the value the database returns.
+/// </summary>
+internal sealed record SqlDeltaKeysetColumn(string Name, AttributeDataType? Type);
+
+/// <summary>
+/// One change a change log records, reduced to what JIM acts on.
+/// </summary>
+internal sealed record SqlChangeLogEntry(string AnchorKey, object?[] AnchorValues, ObjectChangeType ChangeType, string? UnmappedChangeType);
+
+/// <summary>
+/// What one page of a Delta Import produced, and where the next one resumes from (null where this page
+/// was the last).
+/// </summary>
+internal sealed record SqlDeltaPage(List<ConnectedSystemImportObject> ImportObjects, SqlDeltaPagePosition? NextPosition);
+
+/// <summary>
+/// Where one Object Type's Delta Import has got to: the values the previous page ended on, and which
+/// page is being read, so the narration can say so.
+/// </summary>
+/// <remarks>
+/// Each value carries its own type, which a Full Import's token does not have to: a Full Import seeks on
+/// the anchor alone, whose type the Connected System's schema states, while a Delta Import also seeks on
+/// a change log's sequence column, which belongs to no object type and is therefore described by what
+/// the database returned rather than by anything declared.
+/// </remarks>
+internal sealed record SqlDeltaPagePosition
+{
+    private static readonly JsonSerializerOptions TokenOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    internal IReadOnlyList<SqlDeltaValue> Position { get; init; } = [];
+
+    internal int PageNumber { get; init; } = 1;
+
+    internal bool IsFirstPage => Position.Count == 0;
+
+    /// <exception cref="InvalidDataException">The token cannot be read for this configuration, which would otherwise resume the page from the wrong row.</exception>
+    internal static SqlDeltaPagePosition FromToken(ConnectedSystemPaginationToken? token, SqlImportPlan plan)
+    {
+        if (string.IsNullOrEmpty(token?.StringValue))
+            return new SqlDeltaPagePosition();
+
+        SqlDeltaPageToken? parsed;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<SqlDeltaPageToken>(token.StringValue, TokenOptions);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Object Type '{plan.Name}' was replayed a pagination token JIM cannot read. Run the Run Profile again to start from the beginning.", ex);
+        }
+
+        if (parsed?.Position == null || parsed.Position.Count == 0)
+            throw new InvalidDataException(
+                $"Object Type '{plan.Name}' was replayed a pagination token holding nothing to resume from. The configuration changed mid-run; run the Run Profile again.");
+
+        return new SqlDeltaPagePosition { Position = parsed.Position, PageNumber = parsed.Page };
+    }
+
+    internal SqlDeltaPagePosition Advance(List<SqlDeltaValue> position) => new() { Position = position, PageNumber = PageNumber + 1 };
+
+    internal ConnectedSystemPaginationToken ToToken(SqlImportPlan plan) =>
+        new(plan.TokenName, JsonSerializer.Serialize(new SqlDeltaPageToken([.. Position], PageNumber), TokenOptions));
+}
+
+/// <summary>
+/// A Delta Import pagination token's contents as they are written and read back.
+/// </summary>
+internal sealed record SqlDeltaPageToken(List<SqlDeltaValue> Position, int Page);

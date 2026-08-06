@@ -87,6 +87,30 @@ public static class SqlConnectorConstants
 
     public const string SettingObjectTypes = "Object Types";
 
+    /// <summary>
+    /// How a Delta Import finds out what has changed. Deliberately a list rather than a checkbox: a
+    /// database has no single answer, and the members here are the two dialect-agnostic mechanisms every
+    /// estate can offer. Provider-native change detection joins this list rather than reshaping the
+    /// configuration around it.
+    /// </summary>
+    public const string SettingDeltaImportMode = "Delta Import Mode";
+
+    #endregion
+
+    #region Delta Import Mode drop-down values
+
+    /// <summary>
+    /// Changes read from a customer-maintained change-log table or view. The recommended mode, and the
+    /// only one that observes a deletion.
+    /// </summary>
+    public const string DeltaImportModeChangeLogTable = "Change-Log Table";
+
+    /// <summary>
+    /// Changes detected from a last-modified or version column on the object type's own source. Creates
+    /// and updates only; a row that is gone has no column left to move.
+    /// </summary>
+    public const string DeltaImportModeWatermarkColumn = "Watermark Column";
+
     #endregion
 
     #region Database Type drop-down values
@@ -145,6 +169,36 @@ public static class SqlConnectorConstants
                   "joinColumns": [ "EMPLOYEE_ID" ]
                 }
               ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// The same Object Types document with both Delta Import modes configured, shown in the Delta Import
+    /// Mode setting's Description. Only the mode actually chosen is read, but showing both together is
+    /// what makes the difference between them legible. Parsed by the Connector's own unit tests, so it
+    /// cannot drift out of step with what the parser accepts.
+    /// </summary>
+    public const string DeltaConfigurationExample = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "V_EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "watermarkColumn": "LAST_MODIFIED",
+              "changeLog": {
+                "schema": "HR",
+                "table": "IDM_CHANGE_LOG",
+                "anchorColumns": [ "EMPLOYEE_ID" ],
+                "sequenceColumn": "CHANGED_AT",
+                "changeTypeColumn": "CHANGE_TYPE",
+                "createValues": [ "I" ],
+                "updateValues": [ "U" ],
+                "deleteValues": [ "D" ]
+              }
             }
           ]
         }

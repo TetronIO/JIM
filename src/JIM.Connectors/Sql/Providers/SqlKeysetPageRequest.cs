@@ -54,7 +54,25 @@ internal sealed record SqlKeysetPageRequest
     internal IReadOnlyList<string> LastAnchorParameterNames { get; init; } = [];
 
     /// <summary>
+    /// The column a Delta Import restricts the read to, so that only rows beyond the persisted watermark
+    /// are returned: a change log's sequence, or a source's last-modified column. Null for a Full Import,
+    /// and null on a Delta Import that has no watermark yet and therefore reads from the beginning.
+    /// </summary>
+    internal string? ChangeColumn { get; init; }
+
+    /// <summary>
+    /// The parameter carrying the watermark <see cref="ChangeColumn"/> is compared against. Set exactly
+    /// when <see cref="ChangeColumn"/> is.
+    /// </summary>
+    internal string? ChangeParameterName { get; init; }
+
+    /// <summary>
     /// True when no previous anchor was supplied, so the page starts at the beginning of the ordered set.
     /// </summary>
     internal bool IsFirstPage => LastAnchorParameterNames.Count == 0;
+
+    /// <summary>
+    /// True when the read is restricted to rows beyond a watermark.
+    /// </summary>
+    internal bool HasChangeFilter => ChangeColumn != null;
 }
