@@ -96,12 +96,12 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), NewUser("ada"), NewUser("grace"), NewUser("katherine"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler), Has.Count.EqualTo(1));
             Assert.That(ResourceWriteCount(handler), Is.Zero, "the resources should have travelled inside the bulk request, not beside it");
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
 
     [Test]
@@ -114,12 +114,12 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), NewUser("ada"), NewUser("grace"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler), Is.Empty);
             Assert.That(ResourceWriteCount(handler), Is.EqualTo(2));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
 
     [Test]
@@ -133,12 +133,12 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, [], NewUser("ada"), NewUser("grace"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler), Is.Empty);
             Assert.That(ResourceWriteCount(handler), Is.EqualTo(2));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
     #endregion
 
@@ -153,11 +153,11 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), NewUser("ada"), NewUser("grace"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results.Select(r => r.ExternalId), Is.EqualTo(new[] { "generated-1", "generated-2" }));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
 
     [Test]
@@ -182,12 +182,12 @@ public class ScimBulkExportTests
             NewUser("grace"),
             NewUser("katherine"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False, "the failure belongs to the object the provider rejected");
             Assert.That(results[1].Success, Is.True);
             Assert.That(results.Skip(1).Select(r => r.ExternalId), Is.EqualTo(new[] { "ada-id", "generated-1", "generated-2" }));
-        });
+        }
     }
 
     [Test]
@@ -209,13 +209,13 @@ public class ScimBulkExportTests
             Against("ada-id", user, PendingExportChangeType.Update, Change("displayName", user, "Ada Lovelace")),
             Against("grace-id", user, PendingExportChangeType.Delete));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(3));
             Assert.That(results[0].ExternalId, Is.EqualTo("generated-1"));
             Assert.That(results[1].ExternalId, Is.EqualTo("ada-id"));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
 
     [Test]
@@ -238,11 +238,11 @@ public class ScimBulkExportTests
             Against("ada-id", user, PendingExportChangeType.Update, Change("displayName", user, "Ada Lovelace")),
             Against("grace-id", user, PendingExportChangeType.Update, Change("displayName", user, "Grace Hopper")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results.Select(r => r.Success), Is.All.True);
             Assert.That(results.Select(r => r.ExternalId), Is.EqualTo(new[] { "ada-id", "grace-id" }));
-        });
+        }
     }
 
     [Test]
@@ -257,14 +257,14 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), NewUser("ada"), NewUser("grace"), NewUser("katherine"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(3));
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[1].Success, Is.True);
             Assert.That(results[2].Success, Is.False);
             Assert.That(results[2].ErrorMessage, Does.Contain("did not report"));
-        });
+        }
     }
     #endregion
 
@@ -282,11 +282,11 @@ public class ScimBulkExportTests
             handler, BulkEnabled(),
             NewUser("ada"), NewUser("grace"), NewUser("katherine"), NewUser("dorothy"), NewUser("margaret"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler), Has.Count.EqualTo(3));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
 
     [Test]
@@ -300,12 +300,12 @@ public class ScimBulkExportTests
             handler, BulkEnabled(),
             NewUser("ada"), NewUser("grace"), NewUser("katherine"), NewUser("dorothy"), NewUser("margaret"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler), Has.Count.GreaterThan(1), "one request would have exceeded the provider's payload limit");
             Assert.That(BulkRequests(handler).Select(r => r.Body!.Length), Is.All.LessThanOrEqualTo(400));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
 
     [Test]
@@ -323,11 +323,11 @@ public class ScimBulkExportTests
             handler, BulkEnabled(),
             NewUser("ada"), NewUser("grace"), NewUser("katherine"), NewUser("dorothy"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results.Select(r => r.Success), Is.All.True);
             Assert.That(results.Select(r => r.ExternalId), Is.Unique, "each create should have its own provider-assigned id");
-        });
+        }
     }
 
     [Test]
@@ -344,11 +344,11 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), pendingExports);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler), Has.Count.EqualTo(2));
             Assert.That(results.Select(r => r.Success), Is.All.True);
-        });
+        }
     }
     #endregion
 
@@ -365,12 +365,12 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), NewUser("ada"), NewUser("grace"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ResourceWriteCount(handler), Is.EqualTo(2));
             Assert.That(results.Select(r => r.Success), Is.All.True);
             Assert.That(results.Select(r => r.ExternalId), Is.EqualTo(new[] { "generated-1", "generated-2" }));
-        });
+        }
     }
 
     [Test]
@@ -385,11 +385,11 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(handler, BulkEnabled(), NewUser("ada"), NewUser("grace"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results.Select(r => r.Success), Is.All.False);
             Assert.That(ResourceWriteCount(handler), Is.Zero, "resending would risk applying the changes twice");
-        });
+        }
     }
     #endregion
 
@@ -408,11 +408,11 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(provider.CreateHandler(), BulkEnabled(), pendingExport);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.ConcurrencyConflict));
-        });
+        }
     }
 
     [Test]
@@ -428,11 +428,11 @@ public class ScimBulkExportTests
         var handler = provider.CreateHandler();
         var results = await ExportAsync(handler, BulkEnabled(), pendingExport);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(BulkRequests(handler)[0].Body, Does.Contain("version"));
             Assert.That(results[0].Success, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -445,11 +445,11 @@ public class ScimBulkExportTests
 
         var results = await ExportAsync(provider.CreateHandler(), BulkEnabled(), NewUser("ada"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.MissingDependency));
-        });
+        }
     }
 
     [Test]
@@ -475,11 +475,11 @@ public class ScimBulkExportTests
             .SingleOrDefault(s => s.Name == ScimConnectorConstants.SettingUseBulkOperations);
 
         Assert.That(setting, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting!.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox));
             Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export));
             Assert.That(setting.DefaultCheckboxValue, Is.Not.True, "bulk is opt-in, so an administrator has to choose it");
-        });
+        }
     }
 }

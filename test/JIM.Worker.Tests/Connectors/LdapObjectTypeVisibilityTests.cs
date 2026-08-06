@@ -76,10 +76,10 @@ public class LdapObjectTypeVisibilityTests
     private static void AssertInternal(ConnectorSchemaObjectTypeTag? tag)
     {
         Assert.That(tag, Is.Not.Null, "The connector must report a classification for a class it recognises as the directory's own.");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tag!.Key, Is.EqualTo(ObjectTypeTags.Keys.Visibility));
             Assert.That(tag!.Value, Is.EqualTo(ObjectTypeTags.Values.VisibilityInternal));
-        });
+        }
     }
 }

@@ -103,10 +103,10 @@ public class RunPhaseReadingTests
     public void TopLevel_NoPhases_IsEmptyRatherThanThrowing()
     {
         // Activities that are not Run Profile executions, and runs predating step recording.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseReading.TopLevel([]), Is.Empty);
             Assert.That(RunPhaseReading.ActiveTopLevel([]), Is.Null);
-        });
+        }
     }
 }

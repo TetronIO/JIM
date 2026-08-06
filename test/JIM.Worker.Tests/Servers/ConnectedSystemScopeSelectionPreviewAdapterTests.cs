@@ -105,12 +105,12 @@ public class ConnectedSystemScopeSelectionPreviewAdapterTests
         var deltas = await EvaluateAsync(SelectionOf(UsersContainerId));
 
         Assert.That(deltas, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deltas[0].TransitionType,
                 Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope));
             Assert.That(deltas[0].ObjectDisplayName, Is.EqualTo($"CN=Bob,{ContractorsDn}"));
-        });
+        }
     }
 
     [Test]
@@ -197,6 +197,33 @@ public class ConnectedSystemScopeSelectionPreviewAdapterTests
         Assert.That(deltas, Is.Empty);
     }
 
+    [Test]
+    public async Task EvaluateDeltas_ObjectBeneathAOneLevelContainer_IsNotCountedAsLeavingScopeAsync()
+    {
+        // Container Scope (#351): a One Level container imports only what sits directly within it, so an object a
+        // level deeper is already out of scope and deselecting the container takes nothing further away. Counting
+        // it would overstate a destructive change on the strength of a Distinguished Name that merely looks nested.
+        GivenUsersIsOneLevel();
+        GivenObject($"CN=Ann,OU=Finance,{UsersDn}");
+
+        var deltas = await EvaluateAsync(new ConnectedSystemScopeSelectionProposal([PartitionId], []));
+
+        Assert.That(deltas, Is.Empty);
+    }
+
+    [Test]
+    public async Task EvaluateDeltas_ObjectDirectlyWithinAOneLevelContainer_IsCountedAsLeavingScopeAsync()
+    {
+        GivenUsersIsOneLevel();
+        GivenObject($"CN=Ann,{UsersDn}");
+
+        var deltas = await EvaluateAsync(new ConnectedSystemScopeSelectionProposal([PartitionId], []));
+
+        Assert.That(deltas, Has.Count.EqualTo(1));
+        Assert.That(deltas[0].TransitionType,
+            Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope));
+    }
+
     // ─── Metaverse consequences ───
 
     [Test]
@@ -210,11 +237,11 @@ public class ConnectedSystemScopeSelectionPreviewAdapterTests
 
         var eligible = deltas.Single(d =>
             d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(eligible.MetaverseObjectId, Is.EqualTo(metaverseObjectId));
             Assert.That(eligible.ObjectDisplayName, Is.EqualTo("Bob Smith"));
-        });
+        }
     }
 
     [Test]
@@ -243,14 +270,14 @@ public class ConnectedSystemScopeSelectionPreviewAdapterTests
 
         var deltas = await EvaluateAsync(SelectionOf(UsersContainerId));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deltas.Count(d =>
                 d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject),
                 Is.EqualTo(1));
             Assert.That(deltas.Select(d => d.TransitionType),
                 Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible));
-        });
+        }
     }
 
     [Test]
@@ -364,6 +391,13 @@ public class ConnectedSystemScopeSelectionPreviewAdapterTests
     /// </summary>
     private void GivenContractorsIsNotCurrentlySelected() =>
         _connectedSystem.Partitions![0].Containers!.Single(c => c.Id == ContractorsContainerId).Selected = false;
+
+    /// <summary>
+    /// Narrows the Users container to One Level, so only objects directly within it are in import scope.
+    /// </summary>
+    private void GivenUsersIsOneLevel() =>
+        _connectedSystem.Partitions![0].Containers!.Single(c => c.Id == UsersContainerId).Scope =
+            ConnectedSystemContainerScope.OneLevel;
 
     private void GivenObject(string distinguishedName, Guid? joinedTo = null) =>
         _candidates.Add(new ConnectedSystemObjectScopeCandidate(

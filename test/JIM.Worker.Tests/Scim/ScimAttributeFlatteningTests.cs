@@ -82,11 +82,11 @@ public class ScimAttributeFlatteningTests
         var flattened = ScimAttributeMapper.Flatten(Simple("tags", ScimAttributeTypes.String, multiValued: true), ScimUrns.User);
 
         Assert.That(flattened, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened[0].Name, Is.EqualTo("tags"));
             Assert.That(flattened[0].AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
-        });
+        }
     }
 
     [TestCase(ScimMutability.ReadOnly, AttributeWritability.ReadOnly)]
@@ -145,11 +145,11 @@ public class ScimAttributeFlatteningTests
         var flattened = ScimAttributeMapper.Flatten(name, ScimUrns.User);
 
         Assert.That(flattened.Select(a => a.Name), Is.EqualTo(new[] { "name.givenName", "name.familyName" }));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened.Select(a => a.ScimPath), Is.EqualTo(new[] { "name.givenName", "name.familyName" }));
             Assert.That(flattened, Has.All.Property(nameof(ScimFlattenedAttribute.AttributePlurality)).EqualTo(AttributePlurality.SingleValued));
-        });
+        }
     }
 
     [Test]
@@ -215,11 +215,11 @@ public class ScimAttributeFlatteningTests
     {
         var flattened = ScimAttributeMapper.Flatten(Emails(), ScimUrns.User);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened, Has.All.Property(nameof(ScimFlattenedAttribute.AttributePlurality)).EqualTo(AttributePlurality.SingleValued));
             Assert.That(flattened, Has.All.Property(nameof(ScimFlattenedAttribute.Type)).EqualTo(AttributeDataType.Text));
-        });
+        }
     }
 
     [Test]
@@ -227,11 +227,11 @@ public class ScimAttributeFlatteningTests
     {
         var flattened = ScimAttributeMapper.Flatten(Emails(), ScimUrns.User);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened.Single(a => a.Name == "emails.work").ScimPath, Is.EqualTo("emails[type eq \"work\"].value"));
             Assert.That(flattened.Single(a => a.Name == "emails.primary").ScimPath, Is.EqualTo("emails[primary eq true].value"));
-        });
+        }
     }
 
     [Test]
@@ -309,11 +309,11 @@ public class ScimAttributeFlatteningTests
         var flattened = ScimAttributeMapper.Flatten(certificates, ScimUrns.User);
 
         Assert.That(flattened.Select(a => a.Name), Is.EqualTo(new[] { "x509Certificates.value", "x509Certificates.display" }));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened, Has.All.Property(nameof(ScimFlattenedAttribute.AttributePlurality)).EqualTo(AttributePlurality.MultiValued));
             Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Binary));
-        });
+        }
     }
     #endregion
 
@@ -339,13 +339,13 @@ public class ScimAttributeFlatteningTests
         var flattened = ScimAttributeMapper.Flatten(members, ScimUrns.Group);
 
         Assert.That(flattened, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened[0].Name, Is.EqualTo("members"));
             Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Reference));
             Assert.That(flattened[0].AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
             Assert.That(flattened[0].ScimPath, Is.EqualTo("members"));
-        });
+        }
     }
 
     [Test]
@@ -366,12 +366,12 @@ public class ScimAttributeFlatteningTests
         var flattened = ScimAttributeMapper.Flatten(manager, ScimUrns.EnterpriseUser);
 
         Assert.That(flattened, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened[0].Name, Is.EqualTo("manager"));
             Assert.That(flattened[0].Type, Is.EqualTo(AttributeDataType.Reference));
             Assert.That(flattened[0].AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
-        });
+        }
     }
 
     [Test]
@@ -430,11 +430,11 @@ public class ScimAttributeFlatteningTests
 
         var flattened = ScimAttributeMapper.Flatten(manager, ScimUrns.EnterpriseUser, namePrefix: "enterpriseUser");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(flattened[0].Name, Is.EqualTo("enterpriseUser.manager"));
             Assert.That(flattened[0].ScimPath, Is.EqualTo($"{ScimUrns.EnterpriseUser}:manager"));
-        });
+        }
     }
 
     [Test]
@@ -494,7 +494,7 @@ public class ScimAttributeFlatteningTests
         var connectorAttribute = flattened.ToConnectorSchemaAttribute();
 
         Assert.That(connectorAttribute, Is.InstanceOf<ConnectorSchemaAttribute>());
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connectorAttribute.Name, Is.EqualTo("userName"));
             Assert.That(connectorAttribute.Type, Is.EqualTo(AttributeDataType.Text));
@@ -502,7 +502,7 @@ public class ScimAttributeFlatteningTests
             Assert.That(connectorAttribute.Required, Is.True);
             Assert.That(connectorAttribute.Writability, Is.EqualTo(AttributeWritability.Writable));
             Assert.That(connectorAttribute.ClassName, Is.EqualTo(ScimUrns.User));
-        });
+        }
     }
     #endregion
 }

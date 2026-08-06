@@ -133,10 +133,10 @@ public class ConnectedSystemSettingsTabTests : JimComponentTestContext
         connectedSystem.SettingValues.Single(v => v.Setting.Name == AuthenticationMethod).StringValue = BearerToken;
         cut.Render();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Not.Contain($"A {TokenEndpointUrl} is required"));
             Assert.That(cut.Markup, Does.Not.Contain(TokenEndpointUrl), "the setting is no longer relevant, so it should not be rendered at all");
-        });
+        }
     }
 }

@@ -44,10 +44,10 @@ public class ExampleDataRepositoryContextTests
         var header = await jim.ExampleData.GetTemplateHeaderAsync(3);
 
         Assert.That(header, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header!.Name, Is.EqualTo("Contoso Users"));
             Assert.That(header.BuiltIn, Is.True);
-        });
+        }
     }
 }

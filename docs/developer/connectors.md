@@ -27,7 +27,8 @@ Refuse per object rather than aborting the run, so one misdirected object does n
 
 Implement `IConnectorContainment` alongside it. `IsWithinContainer` answers whether one of your objects is at or beneath one of your containers, and JIM uses it to tell an administrator what deselecting a container would cost before they save it: how many objects would leave import scope, how many of those would disconnect from their Metaverse Object, and how many Metaverse Objects that would put on course for deletion.
 
-- **Use the same rule your export guard enforces.** Two implementations of containment would let a preview state a count your Connector then contradicts, which is worse than not answering at all.
+- **Use the same rule your import builds its search scope from, and your export guard enforces.** Copies of containment would let a preview state a count your Connector then contradicts, which is worse than not answering at all.
+- **The container is passed whole, not just its identifier, because its scope is part of the question.** A container the administrator has narrowed to one level covers only what sits directly within it and does not cover its own entry; treating it as a subtree would report objects as managed that no import will ever return.
 - **Never throw, and never open a connection.** JIM asks this about data it already holds, sometimes for a Connected System that is currently unreachable. Answer `false` for an empty or unparseable identifier: that under-counts a preview and refuses a write, which are the safe failures.
 - **Not implementing it is a valid answer.** A Connector with containers that cannot express containment gets a preview that says so, rather than one reporting a zero an administrator would read as "this change is safe".
 

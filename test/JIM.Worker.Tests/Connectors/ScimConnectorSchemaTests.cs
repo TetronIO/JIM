@@ -161,14 +161,14 @@ public class ScimConnectorSchemaTests
 
         var result = await discovery.DiscoverAsync(CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Capabilities.SupportsPatch, Is.True);
             Assert.That(result.Capabilities.SupportsFilter, Is.True);
             Assert.That(result.Capabilities.FilterMaxResults, Is.EqualTo(200));
             Assert.That(result.Capabilities.SupportsETag, Is.True);
             Assert.That(result.Capabilities.SupportsBulk, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -206,11 +206,11 @@ public class ScimConnectorSchemaTests
         var user = result.Schema.ObjectTypes.Single(o => o.Name == "User");
 
         Assert.That(user.RecommendedExternalIdAttribute, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(user.RecommendedExternalIdAttribute.Name, Is.EqualTo("id"));
             Assert.That(user.RecommendedExternalIdAttribute.Writability, Is.EqualTo(AttributeWritability.ReadOnly));
-        });
+        }
     }
 
     [Test]
@@ -257,11 +257,11 @@ public class ScimConnectorSchemaTests
         var result = await discovery.DiscoverAsync(CancellationToken.None);
         var user = result.Schema.ObjectTypes.Single(o => o.Name == "User");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(user.Attributes.Select(a => a.Name), Is.SupersetOf(new[] { "userName", "displayName", "name.givenName", "emails.work" }));
             Assert.That(result.Warnings, Has.Exactly(1).Contains("Schemas"));
-        });
+        }
     }
 
     [Test]
@@ -271,12 +271,12 @@ public class ScimConnectorSchemaTests
 
         var result = await discovery.DiscoverAsync(CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Schema.ObjectTypes.Select(o => o.Name), Is.EqualTo(new[] { "User", "Group" }));
             Assert.That(result.ResourceTypes.Select(r => r.Endpoint), Is.EqualTo(new[] { "/Users", "/Groups" }));
             Assert.That(result.Warnings, Has.Exactly(1).Contains("ResourceTypes"));
-        });
+        }
     }
 
     [Test]
@@ -286,12 +286,12 @@ public class ScimConnectorSchemaTests
 
         var result = await discovery.DiscoverAsync(CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Capabilities.DiscoveryAvailable, Is.False);
             Assert.That(result.Capabilities.SupportsPatch, Is.False);
             Assert.That(result.Warnings, Has.Some.Contains("ServiceProviderConfig"));
-        });
+        }
     }
 
     [Test]
@@ -324,12 +324,12 @@ public class ScimConnectorSchemaTests
         var result = await discovery.DiscoverAsync(CancellationToken.None);
         var device = result.Schema.ObjectTypes.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(device.Name, Is.EqualTo("Device"));
             Assert.That(device.Attributes.Select(a => a.Name), Does.Contain("id"));
             Assert.That(result.Warnings, Has.Some.Contains("Device"));
-        });
+        }
     }
 
     [Test]
@@ -370,11 +370,11 @@ public class ScimConnectorSchemaTests
         var result = await discovery.DiscoverAsync(CancellationToken.None);
         var user = result.Schema.ObjectTypes.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(user.Attributes.Select(a => a.Name), Does.Contain("custom.field"));
             Assert.That(user.Attributes.Select(a => a.Name), Does.Contain("urn:example:b:2.0:Custom.field"));
-        });
+        }
     }
 
     [Test]

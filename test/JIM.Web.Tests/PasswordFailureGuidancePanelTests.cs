@@ -45,11 +45,11 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     {
         var panel = Render(PasswordSetFailureReason.PolicyRejection);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.FindAll($"[data-testid='{ToggleMarker}']"), Is.Not.Empty);
             Assert.That(panel.FindAll($"[data-testid='{PanelMarker}']"), Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -95,12 +95,12 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
         var panel = Render(PasswordSetFailureReason.Transient);
         panel.Find($"[data-testid='{ToggleMarker}']").Click();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Find($"[data-testid='{VerdictMarker}']").TextContent, Does.Contain("unchanged"));
             Assert.That(panel.Find($"[data-testid='{PanelMarker}']").TextContent, Does.Contain("LDAPS"),
                 "the encryption trap is the most common cause and the least obvious, since exports keep working");
-        });
+        }
     }
 
     [Test]
@@ -220,12 +220,12 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
         panel.Find($"[data-testid='{ToggleMarker}']").Click();
 
         var verdict = panel.Find($"[data-testid='{VerdictMarker}']");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(verdict.ClassName, Does.Contain(expectedModifier));
             Assert.That(verdict.ClassName, Does.Not.Contain("mud-info-text").And.Not.Contain("mud-warning-text")
                 .And.Not.Contain("mud-error-text"), "colouring the sentence is what the dot exists to avoid");
-        });
+        }
     }
 
     #endregion

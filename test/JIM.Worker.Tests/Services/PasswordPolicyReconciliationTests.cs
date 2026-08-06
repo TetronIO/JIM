@@ -59,11 +59,11 @@ public class PasswordPolicyReconciliationTests
             System("Fabrikam HR", Policy(minimumLength: 8))
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reconciliation.Policy.Length, Is.GreaterThanOrEqualTo(20));
             Assert.That(reconciliation.Constraints, Has.Some.Contains("20 characters or more"));
-        });
+        }
     }
 
     /// <summary>
@@ -150,11 +150,11 @@ public class PasswordPolicyReconciliationTests
             System("Research LDAP", null)
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reconciliation.SystemsWithNoDiscoveredPolicy, Is.EqualTo(new[] { "Research LDAP" }));
             Assert.That(reconciliation.Policy.Length, Is.GreaterThanOrEqualTo(15), "the systems that did publish still apply");
-        });
+        }
     }
 
     /// <summary>
@@ -173,12 +173,12 @@ public class PasswordPolicyReconciliationTests
             System("Research LDAP", new ConnectedSystemPasswordPolicy())
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reconciliation.SystemsWithNoDiscoveredPolicy, Is.EqualTo(new[] { "Research LDAP" }));
             Assert.That(reconciliation.Constraints, Is.Empty);
             Assert.That(reconciliation.MayBeStricterThanDiscovered, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -186,12 +186,12 @@ public class PasswordPolicyReconciliationTests
     {
         var reconciliation = _generator.Reconcile([]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reconciliation.IsUsable, Is.True);
             Assert.That(reconciliation.Constraints, Is.Empty);
             Assert.That(reconciliation.Policy.Length, Is.EqualTo(new PasswordGenerationPolicy().Length));
-        });
+        }
     }
 
     #endregion
@@ -264,14 +264,14 @@ public class PasswordPolicyReconciliationTests
         var reconciliation = _generator.Reconcile(systems);
 
         Assert.That(reconciliation.IsUsable, Is.True, string.Join(" ", reconciliation.Conflicts));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             foreach (var system in systems)
                 Assert.That(_generator.Assess(reconciliation.Policy, system.Policy).IsUsable, Is.True,
                     $"{system.ConnectedSystemName} would refuse the reconciled configuration");
 
             Assert.That(_generator.Generate(reconciliation.Policy), Has.Length.GreaterThanOrEqualTo(20));
-        });
+        }
     }
 
     #endregion

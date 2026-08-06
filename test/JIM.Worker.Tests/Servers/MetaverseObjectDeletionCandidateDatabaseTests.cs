@@ -98,13 +98,13 @@ public class MetaverseObjectDeletionCandidateDatabaseTests
 
         var candidates = await ReadCandidatesAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // The fact that decides whether the authoritative-source rule would delete an object the last-connector
             // rule is holding back, so getting it from the database rather than assuming it is the whole point.
             Assert.That(candidates.Single(c => c.Id == orphaned).HasConnectedSystemObjects, Is.False);
             Assert.That(candidates.Single(c => c.Id == stillConnected).HasConnectedSystemObjects, Is.True);
-        });
+        }
     }
 
     [Test]

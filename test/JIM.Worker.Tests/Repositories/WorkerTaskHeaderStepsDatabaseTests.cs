@@ -120,7 +120,7 @@ public class WorkerTaskHeaderStepsDatabaseTests
         var import = headers.Single(h => h.ActivityId == importActivityId);
         var export = headers.Single(h => h.ActivityId == exportActivityId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(import.Steps, Is.Not.Null);
             Assert.That(import.Steps!.TotalSteps, Is.EqualTo(2));
@@ -129,7 +129,7 @@ public class WorkerTaskHeaderStepsDatabaseTests
             Assert.That(export.Steps, Is.Not.Null);
             Assert.That(export.Steps!.TotalSteps, Is.EqualTo(3));
             Assert.That(export.Steps.CurrentStepName, Is.EqualTo("Exporting deferred changes"));
-        });
+        }
     }
 
     [Test]
@@ -144,12 +144,12 @@ public class WorkerTaskHeaderStepsDatabaseTests
 
         var header = headers.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.Steps!.TotalSteps, Is.EqualTo(1),
                 "A Connector's step is detail inside the step that called it, so the same Run Profile must not read as a different number of steps per Connector");
             Assert.That(header.Steps.CurrentStepName, Is.EqualTo("Importing objects"));
-        });
+        }
     }
 
     [Test]

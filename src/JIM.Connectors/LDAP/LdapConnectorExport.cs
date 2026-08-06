@@ -147,9 +147,10 @@ internal class LdapConnectorExport
         return results;
     }
 
-    // The container Distinguished Names the administrator has selected on this Connected System, or empty when JIM
-    // has not stated a scope (a Connected System with no container selections, or a caller that does not supply one).
-    private IReadOnlyList<string> _managedScope = [];
+    // The containers the administrator has selected on this Connected System, or empty when JIM has not stated a
+    // scope (a Connected System with no container selections, or a caller that does not supply one). Each carries
+    // its own Container Scope, so a One Level container permits writes directly within it and nowhere beneath it.
+    private IReadOnlyList<ConnectedSystemContainer> _managedScope = [];
 
     /// <summary>
     /// Tells the Connector which containers the administrator manages, so it can refuse to write outside them.
@@ -158,9 +159,9 @@ internal class LdapConnectorExport
     /// An empty or unset scope means "not stated" and permits everything, so a Connected System with no container
     /// selections behaves exactly as it always has.
     /// </remarks>
-    internal void SetManagedScope(IReadOnlyList<string> selectedContainerExternalIds)
+    internal void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> selectedContainers)
     {
-        _managedScope = selectedContainerExternalIds;
+        _managedScope = selectedContainers;
     }
 
     /// <summary>
@@ -173,6 +174,10 @@ internal class LdapConnectorExport
     /// following synchronisation disconnected it, then deleted or re-provisioned it. Refusing the write per object
     /// leaves everything else in the run to proceed, and puts the configuration error where somebody will see it.
     /// A container the Connector created during this run counts as in scope: JIM selects it as soon as the run ends.
+    ///
+    /// Each container's Container Scope decides what "inside" means. Beneath a One Level container the import
+    /// returns nothing, so writing there is exactly the unreadable write this guard exists to refuse, even though
+    /// the Distinguished Name looks like it sits within a selected container.
     /// </remarks>
     private ConnectedSystemExportResult? CheckTargetIsWithinManagedScope(string? targetDn)
     {
@@ -193,22 +198,15 @@ internal class LdapConnectorExport
 
     private bool IsWithinManagedScope(string targetDn)
     {
-        if (_managedScope.Any(scopeDn => IsDnWithinContainer(targetDn, scopeDn)))
+        if (LdapConnectorUtilities.IsDnWithinAnyContainerScope(targetDn, _managedScope))
             return true;
 
         // A container created during this run is selected by JIM the moment the run finishes, so an object being
-        // provisioned into one it has just created is in scope even though the stored selection has yet to catch up.
-        return _createdContainerExternalIds.Any(createdDn => IsDnWithinContainer(targetDn, createdDn));
+        // provisioned into one it has just created is in scope even though the stored selection has yet to catch
+        // up. It is selected as a subtree, which is what JIM's own auto-selection records.
+        return _createdContainerExternalIds.Any(createdDn =>
+            LdapConnectorUtilities.IsDnWithinContainerScope(targetDn, new ConnectedSystemContainer { ExternalId = createdDn }));
     }
-
-    /// <summary>
-    /// Determines whether a Distinguished Name sits at or beneath a container, which is what selecting a container
-    /// means: its whole subtree is in scope. Delegated to the one containment rule the Connector exposes through
-    /// <see cref="JIM.Models.Interfaces.IConnectorContainment"/>, so what export refuses to write and what a
-    /// deselection preview counts as leaving scope cannot drift apart.
-    /// </summary>
-    private static bool IsDnWithinContainer(string dn, string containerDn) =>
-        LdapDistinguishedName.IsWithinContainer(dn, containerDn);
 
     private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport)
     {

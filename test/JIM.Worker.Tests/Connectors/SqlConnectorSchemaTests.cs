@@ -52,7 +52,7 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
         var objectType = schema.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.Name, Is.EqualTo("Person"));
             Assert.That(AttributeType(objectType, "EMPLOYEE_ID"), Is.EqualTo(AttributeDataType.Number));
@@ -60,7 +60,7 @@ public class SqlConnectorSchemaTests
             Assert.That(AttributeType(objectType, "STARTED_ON"), Is.EqualTo(AttributeDataType.DateTime));
             Assert.That(AttributeType(objectType, "FULL_TIME_EQUIVALENT"), Is.EqualTo(AttributeDataType.Decimal));
             Assert.That(schema.Warnings, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -92,12 +92,12 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "V_EMPLOYEES"));
 
         var objectType = schema.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.Attributes, Has.Count.EqualTo(2));
             Assert.That(objectType.Attributes.Select(a => a.Writability), Has.All.EqualTo(AttributeWritability.ReadOnly),
                 "Only a table is guaranteed to accept an INSERT, UPDATE or DELETE, so a view-backed object type is not offered as an export target.");
-        });
+        }
     }
 
     [Test]
@@ -118,12 +118,12 @@ public class SqlConnectorSchemaTests
             """);
 
         var objectType = schema.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.Attributes.Select(a => a.Name), Is.EquivalentTo(new[] { "EMPLOYEE_ID", "GIVEN_NAME" }));
             Assert.That(AttributeType(objectType, "GIVEN_NAME"), Is.EqualTo(AttributeDataType.Text));
             Assert.That(objectType.RecommendedExternalIdAttribute.Name, Is.EqualTo("EMPLOYEE_ID"));
-        });
+        }
     }
 
     [Test]
@@ -138,11 +138,11 @@ public class SqlConnectorSchemaTests
         var exception = Assert.ThrowsAsync<SqlSchemaConfigurationException>(async () =>
             await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEE")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("EMPLOYEE"));
-        });
+        }
     }
 
     [Test]
@@ -168,11 +168,11 @@ public class SqlConnectorSchemaTests
         var exception = Assert.ThrowsAsync<SqlSchemaConfigurationException>(async () =>
             await GetSchemaAsync(provider, ObjectTypesDocument(null, "EMPLOYEES")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("HR"));
             Assert.That(exception.Message, Does.Contain("PAYROLL"));
-        });
+        }
     }
 
     [Test]
@@ -198,14 +198,14 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
         var objectType = schema.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.RecommendedExternalIdAttribute.Name, Is.EqualTo("EMPLOYEE_ID"));
             Assert.That(objectType.RecommendedExternalIdAttribute, Is.SameAs(objectType.Attributes.Single(a => a.Name == "EMPLOYEE_ID")),
                 "The recommendation names one of the object type's own attributes, not a copy of it.");
             Assert.That(objectType.RecommendedSecondaryExternalIdAttribute, Is.Null,
                 "A row's anchor is its only identifier; there is no second one to resolve references with.");
-        });
+        }
     }
 
     [Test]
@@ -234,14 +234,14 @@ public class SqlConnectorSchemaTests
 
         var objectType = schema.ObjectTypes.Single();
         var anchor = objectType.RecommendedExternalIdAttribute;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(anchor.Name, Is.EqualTo("STUDENT_ID+COURSE_ID"));
             Assert.That(anchor.Type, Is.EqualTo(AttributeDataType.Text));
             Assert.That(anchor.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
             Assert.That(anchor.Writability, Is.EqualTo(AttributeWritability.ReadOnly), "A composed anchor is JIM's own projection, so nothing can be written to it.");
             Assert.That(objectType.Attributes.Select(a => a.Name), Does.Contain("STUDENT_ID").And.Contain("COURSE_ID"));
-        });
+        }
     }
 
     [Test]
@@ -253,11 +253,11 @@ public class SqlConnectorSchemaTests
         var exception = Assert.ThrowsAsync<SqlSchemaConfigurationException>(async () =>
             await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("EMPLOYEE_ID"));
-        });
+        }
     }
 
     #endregion
@@ -296,11 +296,11 @@ public class SqlConnectorSchemaTests
             """);
 
         var attribute = schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "PhoneNumbers");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(attribute.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
             Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Text), "The value column's own type decides the attribute's type.");
-        });
+        }
     }
 
     [Test]
@@ -340,11 +340,11 @@ public class SqlConnectorSchemaTests
             """);
 
         var members = schema.ObjectTypes.Single(o => o.Name == "Group").Attributes.Single(a => a.Name == "Members");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(members.Type, Is.EqualTo(AttributeDataType.Reference));
             Assert.That(members.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
-        });
+        }
     }
 
     [Test]
@@ -409,12 +409,12 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, ManagerReferenceDocument());
 
         var manager = schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "MANAGER_EMPLOYEE_ID");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(manager.Type, Is.EqualTo(AttributeDataType.Reference),
                 "A reference is explicit configuration; the column itself is an ordinary integer.");
             Assert.That(manager.AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
-        });
+        }
     }
 
     [Test]
@@ -445,7 +445,7 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, PersonAndDepartmentDocument());
 
         var department = schema.ObjectTypes.Single(o => o.Name == "Person").Attributes.Single(a => a.Name == "DEPARTMENT_ID");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(department.Description, Is.Not.Null.And.Contains("Department"),
                 "The suggestion names the object type the foreign key points at.");
@@ -453,7 +453,7 @@ public class SqlConnectorSchemaTests
                 "An administrator needs to know how to confirm it, not only that it exists.");
             Assert.That(department.Type, Is.EqualTo(AttributeDataType.Number),
                 "Explicit configuration remains the source of truth, so a suggestion never changes a type on its own.");
-        });
+        }
     }
 
     [Test]
@@ -486,11 +486,11 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, PersonAndDepartmentDocument(configureTheReference: true));
 
         var department = schema.ObjectTypes.Single(o => o.Name == "Person").Attributes.Single(a => a.Name == "DEPARTMENT_ID");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(department.Type, Is.EqualTo(AttributeDataType.Reference));
             Assert.That(department.Description, Is.Null, "There is nothing left to suggest once the administrator has configured it.");
-        });
+        }
     }
 
     [Test]
@@ -549,12 +549,12 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"), treatRaw16AsGuid: true);
 
         var objectType = schema.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(AttributeType(objectType, "EXTERNAL_UID"), Is.EqualTo(AttributeDataType.Guid));
             Assert.That(AttributeType(objectType, "PASSWORD_DIGEST"), Is.EqualTo(AttributeDataType.Binary),
                 "Only exactly sixteen bytes can hold a GUID, whatever the opt-in says.");
-        });
+        }
     }
 
     #endregion
@@ -576,12 +576,12 @@ public class SqlConnectorSchemaTests
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
         var objectType = schema.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.Attributes.Select(a => a.Name), Has.No.Member("WORKPLACE_LOCATION"));
             Assert.That(schema.Warnings, Has.Count.EqualTo(1));
             Assert.That(schema.Warnings[0], Does.Contain("Person").And.Contain("WORKPLACE_LOCATION").And.Contain("geography"));
-        });
+        }
     }
 
     [Test]

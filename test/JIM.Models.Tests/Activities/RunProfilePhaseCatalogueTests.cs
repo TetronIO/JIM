@@ -102,7 +102,7 @@ public class RunProfilePhaseCatalogueTests
     {
         var keys = RunProfilePhaseCatalogue.GetPhases(ConnectedSystemRunType.Export).Select(p => p.Key).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeferred),
                 "An export's second pass re-resolves references that did not exist yet and writes what it can; at scale that pass is most of the run.");
@@ -110,7 +110,7 @@ public class RunProfilePhaseCatalogueTests
                 "An export that creates containers then goes and selects them; that is Connected System work with no step of its own.");
             Assert.That(keys, Does.Contain(RunPhaseKeys.ExportDeliverInitialPasswords),
                 "Initial password delivery opens its own connection and narrates its own outcome, so it needs a step to narrate into.");
-        });
+        }
     }
 
     [Test]

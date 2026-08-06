@@ -43,7 +43,7 @@ public class ActivityErrorDetailTests
         var actual = ActivityErrorDetail.TryReadServerCertificate(detail);
 
         Assert.That(actual, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(actual!.Host, Is.EqualTo(expected.Host));
             Assert.That(actual.Port, Is.EqualTo(expected.Port));
@@ -57,7 +57,7 @@ public class ActivityErrorDetailTests
             Assert.That(actual.SignatureAlgorithm, Is.EqualTo(expected.SignatureAlgorithm));
             Assert.That(actual.IsSelfSigned, Is.EqualTo(expected.IsSelfSigned));
             Assert.That(actual.Remediation, Is.EqualTo(expected.Remediation));
-        });
+        }
     }
 
     /// <summary>
@@ -83,11 +83,11 @@ public class ActivityErrorDetailTests
     [Test]
     public void TryReadServerCertificate_WithNothingRecorded_ReturnsNull()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ActivityErrorDetail.TryReadServerCertificate(null), Is.Null);
             Assert.That(ActivityErrorDetail.TryReadServerCertificate(string.Empty), Is.Null);
-        });
+        }
     }
 
     /// <summary>
@@ -97,10 +97,10 @@ public class ActivityErrorDetailTests
     [Test]
     public void TryReadServerCertificate_WithUnrecognisedOrMalformedContent_ReturnsNullRatherThanThrowing()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ActivityErrorDetail.TryReadServerCertificate("{\"kind\":\"something-else\",\"payload\":42}"), Is.Null);
             Assert.That(ActivityErrorDetail.TryReadServerCertificate("not json at all"), Is.Null);
-        });
+        }
     }
 }

@@ -44,11 +44,11 @@ public class ConfigurationChangePreflightConsequencesTests
         var group = ConfigurationChangePreflightConsequences.For(Preflight(
             Item("Deprovisioning Action", ConfigurationChangeClass.Destructive, consequence: "Objects will be deleted.")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(group!.Headline, Is.EqualTo("This property decides whether objects are removed"));
             Assert.That(group.Items.Single().Text, Does.StartWith("Deprovisioning Action: "));
-        });
+        }
     }
 
     [Test]

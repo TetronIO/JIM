@@ -108,12 +108,12 @@ public class ConnectedSystemObjectTypeTagPersistenceDatabaseTests
         await SaveSchemaAsync(secondPass);
 
         var reloaded = await LoadDetachedAsync(systemId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reloaded.ObjectTypes!.Single().Tags, Has.Count.EqualTo(1));
             Assert.That(reloaded.ObjectTypes!.Single().Tags.Single().Id, Is.EqualTo(originalTagId),
                 "An unchanged classification must keep its row rather than being deleted and re-inserted on every refresh.");
-        });
+        }
     }
 
     [Test]
@@ -191,12 +191,12 @@ public class ConnectedSystemObjectTypeTagPersistenceDatabaseTests
         }
 
         await using var verify = NewContext();
-        Assert.Multiple(async () =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(await verify.ConnectedSystems.AnyAsync(), Is.False);
             Assert.That(await verify.ConnectedSystemObjectTypeTags.CountAsync(), Is.Zero,
                 "Deleting a Connected System must take its object types' classifications with it.");
-        });
+        }
     }
 
     [Test]
@@ -247,11 +247,11 @@ public class ConnectedSystemObjectTypeTagPersistenceDatabaseTests
         var readRepository = new PostgresDataRepository(readContext);
         var objectTypes = await readRepository.ConnectedSystems.GetObjectTypesAsync(systemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectTypes.Single().Tags, Has.Count.EqualTo(2), "The list query must load the classification tags.");
             Assert.That(objectTypes.Single().IsInternal(), Is.True);
-        });
+        }
     }
 
     [Test]
@@ -263,11 +263,11 @@ public class ConnectedSystemObjectTypeTagPersistenceDatabaseTests
         var readRepository = new PostgresDataRepository(readContext);
         var objectTypes = await readRepository.ConnectedSystems.GetObjectTypesAsync(systemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectTypes.Single().Tags, Is.Empty);
             Assert.That(objectTypes.Single().IsInternal(), Is.False);
-        });
+        }
     }
 
     /// <summary>

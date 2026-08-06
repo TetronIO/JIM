@@ -157,11 +157,11 @@ public class SynchronisationControllerScopeSelectionPreviewTests
 
         Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
         var proposal = QueuedProposal();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(proposal.SelectedPartitionIds, Is.EquivalentTo(new[] { PartitionId }));
             Assert.That(proposal.SelectedContainerIds, Is.EquivalentTo(new[] { UsersContainerId, ContractorsContainerId }));
-        });
+        }
     }
 
     [Test]
@@ -175,12 +175,12 @@ public class SynchronisationControllerScopeSelectionPreviewTests
 
         Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
         var proposal = QueuedProposal();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(proposal.SelectedContainerIds, Is.Empty);
             Assert.That(proposal.SelectedPartitionIds, Is.EquivalentTo(new[] { PartitionId }),
                 "an omitted partition list should still preview the stored partitions");
-        });
+        }
     }
 
     [Test]
@@ -205,11 +205,11 @@ public class SynchronisationControllerScopeSelectionPreviewTests
         var result = await _controller.StartConnectedSystemScopeSelectionPreviewAsync(ConnectedSystemId,
             new StartConnectedSystemScopeSelectionPreviewRequest { SelectedContainerIds = [9999] });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
             Assert.That(_queuedWorkerTasks, Is.Empty, "nothing should be evaluated for an incoherent proposal");
-        });
+        }
     }
 
     [Test]

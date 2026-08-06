@@ -107,7 +107,7 @@ public class SchedulingRepositoryHeaderTests
 
         Assert.That(result.Results, Has.Count.EqualTo(1));
         var header = result.Results[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.Id, Is.EqualTo(schedule.Id));
             Assert.That(header.Name, Is.EqualTo("Nightly Sync"));
@@ -117,7 +117,7 @@ public class SchedulingRepositoryHeaderTests
             Assert.That(header.LastExecutionTotalSteps, Is.EqualTo(6));
             Assert.That(header.LastExecutionCompletedAt, Is.EqualTo(completedAt));
             Assert.That(header.LastExecutionErrorMessage, Is.EqualTo("Connected System unreachable"));
-        });
+        }
     }
 
     [Test]
@@ -131,7 +131,7 @@ public class SchedulingRepositoryHeaderTests
 
         Assert.That(result.Results, Has.Count.EqualTo(1));
         var header = result.Results[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.LastExecutionId, Is.Null);
             Assert.That(header.LastExecutionStatus, Is.Null);
@@ -139,7 +139,7 @@ public class SchedulingRepositoryHeaderTests
             Assert.That(header.LastExecutionTotalSteps, Is.Null);
             Assert.That(header.LastExecutionCompletedAt, Is.Null);
             Assert.That(header.LastExecutionErrorMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -158,11 +158,11 @@ public class SchedulingRepositoryHeaderTests
         var result = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10);
 
         var header = result.Results[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.LastExecutionId, Is.EqualTo(newest.Id));
             Assert.That(header.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Complete));
-        });
+        }
     }
 
     [Test]
@@ -183,11 +183,11 @@ public class SchedulingRepositoryHeaderTests
 
         var result = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Results.Single(h => h.Id == schedule.Id).StepCount, Is.EqualTo(3));
             Assert.That(result.Results.Single(h => h.Id == stepless.Id).StepCount, Is.EqualTo(0));
-        });
+        }
     }
 
     [Test]
@@ -215,11 +215,11 @@ public class SchedulingRepositoryHeaderTests
         var ascending = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10, null, "name");
         var descending = await _repository.Scheduling.GetScheduleHeadersAsync(1, 10, null, "name", true);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ascending.Results.Select(h => h.Name), Is.EqualTo(new[] { "Alpha", "Bravo", "Charlie" }));
             Assert.That(descending.Results.Select(h => h.Name), Is.EqualTo(new[] { "Charlie", "Bravo", "Alpha" }));
-        });
+        }
     }
 
     [Test]
@@ -243,12 +243,12 @@ public class SchedulingRepositoryHeaderTests
 
         var result = await _repository.Scheduling.GetScheduleHeadersAsync(2, 2);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.TotalResults, Is.EqualTo(5));
             Assert.That(result.CurrentPage, Is.EqualTo(2));
             Assert.That(result.Results.Select(h => h.Name), Is.EqualTo(new[] { "Schedule 2", "Schedule 3" }));
-        });
+        }
     }
 
     [Test]
@@ -259,11 +259,11 @@ public class SchedulingRepositoryHeaderTests
 
         var result = await _repository.Scheduling.GetScheduleHeadersAsync(5, 10);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Results, Is.Empty);
             Assert.That(result.TotalResults, Is.EqualTo(0));
-        });
+        }
     }
 
     [Test]

@@ -19,7 +19,10 @@ namespace JIM.Models.Staging;
 ///
 /// It deliberately holds no opinion on what containment means. That belongs to the Connector, which is asked through
 /// <see cref="IConnectorContainment"/>; a Connector that cannot answer leaves membership undetermined rather than
-/// letting the framework invent a rule.
+/// letting the framework invent a rule. Each container's own
+/// <see cref="ConnectedSystemContainer.Scope"/> travels with it into that question, so a
+/// <see cref="ConnectedSystemContainerScope.OneLevel"/> container is never mistaken for a licence over its whole
+/// subtree.
 /// </remarks>
 public sealed class ConnectedSystemScope
 {
@@ -29,10 +32,11 @@ public sealed class ConnectedSystemScope
     public IReadOnlySet<int> SelectedPartitionIds { get; }
 
     /// <summary>
-    /// The external ids of the containers in this selection, from partitions in this selection only. Selecting a
-    /// container selects its subtree, so an object beneath one of these is in scope without appearing here.
+    /// The containers in this selection, from partitions in this selection only. Each carries its own
+    /// <see cref="ConnectedSystemContainer.Scope"/>, which decides how far beneath it objects are in scope, so a
+    /// descendant of one of these may or may not be covered by it.
     /// </summary>
-    public IReadOnlyList<string> SelectedContainerExternalIds { get; }
+    public IReadOnlyList<ConnectedSystemContainer> SelectedContainers { get; }
 
     /// <summary>
     /// Whether container membership is part of scope for this Connected System. False for a Connector with
@@ -42,12 +46,12 @@ public sealed class ConnectedSystemScope
 
     private ConnectedSystemScope(
         IReadOnlySet<int> selectedPartitionIds,
-        IReadOnlyList<string> selectedContainerExternalIds,
+        IReadOnlyList<ConnectedSystemContainer> selectedContainers,
         bool containersDecideScope,
         IConnectorContainment? containment)
     {
         SelectedPartitionIds = selectedPartitionIds;
-        SelectedContainerExternalIds = selectedContainerExternalIds;
+        SelectedContainers = selectedContainers;
         ContainersDecideScope = containersDecideScope;
         _containment = containment;
     }
@@ -75,14 +79,14 @@ public sealed class ConnectedSystemScope
 
         var partitionIds = selection.SelectedPartitionIds.ToHashSet();
         var containerIds = selection.SelectedContainerIds.ToHashSet();
-        var externalIds = new List<string>();
+        var containers = new List<ConnectedSystemContainer>();
 
         foreach (var partition in (connectedSystem.Partitions ?? []).Where(p => partitionIds.Contains(p.Id) && p.Containers != null))
-            CollectSelectedContainerExternalIds(partition.Containers!, containerIds, externalIds);
+            CollectSelectedContainers(partition.Containers!, containerIds, containers);
 
         return new ConnectedSystemScope(
             partitionIds,
-            externalIds,
+            containers,
             connectedSystem.ConnectorDefinition?.SupportsPartitionContainers ?? false,
             containment);
     }
@@ -114,26 +118,26 @@ public sealed class ConnectedSystemScope
 
         // A selected partition with no selected containers imports nothing, which is a determined answer and the
         // one an administrator who has just cleared every container needs to see counted.
-        if (SelectedContainerExternalIds.Count == 0)
+        if (SelectedContainers.Count == 0)
             return false;
 
         if (_containment is null || string.IsNullOrEmpty(containerIdentifier))
             return null;
 
-        return SelectedContainerExternalIds.Any(container => _containment.IsWithinContainer(containerIdentifier, container));
+        return SelectedContainers.Any(container => _containment.IsWithinContainer(containerIdentifier, container));
     }
 
-    private static void CollectSelectedContainerExternalIds(
+    private static void CollectSelectedContainers(
         IEnumerable<ConnectedSystemContainer> containers,
         IReadOnlySet<int> selectedContainerIds,
-        List<string> collected)
+        List<ConnectedSystemContainer> collected)
     {
         foreach (var container in containers)
         {
-            if (selectedContainerIds.Contains(container.Id) && !string.IsNullOrEmpty(container.ExternalId))
-                collected.Add(container.ExternalId);
+            if (selectedContainerIds.Contains(container.Id))
+                collected.Add(container);
 
-            CollectSelectedContainerExternalIds(container.ChildContainers, selectedContainerIds, collected);
+            CollectSelectedContainers(container.ChildContainers, selectedContainerIds, collected);
         }
     }
 }

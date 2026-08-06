@@ -97,12 +97,12 @@ public class TaskingRepositoryQueueReadTests
 
         var headers = await jim.Tasking.GetWorkerTaskHeadersAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(headers, Has.Count.EqualTo(1));
             Assert.That(headers[0].Name, Is.EqualTo("Connected System 404"),
                 "Named the same way a delete task for a missing system already is, so the two read alike");
-        });
+        }
     }
 
     [Test]
