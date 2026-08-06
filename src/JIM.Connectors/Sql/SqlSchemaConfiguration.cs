@@ -230,9 +230,18 @@ internal sealed record SqlSchemaConfiguration
     /// same document is valid under one mode and unusable under the other.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Every object type has to be covered, not just some. A Delta Import that silently skips an object
     /// type reports success while leaving that type's objects to drift, and no administrator would read
     /// a green Activity as "except for Groups".
+    /// </para>
+    /// <para>
+    /// In Watermark Column mode that extends to every related table, for the same reason one step down:
+    /// a membership added or revoked never moves the parent row's own watermark, so a related table with
+    /// no watermark of its own is a source of changes JIM could never see. Permitting it would make
+    /// undetected drift the default rather than a fault, so it is refused at save time; the alternative
+    /// costs nothing to configure and everything to diagnose.
+    /// </para>
     /// </remarks>
     /// <exception cref="SqlSchemaConfigurationException">An Object Type has nothing for this mode to read.</exception>
     internal void ValidateDeltaImportMode(SqlDeltaImportMode mode)
@@ -250,8 +259,21 @@ internal sealed record SqlSchemaConfiguration
                     throw new SqlSchemaConfigurationException(
                         $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' has no 'watermarkColumn'. " +
                         "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every object type needs one.");
+
+                case SqlDeltaImportMode.WatermarkColumn:
+                    ValidateRelatedTableWatermarkColumns(objectType);
+                    break;
             }
         }
+    }
+
+    /// <exception cref="SqlSchemaConfigurationException">A related table has no watermark column for this mode to read.</exception>
+    private static void ValidateRelatedTableWatermarkColumns(SqlObjectTypeConfiguration objectType)
+    {
+        foreach (var relatedTable in objectType.RelatedTables.Where(relatedTable => relatedTable.WatermarkColumn == null))
+            throw new SqlSchemaConfigurationException(
+                $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' has related table attribute '{relatedTable.AttributeName}' with no 'watermarkColumn'. " +
+                $"A row added to or removed from '{relatedTable.TableName}' changes the object without touching its own row, so without a watermark column on the related table that change could never be detected.");
     }
 
     private static List<string> ReadAnchorColumns(ObjectTypeDocument document, string objectTypeName)
@@ -334,6 +356,9 @@ internal sealed record SqlSchemaConfiguration
             foreach (var joinColumn in relatedTable.JoinColumns)
                 ValidateIdentifier(joinColumn, objectTypeName, $"relatedTables['{attributeName}'].joinColumns");
 
+            if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
+                ValidateIdentifier(relatedTable.WatermarkColumn, objectTypeName, $"relatedTables['{attributeName}'].watermarkColumn");
+
             relatedTables.Add(new SqlRelatedTableConfiguration
             {
                 AttributeName = attributeName,
@@ -341,7 +366,8 @@ internal sealed record SqlSchemaConfiguration
                 TableName = relatedTable.Table!,
                 ValueColumn = relatedTable.ValueColumn!,
                 JoinColumns = [.. relatedTable.JoinColumns.Select(joinColumn => joinColumn!)],
-                ReferencesObjectType = string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType) ? null : relatedTable.ReferencesObjectType.Trim()
+                ReferencesObjectType = string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType) ? null : relatedTable.ReferencesObjectType.Trim(),
+                WatermarkColumn = string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn) ? null : relatedTable.WatermarkColumn
             });
         }
 
@@ -481,6 +507,8 @@ internal sealed record SqlSchemaConfiguration
         public List<string?>? JoinColumns { get; set; }
 
         public string? ReferencesObjectType { get; set; }
+
+        public string? WatermarkColumn { get; set; }
     }
 
     #endregion

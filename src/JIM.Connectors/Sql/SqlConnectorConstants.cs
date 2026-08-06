@@ -189,6 +189,16 @@ public static class SqlConnectorConstants
               "table": "V_EMPLOYEES",
               "anchorColumns": [ "EMPLOYEE_ID" ],
               "watermarkColumn": "LAST_MODIFIED",
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "LAST_MODIFIED"
+                }
+              ],
               "changeLog": {
                 "schema": "HR",
                 "table": "IDM_CHANGE_LOG",

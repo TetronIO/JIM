@@ -279,7 +279,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         "a change type and a monotonic sequence or timestamp. It is the recommended mode, and the only one that observes a deletion. " +
         "Add a 'changeLog' to every object type naming that table, the columns carrying the anchor, the sequence column, the change type column, " +
         "and which of your own change-type values mean a create, an update and a deletion. " +
-        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn'. " +
+        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn', " +
+        "and one on each of its related tables, named the same way, so that a phone number or a group membership changing is detected as a change to the object it belongs to. " +
         "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
         "so deletions are found only by a Full Import. Example:" + Environment.NewLine + Environment.NewLine +
         SqlConnectorConstants.DeltaConfigurationExample;

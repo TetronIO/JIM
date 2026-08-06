@@ -574,24 +574,40 @@ internal sealed class FakeDbCommand : DbCommand
 
     /// <summary>
     /// Which source this command reads, found by matching the dialect's own qualified name against the
-    /// command text. The longest match wins, so EMPLOYEE_PHONES is never mistaken for EMPLOYEES.
+    /// command text. The source a statement returns rows from is the one its first FROM names: a
+    /// Watermark Column page names its related tables further on, inside correlated subqueries, and
+    /// those decide which parents are returned rather than what is returned.
     /// </summary>
     private FakeSqlDataTable? ResolveDataTable()
     {
         FakeSqlDataTable? match = null;
-        var matchedLength = 0;
+        var matchedIndex = int.MaxValue;
 
         foreach (var dataTable in _provider.Catalogue.DataTables)
         {
-            var qualifiedName = _provider.QualifyObjectName(dataTable.SchemaName, dataTable.ObjectName);
-            if (CommandText.Contains(qualifiedName, StringComparison.Ordinal) && qualifiedName.Length > matchedLength)
+            // Matched with its FROM, so EMPLOYEE_PHONES is never mistaken for EMPLOYEES and neither is
+            // taken from a subquery that merely mentions it.
+            var index = CommandText.IndexOf($"FROM {_provider.QualifyObjectName(dataTable.SchemaName, dataTable.ObjectName)}", StringComparison.Ordinal);
+
+            if (index >= 0 && index < matchedIndex)
             {
                 match = dataTable;
-                matchedLength = qualifiedName.Length;
+                matchedIndex = index;
             }
         }
 
         return match;
+    }
+
+    /// <summary>
+    /// Finds the table a related-table existence test reads, by the qualified name the command text
+    /// gave it.
+    /// </summary>
+    private FakeSqlDataTable ResolveRelatedDataTable(string qualifiedName)
+    {
+        return _provider.Catalogue.DataTables.FirstOrDefault(dataTable =>
+                   string.Equals(_provider.QualifyObjectName(dataTable.SchemaName, dataTable.ObjectName), qualifiedName, StringComparison.Ordinal))
+               ?? throw new FakeDbException($"This stand-in database holds no related table called {qualifiedName}.");
     }
 
     /// <summary>
@@ -726,7 +742,9 @@ internal sealed class FakeDbCommand : DbCommand
 
     /// <summary>
     /// Applies the watermark a Delta Import restricted its read to, so that a test can tell a command
-    /// that asked for changes from one that read everything.
+    /// that asked for changes from one that read everything. A row qualifies on its own watermark or on
+    /// any of the related-table existence tests the command carries, which is exactly the OR the
+    /// Connector asked the database for.
     /// </summary>
     private List<object?[]> FilterByChangeColumn(FakeSqlDataTable dataTable, IEnumerable<object?[]> rows)
     {
@@ -736,8 +754,54 @@ internal sealed class FakeDbCommand : DbCommand
 
         var ordinal = dataTable.IndexOf(changePredicate.Groups["column"].Value);
         var watermark = BoundValue(SqlConnectorImport.WatermarkParameterName);
+        var relatedChanges = ParseRelatedChangePredicates();
 
-        return [.. rows.Where(row => CompareValues(row[ordinal], watermark) > 0)];
+        return [.. rows.Where(row =>
+            CompareValues(row[ordinal], watermark) > 0 ||
+            relatedChanges.Any(relatedChange => HasChangedRelatedRow(dataTable, row, relatedChange)))];
+    }
+
+    /// <summary>
+    /// The related-table existence tests a Watermark Column page carries, read back out of the command
+    /// text it generated: which table, how it correlates to the parent, and which watermark (if any) its
+    /// rows are compared against.
+    /// </summary>
+    private List<FakeRelatedChangePredicate> ParseRelatedChangePredicates()
+    {
+        var predicates = new Dictionary<string, FakeRelatedChangePredicate>(StringComparer.Ordinal);
+
+        foreach (Match match in RelatedSourcePattern.Matches(CommandText))
+            predicates[match.Groups["alias"].Value] = new FakeRelatedChangePredicate(match.Groups["source"].Value);
+
+        foreach (Match match in RelatedCorrelationPattern.Matches(CommandText))
+            predicates[match.Groups["alias"].Value].Correlations.Add((match.Groups["related"].Value, match.Groups["parent"].Value));
+
+        foreach (Match match in RelatedWatermarkPattern.Matches(CommandText))
+        {
+            var predicate = predicates[match.Groups["alias"].Value];
+            predicate.WatermarkColumn = match.Groups["column"].Value;
+            predicate.Watermark = BoundValue(match.Groups["parameter"].Value);
+        }
+
+        return [.. predicates.Values];
+    }
+
+    /// <summary>
+    /// Whether a related table holds a row belonging to this parent that has changed beyond the
+    /// watermark bound for it. A predicate carrying no watermark is satisfied by the row existing at
+    /// all, which is what JIM asks for where it holds no watermark for that related table yet.
+    /// </summary>
+    private bool HasChangedRelatedRow(FakeSqlDataTable parentTable, object?[] parentRow, FakeRelatedChangePredicate predicate)
+    {
+        var relatedTable = ResolveRelatedDataTable(predicate.Source);
+
+        Assert.That(predicate.Correlations, Is.Not.Empty,
+            "A related table must be correlated to the parent it belongs to, or it would select every object whenever anything changed in it.");
+
+        return relatedTable.Rows.Any(relatedRow =>
+            predicate.Correlations.All(correlation =>
+                Equals(relatedRow[relatedTable.IndexOf(correlation.RelatedColumn)], parentRow[parentTable.IndexOf(correlation.ParentColumn)])) &&
+            (predicate.WatermarkColumn == null || CompareValues(relatedRow[relatedTable.IndexOf(predicate.WatermarkColumn)], predicate.Watermark) > 0));
     }
 
     private static readonly Regex JoinPredicatePattern = new(
@@ -745,7 +809,19 @@ internal sealed class FakeDbCommand : DbCommand
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex ChangePredicatePattern = new(
-        @"\[(?<column>[^\]]+)\]\s*>\s*@" + SqlConnectorImport.WatermarkParameterName,
+        @"\[(?<column>[^\]]+)\]\s*>\s*@" + SqlConnectorImport.WatermarkParameterName + @"(?!\d)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex RelatedSourcePattern = new(
+        @"FROM (?<source>\[[^\]]+\](?:\.\[[^\]]+\])?) \[(?<alias>" + SqlRelatedChangeSource.AliasPrefix + @"\d+)\]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex RelatedCorrelationPattern = new(
+        @"\[(?<alias>" + SqlRelatedChangeSource.AliasPrefix + @"\d+)\]\.\[(?<related>[^\]]+)\] = \[" + SqlKeysetPageRequest.SourceAlias + @"\]\.\[(?<parent>[^\]]+)\]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex RelatedWatermarkPattern = new(
+        @"\[(?<alias>" + SqlRelatedChangeSource.AliasPrefix + @"\d+)\]\.\[(?<column>[^\]]+)\] > @(?<parameter>\w+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex MaxColumnPattern = new(
@@ -753,6 +829,35 @@ internal sealed class FakeDbCommand : DbCommand
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     #endregion
+}
+
+/// <summary>
+/// One related-table existence test, as a <see cref="FakeDbCommand"/> reads it back out of the command
+/// text it was given.
+/// </summary>
+internal sealed class FakeRelatedChangePredicate
+{
+    internal FakeRelatedChangePredicate(string source)
+    {
+        Source = source;
+    }
+
+    /// <summary>
+    /// The related table's qualified name, exactly as the dialect rendered it.
+    /// </summary>
+    internal string Source { get; }
+
+    /// <summary>
+    /// How a related row is matched to its parent: the related table's column, and the parent's.
+    /// </summary>
+    internal List<(string RelatedColumn, string ParentColumn)> Correlations { get; } = [];
+
+    /// <summary>
+    /// The related table's own watermark column, or null where the test is existence alone.
+    /// </summary>
+    internal string? WatermarkColumn { get; set; }
+
+    internal object? Watermark { get; set; }
 }
 
 /// <summary>
