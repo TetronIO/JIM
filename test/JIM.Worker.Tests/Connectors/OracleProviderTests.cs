@@ -199,6 +199,83 @@ public class OracleProviderTests
         });
     }
 
+    [Test]
+    public void BuildKeysetPageCommandText_WatermarkPageWithARelatedTable_AlsoSelectsParentsWhoseRelatedRowsChanged()
+    {
+        var request = new SqlKeysetPageRequest
+        {
+            SchemaName = "HR",
+            ObjectName = "EMPLOYEES",
+            SelectColumns = ["EMPLOYEE_ID", "FIRST_NAME"],
+            AnchorColumns = ["EMPLOYEE_ID"],
+            PageSizeParameterName = "pageSize",
+            ChangeColumn = "LAST_MODIFIED",
+            ChangeParameterName = "watermark",
+            RelatedChangeSources =
+            [
+                new SqlRelatedChangeSource
+                {
+                    SchemaName = "HR",
+                    TableName = "EMPLOYEE_PHONES",
+                    JoinColumns = ["EMPLOYEE_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark0"
+                }
+            ]
+        };
+
+        var sql = _provider.BuildKeysetPageCommandText(request);
+
+        Assert.That(sql, Is.EqualTo(
+            "SELECT \"EMPLOYEE_ID\", \"FIRST_NAME\" FROM \"HR\".\"EMPLOYEES\" \"JIM_SOURCE\" " +
+            "WHERE (\"LAST_MODIFIED\" > :watermark OR EXISTS (SELECT 1 FROM \"HR\".\"EMPLOYEE_PHONES\" \"JIM_RELATED0\" " +
+            "WHERE \"JIM_RELATED0\".\"EMPLOYEE_ID\" = \"JIM_SOURCE\".\"EMPLOYEE_ID\" AND \"JIM_RELATED0\".\"ROW_CHANGED\" > :relatedWatermark0)) " +
+            "ORDER BY \"EMPLOYEE_ID\" FETCH FIRST :pageSize ROWS ONLY"),
+            "A membership added or revoked never moves the parent row's own watermark, so the parent has to be selectable on its related table's evidence too.");
+    }
+
+    [Test]
+    public void BuildKeysetPageCommandText_WatermarkPageWithTwoRelatedTables_OrsOneExistsPerRelatedTable()
+    {
+        var request = new SqlKeysetPageRequest
+        {
+            ObjectName = "EMPLOYEES",
+            SelectColumns = ["EMPLOYEE_ID"],
+            AnchorColumns = ["EMPLOYEE_ID"],
+            PageSizeParameterName = "pageSize",
+            ChangeColumn = "LAST_MODIFIED",
+            ChangeParameterName = "watermark",
+            RelatedChangeSources =
+            [
+                new SqlRelatedChangeSource
+                {
+                    TableName = "EMPLOYEE_PHONES",
+                    JoinColumns = ["EMPLOYEE_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark0"
+                },
+                new SqlRelatedChangeSource
+                {
+                    TableName = "EMPLOYEE_GROUPS",
+                    JoinColumns = ["EMPLOYEE_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark1"
+                }
+            ]
+        };
+
+        var sql = _provider.BuildKeysetPageCommandText(request);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sql, Does.Contain("EXISTS (SELECT 1 FROM \"EMPLOYEE_PHONES\" \"JIM_RELATED0\" WHERE \"JIM_RELATED0\".\"EMPLOYEE_ID\" = \"JIM_SOURCE\".\"EMPLOYEE_ID\" AND \"JIM_RELATED0\".\"ROW_CHANGED\" > :relatedWatermark0)"));
+            Assert.That(sql, Does.Contain("EXISTS (SELECT 1 FROM \"EMPLOYEE_GROUPS\" \"JIM_RELATED1\" WHERE \"JIM_RELATED1\".\"EMPLOYEE_ID\" = \"JIM_SOURCE\".\"EMPLOYEE_ID\" AND \"JIM_RELATED1\".\"ROW_CHANGED\" > :relatedWatermark1)"),
+                "Each related table carries its own watermark, so each one gets its own correlated subquery rather than being folded into a single join.");
+            Assert.That(sql, Does.Not.Contain("JOIN"),
+                "A join would return one parent row per matching related row, which is how a page silently turns into duplicate objects.");
+        });
+    }
+
     #endregion
 
     #region Generated keys

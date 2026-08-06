@@ -30,8 +30,8 @@
         <div class="jim-run-substeps">
             @foreach (var subStep in SubSteps)
             {
-                <div class="jim-run-substep jim-run-substep--@StatusModifier(subStep.Status)">
-                    <MudIcon Icon="@StatusIcon(subStep)" Size="Size.Small" Class="jim-run-substep-icon" />
+                <div class="jim-run-substep jim-run-substep--@RunPhaseVisuals.StatusModifier(subStep.Status)">
+                    <MudIcon Icon="@RunPhaseVisuals.StatusIcon(subStep)" Size="Size.Small" Class="jim-run-substep-icon" />
                     <MudText Typo="Typo.body2">@subStep.Name</MudText>
                     @* Separated rather than left to the colour alone: at the same weight and size as
                        the step's name, "Fetching objects 20 sec, 990 ms" read as one phrase. The
@@ -204,27 +204,6 @@
                 : Phases.Where(p => p.ParentKey == step.Key).OrderBy(p => p.Order).ToList();
         }
     }
-
-    private static string StatusModifier(ActivityPhaseStatus status) => status switch
-    {
-        ActivityPhaseStatus.Active => "active",
-        ActivityPhaseStatus.Completed => "completed",
-        ActivityPhaseStatus.Skipped => "skipped",
-        ActivityPhaseStatus.Failed => "failed",
-        _ => "pending"
-    };
-
-    /// <summary>
-    /// A finished step shows the outcome; every other state shows what the step is for, matching
-    /// the rail above so the two read as one thing.
-    /// </summary>
-    private static string StatusIcon(ActivityPhase phase) => phase.Status switch
-    {
-        ActivityPhaseStatus.Completed => Icons.Material.Filled.Check,
-        ActivityPhaseStatus.Skipped => Icons.Material.Filled.Remove,
-        ActivityPhaseStatus.Failed => Icons.Material.Filled.PriorityHigh,
-        _ => RunPhaseIcons.ForPhase(phase.Key)
-    };
 
     private bool IsIndeterminate => ObjectsToProcess <= 0;
 

@@ -33,12 +33,16 @@ public class ScheduleExecution
     public ScheduleExecutionStatus Status { get; set; } = ScheduleExecutionStatus.Queued;
 
     /// <summary>
-    /// The current step index being executed (0-based).
+    /// The current step group being executed (0-based). Schedule Steps sharing a
+    /// <see cref="ScheduleStep.StepIndex"/> run concurrently and are one position here, not several.
     /// </summary>
     public int CurrentStepIndex { get; set; }
 
     /// <summary>
-    /// Total number of steps in this execution (snapshot from schedule at execution time).
+    /// The number of step groups in this execution (snapshot from the Schedule at execution time), so
+    /// that this and <see cref="CurrentStepIndex"/> count the same thing and can be read together as
+    /// "step X of Y". It is deliberately not the number of Schedule Step rows: a parallel step is
+    /// several rows but one position for the execution to advance through.
     /// </summary>
     public int TotalSteps { get; set; }
 

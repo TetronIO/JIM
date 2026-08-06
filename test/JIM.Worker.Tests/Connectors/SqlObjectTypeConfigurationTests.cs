@@ -109,6 +109,63 @@ public class SqlObjectTypeConfigurationTests
     }
 
     [Test]
+    public void Parse_ARelatedTableWithItsOwnWatermarkColumn_ReadsIt()
+    {
+        var configuration = SqlSchemaConfiguration.Parse("""
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "LAST_MODIFIED",
+                  "relatedTables": [
+                    {
+                      "attributeName": "PhoneNumbers",
+                      "table": "EMPLOYEE_PHONES",
+                      "valueColumn": "PHONE_NUMBER",
+                      "joinColumns": [ "EMPLOYEE_ID" ],
+                      "watermarkColumn": "ROW_CHANGED"
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        Assert.That(configuration.ObjectTypes.Single().RelatedTables.Single().WatermarkColumn, Is.EqualTo("ROW_CHANGED"),
+            "A change confined to a related table never moves the parent row's own watermark, so the related table needs one of its own.");
+    }
+
+    [Test]
+    public void Parse_ARelatedTableWatermarkColumnThatCannotNameAColumn_IsRefused()
+    {
+        var exception = Assert.Throws<SqlSchemaConfigurationException>(() => SqlSchemaConfiguration.Parse("""
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    {
+                      "attributeName": "PhoneNumbers",
+                      "table": "EMPLOYEE_PHONES",
+                      "valueColumn": "PHONE_NUMBER",
+                      "joinColumns": [ "EMPLOYEE_ID" ],
+                      "watermarkColumn": " ROW_CHANGED"
+                    }
+                  ]
+                }
+              ]
+            }
+            """));
+
+        Assert.That(exception!.Message, Does.Contain("PhoneNumbers").And.Contain("watermarkColumn"),
+            "A related table's watermark column is validated exactly as every other identifier in the document is.");
+    }
+
+    [Test]
     public void Parse_AReferenceColumn_NamesTheObjectTypeItPointsAt()
     {
         var configuration = SqlSchemaConfiguration.Parse("""

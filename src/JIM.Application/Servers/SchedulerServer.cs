@@ -431,43 +431,10 @@ public class SchedulerServer
         int currentStepIndex,
         ScheduleExecutionStatus executionStatus)
     {
-        // A Worker Task only still exists while the step is live, so it describes the step better than the
-        // in-progress Activity beside it.
-        if (task != null)
-        {
-            return task.Status switch
-            {
-                WorkerTaskStatus.Queued => ScheduleExecutionStepStatus.Queued,
-                WorkerTaskStatus.Processing => ScheduleExecutionStepStatus.Processing,
-                WorkerTaskStatus.CancellationRequested => ScheduleExecutionStepStatus.Cancelling,
-                WorkerTaskStatus.WaitingForPreviousStep => ScheduleExecutionStepStatus.Waiting,
-                _ => ScheduleExecutionStepStatus.Unknown
-            };
-        }
-
-        if (activity != null)
-        {
-            return activity.Status switch
-            {
-                ActivityStatus.InProgress => ScheduleExecutionStepStatus.Processing,
-                ActivityStatus.Complete => ScheduleExecutionStepStatus.Completed,
-                ActivityStatus.CompleteWithWarning => ScheduleExecutionStepStatus.CompletedWithWarning,
-                ActivityStatus.CompleteWithError => ScheduleExecutionStepStatus.CompletedWithError,
-                ActivityStatus.FailedWithError => ScheduleExecutionStepStatus.Failed,
-                ActivityStatus.Cancelled => ScheduleExecutionStepStatus.Cancelled,
-                _ => ScheduleExecutionStepStatus.Unknown
-            };
-        }
-
-        // Neither exists: infer from how far the execution got. A step beyond the current index on an execution
-        // that has stopped never ran, and reads as Pending.
-        if (stepIndex < currentStepIndex)
-            return ScheduleExecutionStepStatus.Completed;
-
-        if (stepIndex == currentStepIndex && executionStatus == ScheduleExecutionStatus.InProgress)
-            return ScheduleExecutionStepStatus.Waiting;
-
-        return ScheduleExecutionStepStatus.Pending;
+        // One definition, shared with the Operations queue's group header, which aggregates the same
+        // status per step group (#1162). Deriving it twice is how the two surfaces would come to
+        // disagree about a step that is finishing at the moment they are each asked.
+        return ScheduleStepReading.StatusOf(task?.Status, activity?.Status, stepIndex, currentStepIndex, executionStatus);
     }
 
     /// <summary>
@@ -511,7 +478,9 @@ public class SchedulerServer
             ScheduleName = schedule.Name,
             Status = ScheduleExecutionStatus.InProgress,
             CurrentStepIndex = 0,
-            TotalSteps = schedule.Steps.Count,
+            // Step groups, not step rows: CurrentStepIndex advances one group at a time, and the two are
+            // read together as "step X of Y". Steps sharing a StepIndex are one position, not several.
+            TotalSteps = distinctStepIndices.Count,
             StartedAt = DateTime.UtcNow,
             InitiatedByType = initiatorType,
             InitiatedById = initiatorId,

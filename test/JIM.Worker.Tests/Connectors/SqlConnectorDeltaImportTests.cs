@@ -68,6 +68,113 @@ public class SqlConnectorDeltaImportTests
         }
         """;
 
+    /// <summary>
+    /// The same object type again, with a multi-valued attribute in a related table that carries a
+    /// watermark column of its own.
+    /// </summary>
+    private const string WatermarkWithRelatedTableDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "watermarkColumn": "LAST_MODIFIED",
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "ROW_CHANGED"
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// Two related tables, each with a watermark column of its own, which is the shape a Person with
+    /// phone numbers and group memberships has.
+    /// </summary>
+    private const string WatermarkWithTwoRelatedTablesDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "watermarkColumn": "LAST_MODIFIED",
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "ROW_CHANGED"
+                },
+                {
+                  "attributeName": "GroupNames",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_GROUPS",
+                  "valueColumn": "GROUP_NAME",
+                  "joinColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "ROW_CHANGED"
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// A related table with no watermark column, which Watermark Column mode refuses.
+    /// </summary>
+    private const string WatermarkWithUnwatchedRelatedTableDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "EMPLOYEE_ID" ],
+              "watermarkColumn": "LAST_MODIFIED",
+              "relatedTables": [
+                {
+                  "attributeName": "PhoneNumbers",
+                  "schema": "HR",
+                  "table": "EMPLOYEE_PHONES",
+                  "valueColumn": "PHONE_NUMBER",
+                  "joinColumns": [ "EMPLOYEE_ID" ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// Before the watermark every test below reads from; a row carrying this has not changed.
+    /// </summary>
+    private static readonly DateTime BeforeTheWatermark = new(2026, 7, 15, 9, 0, 0, DateTimeKind.Unspecified);
+
+    /// <summary>
+    /// After the watermark every test below reads from; a row carrying this has changed.
+    /// </summary>
+    private static readonly DateTime AfterTheWatermark = new(2026, 7, 16, 9, 0, 0, DateTimeKind.Unspecified);
+
+    /// <summary>
+    /// Later still, so a test can tell one source's highest value from another's.
+    /// </summary>
+    private static readonly DateTime LaterStill = new(2026, 7, 20, 9, 0, 0, DateTimeKind.Unspecified);
+
+    private const string TheWatermark = "2026-07-15T12:00:00.0000000Z";
+
     #endregion
 
     private ILogger _logger = null!;
@@ -358,6 +465,133 @@ public class SqlConnectorDeltaImportTests
 
     #endregion
 
+    #region Watermark column mode: related tables
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeRelatedRowChangedButTheParentDidNot_ImportsTheParentWithItsMultiValuedAttributes()
+    {
+        // Ada's phone number changed; her own row did not, so her LAST_MODIFIED has not moved.
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", BeforeTheWatermark], [2, "Grace", BeforeTheWatermark]],
+            phones: [[1, "0100", AfterTheWatermark], [1, "0101", BeforeTheWatermark], [2, "0200", BeforeTheWatermark]]);
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
+            PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1 }),
+                "A phone number added or replaced is a change to the person it belongs to, and it never moves the person's own row.");
+            Assert.That(AttributeOf(run.ImportObjects[0], "PhoneNumbers").StringValues, Is.EquivalentTo(new[] { "0100", "0101" }),
+                "The object is imported whole, so its multi-valued attributes are gathered as they now stand rather than only the values that moved.");
+        });
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeSeveralRelatedTables_SelectsAParentChangedInAnyOfThem()
+    {
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", BeforeTheWatermark], [2, "Grace", BeforeTheWatermark], [3, "Katherine", BeforeTheWatermark]],
+            phones: [[1, "0100", AfterTheWatermark], [2, "0200", BeforeTheWatermark]],
+            groups: [[2, "Payroll", AfterTheWatermark], [3, "Research", BeforeTheWatermark]]);
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkWithTwoRelatedTablesDocument, RelatedWatermarkSystem(withGroups: true),
+            PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark), ("GroupNames", TheWatermark)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2 }),
+                "Each related table is evidence of a change on its own; Katherine's rows are all older than the watermark, so nothing about her changed.");
+            Assert.That(AttributeOf(ObjectWithAnchor(run, 2), "GroupNames").StringValues, Is.EqualTo(new[] { "Payroll" }));
+        });
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeRelatedTableWithNoChanges_DoesNotSelectTheParent()
+    {
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", BeforeTheWatermark], [2, "Grace", BeforeTheWatermark]],
+            phones: [[1, "0100", BeforeTheWatermark], [2, "0200", BeforeTheWatermark]]);
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
+            PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
+
+        Assert.That(run.ImportObjects, Is.Empty,
+            "Watching a related table must not turn every Delta Import into a Full Import: a parent is selected only where something beyond the watermark exists.");
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeParentAndItsRelatedTableBothChanged_ImportsTheObjectOnce()
+    {
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", AfterTheWatermark]],
+            phones: [[1, "0100", AfterTheWatermark], [1, "0101", AfterTheWatermark]]);
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
+            PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.ImportObjects, Has.Count.EqualTo(1),
+                "The page selects parent rows, so an object changed in two places at once is still one object; a join to the related table would have produced one per matching row.");
+            Assert.That(AttributeOf(run.ImportObjects[0], "PhoneNumbers").StringValues, Is.EquivalentTo(new[] { "0100", "0101" }));
+        });
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeWithRelatedTables_CapturesAWatermarkForEachSourceSeparately()
+    {
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", AfterTheWatermark]],
+            phones: [[1, "0100", LaterStill]]);
+
+        var store = Store(PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
+        await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(), store);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PersonWatermarkValueOf(store.Value), Is.EqualTo(TokenFor(AfterTheWatermark)),
+                "Each source's watermark comes from its own column. A single maximum across all of them would push the primary source's boundary past changes nobody has read, and lose them for ever.");
+            Assert.That(RelatedWatermarkValueOf(store.Value, "PhoneNumbers"), Is.EqualTo(TokenFor(LaterStill)),
+                "Without a watermark of its own, a related table would either be re-read in full on every run for ever, or never re-read at all.");
+        });
+    }
+
+    [Test]
+    public async Task ImportAsync_WatermarkColumnModeMoreRelatedChangesThanOnePage_PagesThroughThemAndStops()
+    {
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", BeforeTheWatermark], [2, "Grace", BeforeTheWatermark], [3, "Katherine", BeforeTheWatermark]],
+            phones: [[1, "0100", AfterTheWatermark], [2, "0200", AfterTheWatermark], [3, "0300", AfterTheWatermark]]);
+
+        var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
+            PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)), pageSize: 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2, 3 }),
+                "Every changed object arrives exactly once, which is only true if each page seeked past the last anchor of the one before it.");
+            Assert.That(run.Pages, Has.Count.EqualTo(4), "Three changes at one per page is three full pages and a short one.");
+            Assert.That(run.Pages[^1].PaginationTokens, Is.Empty,
+                "An empty pagination token list is how JIM is told there is no more data; returning one forever is an infinite import.");
+        });
+    }
+
+    [Test]
+    public void ImportAsync_WatermarkColumnModeRelatedTableWithNoWatermarkColumn_RefusesToRun()
+    {
+        var provider = RelatedWatermarkProvider(
+            employees: [[1, "Ada", BeforeTheWatermark]],
+            phones: [[1, "0100", AfterTheWatermark]]);
+
+        Assert.That(async () => await RunWatermarkDeltaAsync(provider, WatermarkWithUnwatchedRelatedTableDocument, RelatedWatermarkSystem(),
+                PersonWatermark(TheWatermark)),
+            Throws.TypeOf<SqlSchemaConfigurationException>().With.Message.Contains("PhoneNumbers"),
+            "Save-time validation refuses this configuration, and a run reaching it anyway (the document was changed since) must fail rather than quietly stop detecting membership changes.");
+    }
+
+    #endregion
+
     #region Fallback and refusal
 
     [Test]
@@ -437,6 +671,73 @@ public class SqlConnectorDeltaImportTests
 
         Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
             "The example in the setting's own description is the first thing an administrator will paste in, so it has to be one the Connector accepts.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_TheDocumentedDeltaExampleInWatermarkColumnMode_IsAccepted()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, SqlConnectorConstants.DeltaConfigurationExample, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
+            "The example shows both modes, so it has to be complete under either one, related tables included.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_WatermarkColumnModeWithARelatedTableThatHasNoWatermarkColumn_IsRefused()
+    {
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "LAST_MODIFIED",
+                  "relatedTables": [
+                    { "attributeName": "PhoneNumbers", "table": "EMPLOYEE_PHONES", "valueColumn": "PHONE_NUMBER", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        Assert.That(ValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeWatermarkColumn),
+            Does.Contain("Person").And.Contain("PhoneNumbers").And.Contain("watermarkColumn"),
+            "A related table with no watermark column can never report a change of its own, and a membership that changes without JIM noticing is exactly the silent drift this mode must not have.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_ChangeLogModeWithARelatedTableThatHasNoWatermarkColumn_IsAccepted()
+    {
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    { "attributeName": "PhoneNumbers", "table": "EMPLOYEE_PHONES", "valueColumn": "PHONE_NUMBER", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ],
+                  "changeLog": {
+                    "table": "EMPLOYEE_CHANGES",
+                    "anchorColumns": [ "EMPLOYEE_ID" ],
+                    "sequenceColumn": "CHANGE_NUMBER",
+                    "changeTypeColumn": "CHANGE_TYPE",
+                    "createValues": [ "I" ],
+                    "updateValues": [ "U" ],
+                    "deleteValues": [ "D" ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+
+        Assert.That(connector.ValidateSettingValues(DeltaSettingValues(connector, document, SqlConnectorConstants.DeltaImportModeChangeLogTable), _logger), Is.Empty,
+            "A change log records what happened to the object however it happened, so a related table needs no watermark of its own in that mode.");
     }
 
     [Test]
@@ -675,10 +976,61 @@ public class SqlConnectorDeltaImportTests
         return provider;
     }
 
+    /// <summary>
+    /// The same, with one or two related tables whose rows carry a last-modified column of their own.
+    /// </summary>
+    private static FakeSqlProvider RelatedWatermarkProvider(object?[][] employees, object?[][] phones, object?[][]? groups = null)
+    {
+        var provider = WatermarkProvider(employees);
+        provider.Catalogue.AddRows("HR", "EMPLOYEE_PHONES", ["EMPLOYEE_ID", "PHONE_NUMBER", "ROW_CHANGED"], phones);
+
+        if (groups != null)
+            provider.Catalogue.AddRows("HR", "EMPLOYEE_GROUPS", ["EMPLOYEE_ID", "GROUP_NAME", "ROW_CHANGED"], groups);
+
+        return provider;
+    }
+
+    /// <summary>
+    /// Drives a Delta Import in Watermark Column mode to completion.
+    /// </summary>
+    private Task<SqlDeltaRun> RunWatermarkDeltaAsync(
+        FakeSqlProvider provider,
+        string objectTypesDocument,
+        ConnectedSystem connectedSystem,
+        string persistedConnectorData,
+        int pageSize = 10) =>
+        RunWatermarkDeltaAsync(provider, objectTypesDocument, connectedSystem, Store(persistedConnectorData), pageSize);
+
+    private Task<SqlDeltaRun> RunWatermarkDeltaAsync(
+        FakeSqlProvider provider,
+        string objectTypesDocument,
+        ConnectedSystem connectedSystem,
+        PersistedConnectorDataStore store,
+        int pageSize = 10) =>
+        RunDeltaAsync(provider, objectTypesDocument, connectedSystem, pageSize, store, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
     private static string PersonWatermark(SqlDeltaImportMode mode, string value, AttributeDataType type = AttributeDataType.Number)
     {
         var watermark = new SqlConnectorWatermark { Mode = mode };
         watermark.ObjectTypes["Person"] = new SqlDeltaValue(value, type);
+        return watermark.Serialise();
+    }
+
+    /// <summary>
+    /// A Watermark Column mode watermark: one for the object type's own source, and one for each related
+    /// table JIM has already read.
+    /// </summary>
+    private static string PersonWatermark(string value, params (string AttributeName, string Value)[] relatedTables)
+    {
+        var watermark = new SqlConnectorWatermark { Mode = SqlDeltaImportMode.WatermarkColumn };
+        watermark.ObjectTypes["Person"] = new SqlDeltaValue(value, AttributeDataType.DateTime);
+
+        if (relatedTables.Length > 0)
+            watermark.RelatedTables["Person"] = relatedTables.ToDictionary(
+                relatedTable => relatedTable.AttributeName,
+                relatedTable => new SqlDeltaValue(relatedTable.Value, AttributeDataType.DateTime),
+                StringComparer.OrdinalIgnoreCase);
+
         return watermark.Serialise();
     }
 
@@ -687,6 +1039,20 @@ public class SqlConnectorDeltaImportTests
         var watermark = SqlConnectorWatermark.TryRead(persistedConnectorData);
         return watermark != null && watermark.ObjectTypes.TryGetValue("Person", out var value) ? value.Value : null;
     }
+
+    private static string? RelatedWatermarkValueOf(string? persistedConnectorData, string attributeName)
+    {
+        var watermark = SqlConnectorWatermark.TryRead(persistedConnectorData);
+        return watermark != null && watermark.RelatedTables.TryGetValue("Person", out var relatedTables) && relatedTables.TryGetValue(attributeName, out var value)
+            ? value.Value
+            : null;
+    }
+
+    /// <summary>
+    /// A date and time as a watermark carries it, so a test states the value it expects rather than its
+    /// rendering.
+    /// </summary>
+    private static string? TokenFor(DateTime value) => SqlConnectorWatermark.Describe(value)?.Value;
 
     private static ConnectedSystem PersonSystem() => new()
     {
@@ -711,11 +1077,35 @@ public class SqlConnectorDeltaImportTests
         ]
     };
 
+    /// <summary>
+    /// The same object type again, with the multi-valued attributes its related tables supply.
+    /// </summary>
+    private static ConnectedSystem RelatedWatermarkSystem(bool withGroups = false)
+    {
+        var attributes = new List<ConnectedSystemObjectTypeAttribute>
+        {
+            Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+            Attribute("DISPLAY_NAME", AttributeDataType.Text),
+            Attribute("LAST_MODIFIED", AttributeDataType.DateTime, selected: false),
+            Attribute("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued)
+        };
+
+        if (withGroups)
+            attributes.Add(Attribute("GroupNames", AttributeDataType.Text, plurality: AttributePlurality.MultiValued));
+
+        return new ConnectedSystem { Name = "HR Database", ObjectTypes = [ObjectType("Person", [.. attributes])] };
+    }
+
     private static ConnectedSystemObjectType ObjectType(string name, params ConnectedSystemObjectTypeAttribute[] attributes) =>
         new() { Name = name, Selected = true, Attributes = [.. attributes] };
 
-    private static ConnectedSystemObjectTypeAttribute Attribute(string name, AttributeDataType type, bool isExternalId = false, bool selected = true) =>
-        new() { Name = name, Type = type, Selected = selected, IsExternalId = isExternalId, AttributePlurality = AttributePlurality.SingleValued };
+    private static ConnectedSystemObjectTypeAttribute Attribute(
+        string name,
+        AttributeDataType type,
+        bool isExternalId = false,
+        bool selected = true,
+        AttributePlurality plurality = AttributePlurality.SingleValued) =>
+        new() { Name = name, Type = type, Selected = selected, IsExternalId = isExternalId, AttributePlurality = plurality };
 
     private static ConnectedSystemImportObjectAttribute AttributeOf(ConnectedSystemImportObject importObject, string name) =>
         importObject.Attributes.Single(attribute => attribute.Name == name);
