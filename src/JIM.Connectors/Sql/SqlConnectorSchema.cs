@@ -408,42 +408,12 @@ internal sealed class SqlConnectorSchema
         return catalogueObjects;
     }
 
-    private async Task<List<SqlDiscoveredColumn>> ReadColumnsAsync(string? schemaName, string objectName)
-    {
-        var columns = new List<SqlDiscoveredColumn>();
-
-        using var command = _provider.CreateCommand(_connection, _provider.ColumnsCommandText);
-
-        // Schema and object names are values here, not identifiers, so they are bound rather than
-        // interpolated even though the identifiers themselves have already been validated.
-        command.Parameters.Add(_provider.CreateParameter(SqlCatalogueParameters.SchemaName, schemaName));
-        command.Parameters.Add(_provider.CreateParameter(SqlCatalogueParameters.ObjectName, objectName));
-
-        using var reader = await command.ExecuteReaderAsync();
-
-        var columnNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ColumnName);
-        var dataTypeNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.DataTypeName);
-        var maxLengthOrdinal = reader.GetOrdinal(SqlCatalogueColumns.MaxLength);
-        var precisionOrdinal = reader.GetOrdinal(SqlCatalogueColumns.NumericPrecision);
-        var scaleOrdinal = reader.GetOrdinal(SqlCatalogueColumns.NumericScale);
-        var isNullableOrdinal = reader.GetOrdinal(SqlCatalogueColumns.IsNullable);
-
-        while (await reader.ReadAsync())
-        {
-            var columnType = new SqlColumnType(
-                reader.GetString(dataTypeNameOrdinal),
-                GetNullableInt(reader, precisionOrdinal),
-                GetNullableInt(reader, scaleOrdinal),
-                GetNullableInt(reader, maxLengthOrdinal));
-
-            columns.Add(new SqlDiscoveredColumn(
-                reader.GetString(columnNameOrdinal),
-                columnType,
-                string.Equals(GetNullableString(reader, isNullableOrdinal), "YES", StringComparison.OrdinalIgnoreCase)));
-        }
-
-        return columns;
-    }
+    /// <summary>
+    /// The columns of one table or view. Shared with export, which asks the same catalogue the same
+    /// question so that the two can never disagree about what a column is.
+    /// </summary>
+    private Task<List<SqlDiscoveredColumn>> ReadColumnsAsync(string? schemaName, string objectName) =>
+        SqlCatalogueReader.ReadColumnsAsync(_provider, _connection, schemaName, objectName);
 
     /// <summary>
     /// Learns the shape of an administrator-supplied SELECT statement, which no catalogue describes.
@@ -510,14 +480,7 @@ internal sealed class SqlConnectorSchema
     }
 
     private static string? GetNullableString(DbDataReader reader, int ordinal) =>
-        reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
-
-    /// <summary>
-    /// Reads a catalogue's numeric column without assuming its CLR type: SQL Server reports precision
-    /// and scale as small integers, Oracle as NUMBER, which a driver may hand back as a decimal.
-    /// </summary>
-    private static int? GetNullableInt(DbDataReader reader, int ordinal) =>
-        reader.IsDBNull(ordinal) ? null : Convert.ToInt32(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
+        SqlCatalogueReader.GetNullableString(reader, ordinal);
 
     #endregion
 }
