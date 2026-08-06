@@ -92,14 +92,14 @@ public class ConfigurationChangePreflightDatabaseTests
         var preflight = await jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(rule);
 
         var item = preflight.DestructiveItems.SingleOrDefault();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(preflight.BaselineUnavailable, Is.False, "the create should have captured a version 1 baseline");
             Assert.That(preflight.IsDestructive, Is.True,
                 "switching the Deprovisioning Action to Delete must be caught before the save, not after");
             Assert.That(item, Is.Not.Null);
             Assert.That(item!.Consequence, Does.Contain("deleted"));
-        });
+        }
     }
 
     [Test]
@@ -116,12 +116,12 @@ public class ConfigurationChangePreflightDatabaseTests
         rule!.Name = "Renamed Export Rule";
         var preflight = await jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(rule);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(preflight.RequiresAcknowledgement, Is.False,
                 "a rename cannot change a synchronisation outcome and must not interrupt the administrator");
             Assert.That(preflight.HighestClass, Is.EqualTo(ConfigurationChangeClass.Cosmetic));
-        });
+        }
     }
 
     #region Seeding

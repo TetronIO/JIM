@@ -119,11 +119,11 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
 
         var findings = await NewAdapter().ValidateAsync(Context(proposal));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(findings.Any(f => f.Severity == PreviewValidationSeverity.Blocking), Is.False);
             Assert.That(findings.Any(f => f.PropertyName == nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)), Is.True);
-        });
+        }
     }
 
     [Test]
@@ -141,11 +141,11 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
             [1],
             AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(findings.Any(f => f.Severity == PreviewValidationSeverity.Blocking), Is.False);
             Assert.That(findings.Any(f => f.PropertyName == nameof(MetaverseObjectType.DeletionTriggerMode)), Is.True);
-        });
+        }
     }
 
     [Test]
@@ -177,11 +177,11 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
         var becomeEligible = counts.SingleOrDefault(c =>
             c.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible);
         Assert.That(becomeEligible, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(becomeEligible!.ObjectCount, Is.EqualTo(2));
             Assert.That(becomeEligible!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
-        });
+        }
     }
 
     [Test]
@@ -193,13 +193,13 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
         var counts = await NewAdapter().CountImpactAsync(
             Context(Proposal(MetaverseObjectDeletionRule.Manual, _objectType.DeletionGracePeriod)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(counts.Single(c => c.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible).ObjectCount,
                 Is.EqualTo(1), "one object is being deleted today and would not be");
             Assert.That(counts.Single(c => c.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate).ObjectCount,
                 Is.EqualTo(1), "the other is not being deleted today either way, but comes off the path entirely");
-        });
+        }
     }
 
     [Test]
@@ -247,7 +247,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected, _objectType.DeletionGracePeriod, 1));
 
         Assert.That(deltas, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deltas[0].TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible));
             Assert.That(deltas[0].ObjectDisplayName, Is.EqualTo("Ada"));
@@ -255,7 +255,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
             Assert.That(deltas[0].MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
             Assert.That(deltas[0].OldValue, Is.Null, "the object has no deletion date today; that is the point");
             Assert.That(deltas[0].NewValue, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -279,7 +279,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
         var deltas = await EvaluateAsync(Proposal(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected, TimeSpan.FromDays(60)));
 
         Assert.That(deltas, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deltas[0].TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate));
             // Grouping is by the setting that caused the change, so a summary reads "12,400 objects, Deletion Grace
@@ -288,7 +288,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
             Assert.That(deltas[0].OldValue, Is.Not.Null);
             Assert.That(deltas[0].NewValue, Is.Not.Null);
             Assert.That(deltas[0].OldValue, Is.Not.EqualTo(deltas[0].NewValue));
-        });
+        }
     }
 
     [Test]
@@ -334,11 +334,11 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapterTests
         var estimate = await NewAdapter().EstimateCostAsync(
             Context(Proposal(MetaverseObjectDeletionRule.Manual, _objectType.DeletionGracePeriod)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(estimate.AffectedObjects, Is.EqualTo(2));
             Assert.That(estimate.EstimatedDeltaRows, Is.EqualTo(2), "this adapter emits at most one delta per object");
-        });
+        }
     }
 
     #endregion

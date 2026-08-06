@@ -68,12 +68,12 @@ public class ConfigurationChangePreviewStarterTests
 
         var activityId = await NewStarter().StartAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_prompt.TimesAsked, Is.Zero, "a question with one sensible answer is noise");
             Assert.That(activityId, Is.Not.Null);
             Assert.That(StartedPreview!.RequestedDeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
-        });
+        }
     }
 
     [Test]
@@ -84,12 +84,12 @@ public class ConfigurationChangePreviewStarterTests
 
         await NewStarter().StartAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_prompt.TimesAsked, Is.EqualTo(1));
             Assert.That(_prompt.RowsStated, Is.EqualTo(200_000L), "the choice is only informed if it states the size");
             Assert.That(StartedPreview!.RequestedDeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
-        });
+        }
     }
 
     [Test]
@@ -102,11 +102,11 @@ public class ConfigurationChangePreviewStarterTests
 
         var activityId = await NewStarter().StartAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activityId, Is.Null);
             Assert.That(StartedPreview, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -129,11 +129,11 @@ public class ConfigurationChangePreviewStarterTests
 
         await NewStarter().StartAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_prompt.TimesAsked, Is.EqualTo(1));
             Assert.That(_prompt.RowsStated, Is.EqualTo(200_000L));
-        });
+        }
     }
 
     #region Helpers

@@ -129,13 +129,13 @@ public class LdapDnParsingDirectoryTests
     [Test]
     public void HasValidRdnValues_RealDirectoryDns_AllValid()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(LdapConnectorUtilities_HasValidRdnValues(_corpDn), Is.True);
             Assert.That(LdapConnectorUtilities_HasValidRdnValues(_usersDn), Is.True);
             Assert.That(LdapConnectorUtilities_HasValidRdnValues(_salesDn), Is.True);
             Assert.That(LdapConnectorUtilities_HasValidRdnValues(_smithDn), Is.True);
-        });
+        }
     }
 
     [Test]

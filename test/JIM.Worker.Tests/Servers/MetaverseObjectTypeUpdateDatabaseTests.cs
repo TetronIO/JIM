@@ -112,13 +112,13 @@ public class MetaverseObjectTypeUpdateDatabaseTests
             .SqlQuery<int>($@"SELECT COUNT(*)::int AS ""Value"" FROM ""MetaverseAttributeMetaverseObjectType""")
             .SingleAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reloaded.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
             Assert.That(reloaded.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(3)));
             Assert.That(reloaded.DeletionTriggerConnectedSystemIds, Is.EqualTo(new List<int> { 7 }));
             Assert.That(bindingCount, Is.EqualTo(2), "the update must leave the attribute bindings alone, not re-insert them");
-        });
+        }
     }
 
     [Test]
@@ -150,11 +150,11 @@ public class MetaverseObjectTypeUpdateDatabaseTests
             .Include(t => t.Attributes)
             .SingleAsync(t => t.Id == objectTypeId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reloaded.Icon, Is.EqualTo("Devices"));
             Assert.That(reloaded.Attributes.Select(a => a.Name), Is.EquivalentTo(new[] { "serialNumber", "assetTag" }));
-        });
+        }
     }
 
     [Test]

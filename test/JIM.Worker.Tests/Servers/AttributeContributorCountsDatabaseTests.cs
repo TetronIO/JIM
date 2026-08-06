@@ -150,7 +150,7 @@ public class AttributeContributorCountsDatabaseTests
         var jim = new JimApplication(new PostgresDataRepository(ctx));
         var counts = await jim.ConnectedSystems.GetAttributeContributorCountsAsync(ids.PersonTypeId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // department has three import contributors (including the disabled rule, which holds position).
             Assert.That(counts.GetValueOrDefault(ids.DepartmentId), Is.EqualTo(3), "department contributor count");
@@ -161,7 +161,7 @@ public class AttributeContributorCountsDatabaseTests
             Assert.That(counts.ContainsKey(ids.GroupNameId), Is.False, "Group attribute must not leak into Person counts");
             // Exactly the two Person attributes that have contributors.
             Assert.That(counts, Has.Count.EqualTo(2), "only attributes with contributors are present");
-        });
+        }
     }
 
     [Test]
@@ -173,11 +173,11 @@ public class AttributeContributorCountsDatabaseTests
         var jim = new JimApplication(new PostgresDataRepository(ctx));
         var groupCounts = await jim.ConnectedSystems.GetAttributeContributorCountsAsync(ids.GroupTypeId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(groupCounts.GetValueOrDefault(ids.GroupNameId), Is.EqualTo(1), "Group displayName contributor count");
             Assert.That(groupCounts.ContainsKey(ids.DepartmentId), Is.False, "Person attribute must not leak into Group counts");
             Assert.That(groupCounts, Has.Count.EqualTo(1));
-        });
+        }
     }
 }

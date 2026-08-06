@@ -129,11 +129,11 @@ public class LdapTrustedCertificateDirectoryTests
         using var trustDirectory = LdapTrustedCertificateDirectory.Create(new[] { certificate }, _logger, new[] { CreateFakeSystemBundle(bundleContent) });
 
         var bundlePath = Path.Combine(trustDirectory.DirectoryPath, LdapTrustedCertificateDirectory.SystemBundleFileName);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(File.Exists(bundlePath), Is.True);
             Assert.That(File.ReadAllText(bundlePath), Is.EqualTo(bundleContent));
-        });
+        }
     }
 
     [Test]
@@ -162,11 +162,11 @@ public class LdapTrustedCertificateDirectoryTests
             _logger,
             new[] { Path.Combine(_scratchDirectory, "does-not-exist.crt") });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(File.Exists(Path.Combine(trustDirectory.DirectoryPath, $"{certificate.Thumbprint}.crt")), Is.True);
             Assert.That(File.Exists(Path.Combine(trustDirectory.DirectoryPath, LdapTrustedCertificateDirectory.SystemBundleFileName)), Is.False);
-        });
+        }
     }
 
     [Test]

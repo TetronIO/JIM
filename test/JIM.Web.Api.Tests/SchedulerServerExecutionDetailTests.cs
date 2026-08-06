@@ -114,13 +114,13 @@ public class SchedulerServerExecutionDetailTests
         var badge = detail!.Steps.Single(s => s.ConnectedSystemId == 10);
         var contractor = detail.Steps.Single(s => s.ConnectedSystemId == 20);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(badge.Status, Is.EqualTo(ScheduleExecutionStepStatus.Completed));
             Assert.That(badge.ActivityId, Is.EqualTo(badgeActivity.Id));
             Assert.That(contractor.Status, Is.EqualTo(ScheduleExecutionStepStatus.Failed));
             Assert.That(contractor.ActivityId, Is.EqualTo(contractorActivity.Id));
-        });
+        }
     }
 
     /// <summary>
@@ -188,12 +188,12 @@ public class SchedulerServerExecutionDetailTests
         var detail = await _application.Scheduler.GetScheduleExecutionDetailAsync(ExecutionId);
 
         Assert.That(detail, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detail!.Steps[0].Status, Is.EqualTo(ScheduleExecutionStepStatus.Completed));
             Assert.That(detail.Steps[1].Status, Is.EqualTo(ScheduleExecutionStepStatus.Waiting));
             Assert.That(detail.Steps[2].Status, Is.EqualTo(ScheduleExecutionStepStatus.Pending));
-        });
+        }
     }
 
     /// <summary>
@@ -213,12 +213,12 @@ public class SchedulerServerExecutionDetailTests
 
         Assert.That(detail, Is.Not.Null);
         var state = detail!.Steps.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(state.StartedAt, Is.EqualTo(activity.Executed));
             Assert.That(state.CompletedAt, Is.EqualTo(activity.Executed + activity.TotalActivityTime));
             Assert.That(state.Duration, Is.EqualTo(TimeSpan.FromSeconds(135)));
-        });
+        }
     }
 
     /// <summary>
@@ -242,11 +242,11 @@ public class SchedulerServerExecutionDetailTests
 
         Assert.That(detail, Is.Not.Null);
         var state = detail!.Steps.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(state.ConnectedSystemName, Is.EqualTo("Corporate LDAP"));
             Assert.That(state.RunProfileName, Is.EqualTo("LDAP Delta Import"));
-        });
+        }
     }
 
     /// <summary>

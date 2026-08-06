@@ -202,7 +202,7 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ChangeTypeOf(run, 1), Is.EqualTo(ObjectChangeType.Added));
             Assert.That(ChangeTypeOf(run, 2), Is.EqualTo(ObjectChangeType.Updated));
@@ -216,7 +216,7 @@ public class SqlConnectorDeltaImportTests
             Assert.That(deleted.ObjectType, Is.EqualTo("Person"));
             Assert.That(AttributeOf(deleted, "EMPLOYEE_ID").IntValues, Is.EqualTo(new[] { 3 }),
                 "A deletion carries the anchor and nothing else, because the anchor is all JIM needs to find the object it is about.");
-        });
+        }
     }
 
     [Test]
@@ -251,13 +251,13 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, document, PersonSystem(), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ChangeTypeOf(run, 1), Is.EqualTo(ObjectChangeType.Added), "No two estates spell a change type the same way, so the vocabulary is the administrator's to declare.");
             Assert.That(ChangeTypeOf(run, 2), Is.EqualTo(ObjectChangeType.Updated));
             Assert.That(ChangeTypeOf(run, 3), Is.EqualTo(ObjectChangeType.Deleted),
                 "Values are matched without regard to case, because a column holding 'D' holds 'd' just as often.");
-        });
+        }
     }
 
     [Test]
@@ -269,7 +269,7 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ChangeTypeOf(run, 1), Is.EqualTo(ObjectChangeType.Added), "One unrecognisable row must not cost the whole run.");
 
@@ -277,7 +277,7 @@ public class SqlConnectorDeltaImportTests
             Assert.That(errored.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
             Assert.That(errored.ErrorMessage, Does.Contain("CHANGE_TYPE").And.Contain("X"),
                 "The administrator needs to know which value in which column their configuration does not account for.");
-        });
+        }
     }
 
     [Test]
@@ -289,11 +289,11 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects, Has.Count.EqualTo(1), "An object that changed three times is still one object to synchronise.");
             Assert.That(run.ImportObjects[0].ChangeType, Is.EqualTo(ObjectChangeType.Deleted), "The change-log rows are read in sequence order, so the last one is what the object's fate now is.");
-        });
+        }
     }
 
     [Test]
@@ -332,14 +332,14 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 2, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Pages, Has.Count.EqualTo(3), "Five changes at two per page is two full pages and a short one.");
             Assert.That(run.Pages[^1].PaginationTokens, Is.Empty,
                 "An empty pagination token list is how JIM is told there is no more data; returning one forever is an infinite import.");
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2, 3, 4, 5 }),
                 "Every change arrives exactly once, in sequence order, which is only true if every page was read against the run's original watermark.");
-        });
+        }
     }
 
     [Test]
@@ -351,7 +351,7 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 1, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Progress.ExpectedObjectCounts, Is.EqualTo(new[] { 2 }),
                 "A database states the size of a change set cheaply, so the Activity shows a percentage rather than a number counting up.");
@@ -359,7 +359,7 @@ public class SqlConnectorDeltaImportTests
             Assert.That(run.Progress.PhaseKeys, Does.Contain(SqlConnectorPhases.Fetch));
             Assert.That(run.Progress.PhaseKeys.Count(key => key == SqlConnectorPhases.QueryChanges), Is.EqualTo(1),
                 "Asking again on every page would make an extra query the price of paging.");
-        });
+        }
     }
 
     #endregion
@@ -376,14 +376,14 @@ public class SqlConnectorDeltaImportTests
         var store = Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "0"));
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 1, store);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Pages[0].PersistedConnectorData, Is.Not.Null, "The new watermark is captured before any change is read, and returned from the first page.");
             Assert.That(run.Pages.Skip(1).Select(page => page.PersistedConnectorData), Is.All.Null,
                 "A later page returning a watermark would overwrite the run's own starting point mid-run.");
             Assert.That(PersonWatermarkValueOf(store.Value), Is.EqualTo("3"),
                 "The watermark advances to where the change log stood when the run began; anything logged since is read by the next run.");
-        });
+        }
     }
 
     [Test]
@@ -435,13 +435,13 @@ public class SqlConnectorDeltaImportTests
         var watermark = PersonWatermark(SqlDeltaImportMode.WatermarkColumn, "2026-07-15T12:00:00.0000000Z", AttributeDataType.DateTime);
         var run = await RunDeltaAsync(provider, WatermarkDocument, WatermarkSystem(), pageSize: 10, Store(watermark), SqlConnectorConstants.DeltaImportModeWatermarkColumn);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 2 }), "Only the row whose last-modified column moved beyond the watermark has changed.");
             Assert.That(run.ImportObjects[0].ChangeType, Is.EqualTo(ObjectChangeType.Updated),
                 "A last-modified column cannot tell a create from an update, so the Connector says what it knows and JIM creates the object where it has none.");
             Assert.That(AttributeOf(run.ImportObjects[0], "DISPLAY_NAME").StringValues, Is.EqualTo(new[] { "Grace" }));
-        });
+        }
     }
 
     [Test]
@@ -455,12 +455,12 @@ public class SqlConnectorDeltaImportTests
         var watermark = PersonWatermark(SqlDeltaImportMode.WatermarkColumn, "2026-07-15T12:00:00.0000000Z", AttributeDataType.DateTime);
         var run = await RunDeltaAsync(provider, WatermarkDocument, WatermarkSystem(), pageSize: 10, Store(watermark), SqlConnectorConstants.DeltaImportModeWatermarkColumn);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects.Any(importObject => importObject.ChangeType == ObjectChangeType.Deleted), Is.False,
                 "Watermark Column mode detects creates and updates only; deletions need the change-log table, or a periodic Full Import.");
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 2 }));
-        });
+        }
     }
 
     #endregion
@@ -478,13 +478,13 @@ public class SqlConnectorDeltaImportTests
         var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
             PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1 }),
                 "A phone number added or replaced is a change to the person it belongs to, and it never moves the person's own row.");
             Assert.That(AttributeOf(run.ImportObjects[0], "PhoneNumbers").StringValues, Is.EquivalentTo(new[] { "0100", "0101" }),
                 "The object is imported whole, so its multi-valued attributes are gathered as they now stand rather than only the values that moved.");
-        });
+        }
     }
 
     [Test]
@@ -498,12 +498,12 @@ public class SqlConnectorDeltaImportTests
         var run = await RunWatermarkDeltaAsync(provider, WatermarkWithTwoRelatedTablesDocument, RelatedWatermarkSystem(withGroups: true),
             PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark), ("GroupNames", TheWatermark)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2 }),
                 "Each related table is evidence of a change on its own; Katherine's rows are all older than the watermark, so nothing about her changed.");
             Assert.That(AttributeOf(ObjectWithAnchor(run, 2), "GroupNames").StringValues, Is.EqualTo(new[] { "Payroll" }));
-        });
+        }
     }
 
     [Test]
@@ -530,12 +530,12 @@ public class SqlConnectorDeltaImportTests
         var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
             PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects, Has.Count.EqualTo(1),
                 "The page selects parent rows, so an object changed in two places at once is still one object; a join to the related table would have produced one per matching row.");
             Assert.That(AttributeOf(run.ImportObjects[0], "PhoneNumbers").StringValues, Is.EquivalentTo(new[] { "0100", "0101" }));
-        });
+        }
     }
 
     [Test]
@@ -548,13 +548,13 @@ public class SqlConnectorDeltaImportTests
         var store = Store(PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)));
         await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(), store);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(PersonWatermarkValueOf(store.Value), Is.EqualTo(TokenFor(AfterTheWatermark)),
                 "Each source's watermark comes from its own column. A single maximum across all of them would push the primary source's boundary past changes nobody has read, and lose them for ever.");
             Assert.That(RelatedWatermarkValueOf(store.Value, "PhoneNumbers"), Is.EqualTo(TokenFor(LaterStill)),
                 "Without a watermark of its own, a related table would either be re-read in full on every run for ever, or never re-read at all.");
-        });
+        }
     }
 
     [Test]
@@ -567,14 +567,14 @@ public class SqlConnectorDeltaImportTests
         var run = await RunWatermarkDeltaAsync(provider, WatermarkWithRelatedTableDocument, RelatedWatermarkSystem(),
             PersonWatermark(TheWatermark, ("PhoneNumbers", TheWatermark)), pageSize: 1);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2, 3 }),
                 "Every changed object arrives exactly once, which is only true if each page seeked past the last anchor of the one before it.");
             Assert.That(run.Pages, Has.Count.EqualTo(4), "Three changes at one per page is three full pages and a short one.");
             Assert.That(run.Pages[^1].PaginationTokens, Is.Empty,
                 "An empty pagination token list is how JIM is told there is no more data; returning one forever is an infinite import.");
-        });
+        }
     }
 
     [Test]
@@ -604,7 +604,7 @@ public class SqlConnectorDeltaImportTests
         var store = Store(null);
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 10, store);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2 }), "A Full Import both delivers the right data and establishes the baseline the next Delta Import needs.");
             Assert.That(run.Pages[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
@@ -612,7 +612,7 @@ public class SqlConnectorDeltaImportTests
             Assert.That(run.ImportObjects.Select(importObject => importObject.ChangeType), Is.All.EqualTo(ObjectChangeType.NotSet),
                 "The run really is a Full Import, so what is a create and what is an update stays JIM's to work out.");
             Assert.That(PersonWatermarkValueOf(store.Value), Is.EqualTo("1"), "Falling back forever would be the worst of both; the fallback leaves a watermark behind.");
-        });
+        }
     }
 
     [Test]
@@ -624,11 +624,11 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 10, Store("{ this is not a watermark"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Pages[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1 }));
-        });
+        }
     }
 
     [Test]
@@ -641,12 +641,12 @@ public class SqlConnectorDeltaImportTests
         var watermark = PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "42");
         var run = await RunDeltaAsync(provider, WatermarkDocument, WatermarkSystem(), pageSize: 10, Store(watermark), SqlConnectorConstants.DeltaImportModeWatermarkColumn);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Pages[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
             Assert.That(run.Pages[0].WarningMessage, Does.Contain(SqlConnectorConstants.SettingDeltaImportMode));
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1 }));
-        });
+        }
     }
 
     [Test]

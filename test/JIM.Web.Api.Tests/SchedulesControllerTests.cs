@@ -172,7 +172,7 @@ public class SchedulesControllerTests
         var response = result?.Value as PaginatedResponse<ScheduleDto>;
         var dto = response!.Items.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.Id, Is.EqualTo(id));
             Assert.That(dto.Name, Is.EqualTo("Nightly Sync"));
@@ -185,7 +185,7 @@ public class SchedulesControllerTests
             Assert.That(dto.LastRunTime, Is.EqualTo(lastRun));
             Assert.That(dto.StepCount, Is.EqualTo(6));
             Assert.That(dto.LastUpdated, Is.EqualTo(lastUpdated));
-        });
+        }
     }
 
     [Test]
@@ -222,7 +222,7 @@ public class SchedulesControllerTests
         var response = result?.Value as PaginatedResponse<ScheduleDto>;
         var dto = response!.Items.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.LastExecutionId, Is.EqualTo(executionId));
             Assert.That(dto.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Failed));
@@ -230,7 +230,7 @@ public class SchedulesControllerTests
             Assert.That(dto.LastExecutionTotalSteps, Is.EqualTo(6));
             Assert.That(dto.LastExecutionCompletedAt, Is.EqualTo(completedAt));
             Assert.That(dto.LastExecutionErrorMessage, Is.EqualTo("Step 3 timed out"));
-        });
+        }
     }
 
     [Test]
@@ -253,7 +253,7 @@ public class SchedulesControllerTests
         var response = result?.Value as PaginatedResponse<ScheduleDto>;
         var dto = response!.Items.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.LastExecutionId, Is.Null);
             Assert.That(dto.LastExecutionStatus, Is.Null);
@@ -261,7 +261,7 @@ public class SchedulesControllerTests
             Assert.That(dto.LastExecutionTotalSteps, Is.Null);
             Assert.That(dto.LastExecutionCompletedAt, Is.Null);
             Assert.That(dto.LastExecutionErrorMessage, Is.Null);
-        });
+        }
     }
 
     [Test]

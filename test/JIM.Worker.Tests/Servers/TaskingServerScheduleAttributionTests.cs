@@ -80,7 +80,7 @@ public class TaskingServerScheduleAttributionTests
 
         Assert.That(_createdActivities, Has.Count.EqualTo(1), "the task type creates exactly one Activity");
         var activity = _createdActivities[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.ScheduledByScheduleId, Is.EqualTo(scheduleId),
                 "the Schedule id must be denormalised so the attribution survives the Schedule's deletion");
@@ -88,7 +88,7 @@ public class TaskingServerScheduleAttributionTests
                 "the Schedule name must be denormalised so history reads correctly after a rename or deletion");
             Assert.That(activity.ScheduleExecutionId, Is.EqualTo(executionId));
             Assert.That(activity.ScheduleStepIndex, Is.EqualTo(2));
-        });
+        }
     }
 
     [Test]
@@ -100,11 +100,11 @@ public class TaskingServerScheduleAttributionTests
 
         Assert.That(_createdActivities, Has.Count.EqualTo(1), "the task type creates exactly one Activity");
         var activity = _createdActivities[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.ScheduledByScheduleId, Is.Null, "no Schedule produced this Activity");
             Assert.That(activity.ScheduledByScheduleName, Is.Null, "no Schedule produced this Activity");
-        });
+        }
         _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionAsync(It.IsAny<Guid>()), Times.Never,
             "an unscheduled task must not pay for a Schedule Execution lookup");
     }
@@ -124,12 +124,12 @@ public class TaskingServerScheduleAttributionTests
 
         Assert.That(_createdActivities, Has.Count.EqualTo(1));
         var activity = _createdActivities[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.ScheduledByScheduleId, Is.Null, "there is nothing to attribute the Activity to");
             Assert.That(activity.ScheduledByScheduleName, Is.Null, "there is nothing to attribute the Activity to");
             Assert.That(activity.ScheduleExecutionId, Is.EqualTo(executionId),
                 "the execution context itself is still copied, exactly as before");
-        });
+        }
     }
 }

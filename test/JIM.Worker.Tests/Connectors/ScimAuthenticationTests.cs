@@ -41,12 +41,12 @@ public class ScimAuthenticationTests
 
         await strategy.ApplyAsync(request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(request.Headers.Authorization?.Scheme, Is.EqualTo("Basic"));
             Assert.That(request.Headers.Authorization?.Parameter,
                 Is.EqualTo(Convert.ToBase64String(Encoding.UTF8.GetBytes("scim-service:s3cr3t"))));
-        });
+        }
     }
 
     [Test]
@@ -57,11 +57,11 @@ public class ScimAuthenticationTests
 
         await strategy.ApplyAsync(request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(request.Headers.Authorization?.Scheme, Is.EqualTo("Bearer"));
             Assert.That(request.Headers.Authorization?.Parameter, Is.EqualTo("static-token-value"));
-        });
+        }
     }
 
     [Test]
@@ -72,11 +72,11 @@ public class ScimAuthenticationTests
 
         await strategy.ApplyAsync(request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(request.Headers.GetValues("X-Api-Key").Single(), Is.EqualTo("api-key-value"));
             Assert.That(request.Headers.Authorization, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -106,7 +106,7 @@ public class ScimAuthenticationTests
         await strategy.ApplyAsync(request, CancellationToken.None);
 
         var tokenRequest = handler.Requests.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(request.Headers.Authorization?.Parameter, Is.EqualTo("issued-token"));
             Assert.That(tokenRequest.Method, Is.EqualTo(HttpMethod.Post));
@@ -114,7 +114,7 @@ public class ScimAuthenticationTests
             Assert.That(tokenRequest.Body, Does.Contain("grant_type=client_credentials"));
             Assert.That(tokenRequest.Body, Does.Contain("client_id=scim-client"));
             Assert.That(tokenRequest.Body, Does.Contain("scope=scim"));
-        });
+        }
     }
 
     [Test]
@@ -142,11 +142,11 @@ public class ScimAuthenticationTests
         await strategy.ApplyAsync(first, CancellationToken.None);
         await strategy.ApplyAsync(second, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.CallCount, Is.EqualTo(1), "a cached, unexpired token must not be re-acquired.");
             Assert.That(second.Headers.Authorization?.Parameter, Is.EqualTo("issued-token"));
-        });
+        }
     }
 
     [Test]
@@ -166,11 +166,11 @@ public class ScimAuthenticationTests
         using var second = CreateRequest();
         await strategy.ApplyAsync(second, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.CallCount, Is.EqualTo(2));
             Assert.That(second.Headers.Authorization?.Parameter, Is.EqualTo("token-2"));
-        });
+        }
     }
 
     [Test]
@@ -208,11 +208,11 @@ public class ScimAuthenticationTests
         gate.SetResult();
         await Task.WhenAll(applies);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.CallCount, Is.EqualTo(1), "concurrent callers must share a single token acquisition.");
             Assert.That(requests.Select(r => r.Headers.Authorization?.Parameter), Is.All.EqualTo("token-1"));
-        });
+        }
         foreach (var request in requests)
             request.Dispose();
     }
@@ -231,11 +231,11 @@ public class ScimAuthenticationTests
         using var second = CreateRequest();
         await strategy.ApplyAsync(second, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.CallCount, Is.EqualTo(2));
             Assert.That(second.Headers.Authorization?.Parameter, Is.EqualTo("token-2"));
-        });
+        }
     }
 
     [Test]
@@ -252,12 +252,12 @@ public class ScimAuthenticationTests
         var exception = Assert.ThrowsAsync<ScimAuthenticationException>(
             async () => await strategy.ApplyAsync(request, CancellationToken.None));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("401"));
             Assert.That(exception.Message, Does.Not.Contain("top-secret"), "the client secret must never reach an error message.");
             Assert.That(exception.ToString(), Does.Not.Contain("top-secret"));
-        });
+        }
     }
 
     [Test]

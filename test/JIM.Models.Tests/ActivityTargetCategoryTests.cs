@@ -29,7 +29,7 @@ public class ActivityTargetCategoryTests
     [Test]
     public void GetCategory_ConfigurationObjects_MapToConfiguration()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectedSystem), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.SynchronisationRule), Is.EqualTo(ActivityTargetCategory.Configuration));
@@ -45,13 +45,13 @@ public class ActivityTargetCategoryTests
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectorDefinition), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExampleDataSet), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExampleDataTemplate), Is.EqualTo(ActivityTargetCategory.Configuration));
-        });
+        }
     }
 
     [Test]
     public void GetCategory_OtherGroups_MapAsExpected()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.MetaverseObject), Is.EqualTo(ActivityTargetCategory.IdentityData));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectedSystemRunProfile), Is.EqualTo(ActivityTargetCategory.SyncRuns));
@@ -61,7 +61,7 @@ public class ActivityTargetCategoryTests
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.NotSet), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.DataGeneration), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.Authentication), Is.EqualTo(ActivityTargetCategory.Security));
-        });
+        }
     }
 
     [Test]

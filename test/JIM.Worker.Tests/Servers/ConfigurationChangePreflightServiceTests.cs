@@ -65,11 +65,11 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.False, "renaming a rule cannot change a synchronisation outcome");
             Assert.That(result.HighestClass, Is.EqualTo(ConfigurationChangeClass.Cosmetic));
-        });
+        }
     }
 
     [Test]
@@ -79,12 +79,12 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(Rule("HR Inbound"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.False);
             Assert.That(result.Items, Is.Empty);
             Assert.That(result.HighestClass, Is.EqualTo(ConfigurationChangeClass.NotClassified));
-        });
+        }
     }
 
     [Test]
@@ -98,11 +98,11 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.False);
             Assert.That(result.BaselineUnavailable, Is.False, "a create is knowably safe, not unknowable");
-        });
+        }
         _activityRepo.Verify(r => r.GetLatestConfigurationChangeSnapshotAsync(It.IsAny<ActivityTargetType>(), It.IsAny<int>()),
             Times.Never, "a create needs no baseline lookup");
     }
@@ -120,13 +120,13 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.True);
             Assert.That(result.IsDestructive, Is.False);
             Assert.That(result.Items.Select(i => i.Key), Does.Contain("enabled"));
             Assert.That(result.DestructiveItems, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -162,14 +162,14 @@ public class ConfigurationChangePreflightServiceTests
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
         var item = result.DestructiveItems.SingleOrDefault();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True);
             Assert.That(item, Is.Not.Null);
             Assert.That(item!.Consequence, Does.Contain("deleted"),
                 "the administrator is consenting to deletion, so the copy must say so");
             Assert.That(item!.NewDisplayValue, Is.EqualTo("Delete"));
-        });
+        }
     }
 
     [Test]
@@ -188,12 +188,12 @@ public class ConfigurationChangePreflightServiceTests
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
         var item = result.DestructiveItems.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True, "the class must match what the change history will record");
             Assert.That(item.Consequence, Does.Not.Contain("will be deleted"));
             Assert.That(item.Consequence, Does.Contain("disconnected"));
-        });
+        }
     }
 
     [Test]
@@ -205,13 +205,13 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True, "a cosmetic edit must never mask a destructive one in the same save");
             Assert.That(result.Items.Select(i => i.Key), Does.Contain("name"), "the administrator should see everything they are saving");
             Assert.That(result.Items[0].Class, Is.EqualTo(ConfigurationChangeClass.Destructive),
                 "the most consequential change must lead");
-        });
+        }
     }
 
     #endregion
@@ -228,12 +228,12 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.BaselineUnavailable, Is.True);
             Assert.That(result.RequiresAcknowledgement, Is.False,
                 "with no baseline JIM cannot say what changed, and inventing an acknowledgement would be guesswork");
-        });
+        }
     }
 
     [Test]
@@ -248,11 +248,11 @@ public class ConfigurationChangePreflightServiceTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.BaselineUnavailable, Is.True);
             Assert.That(result.RequiresAcknowledgement, Is.False);
-        });
+        }
     }
 
     #endregion

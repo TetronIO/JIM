@@ -123,11 +123,11 @@ public class SynchronisationControllerSetPasswordTests
     {
         var result = await SetPasswordAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.TypeOf<OkObjectResult>());
             Assert.That(_connector.PasswordsSet, Is.EqualTo(new[] { Password }));
-        });
+        }
     }
 
     /// <summary>
@@ -162,11 +162,11 @@ public class SynchronisationControllerSetPasswordTests
         });
 
         var response = (SetConnectedSystemObjectPasswordResponse)result.Value!;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy));
             Assert.That(response.ExpiryBehaviourWarning, Is.EqualTo(warning));
-        });
+        }
     }
 
     [Test]
@@ -194,11 +194,11 @@ public class SynchronisationControllerSetPasswordTests
     {
         var result = await SetPasswordAsync(new SetConnectedSystemObjectPasswordRequest { Password = "   " });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
             Assert.That(_connector.PasswordsSet, Is.Empty);
-        });
+        }
     }
 
     /// <summary>
@@ -231,13 +231,13 @@ public class SynchronisationControllerSetPasswordTests
 
         Assert.That(result, Is.TypeOf<ObjectResult>());
         var objectResult = (ObjectResult)result;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectResult.StatusCode, Is.EqualTo(StatusCodes.Status502BadGateway));
             // The body's code has to agree with the status, or a client branching on it is told the caller was
             // at fault when the target was.
             Assert.That(((ApiErrorResponse)objectResult.Value!).Code, Is.EqualTo(ApiErrorCodes.BadGateway));
-        });
+        }
     }
 
     /// <summary>
@@ -297,12 +297,12 @@ public class SynchronisationControllerSetPasswordTests
         var created = new List<Activity>();
         _activityRepo.Verify(r => r.CreateActivityAsync(Capture.In(created)), Times.Once);
         var activity = created.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemObject));
             Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
             Assert.That(activity.ConnectedSystemObjectId, Is.EqualTo(_csoId));
-        });
+        }
     }
 
     private JimApplication BuildApplicationWith(IConnector connector)

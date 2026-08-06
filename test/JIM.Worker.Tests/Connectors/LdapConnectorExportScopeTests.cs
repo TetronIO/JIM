@@ -53,12 +53,12 @@ public class LdapConnectorExportScopeTests
             [CreateUpdatePendingExport("CN=Bob,OU=Disabled,DC=test,DC=local")],
             CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.OutsideManagedScope));
             Assert.That(results[0].ErrorMessage, Does.Contain("OU=Disabled,DC=test,DC=local"));
-        });
+        }
         _mockExecutor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Never);
         _mockExecutor.Verify(e => e.SendRequestAsync(It.IsAny<ModifyRequest>()), Times.Never);
     }

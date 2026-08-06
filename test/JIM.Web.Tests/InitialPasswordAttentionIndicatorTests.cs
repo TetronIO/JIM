@@ -57,12 +57,12 @@ public class InitialPasswordAttentionIndicatorTests : JimComponentTestContext
 
         var chips = cut.FindComponents<MudBlazor.MudChip<string>>();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(chips.Count, Is.EqualTo(1));
             Assert.That(chips[0].Instance.Color, Is.EqualTo(MudBlazor.Color.Warning),
                 "parked is fixable from the rule, so it is a warning rather than an error");
-        });
+        }
     }
 
     [Test]
@@ -73,12 +73,12 @@ public class InitialPasswordAttentionIndicatorTests : JimComponentTestContext
 
         var chips = cut.FindComponents<MudBlazor.MudChip<string>>();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(chips.Count, Is.EqualTo(1));
             Assert.That(chips[0].Instance.Color, Is.EqualTo(MudBlazor.Color.Error),
                 "those accounts were provisioned and will never get a password from JIM; that is not a warning");
-        });
+        }
     }
 
     [Test]
@@ -99,13 +99,13 @@ public class InitialPasswordAttentionIndicatorTests : JimComponentTestContext
 
         var tooltip = TooltipTextOf(cut);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tooltip, Does.Contain("Staff to Contoso AD"),
                 "naming the rule reads better than 'this one' when several rows carry the indicator");
             Assert.That(tooltip, Does.Contain("releases them"),
                 "the tooltip has to say what to do about it, or the count is just a number");
-        });
+        }
     }
 
     /// <summary>
@@ -132,11 +132,11 @@ public class InitialPasswordAttentionIndicatorTests : JimComponentTestContext
 
         var tooltip = TooltipTextOf(cut);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tooltip, Does.Contain("1 account is"));
             Assert.That(tooltip, Does.Not.Contain("1 accounts"));
-        });
+        }
     }
 
     /// <summary>

@@ -167,11 +167,11 @@ public class ScheduleExecutionProgressReadTests
         var dto = await GetDetailAsync();
 
         Assert.That(dto.Progress, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.Progress!.CurrentStepNumber, Is.EqualTo(2));
             Assert.That(dto.Progress.TotalSteps, Is.EqualTo(3));
-        });
+        }
     }
 
     [Test]
@@ -184,13 +184,13 @@ public class ScheduleExecutionProgressReadTests
         var dto = await GetDetailAsync();
 
         Assert.That(dto.Progress, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.Progress!.Steps, Has.Count.EqualTo(3));
             Assert.That(dto.Progress.Steps[0].Status, Is.EqualTo(ScheduleExecutionStepStatus.Failed));
             Assert.That(dto.Progress.Steps[1].Status, Is.EqualTo(ScheduleExecutionStepStatus.Processing));
             Assert.That(dto.Progress.Steps[2].Status, Is.EqualTo(ScheduleExecutionStepStatus.Waiting));
-        });
+        }
     }
 
     [Test]
@@ -204,14 +204,14 @@ public class ScheduleExecutionProgressReadTests
 
         Assert.That(dto.Progress, Is.Not.Null);
         var parallelStep = dto.Progress!.Steps[0];
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parallelStep.IsParallel, Is.True);
             Assert.That(parallelStep.TaskStatuses, Is.EqualTo(new[]
             {
                 ScheduleExecutionStepStatus.Failed, ScheduleExecutionStepStatus.Completed
             }), "Ordered by outcome, the same order the portal draws the wedges in");
-        });
+        }
     }
 
     [Test]
@@ -223,10 +223,10 @@ public class ScheduleExecutionProgressReadTests
 
         var dto = await GetDetailAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.Steps, Has.Count.EqualTo(4), "One per Schedule Step row, parallel rows included");
             Assert.That(dto.Steps.Select(s => s.Status), Does.Contain("Completed with Error").Or.Contain("Failed"));
-        });
+        }
     }
 }

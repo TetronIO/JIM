@@ -307,7 +307,7 @@ public class SystemResetDatabaseTests
             var repository = new PostgresDataRepository(ctx);
             var result = await repository.System.ResetSystemAsync(includeAdministrators: true);
 
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(result.ObjectMatchingRulesRemoved, Is.EqualTo(1));
                 Assert.That(result.ScheduleExecutionsRemoved, Is.EqualTo(1));
@@ -315,7 +315,7 @@ public class SystemResetDatabaseTests
                 Assert.That(result.MetaverseObjectChangesRemoved, Is.EqualTo(1));
                 Assert.That(result.ConnectedSystemObjectChangesRemoved, Is.EqualTo(1));
                 Assert.That(result.CustomExampleDataTemplatesRemoved, Is.EqualTo(1), "Only the non-built-in template should be counted.");
-            });
+            }
         }
 
         await using var verify = NewContext();

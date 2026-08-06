@@ -78,21 +78,21 @@ public class ActivityConfigurationTargetTests
     {
         var activity = new Activity();
         activity.SetConfigurationTargetId(ActivityTargetType.PredefinedSearch, 42);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.PredefinedSearchId, Is.EqualTo(42));
             Assert.That(activity.ConnectedSystemId, Is.Null);
             Assert.That(activity.SyncRuleId, Is.Null);
             Assert.That(activity.RoleId, Is.Null);
             Assert.That(activity.ServiceSettingKey, Is.Null);
-        });
+        }
     }
 
     [Test]
     public void SetConfigurationTargetId_WrongKeyShape_Throws()
     {
         var activity = new Activity();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(() => activity.SetConfigurationTargetId(ActivityTargetType.Schedule, 42),
                 Throws.TypeOf<ArgumentOutOfRangeException>(), "Schedule is Guid-keyed, not integer-keyed");
@@ -100,6 +100,6 @@ public class ActivityConfigurationTargetTests
                 Throws.TypeOf<ArgumentOutOfRangeException>(), "SyncRule is integer-keyed, not Guid-keyed");
             Assert.That(() => activity.SetConfigurationTargetId(ActivityTargetType.ConnectedSystem, "key"),
                 Throws.TypeOf<ArgumentOutOfRangeException>(), "ConnectedSystem is integer-keyed, not string-keyed");
-        });
+        }
     }
 }
