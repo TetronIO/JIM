@@ -47,7 +47,7 @@ public class LdapConnectorExportScopeTests
     public async Task ExecuteAsync_TargetOutsideSelectedContainers_FailsThatObjectWithoutWritingAsync()
     {
         var export = CreateExport();
-        export.SetManagedScope(["OU=Users,DC=test,DC=local"]);
+        export.SetManagedScope([Managed("OU=Users,DC=test,DC=local")]);
 
         var results = await export.ExecuteAsync(
             [CreateUpdatePendingExport("CN=Bob,OU=Disabled,DC=test,DC=local")],
@@ -68,7 +68,7 @@ public class LdapConnectorExportScopeTests
     {
         SetupModifyResponse(ResultCode.Success);
         var export = CreateExport();
-        export.SetManagedScope(["OU=Users,DC=test,DC=local"]);
+        export.SetManagedScope([Managed("OU=Users,DC=test,DC=local")]);
 
         var results = await export.ExecuteAsync(
             [CreateUpdatePendingExport("CN=Bob,OU=Users,DC=test,DC=local")],
@@ -83,7 +83,7 @@ public class LdapConnectorExportScopeTests
         // Selecting a container selects its subtree for import, so export must treat descendants as in scope too.
         SetupModifyResponse(ResultCode.Success);
         var export = CreateExport();
-        export.SetManagedScope(["OU=Corp,DC=test,DC=local"]);
+        export.SetManagedScope([Managed("OU=Corp,DC=test,DC=local")]);
 
         var results = await export.ExecuteAsync(
             [CreateUpdatePendingExport("CN=Bob,OU=Contractors,OU=Users,OU=Corp,DC=test,DC=local")],
@@ -114,7 +114,7 @@ public class LdapConnectorExportScopeTests
         // that returns a differently-cased DN must not make every export fail.
         SetupModifyResponse(ResultCode.Success);
         var export = CreateExport();
-        export.SetManagedScope(["ou=users,dc=test,dc=local"]);
+        export.SetManagedScope([Managed("ou=users,dc=test,dc=local")]);
 
         var results = await export.ExecuteAsync(
             [CreateUpdatePendingExport("CN=Bob,OU=Users,DC=test,DC=local")],
@@ -129,10 +129,46 @@ public class LdapConnectorExportScopeTests
         // An object whose parent IS the selected container, expressed with no intervening container.
         SetupModifyResponse(ResultCode.Success);
         var export = CreateExport();
-        export.SetManagedScope(["DC=test,DC=local"]);
+        export.SetManagedScope([Managed("DC=test,DC=local")]);
 
         var results = await export.ExecuteAsync(
             [CreateUpdatePendingExport("CN=Bob,DC=test,DC=local")],
+            CancellationToken.None);
+
+        Assert.That(results[0].Success, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_TargetBeneathAOneLevelContainer_FailsThatObjectWithoutWritingAsync()
+    {
+        // Container Scope (#351) narrows what an import returns, and the export guard has to narrow with it. A One
+        // Level container imports only what sits directly within it, so writing to something a level deeper is the
+        // very unreadable write this guard exists to refuse, even though the Distinguished Name sits under a
+        // selected container.
+        var export = CreateExport();
+        export.SetManagedScope([Managed("OU=Users,DC=test,DC=local", ConnectedSystemContainerScope.OneLevel)]);
+
+        var results = await export.ExecuteAsync(
+            [CreateUpdatePendingExport("CN=Bob,OU=Contractors,OU=Users,DC=test,DC=local")],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.OutsideManagedScope));
+        }
+        _mockExecutor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_TargetDirectlyWithinAOneLevelContainer_WritesAsUsualAsync()
+    {
+        SetupModifyResponse(ResultCode.Success);
+        var export = CreateExport();
+        export.SetManagedScope([Managed("OU=Users,DC=test,DC=local", ConnectedSystemContainerScope.OneLevel)]);
+
+        var results = await export.ExecuteAsync(
+            [CreateUpdatePendingExport("CN=Bob,OU=Users,DC=test,DC=local")],
             CancellationToken.None);
 
         Assert.That(results[0].Success, Is.True);
@@ -209,4 +245,13 @@ public class LdapConnectorExportScopeTests
     }
 
     #endregion
+
+    /// <summary>
+    /// A selected container as JIM states it to the Connector. Subtree by default, which is what every container
+    /// selected before Container Scope (#351) existed behaves as.
+    /// </summary>
+    private static ConnectedSystemContainer Managed(
+        string externalId,
+        ConnectedSystemContainerScope scope = ConnectedSystemContainerScope.Subtree) =>
+        new() { ExternalId = externalId, Scope = scope };
 }

@@ -514,7 +514,12 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -535,7 +540,8 @@ public class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = connectedSystem.Id
+            ConnectedSystemId = connectedSystem.Id,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -4128,6 +4134,34 @@ public class ConnectedSystemServer
     public async Task<int> GetConnectedSystemObjectCountAsync()
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync();
+    }
+
+    /// <summary>
+    /// Streams every Connected System Object in a Connected System, reduced to where it sits and what it is joined
+    /// to, for evaluating what a change to the partition and container selection would take out of import scope
+    /// (#1251).
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectScopeCandidates(connectedSystemId);
+    }
+
+    /// <summary>
+    /// The Connector's containment rule, for a Connected System whose Connector can express one; null otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Creating the Connector opens no connection to the Connected System, which matters here: a preview asks where
+    /// objects sit using data JIM already holds, and must not reach out to a directory that may be unreachable to
+    /// answer a question about a tick box.
+    /// </remarks>
+    public IConnectorContainment? GetConnectorContainment(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        if (connectedSystem.ConnectorDefinition == null)
+            return null;
+
+        return CreateConnector(connectedSystem) as IConnectorContainment;
     }
 
     /// <summary>

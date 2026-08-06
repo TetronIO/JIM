@@ -1,12 +1,16 @@
+@using JIM.Models.Activities
+@using JIM.Models.Preview
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using JIM.Web.Services
 @using Serilog
 @using System.Text
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IJSRuntime JSRuntime
+@inject IConfigurationChangePreviewStarter PreviewStarter
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -351,7 +355,36 @@
         </MudPaper>
     }
 
-    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DropShadow="false">Save Changes</MudButton>
+    <MudStack Row="true" Class="mt-5" Spacing="2">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" DropShadow="false">Save Changes</MudButton>
+        @* Preview (#1251): deselecting a container takes everything beneath it out of import scope, which obsoletes *@
+        @* those objects, disconnects whatever they were joined to, and can leave Metaverse Objects with no          *@
+        @* connectors at all. This is the count an administrator needs before saving, not afterwards.                *@
+        <MudButton data-testid="jim-preview-scope-selection" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewScopeSelectionAsync"
+                   Disabled="@_startingPreview" DropShadow="false">
+            Preview Changes
+        </MudButton>
+    </MudStack>
+
+    @if (_previewActivityId.HasValue)
+    {
+        var previewActivityId = _previewActivityId.Value;
+
+        @if (ScopeSelectionPreviewIsStale)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                      data-testid="jim-preview-stale">
+                The selection has been edited since this preview ran, so it no longer describes what saving would do.
+                Preview again for an answer about the current selection.
+            </MudAlert>
+        }
+
+        <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
+                                         Title="Preview: Partitions and Containers"
+                                         OnPreviewChanged="OnScopeSelectionPreviewChanged"
+                                         Class="mt-6" />
+    }
 }
 
 @code {
@@ -372,6 +405,12 @@
 
     private bool _hierarchyBeingRetrieved;
     private HierarchyRefreshResult? _hierarchyRefreshResult;
+
+    // ─── Configuration Change Preview (#1251) ───
+    private Guid? _previewActivityId;
+    private ConfigurationChangePreview? _preview;
+    private ConnectedSystemScopeSelectionProposal? _previewedProposal;
+    private bool _startingPreview;
 
     protected override void OnParametersSet()
     {
@@ -494,16 +533,106 @@
         using var jim = JimFactory.Create();
 
         // deselecting a partition takes everything imported from it out of scope, which obsoletes those objects and
-        // deprovisions whatever they are joined to. Until now that saved silently.
+        // deprovisions whatever they are joined to. The acknowledgement says so, and where a preview was run it
+        // says how many objects that is (#1251).
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Connected System", ConnectedSystem.Name))
+                "Connected System", ConnectedSystem.Name,
+                ConfigurationChangePreviewCounts.ForConfirmation(_preview, ScopeSelectionPreviewIsStale)))
             return;
 
+        // The preview is linked only when it actually describes this change. A link to a preview run against a
+        // different selection would make the audit assert something untrue about what the administrator read.
+        var previewActivityId = ScopeSelectionPreviewIsStale ? null : _previewActivityId;
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, previewActivityId: previewActivityId);
+        DiscardScopeSelectionPreview();
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
         await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    // ─── Configuration Change Preview (#1251) ───
+
+    /// <summary>
+    /// The selection currently ticked in the tree, as the preview framework's proposal type.
+    /// </summary>
+    /// <remarks>
+    /// Read from the loaded Connected System because the tree edits its <c>Selected</c> flags in place, so the
+    /// in-memory graph *is* what the administrator is about to save. The adapter loads its own copy from the
+    /// database for the "before" side, which is why handing it this graph directly would have it compare the
+    /// proposal against itself.
+    /// </remarks>
+    private ConnectedSystemScopeSelectionProposal BuildScopeSelectionProposal() =>
+        ConnectedSystemScopeSelectionProposal.FromCurrentSelection(ConnectedSystem);
+
+    /// <summary>
+    /// Whether the tree has moved on from the selection the visible preview was run against.
+    /// </summary>
+    private bool ScopeSelectionPreviewIsStale =>
+        _previewedProposal is not null && !BuildScopeSelectionProposal().DescribesSameSelectionAs(_previewedProposal);
+
+    private async Task PreviewScopeSelectionAsync()
+    {
+        if (_startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildScopeSelectionProposal();
+
+            // The starter, not StartAndDispatchPreviewAsync: it owns the question of whether a large preview keeps
+            // every drill-down row, and that decision belongs in one place rather than at each surface.
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.ConnectedSystem,
+                TargetId = ConnectedSystem.Id,
+                TargetName = ConnectedSystem.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+            _previewedProposal = proposal;
+            _preview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            DiscardScopeSelectionPreview();
+            Log.Error(ex, "Failed to start a partition and container selection preview for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Records the panel's latest read of the preview, for the save confirmation to state.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does not call <c>StateHasChanged</c>, for the reason recorded on the pilot surface: the panel
+    /// re-reads on every parameter set, so re-rendering here would set its parameters again, refresh again, and
+    /// raise this again, cancelling and restarting its reconciliation poll on every pass so the panel never leaves
+    /// stage 1. Nothing rendered here depends on this value, so storing it is enough.
+    /// </remarks>
+    private void OnScopeSelectionPreviewChanged(ConfigurationChangePreview? preview) => _preview = preview;
+
+    private void DiscardScopeSelectionPreview()
+    {
+        _previewActivityId = null;
+        _previewedProposal = null;
+        _preview = null;
     }
 
     private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)

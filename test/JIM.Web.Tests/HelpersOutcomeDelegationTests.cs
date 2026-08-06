@@ -43,6 +43,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "Would Cease To Be Deletion Eligible")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Would Change Deletion Eligible Date")]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "CSO Pending Delete")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Would Disconnect From Metaverse Object")]
     public void GetOutcomeTypeDisplayName_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
     {
@@ -75,6 +76,7 @@ public class HelpersOutcomeDelegationTests
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, Color.Warning)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, Color.Error)]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, Color.Error)]
     public void GetOutcomeTypeMudBlazorColor_EveryOutcomeType_ReturnsPreRefactorValue(
         ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, Color expected)
     {
@@ -111,7 +113,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] = Icons.Material.Filled.DeleteOutline,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] = Icons.Material.Filled.RestoreFromTrash,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] = Icons.Material.Filled.EditCalendar,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = Icons.Material.Filled.AutoDelete
+            [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = Icons.Material.Filled.AutoDelete,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = Icons.Material.Filled.LinkOff
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),

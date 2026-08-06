@@ -844,6 +844,20 @@ public interface IConnectedSystemRepository
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId);
 
     /// <summary>
+    /// Streams every Connected System Object in a Connected System, reduced to where it sits and what it is joined
+    /// to, for evaluating what a change to the partition and container selection would take out of import scope
+    /// (#1251).
+    /// </summary>
+    /// <remarks>
+    /// Streamed rather than returned as a list because a preview runs over the whole connector space, and a
+    /// customer's connector space is routinely hundreds of thousands of objects; materialising it would put all of
+    /// them in JIM.Web's process at once. Ordered so a preview re-run over unchanged data produces its groups in
+    /// the same order.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>

@@ -74,8 +74,34 @@ In practice, selecting a partition brings an entire naming context into scope, w
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
 
 - A [Run Profile](run-profiles.md) that targets a deselected partition is refused rather than run. The Run Profiles tab marks it, and the property is available over REST and PowerShell so you can find every affected Run Profile at once.
-- Exports are refused outside the selected containers. Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
+- Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
+
+### Previewing a partition or container change
+
+Because narrowing scope is silently destructive, the Partitions & Containers tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Would fall out of scope | Connected System Objects that leave import scope and are not joined to anything. Nothing in the Metaverse changes as a result. |
+| Would disconnect from a Metaverse Object | Objects that leave import scope and *are* joined. Each takes the attribute values it contributed out of the Metaverse Object with it. |
+| Would become eligible for deletion | Metaverse Objects that those disconnections would leave satisfying their [deletion rule](metaverse.md#deletion-behaviour). These are deletions your selection would set in motion. |
+| Would fall in scope | Objects JIM still holds from scope you are re-selecting. |
+
+The counts honour each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope): beneath a One Level container an import returns nothing, so objects a level deeper are already out of scope and deselecting it takes nothing further away.
+
+Two limits are worth knowing, and the preview states both where they apply:
+
+- **Objects JIM has never imported cannot be counted.** Selecting new scope makes the next Full Import discover objects that are not in the connector space yet, and there is nothing to count until it runs.
+- **Some objects cannot be placed.** An object imported before JIM recorded partitions, or one whose Connector cannot say what container an object is in, is left out of the counts entirely rather than guessed at in either direction.
+
+Save after previewing and the confirmation states the preview's counts alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+
+The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/scope-selection/preview` in the [REST API](../../api/reference/). Send the whole proposed selection rather than one flag: what a deselection costs depends on the rest of the selection, because an object leaves scope only when nothing else still covers it.
+
+See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
 
 ### Renames and moves in the source system
 
