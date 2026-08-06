@@ -298,12 +298,9 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
             // Only the disconnecting system's entries are removed, and only as many as actually leave scope: a
             // system holding two joined objects where one stays is still a connector.
             if (systemId == disconnectingSystemId && stillToRemove > 0)
-            {
                 stillToRemove--;
-                continue;
-            }
-
-            remaining.Add(systemId);
+            else
+                remaining.Add(systemId);
         }
 
         return remaining;
@@ -382,24 +379,22 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
     }
 
     private static HashSet<ConnectedSystemContainer> CloneWithSelection(
-        IEnumerable<ConnectedSystemContainer> containers, IReadOnlySet<int> selectedContainerIds)
+        IEnumerable<ConnectedSystemContainer> containers, IReadOnlySet<int> selectedContainerIds) =>
+        [.. containers.Select(container => CloneWithSelection(container, selectedContainerIds))];
+
+    private static ConnectedSystemContainer CloneWithSelection(
+        ConnectedSystemContainer container, IReadOnlySet<int> selectedContainerIds)
     {
-        var cloned = new HashSet<ConnectedSystemContainer>();
-        foreach (var container in containers)
+        var clone = new ConnectedSystemContainer
         {
-            var clone = new ConnectedSystemContainer
-            {
-                Id = container.Id,
-                Name = container.Name,
-                ExternalId = container.ExternalId,
-                Selected = selectedContainerIds.Contains(container.Id)
-            };
+            Id = container.Id,
+            Name = container.Name,
+            ExternalId = container.ExternalId,
+            Selected = selectedContainerIds.Contains(container.Id)
+        };
 
-            clone.ChildContainers.UnionWith(CloneWithSelection(container.ChildContainers, selectedContainerIds));
-            cloned.Add(clone);
-        }
-
-        return cloned;
+        clone.ChildContainers.UnionWith(CloneWithSelection(container.ChildContainers, selectedContainerIds));
+        return clone;
     }
 
     /// <summary>

@@ -88,7 +88,9 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] =
             new OutcomeDisplay("Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] =
-            new OutcomeDisplay("Deletion date would change", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar)
+            new OutcomeDisplay("Deletion date would change", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] =
+            new OutcomeDisplay("Would disconnect from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff)
     };
 
     /// <summary>

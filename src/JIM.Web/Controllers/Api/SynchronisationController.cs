@@ -15,6 +15,7 @@ using JIM.Models.Connectors;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -1103,6 +1104,130 @@ public class SynchronisationController(
         // Reload to get full entity with relationships
         var updated = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
         return Ok(ConnectedSystemContainerDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Preview a change to a Connected System's partition and container selection
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed selection would do, without making it (#827/#1251): which Connected System Objects
+    /// would leave import scope, which of those are joined and would disconnect from their Metaverse Object, which
+    /// would come back into scope, and which Metaverse Objects would become eligible for automatic deletion once
+    /// the disconnections land.
+    ///
+    /// This matters because a deselection is silently destructive. The objects beneath a deselected container stop
+    /// being searched, so the next Full Import does not return them, so they are marked obsolete, and the following
+    /// synchronisation disconnects them and recalls whatever they contributed to the Metaverse.
+    ///
+    /// Send the whole selection, not one flag: what a deselection costs depends on the rest of the selection, since
+    /// an object leaves scope only when nothing else still covers it. Omitted lists preview the stored selection.
+    /// Apply the previewed change through <c>PUT connected-systems/{id}/partitions/{partitionId}</c> and
+    /// <c>PUT connected-systems/{id}/containers/{containerId}</c>.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A selection that leaves nothing manageable comes back with a validation finding and is still evaluated; that
+    /// is the answer the caller asked for, not a reason to refuse the request.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed selection.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A named partition or container does not belong to this Connected System.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/scope-selection/preview", Name = "StartConnectedSystemScopeSelectionPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemScopeSelectionPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemScopeSelectionPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var currentSelection = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
+        var proposal = new ConnectedSystemScopeSelectionProposal(
+            request.SelectedPartitionIds ?? currentSelection.SelectedPartitionIds,
+            request.SelectedContainerIds ?? currentSelection.SelectedContainerIds);
+
+        // An id naming nothing in this hierarchy is different in kind from a selection the preview disagrees with:
+        // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to a
+        // question the caller did not ask. Everything the selection could be *unwise* about is a validation finding.
+        var unknownIds = UnknownScopeSelectionIds(connectedSystem, proposal);
+        if (unknownIds != null)
+            return BadRequest(unknownIds);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystem,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started partition and container selection preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// The error response for a proposal naming a partition or container this Connected System does not have, or
+    /// null when every id resolves.
+    /// </summary>
+    private static ApiErrorResponse? UnknownScopeSelectionIds(
+        ConnectedSystem connectedSystem, ConnectedSystemScopeSelectionProposal proposal)
+    {
+        var partitions = connectedSystem.Partitions ?? [];
+        var knownPartitionIds = partitions.Select(p => p.Id).ToHashSet();
+        var knownContainerIds = partitions
+            .Where(p => p.Containers != null)
+            .SelectMany(p => FlattenContainerIds(p.Containers!))
+            .ToHashSet();
+
+        var unknownPartitions = proposal.SelectedPartitionIds.Where(id => !knownPartitionIds.Contains(id)).ToList();
+        if (unknownPartitions.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Partition ID(s) {string.Join(", ", unknownPartitions)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        var unknownContainers = proposal.SelectedContainerIds.Where(id => !knownContainerIds.Contains(id)).ToList();
+        if (unknownContainers.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Container ID(s) {string.Join(", ", unknownContainers)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<int> FlattenContainerIds(IEnumerable<ConnectedSystemContainer> containers)
+    {
+        foreach (var container in containers)
+        {
+            yield return container.Id;
+
+            foreach (var childId in FlattenContainerIds(container.ChildContainers))
+                yield return childId;
+        }
     }
     #endregion
 
