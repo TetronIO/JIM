@@ -1,0 +1,802 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Connectors.Sql.Providers;
+using JIM.Models.Core;
+using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using JIM.Utilities;
+using Serilog;
+using System.Data.Common;
+using System.Globalization;
+
+namespace JIM.Connectors.Sql;
+
+/// <summary>
+/// Applies Pending Exports to a database: a row created, a row's columns changed, a row removed, each
+/// with whatever related-table rows its multi-valued attributes carry.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>One transaction per object.</b> Everything an object needs (its parent row and every related-table
+/// row belonging to it) is written inside a transaction of its own, committed together or rolled back
+/// together. A half-written object is worse than an unwritten one: JIM would confirm attributes that
+/// were never applied, and the administrator would have nothing saying which.
+/// </para>
+/// <para>
+/// <b>One result per Pending Export, in order.</b> JIM matches results to Pending Exports by position,
+/// so this never filters, reorders or coalesces them. A failure is caught per object and returned as a
+/// failed result, feeding the existing retry and backoff machinery; it never aborts the batch.
+/// </para>
+/// <para>
+/// <b>Values are always bound.</b> Only identifiers reach a statement's text, quoted by the provider.
+/// Connector configuration is privileged administrator input, but the injection surface it defends is
+/// still exactly value parameterisation and identifier quoting.
+/// </para>
+/// </remarks>
+internal sealed class SqlConnectorExport
+{
+    /// <summary>
+    /// Names the parameters carrying the anchor: the row a statement acts on, and the parent a related
+    /// row belongs to. One per anchor column, in anchor order.
+    /// </summary>
+    internal const string AnchorParameterPrefix = "exAnchor";
+
+    /// <summary>
+    /// Names the parameters carrying the values being written.
+    /// </summary>
+    internal const string ValueParameterPrefix = "exValue";
+
+    /// <summary>
+    /// Names the parameter a database-generated key is returned through, for the dialects that bind one.
+    /// </summary>
+    internal const string GeneratedKeyParameterName = "exKey";
+
+    private readonly ISqlProvider _provider;
+    private readonly DbConnection _connection;
+    private readonly SqlSchemaConfiguration _configuration;
+    private readonly TimeZoneInfo _databaseTimeZone;
+    private readonly ILogger _logger;
+    private readonly Dictionary<string, SqlExportPlan> _plans = new(StringComparer.OrdinalIgnoreCase);
+
+    internal SqlConnectorExport(
+        ISqlProvider provider,
+        DbConnection connection,
+        SqlSchemaConfiguration configuration,
+        TimeZoneInfo databaseTimeZone,
+        ILogger logger)
+    {
+        _provider = provider;
+        _connection = connection;
+        _configuration = configuration;
+        _databaseTimeZone = databaseTimeZone;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Applies every Pending Export in the batch, returning one result per Pending Export in the order
+    /// they arrived.
+    /// </summary>
+    internal async Task<List<ConnectedSystemExportResult>> ExecuteAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pendingExports);
+
+        if (pendingExports.Count == 0)
+        {
+            _logger.Information("SqlConnectorExport: there are no Pending Exports to apply");
+            return [];
+        }
+
+        _logger.Debug("SqlConnectorExport: applying {PendingExportCount} Pending Export(s)", pendingExports.Count);
+
+        var results = new ConnectedSystemExportResult[pendingExports.Count];
+        var failed = 0;
+
+        for (var index = 0; index < pendingExports.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pendingExport = pendingExports[index];
+
+            try
+            {
+                results[index] = await ExportObjectAsync(pendingExport, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Every failure this object could have is one object's failure: a value that cannot be
+                // written, configuration that does not describe it, or the database refusing the write.
+                // It is reported against the object and the batch carries on; an aborting run is a
+                // cancellation, and that is the one thing this does not swallow.
+                failed++;
+                _logger.Error(ex, "SqlConnectorExport: Pending Export {PendingExportId} ({ChangeType}) could not be applied", pendingExport.Id, pendingExport.ChangeType);
+                results[index] = ConnectedSystemExportResult.Failed(ex.Message);
+            }
+        }
+
+        _logger.Information("SqlConnectorExport: applied {PendingExportCount} Pending Export(s), {FailedCount} of which failed",
+            pendingExports.Count, failed);
+
+        return [.. results];
+    }
+
+    /// <summary>
+    /// Applies one Pending Export inside a transaction of its own.
+    /// </summary>
+    private async Task<ConnectedSystemExportResult> ExportObjectAsync(PendingExport pendingExport, CancellationToken cancellationToken)
+    {
+        var plan = ResolvePlan(pendingExport);
+
+        await using var transaction = await _connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var result = pendingExport.ChangeType switch
+            {
+                PendingExportChangeType.Create => await CreateAsync(plan, pendingExport, transaction, cancellationToken),
+                PendingExportChangeType.Update => await UpdateAsync(plan, pendingExport, transaction, cancellationToken),
+                PendingExportChangeType.Delete => await DeleteAsync(plan, pendingExport, transaction, cancellationToken),
+                _ => throw new NotSupportedException($"A Pending Export change type of {pendingExport.ChangeType} is not one this Connector knows how to apply.")
+            };
+
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Nothing this object wrote is left behind. A cancelled run needs no branch of its own:
+            // disposing an uncommitted transaction rolls it back.
+            await RollbackAsync(transaction, pendingExport);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Undoes everything an object wrote. A failure to roll back is reported rather than thrown: the
+    /// failure that led here is the one worth telling the administrator about, and a transaction the
+    /// server has already ended has nothing left to undo.
+    /// </summary>
+    private async Task RollbackAsync(DbTransaction transaction, PendingExport pendingExport)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is DbException or InvalidOperationException)
+        {
+            _logger.Warning(ex, "SqlConnectorExport: the transaction for Pending Export {PendingExportId} could not be rolled back", pendingExport.Id);
+        }
+    }
+
+    #region Create, update and delete
+
+    /// <summary>
+    /// Inserts the parent row, then the related-table rows belonging to it.
+    /// </summary>
+    /// <remarks>
+    /// Related rows can only follow the parent, because where the database generates the anchor they are
+    /// joined by a value that does not exist until the parent row does.
+    /// </remarks>
+    private async Task<ConnectedSystemExportResult> CreateAsync(
+        SqlExportPlan plan,
+        PendingExport pendingExport,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var columnValues = BuildParentColumnValues(plan, pendingExport, forCreate: true);
+        var suppliedAnchor = ResolveSuppliedAnchor(plan, columnValues);
+
+        var (externalId, anchor) = suppliedAnchor == null
+            ? await InsertReturningGeneratedKeyAsync(plan, pendingExport, columnValues, transaction, cancellationToken)
+            : await InsertWithSuppliedAnchorAsync(plan, columnValues, suppliedAnchor, transaction, cancellationToken);
+
+        await ApplyRelatedChangesAsync(plan, anchor, pendingExport, transaction, cancellationToken);
+
+        return ConnectedSystemExportResult.Succeeded(externalId);
+    }
+
+    /// <summary>
+    /// Inserts a row whose anchor JIM supplied, which is the case where the administrator selected an
+    /// external ID the Synchronisation Rules author a value for.
+    /// </summary>
+    private async Task<(string ExternalId, IReadOnlyList<SqlExportColumnValue> Anchor)> InsertWithSuppliedAnchorAsync(
+        SqlExportPlan plan,
+        IReadOnlyList<SqlExportColumnValue> columnValues,
+        IReadOnlyList<SqlExportColumnValue> suppliedAnchor,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var insert = new SqlInsertCommand
+        {
+            SchemaName = plan.SchemaName,
+            ObjectName = plan.TableName,
+            Columns = ToColumnParameters(columnValues)
+        };
+
+        await ExecuteAsync(_provider.BuildInsertCommandText(insert), columnValues, transaction, cancellationToken);
+
+        return (ComposeExternalId(suppliedAnchor), suppliedAnchor);
+    }
+
+    /// <summary>
+    /// Inserts a row whose anchor the database generates, and reads the generated value back as the new
+    /// object's external ID.
+    /// </summary>
+    private async Task<(string ExternalId, IReadOnlyList<SqlExportColumnValue> Anchor)> InsertReturningGeneratedKeyAsync(
+        SqlExportPlan plan,
+        PendingExport pendingExport,
+        IReadOnlyList<SqlExportColumnValue> columnValues,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (plan.AnchorColumns.Count != 1)
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{plan.Name}' has a {plan.AnchorColumns.Count}-column anchor, and this export supplied a value for none of them. " +
+                "A database generates one key for a new row, never a composite one, so an object type identified by several columns has to have every one of them flowed to it by a Synchronisation Rule.");
+
+        var anchorColumn = plan.AnchorColumns[0];
+
+        var insert = new SqlInsertCommand
+        {
+            SchemaName = plan.SchemaName,
+            ObjectName = plan.TableName,
+            Columns = ToColumnParameters(columnValues),
+            GeneratedKeyColumn = anchorColumn,
+            GeneratedKeyParameterName = GeneratedKeyParameterName
+        };
+
+        using var command = CreateCommand(_provider.BuildInsertReturningGeneratedKeyCommandText(insert), columnValues, transaction);
+
+        object? generatedKey;
+
+        if (_provider.GeneratedKeyRetrieval == SqlGeneratedKeyRetrieval.ResultSet)
+        {
+            generatedKey = await command.ExecuteScalarAsync(cancellationToken);
+        }
+        else
+        {
+            var keyParameter = _provider.CreateGeneratedKeyParameter(GeneratedKeyParameterName, ResolveGeneratedKeyType(plan, pendingExport))
+                ?? throw new NotSupportedException($"The {_provider.DisplayName} provider returns a generated key through a bound parameter but supplied none for it.");
+
+            command.Parameters.Add(keyParameter);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            generatedKey = keyParameter.Value;
+        }
+
+        if (generatedKey == null || generatedKey == DBNull.Value)
+            throw new InvalidOperationException(
+                $"Object Type '{plan.Name}' inserted a row, but the database returned no value for its anchor column '{anchorColumn}'. " +
+                "Nothing would identify the new object, so the write is being rolled back; check that the column is backed by an identity, a sequence or a default.");
+
+        return (SqlAnchorValue.ToTokenString(generatedKey), [new SqlExportColumnValue(anchorColumn, AnchorParameterName(0), generatedKey)]);
+    }
+
+    /// <summary>
+    /// Writes the changed columns of the parent row, then the related-table rows its multi-valued
+    /// attributes changed.
+    /// </summary>
+    private async Task<ConnectedSystemExportResult> UpdateAsync(
+        SqlExportPlan plan,
+        PendingExport pendingExport,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var anchor = ResolveAnchor(plan, pendingExport);
+        var columnValues = BuildParentColumnValues(plan, pendingExport, forCreate: false);
+
+        // An export that only changes a multi-valued attribute touches no column of the parent row, and
+        // an UPDATE with nothing to set is not a statement any dialect accepts.
+        if (columnValues.Count > 0)
+        {
+            var update = new SqlUpdateCommand
+            {
+                SchemaName = plan.SchemaName,
+                ObjectName = plan.TableName,
+                Columns = ToColumnParameters(columnValues),
+                KeyColumns = ToColumnParameters(anchor)
+            };
+
+            await ExecuteAsync(_provider.BuildUpdateCommandText(update), [.. columnValues, .. anchor], transaction, cancellationToken);
+        }
+
+        await ApplyRelatedChangesAsync(plan, anchor, pendingExport, transaction, cancellationToken);
+
+        return ConnectedSystemExportResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Removes the object's related-table rows, then the parent row itself.
+    /// </summary>
+    /// <remarks>
+    /// The children go first because a related row holding its parent's anchor cannot outlive it, and
+    /// JIM never relies on the schema declaring a cascade: a related table joined by an unconstrained
+    /// column (the ordinary identity case) declares none, and would be left holding orphaned rows.
+    /// </remarks>
+    private async Task<ConnectedSystemExportResult> DeleteAsync(
+        SqlExportPlan plan,
+        PendingExport pendingExport,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var anchor = ResolveAnchor(plan, pendingExport);
+
+        foreach (var relatedTable in plan.Configuration.RelatedTables)
+        {
+            var joinValues = BuildJoinValues(relatedTable, anchor);
+            var delete = new SqlDeleteCommand
+            {
+                SchemaName = relatedTable.SchemaName,
+                ObjectName = relatedTable.TableName,
+                KeyColumns = ToColumnParameters(joinValues)
+            };
+
+            await ExecuteAsync(_provider.BuildDeleteCommandText(delete), joinValues, transaction, cancellationToken);
+        }
+
+        var parentDelete = new SqlDeleteCommand
+        {
+            SchemaName = plan.SchemaName,
+            ObjectName = plan.TableName,
+            KeyColumns = ToColumnParameters(anchor)
+        };
+
+        await ExecuteAsync(_provider.BuildDeleteCommandText(parentDelete), anchor, transaction, cancellationToken);
+
+        return ConnectedSystemExportResult.Succeeded();
+    }
+
+    #endregion
+
+    #region Related tables
+
+    /// <summary>
+    /// Applies every multi-valued attribute change this Pending Export carries, inside the parent's own
+    /// transaction.
+    /// </summary>
+    private async Task ApplyRelatedChangesAsync(
+        SqlExportPlan plan,
+        IReadOnlyList<SqlExportColumnValue> anchor,
+        PendingExport pendingExport,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        foreach (var change in pendingExport.AttributeValueChanges.Where(change => plan.IsRelatedTableAttribute(change.Attribute.Name)))
+        {
+            var relatedTable = plan.RequireRelatedTable(change.Attribute.Name);
+            var statement = BuildRelatedTableStatement(relatedTable, BuildJoinValues(relatedTable, anchor), change);
+
+            await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// The statement one multi-valued attribute change becomes: a row removed, every row removed, or a
+    /// row added.
+    /// </summary>
+    /// <remarks>
+    /// Anything that is not a removal adds a row. A multi-valued attribute has no single value for an
+    /// update to replace, so a change type of Update against one is one more value rather than a
+    /// different one.
+    /// </remarks>
+    private SqlExportStatement BuildRelatedTableStatement(
+        SqlRelatedTableConfiguration relatedTable,
+        IReadOnlyList<SqlExportColumnValue> joinValues,
+        PendingExportAttributeValueChange change)
+    {
+        if (change.ChangeType == PendingExportAttributeChangeType.RemoveAll)
+        {
+            var clear = new SqlDeleteCommand
+            {
+                SchemaName = relatedTable.SchemaName,
+                ObjectName = relatedTable.TableName,
+                KeyColumns = ToColumnParameters(joinValues)
+            };
+
+            return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues);
+        }
+
+        var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0), ToDatabaseValue(change));
+        List<SqlExportColumnValue> boundValues = [.. joinValues, value];
+
+        if (change.ChangeType == PendingExportAttributeChangeType.Remove)
+        {
+            var remove = new SqlDeleteCommand
+            {
+                SchemaName = relatedTable.SchemaName,
+                ObjectName = relatedTable.TableName,
+                KeyColumns = ToColumnParameters(boundValues)
+            };
+
+            return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), boundValues);
+        }
+
+        var add = new SqlInsertCommand
+        {
+            SchemaName = relatedTable.SchemaName,
+            ObjectName = relatedTable.TableName,
+            Columns = ToColumnParameters(boundValues)
+        };
+
+        return new SqlExportStatement(_provider.BuildInsertCommandText(add), boundValues);
+    }
+
+    /// <summary>
+    /// The parent's anchor, expressed as the related table's own join columns. Every anchor column is
+    /// joined: correlating on fewer would write, or remove, another object's values without any error.
+    /// </summary>
+    private static List<SqlExportColumnValue> BuildJoinValues(SqlRelatedTableConfiguration relatedTable, IReadOnlyList<SqlExportColumnValue> anchor)
+    {
+        if (relatedTable.JoinColumns.Count != anchor.Count)
+            throw new SqlSchemaConfigurationException(
+                $"Attribute '{relatedTable.AttributeName}' joins its related table on {relatedTable.JoinColumns.Count} column(s), but the Object Type's anchor has {anchor.Count}. " +
+                "Joining on part of an anchor would act on another object's values, so the join must name one column per anchor column, in the same order.");
+
+        return [.. relatedTable.JoinColumns.Select((joinColumn, index) => anchor[index] with { ColumnName = joinColumn })];
+    }
+
+    #endregion
+
+    #region Anchors
+
+    /// <summary>
+    /// The anchor identifying the row an update or a delete acts on, taken from the Connected System
+    /// Object's external ID.
+    /// </summary>
+    private List<SqlExportColumnValue> ResolveAnchor(SqlExportPlan plan, PendingExport pendingExport)
+    {
+        var connectedSystemObject = pendingExport.ConnectedSystemObject
+            ?? throw new InvalidOperationException(
+                $"This Pending Export carries no Connected System Object, so JIM cannot tell which row of Object Type '{plan.Name}' it applies to.");
+
+        var externalId = connectedSystemObject.AttributeValues.FirstOrDefault(value => value.AttributeId == connectedSystemObject.ExternalIdAttributeId)
+            ?? throw new InvalidOperationException(
+                $"The Connected System Object has no external ID value, so JIM cannot tell which row of Object Type '{plan.Name}' to change.");
+
+        if (plan.AnchorColumns.Count == 1)
+            return [new SqlExportColumnValue(plan.AnchorColumns[0], AnchorParameterName(0), ToDatabaseValue(externalId))];
+
+        // A composite anchor reaches JIM as the single Text attribute discovery composes for it, because
+        // a Connected System Object is identified by one value. Its parts are separated exactly as the
+        // import that wrote them composed them.
+        var parts = (externalId.StringValue ?? string.Empty).Split(SqlConnectorSchema.ComposedAnchorSeparator);
+
+        if (parts.Length != plan.AnchorColumns.Count)
+            throw new InvalidOperationException(
+                $"The Connected System Object's external ID has {parts.Length} part(s), but Object Type '{plan.Name}' has a {plan.AnchorColumns.Count}-column anchor. " +
+                "Import the schema and run a Full Import so that external IDs are composed from the anchor the Object Types document now declares.");
+
+        return [.. plan.AnchorColumns.Select((anchorColumn, index) =>
+            new SqlExportColumnValue(anchorColumn, AnchorParameterName(index), ResolveAnchorPart(connectedSystemObject, anchorColumn, parts[index])))];
+    }
+
+    /// <summary>
+    /// One column of a composite anchor.
+    /// </summary>
+    /// <remarks>
+    /// The part columns carry typed values of their own wherever the administrator selected them for
+    /// synchronisation, and those are used in preference to anything derived from a string. Where they
+    /// were not selected, the composed external ID is all JIM holds, so the part is bound as the text it
+    /// is and the database converts it exactly as it would any literal compared against that column.
+    /// </remarks>
+    private object? ResolveAnchorPart(ConnectedSystemObject connectedSystemObject, string anchorColumn, string part)
+    {
+        var value = connectedSystemObject.AttributeValues
+            .FirstOrDefault(candidate => string.Equals(candidate.Attribute.Name, anchorColumn, StringComparison.OrdinalIgnoreCase));
+
+        return value == null ? part : ToDatabaseValue(value);
+    }
+
+    /// <summary>
+    /// The anchor a create supplied among its own attribute changes, or null where it supplied none and
+    /// the database is expected to generate one.
+    /// </summary>
+    /// <remarks>
+    /// All or nothing: a partly supplied composite anchor is neither JIM's to compose nor the database's
+    /// to generate, so it is treated as absent and reported as such rather than half-written.
+    /// </remarks>
+    private static List<SqlExportColumnValue>? ResolveSuppliedAnchor(SqlExportPlan plan, IReadOnlyList<SqlExportColumnValue> columnValues)
+    {
+        var supplied = plan.AnchorColumns
+            .Select(anchorColumn => columnValues.FirstOrDefault(columnValue => string.Equals(columnValue.ColumnName, anchorColumn, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        if (supplied.Any(columnValue => columnValue == null))
+            return null;
+
+        // Renamed onto the anchor parameters, because these values key the related-table rows that
+        // follow the insert rather than the insert's own column list.
+        return [.. supplied.Select((columnValue, index) => columnValue! with { ParameterName = AnchorParameterName(index) })];
+    }
+
+    /// <summary>
+    /// The new object's external ID, composed from its anchor exactly as an import of the same row would
+    /// compose it.
+    /// </summary>
+    private static string ComposeExternalId(IReadOnlyList<SqlExportColumnValue> anchor)
+    {
+        return string.Join(SqlConnectorSchema.ComposedAnchorSeparator,
+            anchor.Select(columnValue => columnValue.Value == null ? string.Empty : SqlAnchorValue.ToTokenString(columnValue.Value)));
+    }
+
+    /// <summary>
+    /// The type a database-generated key comes back as, for the dialects that bind an output parameter
+    /// to receive it.
+    /// </summary>
+    /// <remarks>
+    /// An export holds no schema for the Connected System beyond what the Pending Export carries, so the
+    /// Connected System Object's own type is consulted where it brought its attributes with it. Failing
+    /// that, an exact numeric is assumed: an identity column and a sequence both generate one, and they
+    /// are what a database-generated key is in practice.
+    /// </remarks>
+    private static AttributeDataType ResolveGeneratedKeyType(SqlExportPlan plan, PendingExport pendingExport)
+    {
+        var attribute = pendingExport.ConnectedSystemObject?.Type?.Attributes
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, plan.AnchorColumns[0], StringComparison.OrdinalIgnoreCase));
+
+        return attribute?.Type ?? AttributeDataType.Decimal;
+    }
+
+    #endregion
+
+    #region Values
+
+    /// <summary>
+    /// The columns of the parent row this Pending Export writes, with the values to write into them.
+    /// </summary>
+    /// <remarks>
+    /// A removal against a single-valued column writes NULL, which is what "this attribute no longer has
+    /// a value" means in a table. On a create there is nothing to remove, so those changes are dropped:
+    /// a column left out of an INSERT already holds whatever the schema says it should.
+    /// </remarks>
+    private List<SqlExportColumnValue> BuildParentColumnValues(SqlExportPlan plan, PendingExport pendingExport, bool forCreate)
+    {
+        var changes = pendingExport.AttributeValueChanges
+            .Where(change => !plan.IsRelatedTableAttribute(change.Attribute.Name))
+            .Where(change => !plan.IsComposedAnchorAttribute(change.Attribute.Name))
+            .Where(change => !forCreate || !IsRemoval(change))
+            .ToList();
+
+        return [.. changes.Select((change, index) => new SqlExportColumnValue(
+            change.Attribute.Name,
+            ValueParameterName(index),
+            IsRemoval(change) ? null : ToDatabaseValue(change)))];
+    }
+
+    private static bool IsRemoval(PendingExportAttributeValueChange change) =>
+        change.ChangeType is PendingExportAttributeChangeType.Remove or PendingExportAttributeChangeType.RemoveAll;
+
+    /// <summary>
+    /// Turns a Pending Export's attribute value into what the driver binds, inverting exactly what an
+    /// import of the same column does to the value coming the other way.
+    /// </summary>
+    private object? ToDatabaseValue(PendingExportAttributeValueChange change)
+    {
+        return change.Attribute.Type switch
+        {
+            AttributeDataType.Text => change.StringValue,
+            AttributeDataType.Number => change.IntValue,
+            AttributeDataType.LongNumber => change.LongValue,
+            AttributeDataType.Decimal => ToDecimal(change),
+            AttributeDataType.Boolean => change.BoolValue,
+            AttributeDataType.DateTime => change.DateTimeValue == null ? null : ToDatabaseDateTime(change.DateTimeValue.Value),
+            AttributeDataType.Guid => change.GuidValue == null ? null : _provider.ConvertFromGuid(change.GuidValue.Value),
+            AttributeDataType.Binary => change.ByteValue,
+            AttributeDataType.Reference => ToReferenceAnchor(change),
+            _ => throw new NotSupportedException($"Attribute '{change.Attribute.Name}' is a {change.Attribute.Type}, which cannot be written to a database column.")
+        };
+    }
+
+    /// <summary>
+    /// Turns a Connected System Object's stored value into what the driver binds. Exactly one of a
+    /// stored value's fields is populated, decided by the attribute's type when it was imported, so
+    /// reading them in turn recovers the value without needing the schema again.
+    /// </summary>
+    private object? ToDatabaseValue(ConnectedSystemObjectAttributeValue value)
+    {
+        return value switch
+        {
+            { StringValue: { } text } => text,
+            { IntValue: { } number } => number,
+            { LongValue: { } number } => number,
+            { DecimalValue: { } number } => number,
+            { GuidValue: { } identifier } => _provider.ConvertFromGuid(identifier),
+            { BoolValue: { } flag } => flag,
+            { DateTimeValue: { } dateTime } => ToDatabaseDateTime(dateTime),
+            _ => value.ByteValue
+        };
+    }
+
+    /// <summary>
+    /// The exact decimal to bind. Never routed through a floating point type, which drops digits, and
+    /// never parsed with the running culture, which would read "1,5" as fifteen.
+    /// </summary>
+    private static decimal? ToDecimal(PendingExportAttributeValueChange change)
+    {
+        if (change.DecimalValue is { } value)
+            return value;
+
+        if (string.IsNullOrEmpty(change.StringValue))
+            return null;
+
+        // A Decimal held in its canonical string form, which is the one form JIM renders one in.
+        if (DecimalAttributeValue.TryParse(change.StringValue, out var parsed))
+            return parsed;
+
+        throw new FormatException($"Attribute '{change.Attribute.Name}' holds '{change.StringValue}', which is not a decimal number this Connector can write to a numeric column.");
+    }
+
+    /// <summary>
+    /// Inverts the interpretation an import applies to a date and time column carrying no offset. JIM
+    /// holds every value in UTC; a zoneless column holds wall-clock time in the zone the administrator
+    /// declared for this Connected System, so that is what is written back into it.
+    /// </summary>
+    /// <remarks>
+    /// The value leaves with an unspecified kind, matching the column: a kind of UTC would have some
+    /// drivers convert it a second time. Where the Connected System is configured for UTC (the default),
+    /// this is the identity conversion and the value is written exactly as JIM holds it.
+    /// </remarks>
+    private DateTime ToDatabaseDateTime(DateTime value)
+    {
+        var utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+        return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeFromUtc(utc, _databaseTimeZone), DateTimeKind.Unspecified);
+    }
+
+    /// <summary>
+    /// The referenced object's anchor, which is what a reference column holds.
+    /// </summary>
+    /// <remarks>
+    /// JIM resolves a reference before an export runs, replacing the Metaverse Object it was staged
+    /// against with the referenced Connected System Object's own external ID and stamping
+    /// <see cref="PendingExportAttributeValueChange.ResolvedReferenceCsoId"/> with the object it
+    /// resolved to. A reference still carrying an unresolved value is one whose target does not exist in
+    /// this Connected System yet; that object fails and is retried, because writing anything else would
+    /// point the row at the wrong object and nothing downstream would ever notice.
+    /// </remarks>
+    private static string ToReferenceAnchor(PendingExportAttributeValueChange change)
+    {
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+            throw new InvalidOperationException(
+                $"Attribute '{change.Attribute.Name}' references an object that does not exist in this Connected System yet, so there is no anchor to write into it. " +
+                "The reference is resolved and this export retried once that object has been created.");
+
+        return change.StringValue
+            ?? throw new InvalidOperationException($"Attribute '{change.Attribute.Name}' is a Reference carrying no anchor value, so there is nothing to write into it.");
+    }
+
+    #endregion
+
+    #region Statements
+
+    /// <summary>
+    /// Runs one statement in the object's transaction, with every value bound.
+    /// </summary>
+    private async Task ExecuteAsync(
+        string commandText,
+        IReadOnlyList<SqlExportColumnValue> boundValues,
+        DbTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        using var command = CreateCommand(commandText, boundValues, transaction);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private DbCommand CreateCommand(string commandText, IReadOnlyList<SqlExportColumnValue> boundValues, DbTransaction transaction)
+    {
+        var command = _provider.CreateCommand(_connection, commandText);
+        command.Transaction = transaction;
+
+        foreach (var boundValue in boundValues)
+            command.Parameters.Add(_provider.CreateParameter(boundValue.ParameterName, boundValue.Value));
+
+        return command;
+    }
+
+    private static IReadOnlyList<SqlColumnParameter> ToColumnParameters(IReadOnlyList<SqlExportColumnValue> boundValues) =>
+        [.. boundValues.Select(boundValue => new SqlColumnParameter(boundValue.ColumnName, boundValue.ParameterName))];
+
+    private static string AnchorParameterName(int index) => AnchorParameterPrefix + index.ToString(CultureInfo.InvariantCulture);
+
+    private static string ValueParameterName(int index) => ValueParameterPrefix + index.ToString(CultureInfo.InvariantCulture);
+
+    #endregion
+
+    #region Planning
+
+    /// <summary>
+    /// Works out where an object of this Pending Export's type is written, refusing configuration that
+    /// could not be written to before anything is attempted.
+    /// </summary>
+    private SqlExportPlan ResolvePlan(PendingExport pendingExport)
+    {
+        var objectTypeName = ResolveObjectTypeName(pendingExport)
+            ?? throw new SqlSchemaConfigurationException(
+                "This Pending Export names no Connected System Object Type, so JIM cannot tell which table to write it to.");
+
+        if (_plans.TryGetValue(objectTypeName, out var plan))
+            return plan;
+
+        var configuration = _configuration.ObjectTypes.FirstOrDefault(objectType => string.Equals(objectType.Name, objectTypeName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new SqlSchemaConfigurationException(
+                $"Object Type '{objectTypeName}' is not one the {SqlConnectorConstants.SettingObjectTypes} document declares, so JIM has nowhere to write it. " +
+                "Add it to the document, or stop the Synchronisation Rules provisioning objects of that type into this Connected System.");
+
+        if (configuration.IsCustomSelect)
+            throw new SqlSchemaConfigurationException(
+                $"Object Type '{configuration.Name}' reads its objects from a SELECT statement, which is not something JIM can write to. " +
+                "Point the Object Type at a table to export to it.");
+
+        plan = new SqlExportPlan(configuration);
+        _plans[objectTypeName] = plan;
+        return plan;
+    }
+
+    /// <summary>
+    /// What kind of object this Pending Export is for. The Connected System Object states it, including
+    /// for a create, where JIM stages a provisioning object before the row exists; the attribute changes
+    /// are the fallback for a Pending Export loaded without it.
+    /// </summary>
+    private static string? ResolveObjectTypeName(PendingExport pendingExport)
+    {
+        return pendingExport.ConnectedSystemObject?.Type?.Name
+            ?? pendingExport.AttributeValueChanges.FirstOrDefault()?.Attribute?.ConnectedSystemObjectType?.Name;
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// A column an export writes or keys on, the parameter carrying its value, and the value itself. The
+/// three travel together so a generated statement can never drift out of step with what is bound to it.
+/// </summary>
+internal sealed record SqlExportColumnValue(string ColumnName, string ParameterName, object? Value);
+
+/// <summary>
+/// One statement an export runs, with everything bound to it.
+/// </summary>
+internal sealed record SqlExportStatement(string CommandText, IReadOnlyList<SqlExportColumnValue> BoundValues);
+
+/// <summary>
+/// Where one Connected System Object Type's objects are written, and what identifies them. Resolved once
+/// per object type per batch, because every Pending Export of the same type answers to the same one.
+/// </summary>
+internal sealed class SqlExportPlan
+{
+    private readonly Dictionary<string, SqlRelatedTableConfiguration> _relatedTables;
+
+    internal SqlExportPlan(SqlObjectTypeConfiguration configuration)
+    {
+        Configuration = configuration;
+        _relatedTables = configuration.RelatedTables.ToDictionary(relatedTable => relatedTable.AttributeName, StringComparer.OrdinalIgnoreCase);
+
+        ComposedAnchorName = configuration.AnchorColumns.Count > 1
+            ? SqlConnectorSchema.ComposedAnchorAttributeName(configuration.AnchorColumns)
+            : null;
+    }
+
+    internal SqlObjectTypeConfiguration Configuration { get; }
+
+    internal string Name => Configuration.Name;
+
+    internal string? SchemaName => Configuration.SchemaName;
+
+    /// <summary>
+    /// The table objects of this type are written to. Never null: an object type reading from a
+    /// statement is refused before a plan is built for it.
+    /// </summary>
+    internal string TableName => Configuration.TableName!;
+
+    internal IReadOnlyList<string> AnchorColumns => Configuration.AnchorColumns;
+
+    /// <summary>
+    /// The attribute JIM composes for a multi-column anchor, or null where the anchor is one column.
+    /// It is not a column of the table, so nothing is ever written to it.
+    /// </summary>
+    internal string? ComposedAnchorName { get; }
+
+    internal bool IsRelatedTableAttribute(string attributeName) => _relatedTables.ContainsKey(attributeName);
+
+    internal SqlRelatedTableConfiguration RequireRelatedTable(string attributeName) => _relatedTables[attributeName];
+
+    internal bool IsComposedAnchorAttribute(string attributeName) =>
+        ComposedAnchorName != null && string.Equals(attributeName, ComposedAnchorName, StringComparison.OrdinalIgnoreCase);
+}
