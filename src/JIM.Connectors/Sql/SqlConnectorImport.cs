@@ -64,6 +64,13 @@ internal sealed class SqlConnectorImport
     internal const string WatermarkParameterName = "jimWatermark";
 
     /// <summary>
+    /// The bind variables carrying each related table's own watermark, suffixed by its position in the
+    /// Object Type's related tables. Named distinctly from <see cref="WatermarkParameterName"/> rather
+    /// than suffixing it, so neither name is a prefix of the other.
+    /// </summary>
+    internal const string RelatedWatermarkParameterPrefix = "jimRelatedWatermark";
+
+    /// <summary>
     /// How many bind variables one related-table gather may carry. Microsoft SQL Server caps a statement
     /// at 2,100 parameters, so a large page size against a composite anchor would otherwise fail at the
     /// server; a page beyond this is gathered in more than one query rather than one per row.
@@ -259,7 +266,7 @@ internal sealed class SqlConnectorImport
             var watermark = previous.ObjectTypes.GetValueOrDefault(plan.Name);
             var deltaPage = _deltaMode == SqlDeltaImportMode.ChangeLogTable
                 ? await ReadChangeLogPageAsync(plan, page, watermark)
-                : await ReadWatermarkColumnPageAsync(plan, page, watermark);
+                : await ReadWatermarkColumnPageAsync(plan, page, watermark, previous.RelatedTablesFor(plan.Name));
 
             result.ImportObjects.AddRange(deltaPage.ImportObjects);
             objectsRead += deltaPage.ImportObjects.Count;
@@ -554,19 +561,44 @@ internal sealed class SqlConnectorImport
     #region Delta import: watermark column
 
     /// <summary>
-    /// Reads a page of the rows whose own last-modified or version column has moved beyond the watermark.
+    /// Reads a page of the rows that have changed: those whose own last-modified or version column has
+    /// moved beyond the watermark, and those any of whose related tables holds a row for that has.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <b>A related table is a source of changes to the parent object.</b> A group membership added or
+    /// revoked, or a phone number replaced, never touches the object's own row, so its watermark does not
+    /// move and reading the primary source alone would miss the change entirely. Each related table
+    /// carries a watermark column of its own, and a parent is selected on either its own evidence or any
+    /// of theirs; the object is then imported whole, exactly as a Full Import would deliver it.
+    /// </para>
+    /// <para>
     /// <b>This mode cannot observe a deletion, and nothing here is going to change that.</b> A row that
     /// has been deleted has no column left to move, so its absence never reaches the predicate; the same
     /// goes for a row that has fallen out of a view. Deletions need the change-log table, or a periodic
     /// Full Import. Every change is reported as an update, because a last-modified column cannot tell a
     /// create from one; JIM creates the Connected System Object where it holds none.
+    /// </para>
+    /// <para>
+    /// <b>The same limitation applies one level down, and the documentation must say so.</b> A row
+    /// removed from a related table is a change to the parent object and is detected wherever the
+    /// customer's table records the removal: a soft-delete flag, a tombstone row, or an update to the
+    /// row's own watermark. Where a related table hard-deletes its rows instead, there is nothing left
+    /// for any watermark to compare, so a revoked membership is invisible until the next Full Import.
+    /// </para>
     /// </remarks>
-    private async Task<SqlDeltaPage> ReadWatermarkColumnPageAsync(SqlImportPlan plan, SqlDeltaPagePosition page, SqlDeltaValue? watermark)
+    private async Task<SqlDeltaPage> ReadWatermarkColumnPageAsync(
+        SqlImportPlan plan,
+        SqlDeltaPagePosition page,
+        SqlDeltaValue? watermark,
+        IReadOnlyDictionary<string, SqlDeltaValue> relatedWatermarks)
     {
         var watermarkColumn = RequireWatermarkColumn(plan);
         var keysetColumns = plan.AnchorColumns.Select(anchorColumn => new SqlDeltaKeysetColumn(anchorColumn.Name, anchorColumn.Type)).ToList();
+
+        // With no watermark at all this object type is read from the beginning, which already includes
+        // everything a related table could have to say about it.
+        var relatedChanges = watermark == null ? [] : BuildRelatedChanges(plan, relatedWatermarks);
 
         var request = new SqlKeysetPageRequest
         {
@@ -578,10 +610,11 @@ internal sealed class SqlConnectorImport
             PageSizeParameterName = PageSizeParameterName,
             LastAnchorParameterNames = page.IsFirstPage ? [] : [.. Enumerable.Range(0, keysetColumns.Count).Select(AnchorParameterName)],
             ChangeColumn = watermark == null ? null : watermarkColumn,
-            ChangeParameterName = watermark == null ? null : WatermarkParameterName
+            ChangeParameterName = watermark == null ? null : WatermarkParameterName,
+            RelatedChangeSources = [.. relatedChanges.Select(relatedChange => relatedChange.Source)]
         };
 
-        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, plan.SelectColumns);
+        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, plan.SelectColumns, relatedChanges);
 
         var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
         await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
@@ -599,9 +632,13 @@ internal sealed class SqlConnectorImport
     #region Delta import: watermarks, counting and paging mechanics
 
     /// <summary>
-    /// Asks each object type's change source where it currently stands, which is what the next Delta
-    /// Import will read from.
+    /// Asks each object type's change source, and in Watermark Column mode each of its related tables,
+    /// where it currently stands, which is what the next Delta Import will read from.
     /// </summary>
+    /// <remarks>
+    /// One watermark per source, never one across them: see <see cref="SqlConnectorWatermark"/> for why
+    /// a single maximum would permanently skip whatever the slower-moving sources had recorded below it.
+    /// </remarks>
     private async Task<SqlConnectorWatermark> CaptureWatermarkAsync(IReadOnlyList<SqlImportPlan> plans)
     {
         var watermark = new SqlConnectorWatermark { Mode = _deltaMode };
@@ -610,18 +647,64 @@ internal sealed class SqlConnectorImport
         {
             var (source, changeColumn) = ResolveChangeSource(plan);
 
-            using var command = _provider.CreateCommand(_connection, $"SELECT MAX({_provider.QuoteIdentifier(changeColumn)}) FROM {source}");
-            var value = await command.ExecuteScalarAsync(_cancellationToken);
-
             // No highest value at all is what an empty change log, or a source nothing has been written
             // to, looks like. Recording nothing for it means the next run reads from the beginning,
             // which is the only answer that cannot miss a change.
-            var described = SqlConnectorWatermark.Describe(value);
+            var described = SqlConnectorWatermark.Describe(await ReadHighestValueAsync(source, changeColumn));
             if (described != null)
                 watermark.ObjectTypes[plan.Name] = described;
+
+            // Only Watermark Column mode reads a related table for changes; a change log states what
+            // happened to the object however it happened.
+            if (_deltaMode != SqlDeltaImportMode.WatermarkColumn)
+                continue;
+
+            var relatedWatermarks = await CaptureRelatedWatermarksAsync(plan);
+            if (relatedWatermarks.Count > 0)
+                watermark.RelatedTables[plan.Name] = relatedWatermarks;
         }
 
         return watermark;
+    }
+
+    /// <summary>
+    /// Asks each of an object type's related tables where it currently stands.
+    /// </summary>
+    /// <remarks>
+    /// A related table with no watermark column records nothing and is not refused here: this also runs
+    /// for a Full Import, which is both how a baseline is established and how JIM recovers from an
+    /// unusable watermark, and refusing it would take away the remedy. The next Delta Import refuses the
+    /// same configuration loudly, so nothing is hidden by leaving it alone now.
+    /// </remarks>
+    private async Task<Dictionary<string, SqlDeltaValue>> CaptureRelatedWatermarksAsync(SqlImportPlan plan)
+    {
+        var relatedWatermarks = new Dictionary<string, SqlDeltaValue>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var relatedTable in plan.RelatedTables)
+        {
+            var configuration = relatedTable.Configuration;
+            if (configuration.WatermarkColumn == null)
+                continue;
+
+            var source = _provider.QualifyObjectName(configuration.SchemaName, configuration.TableName);
+            var described = SqlConnectorWatermark.Describe(await ReadHighestValueAsync(source, configuration.WatermarkColumn));
+
+            if (described != null)
+                relatedWatermarks[configuration.AttributeName] = described;
+        }
+
+        return relatedWatermarks;
+    }
+
+    /// <summary>
+    /// The highest value a column currently holds, which is where a watermark comes from. No dialect
+    /// divergence to hide behind the provider seam: an aggregate over a source is the same statement in
+    /// both, built from the same quoting the seam already provides.
+    /// </summary>
+    private async Task<object?> ReadHighestValueAsync(string source, string column)
+    {
+        using var command = _provider.CreateCommand(_connection, $"SELECT MAX({_provider.QuoteIdentifier(column)}) FROM {source}");
+        return await command.ExecuteScalarAsync(_cancellationToken);
     }
 
     /// <summary>
@@ -638,25 +721,36 @@ internal sealed class SqlConnectorImport
     {
         long expected = 0;
         foreach (var plan in plans)
-            expected += await CountChangesAsync(plan, previous.ObjectTypes.GetValueOrDefault(plan.Name));
+            expected += await CountChangesAsync(plan, previous.ObjectTypes.GetValueOrDefault(plan.Name), previous.RelatedTablesFor(plan.Name));
 
         _logger.Debug("SqlConnectorImport: expecting up to {ExpectedObjectCount} changed object(s) across {ObjectTypeCount} Object Type(s)", expected, plans.Count);
 
         await _progress.ReportExpectedObjectCountAsync(expected > int.MaxValue ? int.MaxValue : (int)expected);
     }
 
-    private async Task<long> CountChangesAsync(SqlImportPlan plan, SqlDeltaValue? watermark)
+    /// <summary>
+    /// How many rows this object type's pages are about to return, counted against exactly the predicate
+    /// those pages read with, so that the count and the read can never disagree about what a change is.
+    /// </summary>
+    private async Task<long> CountChangesAsync(SqlImportPlan plan, SqlDeltaValue? watermark, IReadOnlyDictionary<string, SqlDeltaValue> relatedWatermarks)
     {
-        var (source, changeColumn) = ResolveChangeSource(plan);
+        var relatedChanges = watermark == null || _deltaMode != SqlDeltaImportMode.WatermarkColumn
+            ? []
+            : BuildRelatedChanges(plan, relatedWatermarks);
+
+        var (source, changeColumn) = ResolveChangeSource(plan, relatedChanges.Count > 0);
 
         var commandText = watermark == null
             ? $"SELECT COUNT(*) FROM {source}"
-            : $"SELECT COUNT(*) FROM {source} WHERE {_provider.QuoteIdentifier(changeColumn)} > {_provider.GetParameterPlaceholder(WatermarkParameterName)}";
+            : $"SELECT COUNT(*) FROM {source} WHERE {BuildChangedRowsPredicate(plan, changeColumn, relatedChanges)}";
 
         using var command = _provider.CreateCommand(_connection, commandText);
 
         if (watermark != null)
+        {
             command.Parameters.Add(_provider.CreateParameter(WatermarkParameterName, BindDeltaValue(plan, watermark, "watermark")));
+            BindRelatedWatermarks(command, plan, relatedChanges);
+        }
 
         var count = await command.ExecuteScalarAsync(_cancellationToken);
 
@@ -667,14 +761,78 @@ internal sealed class SqlConnectorImport
     /// What this object type's changes are read from, and the column that orders them, for whichever
     /// mode is configured.
     /// </summary>
-    private (string Source, string ChangeColumn) ResolveChangeSource(SqlImportPlan plan)
+    /// <param name="plan">The object type being read.</param>
+    /// <param name="aliased">Whether the source has to be named, which it does exactly when a correlated subquery refers back to its columns.</param>
+    private (string Source, string ChangeColumn) ResolveChangeSource(SqlImportPlan plan, bool aliased = false)
     {
         if (_deltaMode != SqlDeltaImportMode.ChangeLogTable)
-            return (BuildFromClause(plan), RequireWatermarkColumn(plan));
+            return (BuildFromClause(plan, aliased), RequireWatermarkColumn(plan));
 
         var changeLog = RequireChangeLog(plan);
         return (_provider.QualifyObjectName(changeLog.SchemaName, changeLog.TableName), changeLog.SequenceColumn);
     }
+
+    /// <summary>
+    /// The related tables this object type's changes may also come from, each paired with the watermark
+    /// JIM holds for it.
+    /// </summary>
+    /// <exception cref="SqlSchemaConfigurationException">A related table has no watermark column for this mode to read. Refused when the Connected System is saved; this is the backstop for configuration changed since.</exception>
+    private static List<SqlRelatedChange> BuildRelatedChanges(SqlImportPlan plan, IReadOnlyDictionary<string, SqlDeltaValue> relatedWatermarks)
+    {
+        return [.. plan.RelatedTables.Select((relatedTable, index) =>
+        {
+            var configuration = relatedTable.Configuration;
+            var watermark = relatedWatermarks.GetValueOrDefault(configuration.AttributeName);
+
+            var source = new SqlRelatedChangeSource
+            {
+                SchemaName = configuration.SchemaName,
+                TableName = configuration.TableName,
+                JoinColumns = configuration.JoinColumns,
+                WatermarkColumn = RequireRelatedWatermarkColumn(plan, configuration),
+
+                // No watermark for this related table yet (it was added to the document after the last
+                // run, or JIM last ran before it watched related tables at all) means every parent it
+                // holds a row for is read once. One expensive run beats a missed change.
+                WatermarkParameterName = watermark == null ? null : RelatedWatermarkParameterName(index)
+            };
+
+            return new SqlRelatedChange(source, watermark);
+        })];
+    }
+
+    /// <summary>
+    /// The predicate selecting the rows this object type considers changed, rendered by the dialect so
+    /// that no SQL of any dialect's is written here.
+    /// </summary>
+    private string BuildChangedRowsPredicate(SqlImportPlan plan, string changeColumn, IReadOnlyList<SqlRelatedChange> relatedChanges) =>
+        _provider.BuildChangedRowsPredicate(new SqlChangeFilter
+        {
+            ChangeColumn = changeColumn,
+            ChangeParameterName = WatermarkParameterName,
+            AnchorColumns = [.. plan.AnchorColumns.Select(anchorColumn => anchorColumn.Name)],
+            RelatedSources = [.. relatedChanges.Select(relatedChange => relatedChange.Source)]
+        });
+
+    /// <summary>
+    /// Binds each related table's own watermark, skipping the ones JIM holds none for: those have no
+    /// parameter in the statement because their predicate is existence alone.
+    /// </summary>
+    private void BindRelatedWatermarks(DbCommand command, SqlImportPlan plan, IReadOnlyList<SqlRelatedChange> relatedChanges)
+    {
+        foreach (var relatedChange in relatedChanges.Where(relatedChange => relatedChange.Source.WatermarkParameterName != null))
+            command.Parameters.Add(_provider.CreateParameter(
+                relatedChange.Source.WatermarkParameterName!,
+                BindDeltaValue(plan, relatedChange.Watermark!, $"watermark for related table '{relatedChange.Source.TableName}'")));
+    }
+
+    private static string RelatedWatermarkParameterName(int index) => $"{RelatedWatermarkParameterPrefix}{index}";
+
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document has nothing for the configured mode to read on this related table.</exception>
+    private static string RequireRelatedWatermarkColumn(SqlImportPlan plan, SqlRelatedTableConfiguration relatedTable) =>
+        relatedTable.WatermarkColumn ?? throw new SqlSchemaConfigurationException(
+            $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{plan.Name}' has related table attribute '{relatedTable.AttributeName}' with no 'watermarkColumn' in {SqlConnectorConstants.SettingObjectTypes}. " +
+            $"A row added to or removed from '{relatedTable.TableName}' changes the object without touching its own row, so without one that change could never be detected.");
 
     /// <exception cref="SqlSchemaConfigurationException">The Object Types document has nothing for the configured mode to read. Refused when the Connected System is saved; this is the backstop for configuration changed since.</exception>
     private static SqlChangeLogConfiguration RequireChangeLog(SqlImportPlan plan) =>
@@ -695,13 +853,17 @@ internal sealed class SqlConnectorImport
         SqlKeysetPageRequest request,
         SqlDeltaPagePosition page,
         SqlDeltaValue? watermark,
-        IReadOnlyList<string> columns)
+        IReadOnlyList<string> columns,
+        IReadOnlyList<SqlRelatedChange>? relatedChanges = null)
     {
         using var command = _provider.CreateCommand(_connection, _provider.BuildKeysetPageCommandText(request));
         command.Parameters.Add(_provider.CreateParameter(PageSizeParameterName, _runProfile.PageSize));
 
         if (request.HasChangeFilter)
+        {
             command.Parameters.Add(_provider.CreateParameter(WatermarkParameterName, BindDeltaValue(plan, watermark!, "watermark")));
+            BindRelatedWatermarks(command, plan, relatedChanges ?? []);
+        }
 
         for (var index = 0; index < page.Position.Count; index++)
             command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindDeltaValue(plan, page.Position[index], "pagination token")));
@@ -904,11 +1066,19 @@ internal sealed class SqlConnectorImport
         return count == null || count == DBNull.Value ? 0 : Convert.ToInt64(count, CultureInfo.InvariantCulture);
     }
 
-    private string BuildFromClause(SqlImportPlan plan)
+    /// <summary>
+    /// What an object type's rows are read from. A statement standing in for a table is always named,
+    /// because a derived table has to be; a table or view is named only where a correlated subquery
+    /// refers back to its columns, so every statement that needed no alias before still generates none.
+    /// </summary>
+    private string BuildFromClause(SqlImportPlan plan, bool aliased = false)
     {
-        return plan.Configuration.IsCustomSelect
-            ? $"({plan.Configuration.SelectStatement}) {_provider.QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}"
-            : _provider.QualifyObjectName(plan.Configuration.SchemaName, plan.Configuration.TableName!);
+        if (plan.Configuration.IsCustomSelect)
+            return $"({plan.Configuration.SelectStatement}) {_provider.QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}";
+
+        var qualifiedObjectName = _provider.QualifyObjectName(plan.Configuration.SchemaName, plan.Configuration.TableName!);
+
+        return aliased ? $"{qualifiedObjectName} {_provider.QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}" : qualifiedObjectName;
     }
 
     #endregion
@@ -1470,6 +1640,12 @@ internal sealed record SqlDeltaKeysetColumn(string Name, AttributeDataType? Type
 /// One change a change log records, reduced to what JIM acts on.
 /// </summary>
 internal sealed record SqlChangeLogEntry(string AnchorKey, object?[] AnchorValues, ObjectChangeType ChangeType, string? UnmappedChangeType);
+
+/// <summary>
+/// One related table a Watermark Column page watches for changes to its parent object, and the
+/// watermark it is compared against (null where JIM holds none for it yet).
+/// </summary>
+internal sealed record SqlRelatedChange(SqlRelatedChangeSource Source, SqlDeltaValue? Watermark);
 
 /// <summary>
 /// What one page of a Delta Import produced, and where the next one resumes from (null where this page

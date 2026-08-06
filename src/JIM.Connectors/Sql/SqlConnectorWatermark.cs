@@ -57,6 +57,14 @@ internal sealed record SqlDeltaValue(string Value, AttributeDataType Type);
 /// System's declared time zone the way an imported date and time is. Interpreting it would move the
 /// boundary by the offset and re-read, or skip, whatever fell inside it.
 /// </para>
+/// <para>
+/// <b>Every source keeps its own watermark, never a single maximum across them.</b> In Watermark Column
+/// mode an object type's related tables are separate sources with separate columns: a version number
+/// here, a last-modified timestamp there, each moved by its own writers. One value taken across all of
+/// them would be the highest any of them had reached, and using it as the others' boundary would skip
+/// everything that had happened to them below it, permanently. Per-source watermarks cost a few bytes of
+/// persisted state and are the only arrangement that cannot lose a change.
+/// </para>
 /// </remarks>
 internal sealed record SqlConnectorWatermark
 {
@@ -80,6 +88,25 @@ internal sealed record SqlConnectorWatermark
     /// the beginning, which is the only answer that cannot miss one.
     /// </summary>
     public Dictionary<string, SqlDeltaValue> ObjectTypes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The watermark per related table of each configured Object Type, keyed by the Object Type's name
+    /// and then by the attribute the related table supplies. Only Watermark Column mode records these:
+    /// a change log states what happened to the object however it happened, so its related tables have
+    /// nothing of their own to remember.
+    /// </summary>
+    /// <remarks>
+    /// A related table absent from here has no watermark yet, which is what a Connected System imported
+    /// before this Connector watched related tables looks like, and what a newly added related table
+    /// looks like. It reads from the beginning once, which is the only answer that cannot miss a change.
+    /// </remarks>
+    public Dictionary<string, Dictionary<string, SqlDeltaValue>> RelatedTables { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What JIM holds for one Object Type's related tables, empty where it holds nothing for any of them.
+    /// </summary>
+    internal IReadOnlyDictionary<string, SqlDeltaValue> RelatedTablesFor(string objectTypeName) =>
+        RelatedTables.TryGetValue(objectTypeName, out var relatedTables) ? relatedTables : new Dictionary<string, SqlDeltaValue>(StringComparer.OrdinalIgnoreCase);
 
     internal string Serialise() => JsonSerializer.Serialize(this, SerialisationOptions);
 
@@ -109,9 +136,16 @@ internal sealed record SqlConnectorWatermark
         if (watermark == null || watermark.Mode == SqlDeltaImportMode.NotSet)
             return null;
 
-        // Object type names are matched the way they are everywhere else in this Connector, which the
-        // deserialiser's own ordinal dictionary would not do.
-        return watermark with { ObjectTypes = new Dictionary<string, SqlDeltaValue>(watermark.ObjectTypes, StringComparer.OrdinalIgnoreCase) };
+        // Object type and attribute names are matched the way they are everywhere else in this Connector,
+        // which the deserialiser's own ordinal dictionaries would not do.
+        return watermark with
+        {
+            ObjectTypes = new Dictionary<string, SqlDeltaValue>(watermark.ObjectTypes, StringComparer.OrdinalIgnoreCase),
+            RelatedTables = watermark.RelatedTables.ToDictionary(
+                objectType => objectType.Key,
+                objectType => new Dictionary<string, SqlDeltaValue>(objectType.Value, StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase)
+        };
     }
 
     /// <summary>
