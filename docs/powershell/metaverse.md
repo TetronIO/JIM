@@ -910,6 +910,31 @@ Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Password <
 
 Set-JIMMetaverseObjectPassword -Id <guid> -AllAccounts -Password <securestring>
     [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+
+Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Generate
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+
+Set-JIMMetaverseObjectPassword -Id <guid> -AllAccounts -Generate
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+```
+
+!!! tip "Use `-Generate` rather than choosing a password yourself"
+    One password has to satisfy the strictest of several systems at once, and their password policies are not
+    something you can see in order to reason about them. JIM can: `-Generate` has it reconcile the discovered
+    policies of every selected Connected System (the longest minimum length any of them demands, and only the
+    character categories all of them count) and produce a password that satisfies all of them.
+
+    Where no single password can satisfy them all, JIM refuses outright rather than handing back one that would
+    be accepted on the first account and refused on the second, after the first has already changed. A system
+    JIM could read no policy from is reported as a warning, because the password is about to be set there and
+    JIM cannot promise it will be accepted.
+
+    The generated password is returned on every outcome's `GeneratedPassword` property as a SecureString.
+    **That is the only chance to capture it**; JIM stores nothing and cannot give it to you again.
+
+```powershell title="Set one compliant password across every account"
+$results = Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -AllAccounts -Generate -Force
+ConvertFrom-SecureString -SecureString $results[0].GeneratedPassword -AsPlainText
 ```
 
 ### Parameters

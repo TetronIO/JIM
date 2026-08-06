@@ -86,6 +86,36 @@ and Destructive changes count, so a rename never registers here.
 | `ChangeCount` | `int` | How many qualifying changes there are |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
 
+### Get-JIMConnectedSystemPasswordPolicy
+
+Reports what the Connected System itself said it will accept, read during a previous connection. Nothing here
+opens a new connection or changes anything.
+
+```powershell
+Get-JIMConnectedSystemPasswordPolicy -Id 3
+Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPasswordPolicy
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `discovered` | `datetime?` | When JIM last read this from the system |
+| `minimumLength` | `int?` | The shortest password the system will accept |
+| `complexityRequired` | `bool?` | Whether the system enforces a complexity rule |
+| `requiredCharacterClassCount` | `int?` | How many character categories a password must draw on |
+| `recognisedCharacterClasses` | `string[]` | The categories this system counts towards that rule |
+| `passwordHistoryLength` | `int?` | How many previous passwords it remembers and refuses |
+| `maximumPasswordAgeDays` | `int?` | How long a password may live |
+| `minimumPasswordAgeDays` | `int?` | How soon it may be changed again |
+| `fineGrainedPolicySignal` | `string` | `Absent`, `Present` or `CouldNotDetermine` |
+| `hasAnyDiscoveredConstraint` | `bool` | Whether JIM discovered anything at all |
+
+!!! warning "A null means JIM could not read that rule, not that no such rule exists"
+    A directory withholds what a caller may not see by omitting it rather than refusing, so a null minimum
+    length does not mean any length is acceptable. Check `hasAnyDiscoveredConstraint` before treating the
+    figures as a description of what the system will accept. Where `fineGrainedPolicySignal` is `Present` or
+    `CouldNotDetermine`, the figures are a floor rather than a guarantee, because some accounts may be governed
+    by a stricter policy.
+
 #### Initial password attention (ById only)
 
 How many accounts in the Connected System are waiting on a person over their initial password.
@@ -527,10 +557,12 @@ Get-JIMConnectorDefinition |
 
 Retrieves the object types and their attributes for a Connected System.
 
+Object Types the Connected System classified as internal (a directory's own configuration and operational classes) are omitted by default, matching what the portal's Schema tab shows. Pass `-IncludeInternal` to return them as well. An Object Type that is already selected is always returned, whatever its classification.
+
 ### Syntax
 
 ```powershell
-Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
+Get-JIMConnectedSystemObjectType -ConnectedSystemId <int> [-IncludeInternal]
 ```
 
 ### Parameters
@@ -538,15 +570,22 @@ Get-JIMConnectedSystemObjectType -ConnectedSystemId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Alias: `Id`. Accepts pipeline input by property name. |
+| `IncludeInternal` | `switch` | No | Off | Also return Object Types the Connected System classified as internal. |
 
 ### Output
 
 Object type definitions with their attributes, selection state, and external ID configuration.
 
+Each Object Type also carries `Tags`, the classification key/value pairs the Connected System reported (for example `class-kind` = `structural`, `visibility` = `internal`), and `IsInternal`, derived from them.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"
 Get-JIMConnectedSystemObjectType -ConnectedSystemId 3
+```
+
+```powershell title="Include the directory's own internal object types"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 3 -IncludeInternal
 ```
 
 ```powershell title="Pipeline from Get-JIMConnectedSystem"
@@ -1308,6 +1347,17 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 - A Connected System that cannot honour the requested expiry behaviour applies what it can and reports the difference in `ExpiryBehaviourWarning`; the password is still set.
 - A rejected password returns an error carrying the system's own reason. A Connected System that could not be reached is reported distinctly, because nothing was established about the password itself and the same request is worth repeating.
 - Routine initial passwords belong on the Synchronisation Rule that provisions the account; see `Set-JIMSyncRuleInitialPassword`.
+- Pass `-Generate` instead of `-Password` to have JIM produce a password satisfying the policy it discovered on
+  the Connected System. Prefer this to inventing one in your own script: JIM knows what the target demands, and
+  a hand-rolled generator rediscovers the passphrase trap, where three words offer two character categories
+  against a directory that wants three. The generated password comes back on the result's `password` property
+  as a SecureString, whether or not `-PassThru` is given, and **that is the only chance to capture it**; JIM
+  stores nothing and cannot return it again.
+
+```powershell title="Set a compliant password without choosing one"
+$result = Set-JIMConnectedSystemObjectPassword -ConnectedSystemId 3 -Id $csoId -Generate -EnableAccount -Force
+ConvertFrom-SecureString -SecureString $result.password -AsPlainText
+```
 
 ---
 

@@ -215,6 +215,18 @@ public enum ConnectedSystemExportErrorType
     InvalidGeneratedExternalId,
 
     /// <summary>
+    /// The export would have written the object outside the scope the administrator has selected for the Connected
+    /// System, so it was refused.
+    /// </summary>
+    /// <remarks>
+    /// Writing there succeeds at the directory and then breaks synchronisation: JIM cannot import the object back,
+    /// so the export is never confirmed, the next Full Import treats the object as deleted, and the following
+    /// synchronisation disconnects it. Refusing the write leaves the object where JIM can still see it and puts the
+    /// configuration error in front of an administrator instead.
+    /// </remarks>
+    OutsideManagedScope,
+
+    /// <summary>
     /// A constraint violation occurred when managing a placeholder member on a group.
     /// This typically means the directory has referential integrity enabled and the placeholder DN
     /// does not reference an existing entry. The administrator should update the 'Group Placeholder

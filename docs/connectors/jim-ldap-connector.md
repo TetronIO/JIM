@@ -44,6 +44,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 - **Automatic RFC 4512 schema parsing**<br /> Object classes and attributes are discovered directly from the directory's subschema subentry.
 - **Structural and auxiliary class support**<br /> Optionally include auxiliary classes in schema discovery.
+- **Internal class classification**<br /> Classes the directory keeps for its own configuration or operation are marked internal, and the schema screen puts them out of the way. See [Internal object types](#internal-object-types) below.
 - **Partition discovery**<br /> Automatically enumerates naming contexts and organisational units.
 - **Hidden partition filtering**<br /> Skip Configuration, Schema, and DNS partitions for improved performance.
 
@@ -151,6 +152,18 @@ If you select a Partition for a domain the connected domain controller does not 
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Include Auxiliary Classes | Include auxiliary object classes alongside structural classes during schema discovery. | `false` |
+
+#### Internal object types
+
+A directory publishes its own machinery in the same schema as the classes you manage. A stock OpenLDAP returns 67 structural classes, of which 27 belong to the server rather than to your directory: the `cn=config` backend's `olc*` classes, the accesslog overlay's `audit*` classes, and the root DSE class.
+
+The Connector marks those Object Types **internal**, and the Schema tab hides them, telling you how many it is holding back and offering **Show internal object types** to see them. Nothing is discarded: every class is still discovered, still stored, and still selectable. An Object Type you have already selected is never hidden, whatever its classification.
+
+The judgement is made from the class's OID rather than its name, because an OID arc is assigned to its vendor and does not change. Classes carrying the RFC 4512 `OBSOLETE` flag are treated the same way, since that is the directory itself declaring them superseded. Classes from the X.500, COSINE and Internet standards arcs, and any schema extensions published under your own organisation's arc, are never marked internal.
+
+Active Directory needs none of this: the Connector already asks the directory to exclude its own hidden and defunct classes when it enumerates them, so what you see is already the classes an administrator manages.
+
+Automation sees the same default. `Get-JIMConnectedSystemObjectType` omits internal Object Types unless you pass `-IncludeInternal`. The REST API always returns every Object Type, each carrying the classification tags the Connector reported and an `isInternal` flag derived from them, so a caller can decide for itself.
 
 ### Hierarchy
 

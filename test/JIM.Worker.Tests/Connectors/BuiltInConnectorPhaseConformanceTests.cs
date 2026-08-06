@@ -3,6 +3,7 @@
 
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Connectors.Sql;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 
@@ -76,6 +77,46 @@ public class LdapConnectorPhaseConformanceTests : ConnectorPhaseConformanceTests
 
     [Test]
     public void GetPhases_ForAnExport_DeclaresNothingBecausePerItemCountsSayMore()
+    {
+        var phases = CreateConnector().GetPhases(CreateConnectedSystem(),
+            new ConnectedSystemRunProfile { Name = "Export", RunType = ConnectedSystemRunType.Export });
+
+        Assert.That(phases, Is.Empty);
+    }
+}
+
+/// <summary>
+/// Runs the phase declaration conformance suite (#454) against the JIM SQL Connector.
+/// </summary>
+[TestFixture]
+public class SqlConnectorPhaseConformanceTests : ConnectorPhaseConformanceTests
+{
+    protected override IConnectorPhases CreateConnector() => new SqlConnector();
+
+    protected override ConnectedSystem CreateConnectedSystem() => new() { Name = "HR Database" };
+
+    [Test]
+    public void GetPhases_ForAFullImport_DeclaresTheCountAheadOfTheFetch()
+    {
+        // A database can be asked how many rows there are for the price of one query, and that answer is
+        // what turns the fetch into a real percentage, so it is work of its own worth showing.
+        var phases = CreateConnector().GetPhases(CreateConnectedSystem(),
+            new ConnectedSystemRunProfile { Name = "Full Import", RunType = ConnectedSystemRunType.FullImport });
+
+        Assert.That(phases.Select(p => p.Key), Is.EqualTo(new[] { SqlConnectorPhases.Count, SqlConnectorPhases.Fetch }));
+    }
+
+    [Test]
+    public void GetPhases_ForADeltaImport_AsksWhatChangedBeforeFetchingIt()
+    {
+        var phases = CreateConnector().GetPhases(CreateConnectedSystem(),
+            new ConnectedSystemRunProfile { Name = "Delta Import", RunType = ConnectedSystemRunType.DeltaImport });
+
+        Assert.That(phases.Select(p => p.Key), Is.EqualTo(new[] { SqlConnectorPhases.QueryChanges, SqlConnectorPhases.Fetch }));
+    }
+
+    [Test]
+    public void GetPhases_ForAnExport_DeclaresNothingBecausePerObjectCountsSayMore()
     {
         var phases = CreateConnector().GetPhases(CreateConnectedSystem(),
             new ConnectedSystemRunProfile { Name = "Export", RunType = ConnectedSystemRunType.Export });

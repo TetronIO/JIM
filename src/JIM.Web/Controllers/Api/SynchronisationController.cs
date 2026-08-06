@@ -445,6 +445,150 @@ public class SynchronisationController(
         return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
     }
 
+
+    /// <summary>
+    /// Get the password policy JIM discovered on a Connected System
+    /// </summary>
+    /// <remarks>
+    /// What the system itself said it will accept, read during a previous connection. Nothing here opens a new
+    /// connection or changes anything.
+    ///
+    /// Every field is nullable, and a null means JIM could not read that rule rather than that no such rule
+    /// exists: a directory withholds what a caller may not see by omitting it rather than refusing. Check
+    /// `hasAnyDiscoveredConstraint` before treating the figures as a description of what the system will accept.
+    /// Where the domain has policies applying to only some accounts, the figures are a floor rather than a
+    /// guarantee; `fineGrainedPolicySignal` says which case this is.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The discovered policy, or an empty one where nothing has been discovered.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/password-policy", Name = "GetConnectedSystemPasswordPolicy")]
+    [ProducesResponseType(typeof(ConnectedSystemPasswordPolicyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConnectedSystemPasswordPolicyAsync(int connectedSystemId)
+    {
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+
+        // A system with nothing discovered is reported as such rather than as a 404: the system exists, and "we
+        // could not read its policy" is a different answer from "there is no such system".
+        return Ok(ConnectedSystemPasswordPolicyResponse.FromEntity(policy));
+    }
+
+    /// <summary>
+    /// Generate a password that satisfies a Connected System's discovered policy
+    /// </summary>
+    /// <remarks>
+    /// Produces a password and returns it. Nothing is set, staged or stored: the value exists in this response
+    /// and nowhere else, and JIM cannot give it to you again.
+    ///
+    /// **This is the only endpoint in JIM whose response body carries a password**, and that is deliberate. What
+    /// JIM never does is store a password, or return one nobody asked for; here the caller asked and is the only
+    /// party that can use it, so withholding it would make the call pointless. The response is marked
+    /// `no-store` so nothing between JIM and the caller keeps a copy.
+    ///
+    /// Pass the result to the set-password endpoint to apply it. The point of asking JIM rather than inventing
+    /// one is that JIM knows what the target demands: `satisfiesDiscoveredPolicy` says whether the result was
+    /// checked against a real policy, and is false where there is none to check against rather than where the
+    /// password failed one.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/generate-password", Name = "GenerateConnectedSystemPassword")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GenerateConnectedSystemPasswordAsync(int connectedSystemId)
+    {
+        // Logs that a password was generated and for which system, never anything about the value, including
+        // its length.
+        _logger.LogInformation("Generating a password against the discovered policy of Connected System {ConnectedSystemId}", connectedSystemId);
+
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+        var generationPolicy = _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+
+        var password = _application.PasswordGenerator.Generate(generationPolicy);
+        var assessment = _application.PasswordGenerator.Assess(generationPolicy, discoveredPolicy);
+
+        // The one response in JIM that must not be kept by anything on its way back to the caller.
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromGenerated(password, assessment, discoveredPolicy?.HasAnyDiscoveredConstraint == true));
+    }
+
+
+    /// <summary>
+    /// Generate one password that satisfies every named Connected System
+    /// </summary>
+    /// <remarks>
+    /// The counterpart of the single-system generate, for setting one password across a person's accounts. JIM
+    /// reconciles the systems' discovered policies into one set of rules and generates against that: the longest
+    /// minimum length any of them demands, and only the character categories all of them count, since a category
+    /// one system does not recognise cannot help satisfy another's complexity rule.
+    ///
+    /// This is the case that most needs JIM rather than the caller: an administrator would otherwise have to
+    /// guess a password acceptable to the strictest of several systems whose policies they cannot see.
+    ///
+    /// Where no single password can satisfy them all, that is reported as a refusal rather than by handing back
+    /// a password that would be accepted on the first account and refused on the second, after the first has
+    /// already been changed. A system JIM could read nothing from is named in the response rather than passed
+    /// over: the password is about to be set there and JIM cannot promise it will be accepted.
+    ///
+    /// As with the single-system generate, the response body carries the password, is marked `no-store`, and
+    /// nothing about the value is written down or logged.
+    /// </remarks>
+    /// <param name="request">The Connected Systems the password has to work on.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="400">No Connected Systems were named, or their policies cannot be reconciled.</response>
+    /// <response code="404">One of the named Connected Systems does not exist.</response>
+    [HttpPost("connected-systems/generate-password", Name = "GeneratePasswordForSystems")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GeneratePasswordForSystemsAsync([FromBody] GeneratePasswordForSystemsRequest request)
+    {
+        if (request.ConnectedSystemIds.Count == 0)
+            return BadRequest(ApiErrorResponse.BadRequest("At least one Connected System is required."));
+
+        _logger.LogInformation("Generating a password against the reconciled policies of {Count} Connected Systems",
+            request.ConnectedSystemIds.Count);
+
+        var policies = new List<PasswordPolicyForSystem>();
+        foreach (var connectedSystemId in request.ConnectedSystemIds.Distinct())
+        {
+            var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (system == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+            policies.Add(new PasswordPolicyForSystem
+            {
+                ConnectedSystemName = system.Name,
+                Policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId)
+            });
+        }
+
+        var reconciliation = _application.PasswordGenerator.Reconcile(policies);
+        if (!reconciliation.IsUsable)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "No single password can satisfy every named Connected System: " + string.Join(" ", reconciliation.Conflicts)));
+
+        var password = _application.PasswordGenerator.Generate(reconciliation.Policy);
+        var assessment = _application.PasswordGenerator.Assess(reconciliation.Policy, targetPolicy: null);
+
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromReconciled(password, assessment, reconciliation));
+    }
+
     /// <summary>
     /// Set the password on a Connected System Object
     /// </summary>
@@ -453,8 +597,8 @@ public class SynchronisationController(
     /// nowhere in JIM to keep a password and no second attempt worth keeping one for. The attempt is recorded as
     /// an Activity against the object, carrying the outcome and, where the target refused, its verbatim reason.
     ///
-    /// The password is supplied by the caller. JIM does not generate one here, because doing so would mean
-    /// returning it in a response body, and password values do not go in those.
+    /// The password is supplied by the caller. To have JIM produce one that satisfies what the Connected System
+    /// itself demands, call the generate endpoint first and pass the result here.
     ///
     /// This is a password-reset primitive: an administrator who can call it can reset any account in this
     /// connector space, subject only to what the Connected System's own service account is permitted to do.

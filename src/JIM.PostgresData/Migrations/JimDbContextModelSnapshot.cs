@@ -2654,6 +2654,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("StableId")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemId");
@@ -3249,6 +3252,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StableId")
                         .HasColumnType("text");
 
                     b.HasKey("Id");

@@ -13,10 +13,14 @@ namespace JIM.Worker.Tests.Connectors;
 public class RecordingConnectorProgress : IConnectorProgress
 {
     private readonly Func<string, Task>? _onReport;
+    private readonly Func<int, Task>? _onObjectsRead;
 
-    public RecordingConnectorProgress(Func<string, Task>? onReport = null)
+    /// <param name="onReport">Runs whenever the Connector narrates, so a test can act at a point only the Connector knows it has reached.</param>
+    /// <param name="onObjectsRead">Runs whenever the Connector reports its running object count, which for a paging Connector is a page boundary.</param>
+    public RecordingConnectorProgress(Func<string, Task>? onReport = null, Func<int, Task>? onObjectsRead = null)
     {
         _onReport = onReport;
+        _onObjectsRead = onObjectsRead;
     }
 
     /// <summary>
@@ -68,6 +72,6 @@ public class RecordingConnectorProgress : IConnectorProgress
     public Task ReportObjectsReadAsync(int objectCount)
     {
         ObjectsRead.Add(objectCount);
-        return Task.CompletedTask;
+        return _onObjectsRead?.Invoke(objectCount) ?? Task.CompletedTask;
     }
 }
