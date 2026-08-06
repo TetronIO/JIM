@@ -125,6 +125,27 @@ A Connected System manages one domain today. During Partition discovery on Activ
 
 If you select a Partition for a domain the connected domain controller does not host, the import fails fast with an error naming the Partition and the domain controller, rather than silently returning zero objects. To manage more than one domain, create a separate Connected System per domain, each with its Host setting pointing at that domain's own domain controllers.
 
+### Container Scope
+
+Each selected Container carries a scope, shown beside it in the Container tree on the Connected System's **Partitions** tab:
+
+| Scope | What is imported | Containers beneath it |
+|-------|------------------|-----------------------|
+| **Whole subtree** (default) | Objects in the Container and in every Container beneath it. | Covered automatically; they cannot be selected separately. |
+| **This level only** | Objects held directly in the Container. | Not imported. Each can be selected in its own right, with its own scope. |
+
+Whole subtree is the default and is how Container selection has always behaved, so existing Connected Systems are unaffected.
+
+**This level only** is for directories where a branch holds a mixture you do not want wholesale. Selecting `OU=Corp` with **This level only**, then selecting `OU=Sales,OU=Corp` with **Whole subtree**, imports the users sitting directly in `OU=Corp` and everything under `OU=Sales`, while leaving the rest of `OU=Corp`'s sub-OUs alone.
+
+!!! warning "Narrowing a Container takes objects out of scope"
+    Changing a Container from **Whole subtree** to **This level only** stops the objects beneath it being imported. JIM asks you to acknowledge this before saving, because the Connected System Objects already imported from those Containers become obsolete on the next Import Run Profile, and whatever they are joined to is deprovisioned on the next synchronisation. Re-selecting the Containers you still want, before running an import, avoids that.
+
+Scope is also settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Scope`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer).
+
+!!! note "Objects that reference something out of scope"
+    A reference attribute pointing at an object outside the imported Containers cannot be resolved, and JIM reports it as an unresolved reference naming Container Scope as the likely cause. Narrowing a Container is a common way to create these; if a group's members live in a Container you have just excluded, either bring that Container back into scope or expect the membership to import incompletely.
+
 ### Credentials
 
 | Setting | Description | Example |

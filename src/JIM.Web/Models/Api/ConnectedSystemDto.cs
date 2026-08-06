@@ -387,6 +387,12 @@ public class ConnectedSystemContainerDto
     public string? Description { get; set; }
     public bool Hidden { get; set; }
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// How far beneath this Container objects are imported from, when it is selected.
+    /// </summary>
+    public ConnectedSystemContainerScope Scope { get; set; }
+
     public int? PartitionId { get; set; }
     public int? ConnectedSystemId { get; set; }
     public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
@@ -401,6 +407,7 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Scope = entity.Scope,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,
             ChildContainers = entity.ChildContainers
