@@ -559,7 +559,7 @@ internal sealed class SqlConnectorExport
             .FirstOrDefault(candidate => string.Equals(candidate.Attribute.Name, anchorColumn, StringComparison.OrdinalIgnoreCase));
 
         return value == null
-            ? ToColumnValue(anchorColumn, columnType, part)
+            ? ToColumnValue(anchorColumn, anchorColumn, columnType, part)
             : ToDatabaseValue(value, anchorColumn, columnType);
     }
 
@@ -724,9 +724,6 @@ internal sealed class SqlConnectorExport
     /// whole thing reading the catalogue exists to stop.
     /// </para>
     /// </remarks>
-    private object ToColumnValue(string columnName, SqlColumnType columnType, string text) =>
-        ToColumnValue(columnName, columnName, columnType, text);
-
     private object ToColumnValue(string attributeName, string columnName, SqlColumnType columnType, string text)
     {
         var attributeType = MapColumnType(attributeName, columnName, columnType);
