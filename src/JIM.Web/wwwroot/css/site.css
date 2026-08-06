@@ -2746,6 +2746,10 @@ html[lang] .jim-schema-change-table td {
     align-items: center;
 }
 
+/* The unstyled state is the pending one: a hollow ring, which every modifier below then overrides. So
+   jim-schedule-node--pending is emitted by the component and has no rule here, deliberately. It is the one
+   modifier that should NOT be added if a sweep for classes named in Razor but missing from this file reports
+   it; the others would each render as an unstyled div, which is the fault such a sweep is looking for. */
 .jim-schedule-node {
     width: 12px;
     height: 12px;
