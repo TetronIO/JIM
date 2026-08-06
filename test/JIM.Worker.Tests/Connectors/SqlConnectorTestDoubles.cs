@@ -54,10 +54,41 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal List<string> ExecutedCommandTexts { get; } = [];
 
     /// <summary>
+    /// Every command this stand-in was asked to run, with the values bound to it and the transaction it
+    /// was enlisted in, so an export test can assert what was written, that it was written as bound
+    /// parameters, and that it was written inside the object's own transaction.
+    /// </summary>
+    internal List<FakeExecutedCommand> ExecutedCommands { get; } = [];
+
+    /// <summary>
+    /// Every transaction this stand-in handed out, so a test can assert that one was committed on
+    /// success and rolled back on failure.
+    /// </summary>
+    internal List<FakeDbTransaction> Transactions { get; } = [];
+
+    /// <summary>
     /// When set, every command beyond this many fails, which is how a database that goes away part way
     /// through a run is expressed here.
     /// </summary>
     internal int? FailAfterCommandCount { get; set; }
+
+    /// <summary>
+    /// When set, any command whose text contains this fails, which is how one object's write failing
+    /// while its neighbours succeed is expressed here.
+    /// </summary>
+    internal string? FailWhenCommandTextContains { get; set; }
+
+    /// <summary>
+    /// The key this stand-in database generates for an inserted row, handed back through whichever
+    /// mechanism <see cref="GeneratedKeyRetrievalMode"/> declares.
+    /// </summary>
+    internal object? GeneratedKey { get; set; }
+
+    /// <summary>
+    /// How this stand-in hands a generated key back. Settable so both dialects' mechanisms are
+    /// exercisable without a database server.
+    /// </summary>
+    internal SqlGeneratedKeyRetrieval GeneratedKeyRetrievalMode { get; init; } = SqlGeneratedKeyRetrieval.ResultSet;
 
     /// <summary>
     /// Every connection string built through this provider, so a test can assert what the Connector
@@ -97,7 +128,7 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     public override string ConnectivityTestCommandText => "SELECT 1";
 
-    public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.ResultSet;
+    public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => GeneratedKeyRetrievalMode;
 
     public override bool SupportsPinnedServerCertificate => CanPinServerCertificate;
 
@@ -113,7 +144,18 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         return new FakeDbParameter { ParameterName = parameterName, Value = value ?? DBNull.Value };
     }
 
-    public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType) => throw new NotSupportedException();
+    /// <summary>
+    /// Nothing to bind where the key comes back as a result set, and an output parameter where it comes
+    /// back through one; exactly the split the two real dialects make.
+    /// </summary>
+    public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType)
+    {
+        SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
+
+        return GeneratedKeyRetrievalMode == SqlGeneratedKeyRetrieval.ResultSet
+            ? null
+            : new FakeDbParameter { ParameterName = parameterName, Direction = ParameterDirection.Output };
+    }
 
     public override string BuildConnectionString(SqlConnectionSettings settings)
     {
@@ -152,7 +194,25 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         return $"{select} {from}{where} {orderBy}";
     }
 
-    public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command) => throw new NotSupportedException();
+    /// <summary>
+    /// The Microsoft SQL Server shape, or the Oracle one, according to which mechanism this stand-in is
+    /// declaring. The real dialects' generation is asserted in their own tests; what matters here is
+    /// that the Connector asks the provider for the statement rather than writing SQL of its own.
+    /// </summary>
+    public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command)
+    {
+        ValidateInsertReturningGeneratedKeyCommand(command);
+
+        return GeneratedKeyRetrievalMode == SqlGeneratedKeyRetrieval.ResultSet
+            ? $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+              $"({BuildInsertColumnList(command.Columns)}) " +
+              $"OUTPUT INSERTED.{QuoteIdentifier(command.GeneratedKeyColumn!)} " +
+              $"VALUES ({BuildInsertValueList(command.Columns)})"
+            : $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+              $"({BuildInsertColumnList(command.Columns)}) " +
+              $"VALUES ({BuildInsertValueList(command.Columns)}) " +
+              $"RETURNING {QuoteIdentifier(command.GeneratedKeyColumn!)} INTO {GetParameterPlaceholder(command.GeneratedKeyParameterName!)}";
+    }
 
     public override Guid ConvertToGuid(object value)
     {
@@ -418,7 +478,16 @@ internal sealed class FakeDbConnection : DbConnection
         _state = ConnectionState.Open;
     }
 
-    protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
+    /// <summary>
+    /// Hands out a transaction that records what became of it, which is how an export test tells a
+    /// committed object from a rolled-back one.
+    /// </summary>
+    protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+    {
+        var transaction = new FakeDbTransaction(this, isolationLevel);
+        _provider.Transactions.Add(transaction);
+        return transaction;
+    }
 
     protected override DbCommand CreateDbCommand() => new FakeDbCommand(_provider);
 
@@ -472,12 +541,24 @@ internal sealed class FakeDbCommand : DbCommand
     public override int ExecuteNonQuery()
     {
         Record();
-        return 0;
+
+        // Oracle's mechanism: the generated key arrives in a bound output parameter rather than a
+        // result set, so the stand-in database fills it in exactly where the driver would.
+        var generatedKey = FindGeneratedKeyOutputParameter();
+        if (generatedKey != null)
+            generatedKey.Value = _provider.GeneratedKey;
+
+        return 1;
     }
 
     public override object? ExecuteScalar()
     {
         Record();
+
+        // Microsoft SQL Server's mechanism: the insert returns the generated key as a single-row
+        // result set, which ADO.NET reads with a scalar execute.
+        if (CommandText.StartsWith("INSERT ", StringComparison.OrdinalIgnoreCase))
+            return _provider.GeneratedKey;
 
         var dataTable = ResolveDataTable();
 
@@ -503,15 +584,34 @@ internal sealed class FakeDbCommand : DbCommand
     }
 
     /// <summary>
-    /// Records what this command was asked to run, and fails where the stand-in database has been told
-    /// to stop answering.
+    /// Records what this command was asked to run, with the values bound to it and the transaction it
+    /// was enlisted in, and fails where the stand-in database has been told to stop answering.
     /// </summary>
     private void Record()
     {
         _provider.ExecutedCommandTexts.Add(CommandText);
 
+        var parameters = Enumerable.Range(0, DbParameterCollection.Count)
+            .Select(index => DbParameterCollection[index])
+            .ToDictionary(parameter => parameter.ParameterName, parameter => parameter.Value == DBNull.Value ? null : parameter.Value, StringComparer.OrdinalIgnoreCase);
+
+        _provider.ExecutedCommands.Add(new FakeExecutedCommand(CommandText, parameters, Transaction as FakeDbTransaction));
+
+        if (_provider.FailWhenCommandTextContains is { } failureMarker && CommandText.Contains(failureMarker, StringComparison.Ordinal))
+            throw new FakeDbException($"The stand-in database refused: {CommandText}");
+
         if (_provider.FailAfterCommandCount is { } limit && _provider.ExecutedCommandTexts.Count > limit)
             throw new FakeDbException("The connection to the stand-in database was lost.");
+    }
+
+    /// <summary>
+    /// The output parameter a generated key comes back through, or null where this command has none.
+    /// </summary>
+    private DbParameter? FindGeneratedKeyOutputParameter()
+    {
+        return Enumerable.Range(0, DbParameterCollection.Count)
+            .Select(index => DbParameterCollection[index])
+            .FirstOrDefault(parameter => parameter.Direction == ParameterDirection.Output);
     }
 
     public override void Prepare()
@@ -858,6 +958,45 @@ internal sealed class FakeRelatedChangePredicate
     internal string? WatermarkColumn { get; set; }
 
     internal object? Watermark { get; set; }
+}
+
+/// <summary>
+/// One statement a <see cref="FakeDbCommand"/> was asked to run, with the values bound to it and the
+/// transaction it was enlisted in.
+/// </summary>
+/// <param name="CommandText">The statement, exactly as the Connector generated it.</param>
+/// <param name="Parameters">The bound values, by parameter name. A value that reached the database any other way is a value interpolated into the statement.</param>
+/// <param name="Transaction">The transaction the statement ran in, or null where it ran outside one.</param>
+internal sealed record FakeExecutedCommand(
+    string CommandText,
+    IReadOnlyDictionary<string, object?> Parameters,
+    FakeDbTransaction? Transaction);
+
+/// <summary>
+/// A transaction that records what became of it, so an export test can tell a committed object from a
+/// rolled-back one without a database server.
+/// </summary>
+internal sealed class FakeDbTransaction : DbTransaction
+{
+    private readonly DbConnection _connection;
+
+    internal FakeDbTransaction(DbConnection connection, IsolationLevel isolationLevel)
+    {
+        _connection = connection;
+        IsolationLevel = isolationLevel;
+    }
+
+    internal bool Committed { get; private set; }
+
+    internal bool RolledBack { get; private set; }
+
+    public override IsolationLevel IsolationLevel { get; }
+
+    protected override DbConnection DbConnection => _connection;
+
+    public override void Commit() => Committed = true;
+
+    public override void Rollback() => RolledBack = true;
 }
 
 /// <summary>
