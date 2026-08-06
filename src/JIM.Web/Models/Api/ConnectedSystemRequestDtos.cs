@@ -215,4 +215,12 @@ public class UpdateConnectedSystemContainerRequest
     /// When selected, objects within this container will be imported during sync.
     /// </summary>
     public bool? Selected { get; set; }
+
+    /// <summary>
+    /// How far beneath this Container objects are imported from, when it is selected. Subtree imports from this
+    /// Container and every Container beneath it; OneLevel imports only the objects held directly in it, leaving
+    /// Containers beneath it to be selected in their own right.
+    /// Omit to leave the stored scope unchanged.
+    /// </summary>
+    public ConnectedSystemContainerScope? Scope { get; set; }
 }

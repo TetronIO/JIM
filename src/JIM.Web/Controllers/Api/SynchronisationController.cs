@@ -1093,6 +1093,9 @@ public class SynchronisationController(
         if (request.Selected.HasValue)
             container.Selected = request.Selected.Value;
 
+        if (request.Scope.HasValue)
+            container.Scope = request.Scope.Value;
+
         // Container selection is configuration; the server records the change with an Activity and a versioned snapshot.
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)

@@ -55,6 +55,14 @@ public class ConnectedSystemContainer
     public bool Selected { get; set; }
 
     /// <summary>
+    /// How far beneath this Container objects are imported from, when it is selected. Subtree (the default)
+    /// imports from this Container and every Container beneath it; OneLevel imports only objects held directly
+    /// in this Container, leaving descendants to be selected in their own right.
+    /// Ignored when <see cref="Selected"/> is false.
+    /// </summary>
+    public ConnectedSystemContainerScope Scope { get; set; } = ConnectedSystemContainerScope.Subtree;
+
+    /// <summary>
     /// Containers can container children containers.
     /// Enables a hierarchy of containers to be built out, i.e a directory DIT.
     /// </summary>

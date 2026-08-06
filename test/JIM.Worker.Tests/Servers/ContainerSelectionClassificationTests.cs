@@ -124,6 +124,23 @@ public class ContainerSelectionClassificationTests
     }
 
     [Test]
+    public async Task EvaluateConnectedSystemAsync_NarrowingAContainerToOneLevel_StatesTheConsequenceAsync()
+    {
+        SetStoredBaseline(SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.Subtree)));
+        var proposed = SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.OneLevel));
+
+        var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsDestructive, Is.True,
+                "narrowing to one level removes everything below that level from scope");
+            Assert.That(result.DestructiveItems.SingleOrDefault()?.Consequence, Is.Not.Null.And.Not.Empty,
+                "a destructive change with no stated consequence is a dialog nobody can weigh");
+        });
+    }
+
+    [Test]
     public async Task EvaluateConnectedSystemAsync_ContainerRenamedInTheDirectory_IsNotDestructiveAsync()
     {
         // A rename is discovery, not an administrator taking objects out of scope. Sweeping it up with deselection
@@ -161,6 +178,43 @@ public class ContainerSelectionClassificationTests
         Assert.That(classification, Is.Not.EqualTo(ConfigurationChangeClass.Destructive));
     }
 
+    [Test]
+    public void Classify_ContainerNarrowedToOneLevel_IsDestructive()
+    {
+        // Narrowing a container's scope takes every object below its own level out of scope. That is the same act
+        // as deselecting the containers beneath it, and it has to be classified the same way; treating it as one
+        // more cosmetic container scalar would let it save in silence.
+        var classification = Classify(
+            SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.Subtree)),
+            SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.OneLevel)));
+
+        Assert.That(classification, Is.EqualTo(ConfigurationChangeClass.Destructive));
+    }
+
+    [Test]
+    public void Classify_ContainerSelectedWithOneLevelScope_IsNotDestructive()
+    {
+        // A newly selected container brings its whole node into the snapshot, scope included, so the scope scalar
+        // arrives as an addition. Nothing has left scope, and classifying the arrival destructively would make
+        // selecting any container at all raise a destructive warning.
+        var classification = Classify(
+            SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.Subtree), ("OU=Contractors", false, ConnectedSystemContainerScope.Subtree)),
+            SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.Subtree), ("OU=Contractors", true, ConnectedSystemContainerScope.OneLevel)));
+
+        Assert.That(classification, Is.Not.EqualTo(ConfigurationChangeClass.Destructive));
+    }
+
+    [Test]
+    public void Classify_ContainerScopeUnchanged_IsNotDestructive()
+    {
+        // The guard against classifying every container edit destructively: scope has to have actually moved.
+        var classification = Classify(
+            SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.OneLevel)),
+            SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.OneLevel)));
+
+        Assert.That(classification, Is.Not.EqualTo(ConfigurationChangeClass.Destructive));
+    }
+
     #endregion
 
     #region The preflight and the change history must reach the same verdict
@@ -173,6 +227,8 @@ public class ContainerSelectionClassificationTests
     [TestCase("deselected", TestName = "PreflightClassMatchesRecordedClass_ContainerDeselected")]
     [TestCase("selected", TestName = "PreflightClassMatchesRecordedClass_ContainerSelected")]
     [TestCase("renamed", TestName = "PreflightClassMatchesRecordedClass_ContainerRenamed")]
+    [TestCase("narrowed", TestName = "PreflightClassMatchesRecordedClass_ContainerNarrowedToOneLevel")]
+    [TestCase("widened", TestName = "PreflightClassMatchesRecordedClass_ContainerWidenedToSubtree")]
     public async Task EvaluateConnectedSystemAsync_ClassMatchesTheClassCaptureWillRecordAsync(string change)
     {
         var (before, after) = change switch
@@ -181,6 +237,10 @@ public class ContainerSelectionClassificationTests
                              SystemWithContainers(("OU=Users", true), ("OU=Service Accounts", false))),
             "selected" => (SystemWithContainers(("OU=Users", true), ("OU=Contractors", false)),
                            SystemWithContainers(("OU=Users", true), ("OU=Contractors", true))),
+            "narrowed" => (SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.Subtree)),
+                           SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.OneLevel))),
+            "widened" => (SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.OneLevel)),
+                          SystemWithScopedContainers(("OU=Users", true, ConnectedSystemContainerScope.Subtree))),
             _ => (SystemWithContainers(("OU=Users", true)), SystemWithContainers(("OU=Colleagues", true)))
         };
         SetStoredBaseline(before);
@@ -208,7 +268,13 @@ public class ContainerSelectionClassificationTests
     /// A Connected System with one selected partition holding the given containers. Container ids are stable across
     /// calls so the diff matches them up rather than reporting wholesale replacement.
     /// </summary>
-    private static ConnectedSystem SystemWithContainers(params (string ExternalId, bool Selected)[] containers) => new()
+    private static ConnectedSystem SystemWithContainers(params (string ExternalId, bool Selected)[] containers) =>
+        SystemWithScopedContainers(containers.Select(c => (c.ExternalId, c.Selected, ConnectedSystemContainerScope.Subtree)).ToArray());
+
+    /// <summary>
+    /// As <see cref="SystemWithContainers"/>, with each container's scope stated rather than defaulted.
+    /// </summary>
+    private static ConnectedSystem SystemWithScopedContainers(params (string ExternalId, bool Selected, ConnectedSystemContainerScope Scope)[] containers) => new()
     {
         Id = ConnectedSystemId,
         Name = "Corporate Directory",
@@ -227,7 +293,8 @@ public class ContainerSelectionClassificationTests
                         Id = 100 + index,
                         Name = c.ExternalId,
                         ExternalId = c.ExternalId,
-                        Selected = c.Selected
+                        Selected = c.Selected,
+                        Scope = c.Scope
                     })
                     .ToHashSet()
             }

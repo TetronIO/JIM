@@ -396,8 +396,9 @@ internal class LdapConnectorImport
                 previousChangeNumber);
 
             await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {previousChangeNumber:N0}...");
+            var changelogTargetContainers = GetTargetContainers(GetTargetPartitions());
             await ReportObjectsReadByAsync(result,
-                () => GetDeltaResultsUsingChangelog(result, previousChangeNumber));
+                () => GetDeltaResultsUsingChangelog(result, previousChangeNumber, changelogTargetContainers));
         }
 
         return result;
@@ -418,6 +419,21 @@ internal class LdapConnectorImport
 
         _logger.Debug("GetTargetPartitions: No partition specified on Run Profile, importing from all selected partitions");
         return _connectedSystem.Partitions!.Where(p => p.Selected);
+    }
+
+    /// <summary>
+    /// Returns the Containers a full import would search, across the partitions this run targets, each carrying
+    /// its own scope.
+    /// </summary>
+    /// <remarks>
+    /// The full import and the AD USN delta search from each of these as a base, so the directory applies the
+    /// selection server-side. The changelog and accesslog delta paths cannot: they read one directory-wide log
+    /// and have to decide per entry whether the changed object is one this Connected System imports. This list
+    /// is what they decide against, so that a delta import sees the same objects a full import would.
+    /// </remarks>
+    private List<ConnectedSystemContainer> GetTargetContainers(IEnumerable<ConnectedSystemPartition> targetPartitions)
+    {
+        return targetPartitions.SelectMany(ConnectedSystemUtilities.GetTopLevelSelectedContainers).ToList();
     }
 
     /// <summary>
@@ -1017,7 +1033,8 @@ internal class LdapConnectorImport
         // remove any duplicates we might have added and change to a simple array for use with the search request
         var queryAttributes = attributes.Distinct().ToArray();
 
-        var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
+        var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter,
+            LdapConnectorUtilities.GetSearchScope(connectedSystemContainer), queryAttributes);
 
         // Only add paging control if the directory supports it
         // Samba AD claims AD compatibility but returns duplicate results when using paging cookies
@@ -1101,7 +1118,8 @@ internal class LdapConnectorImport
         attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
         var queryAttributes = attributes.Distinct().ToArray();
 
-        var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
+        var searchRequest = new SearchRequest(container.ExternalId, ldapFilter,
+            LdapConnectorUtilities.GetSearchScope(container), queryAttributes);
 
         // Only add paging control if the directory supports it
         var supportsPaging = _currentRootDse?.SupportsPaging ?? true;
@@ -1328,9 +1346,10 @@ internal class LdapConnectorImport
     /// Gets delta results for changelog-based directories (e.g., OpenLDAP, Oracle Directory).
     /// Queries the cn=changelog container for changes since the last change number.
     /// </summary>
-    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, int previousChangeNumber)
+    private void GetDeltaResultsUsingChangelog(ConnectedSystemImportResult result, int previousChangeNumber, List<ConnectedSystemContainer> targetContainers)
     {
         _logger.Debug("GetDeltaResultsUsingChangelog: Querying for changes since changeNumber {PreviousChange}", previousChangeNumber);
+        var skippedOutOfScope = 0;
 
         var ldapFilter = $"(&(!(cn=changelog))(changeNumber>{previousChangeNumber}))";
         var ldapRequest = new SearchRequest("cn=changelog", ldapFilter, SearchScope.Subtree,
@@ -1362,6 +1381,15 @@ internal class LdapConnectorImport
 
                 if (string.IsNullOrEmpty(targetDn))
                     continue;
+
+                // Filter by Container scope — the changelog is directory-wide, so it reports changes to objects
+                // this Connected System does not import. A full import only reads the selected Containers, each
+                // to its own scope; without this, a delta import would bring in objects a full import never would.
+                if (!LdapConnectorUtilities.IsDnWithinAnyContainerScope(targetDn, targetContainers))
+                {
+                    skippedOutOfScope++;
+                    continue;
+                }
 
                 // Map changelog changeType to ObjectChangeType
                 // Changelog provides explicit change types, so we use them directly.
@@ -1396,6 +1424,10 @@ internal class LdapConnectorImport
                     }
                 }
             }
+
+            if (skippedOutOfScope > 0)
+                _logger.Information("GetDeltaResultsUsingChangelog: Skipped {SkippedCount} changelog entries for objects outside the selected Container scope",
+                    skippedOutOfScope);
         }
         catch (Exception ex)
         {
@@ -1435,6 +1467,10 @@ internal class LdapConnectorImport
             .Select(p => p.ExternalId)
             .Where(id => !string.IsNullOrEmpty(id))
             .ToList();
+        // Partition filtering alone is not the same selection a full import makes: within a partition, only the
+        // selected Containers are imported from, and each carries its own scope. Applying that here keeps a delta
+        // import to the objects a full import would have returned.
+        var targetContainers = GetTargetContainers(targetPartitions);
 
         while (iterations < maxIterations)
         {
@@ -1512,6 +1548,14 @@ internal class LdapConnectorImport
                 // from other suffixes to avoid importing objects from the wrong partition.
                 if (partitionSuffixes.Count > 0 &&
                     !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skippedOutOfScope++;
+                    continue;
+                }
+
+                // Filter by Container scope — the entry is within a selected partition, but the administrator
+                // selects Containers within it, and a OneLevel Container excludes everything below its own level.
+                if (!LdapConnectorUtilities.IsDnWithinAnyContainerScope(reqDn, targetContainers))
                 {
                     skippedOutOfScope++;
                     continue;

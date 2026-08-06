@@ -324,3 +324,70 @@ Describe 'Set-JIMConnectedSystemAttribute' {
         }
     }
 }
+
+Describe 'Set-JIMConnectedSystemContainer' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMConnectedSystemContainer
+        }
+
+        It 'Should have a Scope parameter' {
+            $command.Parameters['Scope'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should restrict Scope to the supported values' {
+            $param = $command.Parameters['Scope']
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet.ValidValues | Should -Be @('Subtree', 'OneLevel')
+        }
+    }
+
+    Context 'Request body composition' {
+
+        It 'Sends scope in the PUT body when -Scope is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Users' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'OneLevel' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.scope -eq 'OneLevel'
+                }
+            }
+        }
+
+        It 'Omits scope from the PUT body when -Scope is not specified' {
+            # A caller toggling selection must not silently widen a OneLevel container back to Subtree.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Users' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Selected $true -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('scope')
+                }
+            }
+        }
+
+        It 'Allows scope to be set without changing selection' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Users' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'Subtree' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.scope -eq 'Subtree' -and -not $Body.ContainsKey('selected')
+                }
+            }
+        }
+
+        It 'Rejects a scope value outside the ValidateSet' {
+            { Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'Bogus' -Confirm:$false -ErrorAction Stop } | Should -Throw
+        }
+    }
+}

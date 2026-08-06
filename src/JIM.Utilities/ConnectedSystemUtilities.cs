@@ -30,14 +30,19 @@ public static class ConnectedSystemUtilities
     }
 
     /// <summary>
-    /// Generates a list of selected containers that are not already covered by an ancestor container.
-    /// For subtree searches, if a parent container is selected, its selected children are redundant
-    /// and would cause duplicate results. This method returns only the "top-level" selected containers.
+    /// Generates a list of the selected containers that each need searching in their own right, discarding those
+    /// an ancestor's search already covers. Searching a container a selected ancestor already covers would import
+    /// the same objects twice.
     /// </summary>
     /// <remarks>
-    /// Example: If OU=Corp is selected AND OU=Users,OU=Corp is selected:
-    /// - GetAllSelectedContainers returns both
-    /// - GetTopLevelSelectedContainers returns only OU=Corp (since OU=Users is covered by the subtree search)
+    /// Coverage depends on the ancestor's <see cref="ConnectedSystemContainerScope"/>:
+    /// <list type="bullet">
+    /// <item>A Subtree container covers every descendant, so its selected descendants are redundant. If OU=Corp
+    /// and OU=Users,OU=Corp are both selected, only OU=Corp is returned.</item>
+    /// <item>A OneLevel container covers only the objects held directly within it, so its selected descendants are
+    /// not redundant and are returned as search roots of their own. If OU=Corp is selected OneLevel and
+    /// OU=Users,OU=Corp is selected, both are returned; dropping OU=Users would silently stop importing it.</item>
+    /// </list>
     /// </remarks>
     public static List<ConnectedSystemContainer> GetTopLevelSelectedContainers(ConnectedSystemPartition connectedSystemPartition)
     {
@@ -51,20 +56,22 @@ public static class ConnectedSystemUtilities
         foreach (var rootContainer in connectedSystemPartition.Containers)
         {
             if (rootContainer.Selected)
-            {
-                // This root container is selected - add it and skip all its descendants
-                // (they're covered by the subtree search)
                 selectedContainers.Add(rootContainer);
-            }
-            else
-            {
-                // This root container is not selected - search its children
+
+            // Descendants still need searching unless this container's own search already covers them.
+            if (!CoversDescendants(rootContainer))
                 SearchForTopLevelSelectedChildContainers(rootContainer, selectedContainers);
-            }
         }
 
         return selectedContainers;
     }
+
+    /// <summary>
+    /// Whether searching this container also returns everything beneath it, making any selected descendant
+    /// redundant as a search root.
+    /// </summary>
+    private static bool CoversDescendants(ConnectedSystemContainer container) =>
+        container.Selected && container.Scope == ConnectedSystemContainerScope.Subtree;
 
     private static void SearchForSelectedChildContainers(ConnectedSystemContainer container, ICollection<ConnectedSystemContainer> selectedContainers)
     {
@@ -88,16 +95,10 @@ public static class ConnectedSystemUtilities
         foreach (var childContainer in container.ChildContainers)
         {
             if (childContainer.Selected)
-            {
-                // This child is selected - add it and skip its descendants
-                // (they're covered by this container's subtree search)
                 selectedContainers.Add(childContainer);
-            }
-            else
-            {
-                // This child is not selected - continue searching its children
+
+            if (!CoversDescendants(childContainer))
                 SearchForTopLevelSelectedChildContainers(childContainer, selectedContainers);
-            }
         }
     }
 }

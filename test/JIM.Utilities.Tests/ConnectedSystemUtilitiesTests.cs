@@ -320,6 +320,158 @@ public class ConnectedSystemUtilitiesTests
 
     #endregion
 
+    #region Container Scope Tests
+
+    // Subtree is the scope every Container had before the option existed, and its pruning rule ("a selected
+    // Container covers everything beneath it") is what stops duplicate import objects. OneLevel breaks that
+    // rule deliberately: it covers only the objects held directly in the Container, so a selected descendant
+    // is no longer redundant and has to come back as a search root of its own. Pruning it anyway would drop
+    // those objects from the import in silence.
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelParentAndSelectedChild_ReturnsBoth()
+    {
+        // Arrange
+        var child = CreateContainer("Child", true);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelParentAndSelectedGrandchild_ReturnsBoth()
+    {
+        // Arrange - the intervening Container is not selected, so the grandchild is outside the parent's one level
+        var grandchild = CreateContainer("Grandchild", true);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Grandchild"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithSubtreeParentAndSelectedOneLevelChild_ReturnsOnlyParent()
+    {
+        // Arrange - the parent's subtree search already covers the child, whatever scope the child carries
+        var child = CreateContainer("Child", true);
+        child.Scope = ConnectedSystemContainerScope.OneLevel;
+        var parent = CreateContainer("Parent", true, child);
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Name, Is.EqualTo("Parent"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelParentAndUnselectedDescendants_ReturnsOnlyParent()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Name, Is.EqualTo("Parent"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithNestedOneLevelContainers_ReturnsEachAsItsOwnRoot()
+    {
+        // Arrange - three levels, every one of them OneLevel and selected
+        var grandchild = CreateContainer("Grandchild", true);
+        grandchild.Scope = ConnectedSystemContainerScope.OneLevel;
+        var child = CreateContainer("Child", true, grandchild);
+        child.Scope = ConnectedSystemContainerScope.OneLevel;
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(3));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Grandchild"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithSubtreeDescendantOfOneLevelParent_StopsAtTheSubtreeDescendant()
+    {
+        // Arrange - Parent covers its own level; Child covers everything beneath itself, so Grandchild is redundant
+        var grandchild = CreateContainer("Grandchild", true);
+        var child = CreateContainer("Child", true, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+        Assert.That(result.Select(c => c.Name), Does.Not.Contain("Grandchild"));
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithOneLevelRootContainer_ReturnsSelectedDescendants()
+    {
+        // Arrange - the OneLevel Container is a root of the partition rather than a nested one
+        var child = CreateContainer("Child", true);
+        var root = CreateContainer("Root", true, child);
+        root.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(root);
+
+        // Act
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Root"));
+        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+    }
+
+    [Test]
+    public void ConnectedSystemContainer_ByDefault_IsSubtreeScoped()
+    {
+        // Arrange, Act
+        var container = new ConnectedSystemContainer { Name = "Test", ExternalId = "OU=Test" };
+
+        // Assert
+        Assert.That(container.Scope, Is.EqualTo(ConnectedSystemContainerScope.Subtree));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ConnectedSystemPartition CreatePartitionWithContainers(params ConnectedSystemContainer[] rootContainers)
