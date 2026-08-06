@@ -80,11 +80,11 @@ public class ScimHttpClientFactoryTests
     {
         using var handler = ScimHttpClientFactory.CreateHandler(CreateSettings(minimumTls: ScimConnectorConstants.TlsVersion13), [], _logger);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.SslOptions.EnabledSslProtocols.HasFlag(SslProtocols.Tls13), Is.True);
             Assert.That(handler.SslOptions.EnabledSslProtocols.HasFlag(SslProtocols.Tls12), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -186,13 +186,13 @@ public class ScimHttpClientFactoryTests
         var firstAttempt = policy.EvaluateResponse(response, attempt: 1, DateTimeOffset.UnixEpoch);
         var exhausted = policy.EvaluateResponse(response, attempt: 2, DateTimeOffset.UnixEpoch);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(firstAttempt.ShouldRetry, Is.True);
             // The configured delay plus the policy's default jitter band of up to 20%.
             Assert.That(firstAttempt.Delay, Is.InRange(TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(300)));
             Assert.That(exhausted.ShouldRetry, Is.False, "the configured maximum of two retries is respected.");
-        });
+        }
     }
 
     [Test]
@@ -203,12 +203,12 @@ public class ScimHttpClientFactoryTests
 
         var firstAttempt = policy.EvaluateResponse(response, attempt: 1, DateTimeOffset.UnixEpoch);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(firstAttempt.ShouldRetry, Is.True);
             Assert.That(firstAttempt.Delay, Is.InRange(
                 TimeSpan.FromMilliseconds(ScimConnectorConstants.DefaultRetryDelayMs),
                 TimeSpan.FromMilliseconds(ScimConnectorConstants.DefaultRetryDelayMs * 1.2)));
-        });
+        }
     }
 }

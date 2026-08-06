@@ -56,11 +56,11 @@ public class SyncRuleInitialPasswordComparisonTests
     [Test]
     public void WouldDeliverTheSameAs_WhenOneSideHasNoConfiguration_IsFalse()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(SyncRuleInitialPassword.WouldDeliverTheSameAs(null, Configuration()), Is.False);
             Assert.That(SyncRuleInitialPassword.WouldDeliverTheSameAs(Configuration(), null), Is.False);
-        });
+        }
     }
 
     /// <summary>
@@ -99,11 +99,11 @@ public class SyncRuleInitialPasswordComparisonTests
         var edited = Configuration();
         edited.CustomPolicy.Style = PasswordGenerationStyle.Words;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Configuration().Source, Is.EqualTo(InitialPasswordSource.Discovered), "precondition");
             Assert.That(SyncRuleInitialPassword.WouldDeliverTheSameAs(Configuration(), edited), Is.False);
-        });
+        }
     }
 
     /// <summary>
@@ -210,13 +210,13 @@ public class SyncRuleInitialPasswordComparisonTests
 
         var snapshot = configuration.SnapshotDeliverySettings();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(snapshot.Id, Is.Zero);
             Assert.That(snapshot.SyncRuleId, Is.Zero);
             Assert.That(snapshot.CustomPolicy, Is.Not.SameAs(configuration.CustomPolicy),
                 "a shared policy instance would track the live edits it is supposed to be compared against");
-        });
+        }
     }
 
     /// <summary>

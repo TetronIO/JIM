@@ -32,6 +32,7 @@ JIM requires TDD. The workflow is **Red → Green → Refactor**:
 - Use NUnit with `[Test]` attribute
 - Async tests: `public async Task TestNameAsync()`
 - Use `Assert.That()` syntax
+- Group related assertions with `using (Assert.EnterMultipleScope()) { ... }`, never `Assert.Multiple(...)` (rationale in `src/CLAUDE.md`; note that a `return` inside the scope exits the whole test method, unlike the old lambda)
 - Mock with Moq: `Mock<DbSet<T>>`
 - Test naming: `MethodName_Scenario_ExpectedResult`
 

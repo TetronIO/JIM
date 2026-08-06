@@ -141,11 +141,11 @@ public class LdapObjectTypeVisibilityDirectoryTests
         if (expectedInternal)
         {
             Assert.That(tag, Is.Not.Null, $"'{className}' ({definition.Oid}) belongs to the directory itself and must be classified internal.");
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(tag!.Key, Is.EqualTo(ObjectTypeTags.Keys.Visibility));
                 Assert.That(tag!.Value, Is.EqualTo(ObjectTypeTags.Values.VisibilityInternal));
-            });
+            }
         }
         else
         {

@@ -55,11 +55,11 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     {
         var cut = Render(parkedReasons: []);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Not.Contain("waiting on a change"));
             Assert.That(cut.Markup, Does.Not.Contain("parked"));
-        });
+        }
     }
 
     [Test]
@@ -91,12 +91,12 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
             new InitialPasswordRejection { TargetMessage = "Too short.", AccountCount = 3 }
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Not complex enough."));
             Assert.That(cut.Markup, Does.Contain("Too short."));
             Assert.That(cut.Markup, Does.Contain("14 parked"), "the title carries the total across every reason");
-        });
+        }
     }
 
     /// <summary>
@@ -108,11 +108,11 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     {
         var cut = Render(OneReason(accounts: 2, message: null));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("2 parked"));
             Assert.That(cut.Markup, Does.Contain("refused the password without saying why"));
-        });
+        }
     }
 
     [Test]
@@ -137,12 +137,12 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     {
         var cut = Render(OneReason(accounts: 1), willRelease: true);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Saving will release 1 parked account"));
             Assert.That(cut.Markup, Does.Not.Contain("1 parked accounts"));
             Assert.That(cut.Markup, Does.Contain("1 account is waiting"));
-        });
+        }
     }
 
     /// <summary>

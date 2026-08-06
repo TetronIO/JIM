@@ -35,12 +35,12 @@ public class ScimThrottleHintsTests
 
         var hints = ScimThrottleHints.Read(response, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(hints.Limit, Is.EqualTo(100));
             Assert.That(hints.Remaining, Is.EqualTo(7));
             Assert.That(hints.ResetAfter, Is.EqualTo(TimeSpan.FromSeconds(30)));
-        });
+        }
     }
 
     [Test]
@@ -53,12 +53,12 @@ public class ScimThrottleHintsTests
 
         var hints = ScimThrottleHints.Read(response, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(hints.Limit, Is.EqualTo(50));
             Assert.That(hints.Remaining, Is.EqualTo(0));
             Assert.That(hints.ResetAfter, Is.EqualTo(TimeSpan.FromSeconds(15)));
-        });
+        }
     }
 
     [Test]
@@ -82,12 +82,12 @@ public class ScimThrottleHintsTests
 
         var hints = ScimThrottleHints.Read(response, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(hints.Limit, Is.EqualTo(100));
             Assert.That(hints.Remaining, Is.EqualTo(4));
             Assert.That(hints.ResetAfter, Is.EqualTo(TimeSpan.FromSeconds(20)));
-        });
+        }
     }
 
     [Test]
@@ -97,13 +97,13 @@ public class ScimThrottleHintsTests
 
         var hints = ScimThrottleHints.Read(response, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(hints.Limit, Is.Null);
             Assert.That(hints.Remaining, Is.Null);
             Assert.That(hints.ResetAfter, Is.Null);
             Assert.That(hints.HasHints, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -115,11 +115,11 @@ public class ScimThrottleHintsTests
 
         var hints = ScimThrottleHints.Read(response, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(hints.Remaining, Is.Null);
             Assert.That(hints.ResetAfter, Is.Null);
-        });
+        }
     }
 
     [Test]

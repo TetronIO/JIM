@@ -62,12 +62,12 @@ public class ConfigurationChangePreviewCountsTests
         var counts = ConfigurationChangePreviewCounts.ForConfirmation(preview, isStale: false);
 
         Assert.That(counts, Has.Count.EqualTo(2));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(counts[0].Count, Is.EqualTo(4_812), "the largest impact is the one being consented to");
             Assert.That(counts[0].Label, Is.Not.Empty, "a transition ordinal is not something to put in front of an administrator");
             Assert.That(counts[1].Count, Is.EqualTo(12));
-        });
+        }
     }
 
     [Test]

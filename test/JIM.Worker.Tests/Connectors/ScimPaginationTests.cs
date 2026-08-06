@@ -117,13 +117,13 @@ public class ScimPaginationTests
     {
         var position = ScimImportPosition.FromTokens([], ScimPaginationMode.Auto);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(position.ResourceTypeIndex, Is.Zero);
             // RFC 7644 numbers resources from 1.
             Assert.That(position.StartIndex, Is.EqualTo(1));
             Assert.That(position.Cursor, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -156,13 +156,13 @@ public class ScimPaginationTests
 
         var restored = ScimImportPosition.FromTokens([original.ToToken()], ScimPaginationMode.Auto);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(restored.ResourceTypeIndex, Is.EqualTo(1));
             Assert.That(restored.StartIndex, Is.EqualTo(301));
             Assert.That(restored.Cursor, Is.EqualTo("eyJpZCI6IjEwIn0="));
             Assert.That(restored.Mode, Is.EqualTo(ScimPaginationMode.Cursor));
-        });
+        }
     }
 
     [Test]

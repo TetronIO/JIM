@@ -87,7 +87,7 @@ public class SearchFieldConventionTests
 
         var source = File.ReadAllText(componentPath);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(
                 Regex.IsMatch(source, @"Immediate\s*=\s*""true"""),
@@ -105,7 +105,7 @@ public class SearchFieldConventionTests
                 "SearchField must not splat unmatched attributes onto its MudTextField; Immediate=\"false\" would " +
                 "pass straight through and silently revert that instance to blur-commit. Add an explicit parameter " +
                 "for anything a call site legitimately needs to set.");
-        });
+        }
     }
 
     /// <summary>

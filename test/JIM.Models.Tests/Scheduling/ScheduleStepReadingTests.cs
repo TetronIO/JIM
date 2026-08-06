@@ -83,13 +83,13 @@ public class ScheduleStepReadingTests
     {
         // A step type that queues no task and writes no Activity is passed straight through, so its
         // place in the Schedule is all there is to go on.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ScheduleStepReading.StatusOf(null, null, 0, 2, Running),
                 Is.EqualTo(ScheduleExecutionStepStatus.Completed), "Behind the execution's position");
             Assert.That(ScheduleStepReading.StatusOf(null, null, 3, 2, Running),
                 Is.EqualTo(ScheduleExecutionStepStatus.Pending), "Ahead of it");
-        });
+        }
     }
 
     #endregion
@@ -224,11 +224,11 @@ public class ScheduleStepReadingTests
 
         var wedges = ScheduleStepReading.OrderWedges(statuses);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(wedges[0], Is.EqualTo(ScheduleExecutionStepStatus.Failed));
             Assert.That(wedges, Has.Count.EqualTo(12), "Every task keeps its wedge; ordering is not grouping");
-        });
+        }
     }
 
     [Test]
@@ -262,7 +262,7 @@ public class ScheduleStepReadingTests
             Task(3, "AD Sync", WorkerTaskStatus.WaitingForPreviousStep),
             Task(4, "AD Export", WorkerTaskStatus.WaitingForPreviousStep));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(progress.TotalSteps, Is.EqualTo(5));
             Assert.That(progress.CurrentStepNumber, Is.EqualTo(3));
@@ -272,7 +272,7 @@ public class ScheduleStepReadingTests
                 ScheduleExecutionStepStatus.Processing, ScheduleExecutionStepStatus.Waiting,
                 ScheduleExecutionStepStatus.Waiting
             }));
-        });
+        }
     }
 
     [Test]
@@ -283,13 +283,13 @@ public class ScheduleStepReadingTests
             Task(0, "Cloud Import", WorkerTaskStatus.Processing),
             Task(1, "AD Sync", WorkerTaskStatus.WaitingForPreviousStep));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(progress.Steps[0].Name, Is.EqualTo("2 in parallel"));
             Assert.That(progress.Steps[0].IsParallel, Is.True);
             Assert.That(progress.Steps[1].Name, Is.EqualTo("AD Sync"));
             Assert.That(progress.Steps[1].IsParallel, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -301,14 +301,14 @@ public class ScheduleStepReadingTests
             Ran(0, "AD Import", ActivityStatus.FailedWithError),
             Task(0, "Cloud Import", WorkerTaskStatus.Processing));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(progress.Steps[0].Status, Is.EqualTo(ScheduleExecutionStepStatus.Failed));
             Assert.That(progress.Steps[0].TaskStatuses, Is.EqualTo(new[]
             {
                 ScheduleExecutionStepStatus.Failed, ScheduleExecutionStepStatus.Processing
             }));
-        });
+        }
     }
 
     [Test]
@@ -320,13 +320,13 @@ public class ScheduleStepReadingTests
             Ran(0, "HR Import", ActivityStatus.Complete),
             Task(2, "AD Sync", WorkerTaskStatus.Processing));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(progress.Steps, Has.Count.EqualTo(3));
             Assert.That(progress.Steps[1].Status, Is.EqualTo(ScheduleExecutionStepStatus.Completed),
                 "The Schedule has moved past it, so it is behind us whatever it left behind");
             Assert.That(progress.Steps[1].Name, Is.EqualTo("Step 2"));
-        });
+        }
     }
 
     [Test]
@@ -338,12 +338,12 @@ public class ScheduleStepReadingTests
             Ran(0, "HR Import", ActivityStatus.Complete),
             Task(1, "AD Sync", WorkerTaskStatus.Queued));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(progress.CurrentStepNumber, Is.EqualTo(2));
             Assert.That(progress.Steps[1].Status, Is.EqualTo(ScheduleExecutionStepStatus.Queued),
                 "Knowing which step is next is not the same as claiming it has started");
-        });
+        }
     }
 
     [Test]
@@ -357,11 +357,11 @@ public class ScheduleStepReadingTests
             Ran(1, "Legacy CRM Import", ActivityStatus.FailedWithError),
             Task(1, "AD Import", WorkerTaskStatus.Processing));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(progress.Steps[1].Status, Is.EqualTo(ScheduleExecutionStepStatus.Failed));
             Assert.That(progress.CurrentStepNumber, Is.EqualTo(2));
-        });
+        }
     }
 
     [Test]

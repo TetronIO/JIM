@@ -79,7 +79,7 @@ public class ContainerSelectionClassificationTests
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
         var item = result.DestructiveItems.SingleOrDefault();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsDestructive, Is.True,
                 "deselecting a container removes its objects from scope, exactly as deselecting a partition does");
@@ -87,7 +87,7 @@ public class ContainerSelectionClassificationTests
                 "the administrator needs to know which container they are removing from scope");
             Assert.That(item?.Consequence, Is.Not.Null.And.Not.Empty,
                 "a destructive change with no stated consequence is a dialog nobody can weigh");
-        });
+        }
     }
 
     [Test]
@@ -100,11 +100,11 @@ public class ContainerSelectionClassificationTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Items, Has.Count.EqualTo(1));
             Assert.That(result.Items[0].ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Removed));
-        });
+        }
     }
 
     [Test]
@@ -115,12 +115,12 @@ public class ContainerSelectionClassificationTests
 
         var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(proposed);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RequiresAcknowledgement, Is.True, "a wider import scope is a synchronisation-affecting change");
             Assert.That(result.IsDestructive, Is.False, "nothing leaves scope, so nothing existing is at risk");
             Assert.That(result.Items.Single().ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Added));
-        });
+        }
     }
 
     [Test]

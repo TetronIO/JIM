@@ -42,11 +42,11 @@ public class RunPhaseVisualsTests
         // one would make them indistinguishable on every rail at once.
         var modifiers = EveryStatus.Select(RunPhaseVisuals.StatusModifier).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(modifiers.Any(string.IsNullOrWhiteSpace), Is.False, "Every status needs a modifier a stylesheet can select on");
             Assert.That(modifiers.Distinct().Count(), Is.EqualTo(EveryStatus.Length), "Two statuses sharing a modifier would be indistinguishable on every rail at once");
-        });
+        }
     }
 
     [Test]
@@ -70,12 +70,12 @@ public class RunPhaseVisualsTests
     [Test]
     public void StatusIcon_StepThatHasFinished_ShowsTheOutcomeRatherThanTheWork()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.StatusIcon(Phase(ActivityPhaseStatus.Completed)), Is.EqualTo(Icons.Material.Filled.Check));
             Assert.That(RunPhaseVisuals.StatusIcon(Phase(ActivityPhaseStatus.Skipped)), Is.EqualTo(Icons.Material.Filled.Remove));
             Assert.That(RunPhaseVisuals.StatusIcon(Phase(ActivityPhaseStatus.Failed)), Is.EqualTo(Icons.Material.Filled.PriorityHigh));
-        });
+        }
     }
 
     [Test]
@@ -83,13 +83,13 @@ public class RunPhaseVisualsTests
     {
         // Before there is an outcome to report, the icon's job is to make the rail scannable by
         // shape, so it names the work rather than the state.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.StatusIcon(Phase(ActivityPhaseStatus.Active)),
                 Is.EqualTo(RunPhaseIcons.ForPhase(RunPhaseKeys.ImportSave)));
             Assert.That(RunPhaseVisuals.StatusIcon(Phase(ActivityPhaseStatus.Pending)),
                 Is.EqualTo(RunPhaseIcons.ForPhase(RunPhaseKeys.ImportSave)));
-        });
+        }
     }
 
     #endregion
@@ -101,25 +101,25 @@ public class RunPhaseVisualsTests
     {
         // Completed, skipped and failed all mean "the run is past this step". Treating skipped as
         // not-yet-run would leave a permanent gap in every rail that draws a Delta Import.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.HasRun(ActivityPhaseStatus.Completed), Is.True);
             Assert.That(RunPhaseVisuals.HasRun(ActivityPhaseStatus.Skipped), Is.True);
             Assert.That(RunPhaseVisuals.HasRun(ActivityPhaseStatus.Failed), Is.True);
             Assert.That(RunPhaseVisuals.HasRun(ActivityPhaseStatus.Active), Is.False);
             Assert.That(RunPhaseVisuals.HasRun(ActivityPhaseStatus.Pending), Is.False);
-        });
+        }
     }
 
     [Test]
     public void FillPercent_StepThatRan_IsFullWhateverTheOutcome()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.FillPercent(Phase(ActivityPhaseStatus.Completed), null), Is.EqualTo(100d));
             Assert.That(RunPhaseVisuals.FillPercent(Phase(ActivityPhaseStatus.Skipped), null), Is.EqualTo(100d));
             Assert.That(RunPhaseVisuals.FillPercent(Phase(ActivityPhaseStatus.Failed), null), Is.EqualTo(100d));
-        });
+        }
     }
 
     [Test]
@@ -139,21 +139,21 @@ public class RunPhaseVisualsTests
     {
         // The count and the total are reported separately and briefly disagree at a step boundary,
         // which is enough to produce a ratio above one and a fill running off the end of its track.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.FillPercent(Phase(ActivityPhaseStatus.Active), 1.4d), Is.EqualTo(100d));
             Assert.That(RunPhaseVisuals.FillPercent(Phase(ActivityPhaseStatus.Active), -0.2d), Is.EqualTo(0d));
-        });
+        }
     }
 
     [Test]
     public void FillPercent_StepAheadOfTheRun_IsEmpty()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.FillPercent(Phase(ActivityPhaseStatus.Pending), 0.5d), Is.EqualTo(0d));
             Assert.That(RunPhaseVisuals.FillPercent(null, 0.5d), Is.EqualTo(0d));
-        });
+        }
     }
 
     #endregion
@@ -163,11 +163,11 @@ public class RunPhaseVisualsTests
     [Test]
     public void OutcomeTooltip_UnusualOutcomes_ExplainThemselves()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.OutcomeTooltip(Phase(ActivityPhaseStatus.Skipped)), Is.EqualTo("Not needed for this run"));
             Assert.That(RunPhaseVisuals.OutcomeTooltip(Phase(ActivityPhaseStatus.Failed)), Is.EqualTo("The run failed at this step"));
-        });
+        }
     }
 
     [Test]
@@ -175,13 +175,13 @@ public class RunPhaseVisualsTests
     {
         // A tooltip on every step would train the reader to ignore all of them, including the two
         // that carry something worth reading.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(RunPhaseVisuals.OutcomeTooltip(Phase(ActivityPhaseStatus.Completed)), Is.Empty);
             Assert.That(RunPhaseVisuals.OutcomeTooltip(Phase(ActivityPhaseStatus.Active)), Is.Empty);
             Assert.That(RunPhaseVisuals.OutcomeTooltip(Phase(ActivityPhaseStatus.Pending)), Is.Empty);
             Assert.That(RunPhaseVisuals.OutcomeTooltip(null), Is.Empty);
-        });
+        }
     }
 
     #endregion

@@ -171,14 +171,14 @@ public class ScimCertificateDiagnosisTests
         var failure = results.Single(r => !r.IsValid);
         var rejection = failure.Exception as ServerCertificateRejectedException;
         Assert.That(rejection, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(rejection!.Diagnostic.Thumbprint, Is.EqualTo("AABBCCDDEEFF00112233445566778899AABBCCDD"));
             Assert.That(rejection!.Diagnostic.FailureReason, Is.EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
             // The remediation points at the store, which is the decision JIM wants an administrator to make.
             Assert.That(failure.ErrorMessage, Does.Contain("Admin > Certificates"));
             Assert.That(connector.Probed, Is.EqualTo(("provider.example.com", 443)));
-        });
+        }
     }
 
     [Test]
@@ -226,11 +226,11 @@ public class ScimCertificateDiagnosisTests
             await connector.ImportAsync(connectedSystem, new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.FullImport },
                 [], null, _logger, CancellationToken.None, new RecordingConnectorProgress()));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Diagnostic.Thumbprint, Is.EqualTo("AABBCCDDEEFF00112233445566778899AABBCCDD"));
             Assert.That(exception!.Message, Does.Contain("Admin > Certificates"));
-        });
+        }
     }
 
     [Test]
@@ -264,11 +264,11 @@ public class ScimCertificateDiagnosisTests
 
         var results = connector.ValidateSettingValues(Settings(certificateValidation: ScimConnectorConstants.CertValidationSkip), _logger);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results.Single().IsValid, Is.False);
             Assert.That(connector.Probed, Is.Null);
-        });
+        }
     }
     #endregion
 }

@@ -87,7 +87,7 @@ public class SynchronisationControllerPasswordGenerationTests
         var result = await _controller.GetConnectedSystemPasswordPolicyAsync(ConnectedSystemId);
         var response = (ConnectedSystemPasswordPolicyResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.MinimumLength, Is.EqualTo(14));
             Assert.That(response.RequiredCharacterClassCount, Is.EqualTo(3));
@@ -95,7 +95,7 @@ public class SynchronisationControllerPasswordGenerationTests
             Assert.That(response.MaximumPasswordAgeDays, Is.EqualTo(90),
                 "expressed in days rather than as a timespan, which JSON has no native form for");
             Assert.That(response.Discovered, Is.EqualTo(new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc)));
-        });
+        }
     }
 
     /// <summary>
@@ -110,12 +110,12 @@ public class SynchronisationControllerPasswordGenerationTests
         var result = await _controller.GetConnectedSystemPasswordPolicyAsync(ConnectedSystemId);
         var response = (ConnectedSystemPasswordPolicyResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.Discovered, Is.Null);
             Assert.That(response.HasAnyDiscoveredConstraint, Is.False);
             Assert.That(response.MinimumLength, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -148,14 +148,14 @@ public class SynchronisationControllerPasswordGenerationTests
         var result = await _controller.GenerateConnectedSystemPasswordAsync(ConnectedSystemId);
         var response = (GeneratedPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.Password, Is.Not.Null.And.Not.Empty);
             Assert.That(response.Password!.Length, Is.GreaterThanOrEqualTo(20),
                 "generated against what the target demands, which is the whole reason to ask JIM rather than invent one");
             Assert.That(response.GuaranteedCharacterClassCount, Is.GreaterThanOrEqualTo(3));
             Assert.That(response.SatisfiesDiscoveredPolicy, Is.True);
-        });
+        }
     }
 
     /// <summary>
@@ -181,13 +181,13 @@ public class SynchronisationControllerPasswordGenerationTests
         var result = await _controller.GenerateConnectedSystemPasswordAsync(ConnectedSystemId);
         var response = (GeneratedPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.Password, Is.Not.Null.And.Not.Empty,
                 "JIM's own defaults are better than whatever a script would invent");
             Assert.That(response.SatisfiesDiscoveredPolicy, Is.False,
                 "there is no policy to satisfy, and claiming it complies would be a claim JIM cannot make");
-        });
+        }
     }
 
     [Test]
@@ -323,11 +323,11 @@ public class SynchronisationControllerPasswordGenerationTests
             new GeneratePasswordForSystemsRequest { ConnectedSystemIds = [ConnectedSystemId, 7] });
         var response = (GeneratedPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.Password, Is.Not.Null.And.Not.Empty);
             Assert.That(response.SystemsWithNoDiscoveredPolicy, Does.Contain("Research LDAP"));
-        });
+        }
     }
 
     #endregion

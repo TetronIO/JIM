@@ -115,11 +115,11 @@ public class ConnectedSystemSettingsValidationTests
 
         // Assert
         var conditionalSetting = connectorDefinition.Settings.Single(s => s.Name == "Certificate Path");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(conditionalSetting.RequiredWhenSetting, Is.EqualTo("Use Secure Connection?"));
             Assert.That(conditionalSetting.RequiredWhenValue, Is.EqualTo("true"));
-        });
+        }
     }
 
     [Test]

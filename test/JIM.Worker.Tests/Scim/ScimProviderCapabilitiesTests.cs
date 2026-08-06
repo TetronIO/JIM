@@ -27,7 +27,7 @@ public class ScimProviderCapabilitiesTests
 
         var capabilities = ScimProviderCapabilities.From(config);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(capabilities.DiscoveryAvailable, Is.True);
             Assert.That(capabilities.SupportsPatch, Is.True);
@@ -41,7 +41,7 @@ public class ScimProviderCapabilitiesTests
             Assert.That(capabilities.SupportsChangePassword, Is.True);
             Assert.That(capabilities.AuthenticationSchemes, Is.EqualTo(new[] { "oauthbearertoken" }));
             Assert.That(capabilities.Warnings, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -49,7 +49,7 @@ public class ScimProviderCapabilitiesTests
     {
         var capabilities = ScimProviderCapabilities.From(null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(capabilities.DiscoveryAvailable, Is.False);
             Assert.That(capabilities.SupportsPatch, Is.False);
@@ -57,7 +57,7 @@ public class ScimProviderCapabilitiesTests
             Assert.That(capabilities.SupportsFilter, Is.False);
             Assert.That(capabilities.SupportsETag, Is.False);
             Assert.That(capabilities.Warnings, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -66,13 +66,13 @@ public class ScimProviderCapabilitiesTests
         // Assuming support the provider never claimed turns a discovery gap into failed exports.
         var capabilities = ScimProviderCapabilities.From(new ScimServiceProviderConfig());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(capabilities.DiscoveryAvailable, Is.True);
             Assert.That(capabilities.SupportsPatch, Is.False);
             Assert.That(capabilities.SupportsBulk, Is.False);
             Assert.That(capabilities.SupportsETag, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -86,13 +86,13 @@ public class ScimProviderCapabilitiesTests
 
         var capabilities = ScimProviderCapabilities.From(config);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(capabilities.SupportsPatch, Is.False);
             Assert.That(capabilities.SupportsBulk, Is.False);
             // A limit published alongside "not supported" is meaningless and must not be acted on.
             Assert.That(capabilities.BulkMaxOperations, Is.Null);
-        });
+        }
     }
 
     [Test]

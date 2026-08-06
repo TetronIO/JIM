@@ -48,12 +48,12 @@ public class InitialPasswordAttentionTests
 
         var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(attention[SyncRuleId].ParkedCount, Is.EqualTo(2));
             Assert.That(attention[SyncRuleId].ExpiredCount, Is.EqualTo(1),
                 "expired is its own count: those accounts cannot be helped by changing these settings");
-        });
+        }
     }
 
     [Test]
@@ -74,12 +74,12 @@ public class InitialPasswordAttentionTests
 
         var attention = await _server.GetAttentionBySyncRuleAsync([SyncRuleId, OtherSyncRuleId]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(attention, Does.Not.ContainKey(SyncRuleId),
                 "a settled rule is absent, so a list can render nothing on lookup failure alone");
             Assert.That(attention[OtherSyncRuleId].ParkedCount, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -118,11 +118,11 @@ public class InitialPasswordAttentionTests
     {
         await StageAsync(PendingInitialPasswordStatus.Parked);
 
-        Assert.Multiple(async () =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(await _server.GetAttentionBySyncRuleAsync([]), Is.Empty);
             Assert.That(await _server.GetAttentionByConnectedSystemAsync([]), Is.Empty);
-        });
+        }
     }
 
     #endregion
@@ -139,13 +139,13 @@ public class InitialPasswordAttentionTests
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reasons.Count, Is.EqualTo(1), "three accounts refused for one reason is one problem");
             Assert.That(reasons[0].AccountCount, Is.EqualTo(3));
             Assert.That(reasons[0].TargetMessage, Is.EqualTo(refusal),
                 "verbatim: the code is the one thing precise enough to search for");
-        });
+        }
     }
 
     [Test]
@@ -157,12 +157,12 @@ public class InitialPasswordAttentionTests
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reasons[0].TargetMessage, Is.EqualTo("Not complex enough."));
             Assert.That(reasons[0].AccountCount, Is.EqualTo(2));
             Assert.That(reasons[1].AccountCount, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -207,12 +207,12 @@ public class InitialPasswordAttentionTests
 
         var reasons = await _server.GetParkedReasonsAsync(SyncRuleId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reasons.Count, Is.EqualTo(1),
                 "a silent refusal is still a refusal holding an account up; dropping it would lose the account");
             Assert.That(reasons[0].TargetMessage, Is.Null);
-        });
+        }
     }
 
     #endregion

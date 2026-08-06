@@ -160,13 +160,13 @@ public class MetaverseControllerDeletionSettingsPreviewTests
 
         Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
         var proposal = QueuedProposal();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(proposal.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected));
             Assert.That(proposal.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
             Assert.That(proposal.DeletionTriggerConnectedSystemIds, Is.EquivalentTo(new[] { 4 }));
             Assert.That(proposal.DeletionTriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
-        });
+        }
     }
 
     [Test]
@@ -195,13 +195,13 @@ public class MetaverseControllerDeletionSettingsPreviewTests
 
         Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
         var proposal = QueuedProposal();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(proposal.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
             Assert.That(proposal.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
             Assert.That(proposal.DeletionTriggerConnectedSystemIds, Is.EquivalentTo(new[] { 9 }));
             Assert.That(proposal.DeletionTriggerMode, Is.EqualTo(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect));
-        });
+        }
     }
 
     [Test]
@@ -266,13 +266,13 @@ public class MetaverseControllerDeletionSettingsPreviewTests
         Assert.That(result, Is.Not.Null);
         var response = result!.Value as ConfigurationChangePreviewStartResponse;
         Assert.That(response, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response!.IsBlocked, Is.True);
             Assert.That(response!.ValidationFindings.Any(f => f.Severity == PreviewValidationSeverity.Blocking), Is.True);
             Assert.That(response!.ActivityId, Is.Not.EqualTo(Guid.Empty), "the caller needs the Activity to read the findings back");
             Assert.That(_queuedWorkerTasks, Is.Empty, "a blocked proposal is never evaluated");
-        });
+        }
     }
 
     [Test]

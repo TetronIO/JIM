@@ -103,12 +103,12 @@ public class ScimResourceWriterTests
         // A provider is entitled to reject a whole request that asserts a read-only attribute.
         var result = WriteUser(Write("id", "abc"), Write("meta.version", "W/\"1\""), Write("userName", "alice"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Json(result), Does.Not.Contain("\"id\""));
             Assert.That(Json(result), Does.Not.Contain("meta"));
             Assert.That(Json(result), Does.Contain("alice"));
-        });
+        }
     }
 
     [Test]
@@ -117,11 +117,11 @@ public class ScimResourceWriterTests
         // Dropping it would export an object JIM believes carries a value the provider never received.
         var result = WriteUser(Write("notAnAttribute", "x"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.UnknownAttributes, Is.EqualTo(new[] { "notAnAttribute" }));
             Assert.That(Json(result), Does.Not.Contain("notAnAttribute"));
-        });
+        }
     }
 
     [Test]
@@ -156,11 +156,11 @@ public class ScimResourceWriterTests
     {
         var result = WriteUser(Write("emails.work", "work@example.com"), Write("emails.home", "home@example.com"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Resource["emails"]!.AsArray(), Has.Count.EqualTo(2));
             Assert.That(Json(result), Does.Contain("work@example.com").And.Contain("home@example.com"));
-        });
+        }
     }
 
     [Test]
@@ -170,11 +170,11 @@ public class ScimResourceWriterTests
         // same address and must land in the same entry.
         var result = WriteUser(Write("addresses.work.streetAddress", "1 High Street"), Write("addresses.work.locality", "Bath"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Resource["addresses"]!.AsArray(), Has.Count.EqualTo(1));
             Assert.That(Json(result), Does.Contain("1 High Street").And.Contain("Bath"));
-        });
+        }
     }
 
     [Test]
@@ -196,11 +196,11 @@ public class ScimResourceWriterTests
         var result = ScimResourceWriter.BuildResource(
             [Write("members", "member-a", "member-b")], groupSchema, ScimUrns.Group);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Resource["members"]!.AsArray(), Has.Count.EqualTo(2));
             Assert.That(Json(result), Does.Contain("{\"value\":\"member-a\"}"));
-        });
+        }
     }
 
     [Test]
@@ -295,11 +295,11 @@ public class ScimResourceWriterTests
 
         ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("members", ScimPatchOperations.Remove, "alice")], GroupSchema());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(resource["members"]!.AsArray(), Has.Count.EqualTo(1));
             Assert.That(resource.ToJsonString(), Does.Contain("bob").And.Not.Contain("alice"));
-        });
+        }
     }
 
     [Test]
@@ -313,11 +313,11 @@ public class ScimResourceWriterTests
 
         ScimResourceWriter.ApplyChanges(resource, [new ScimAttributeChange("emails.work", ScimPatchOperations.Remove, null)], UserSchema());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(resource["emails"]!.AsArray(), Has.Count.EqualTo(1));
             Assert.That(resource.ToJsonString(), Does.Contain("home@example.com"));
-        });
+        }
     }
 
     [Test]

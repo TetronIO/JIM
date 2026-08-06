@@ -33,12 +33,12 @@ public class ConnectedSystemObjectTypeDtoTagTests
 
         var dto = ConnectedSystemObjectTypeDto.FromEntity(objectType);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.Tags, Has.Count.EqualTo(2));
             Assert.That(dto.Tags.Any(t => t.Key == ObjectTypeTags.Keys.ClassKind && t.Value == ObjectTypeTags.Values.ClassKindStructural), Is.True);
             Assert.That(dto.Tags.Any(t => t.Key == ObjectTypeTags.Keys.Visibility && t.Value == ObjectTypeTags.Values.VisibilityInternal), Is.True);
-        });
+        }
     }
 
     [Test]
@@ -63,10 +63,10 @@ public class ConnectedSystemObjectTypeDtoTagTests
 
         var dto = ConnectedSystemObjectTypeDto.FromEntity(objectType);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.Tags, Is.Empty);
             Assert.That(dto.IsInternal, Is.False);
-        });
+        }
     }
 }

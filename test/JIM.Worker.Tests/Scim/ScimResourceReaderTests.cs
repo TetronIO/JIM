@@ -52,13 +52,13 @@ public class ScimResourceReaderTests
         }
         """);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Attributes.Single(a => a.Name == "id").StringValues, Is.EqualTo(new[] { "2819c223-7f76-453a-919d-413861904646" }));
             Assert.That(result.Attributes.Single(a => a.Name == "externalId").StringValues, Is.EqualTo(new[] { "701984" }));
             Assert.That(result.Attributes.Single(a => a.Name == "userName").StringValues, Is.EqualTo(new[] { "bjensen@example.com" }));
             Assert.That(result.Attributes.Single(a => a.Name == "meta.version").StringValues, Is.EqualTo(new[] { "W/\"a330bc54f0671c9\"" }));
-        });
+        }
     }
 
     [Test]
@@ -133,11 +133,11 @@ public class ScimResourceReaderTests
         { "id": "1", "name": { "givenName": "Barbara", "familyName": "Jensen", "formatted": "Ms. Barbara J Jensen" } }
         """);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Attributes.Single(a => a.Name == "name.givenName").StringValues, Is.EqualTo(new[] { "Barbara" }));
             Assert.That(result.Attributes.Single(a => a.Name == "name.familyName").StringValues, Is.EqualTo(new[] { "Jensen" }));
-        });
+        }
     }
 
     [Test]
@@ -149,12 +149,12 @@ public class ScimResourceReaderTests
             { "value": "home@example.com", "type": "home" } ] }
         """);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Attributes.Single(a => a.Name == "emails.work").StringValues, Is.EqualTo(new[] { "work@example.com" }));
             Assert.That(result.Attributes.Single(a => a.Name == "emails.home").StringValues, Is.EqualTo(new[] { "home@example.com" }));
             Assert.That(result.Attributes.Single(a => a.Name == "emails.primary").StringValues, Is.EqualTo(new[] { "work@example.com" }));
-        });
+        }
     }
 
     [Test]
@@ -176,11 +176,11 @@ public class ScimResourceReaderTests
             { "value": "second@example.com", "type": "work" } ] }
         """);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Attributes.Single(a => a.Name == "emails.work").StringValues, Is.EqualTo(new[] { "first@example.com" }));
             Assert.That(result.Warnings, Has.Exactly(1).Contains("emails"));
-        });
+        }
     }
 
     [Test]
@@ -207,11 +207,11 @@ public class ScimResourceReaderTests
             { "streetAddress": "100 Universal City Plaza", "locality": "Hollywood", "postalCode": "91608", "type": "work" } ] }
         """);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Attributes.Single(a => a.Name == "addresses.work.streetAddress").StringValues, Is.EqualTo(new[] { "100 Universal City Plaza" }));
             Assert.That(result.Attributes.Single(a => a.Name == "addresses.work.locality").StringValues, Is.EqualTo(new[] { "Hollywood" }));
-        });
+        }
     }
 
     [Test]
@@ -250,11 +250,11 @@ public class ScimResourceReaderTests
         """), groupSchema);
 
         var members = result.Attributes.Single(a => a.Name == "members");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(members.Type, Is.EqualTo(AttributeDataType.Reference));
             Assert.That(members.ReferenceValues, Is.EqualTo(new[] { "u1", "u2" }));
-        });
+        }
     }
 
     [Test]
@@ -291,11 +291,11 @@ public class ScimResourceReaderTests
         { "id": "1", "{{ScimUrns.EnterpriseUser}}": { "department": "Tour Operations", "employeeNumber": "701984" } }
         """);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Attributes.Single(a => a.Name == "enterpriseUser.department").StringValues, Is.EqualTo(new[] { "Tour Operations" }));
             Assert.That(result.Attributes.Single(a => a.Name == "enterpriseUser.employeeNumber").StringValues, Is.EqualTo(new[] { "701984" }));
-        });
+        }
     }
 
     [Test]
@@ -361,11 +361,11 @@ public class ScimResourceReaderTests
         // outranks importing the object at all.
         var result = ScimResourceReader.Read(Resource("""{ "field": "1e40" }"""), TypedSchema(ScimAttributeTypes.Decimal));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Error, Is.Not.Null);
             Assert.That(result.Attributes, Is.Empty);
-        });
+        }
     }
 
     [Test]
