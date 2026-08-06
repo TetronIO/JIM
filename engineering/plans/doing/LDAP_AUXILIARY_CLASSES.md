@@ -1,6 +1,6 @@
 # LDAP Auxiliary Object Classes (RFC 4512 Directories)
 
-- **Status:** Planned
+- **Status:** Doing
 - **Issue:** [#492](https://github.com/TetronIO/JIM/issues/492)
 - **Blocked by:** [#845](https://github.com/TetronIO/JIM/issues/845) (classification tag model)
 - **Follow-on:** [#1168](https://github.com/TetronIO/JIM/issues/1168) (Advanced objectClass mode, deferred)

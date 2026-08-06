@@ -3261,6 +3261,82 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
     }
 
+    #region Object Type extensions (auxiliary classes)
+
+    /// <summary>
+    /// Gets every auxiliary class selection an administrator has made on a Connected System.
+    /// </summary>
+    public async Task<List<ConnectedSystemObjectTypeExtension>> GetObjectTypeExtensionsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeExtensionsAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Records that one Object Type should be extended with the attributes of another.
+    /// </summary>
+    /// <returns>True if a new selection was recorded; false if it was already there.</returns>
+    public async Task<bool> AddObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.AddObjectTypeExtensionAsync(baseObjectTypeId, extensionObjectTypeId);
+    }
+
+    /// <summary>
+    /// Withdraws an auxiliary class selection.
+    /// </summary>
+    /// <returns>True if a selection was removed; false if there was nothing to remove.</returns>
+    public async Task<bool> RemoveObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.RemoveObjectTypeExtensionAsync(baseObjectTypeId, extensionObjectTypeId);
+    }
+
+    /// <summary>
+    /// Names the structural Object Type to use as the carrier when creating objects of a type that cannot stand
+    /// alone, or clears it when passed null.
+    /// </summary>
+    public async Task SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId)
+    {
+        await Application.Repository.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(objectTypeId, carrierObjectTypeId);
+    }
+
+    #endregion
+
+    #region Auxiliary class discovery
+
+    /// <summary>
+    /// Starts an auxiliary class discovery run for a Connected System.
+    /// </summary>
+    public async Task<AuxiliaryClassDiscoveryRun> CreateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        return await Application.Repository.ConnectedSystems.CreateAuxiliaryClassDiscoveryRunAsync(run);
+    }
+
+    /// <summary>
+    /// Gets the most recently started discovery run for a Connected System, with its results.
+    /// </summary>
+    public async Task<AuxiliaryClassDiscoveryRun?> GetLatestAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLatestAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Gets the discovery run currently in flight for a Connected System, or null if none is.
+    /// </summary>
+    public async Task<AuxiliaryClassDiscoveryRun?> GetInProgressAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetInProgressAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Persists a discovery run's progress, outcome and results. The run must have been loaded on the same
+    /// JimApplication instance used to save it.
+    /// </summary>
+    public async Task UpdateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        await Application.Repository.ConnectedSystems.UpdateAuxiliaryClassDiscoveryRunAsync(run);
+    }
+
+    #endregion
+
     /// <summary>
     /// Updates a Connected System Object Type.
     /// </summary>
