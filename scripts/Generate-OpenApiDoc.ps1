@@ -16,12 +16,21 @@
     Where to write the OpenAPI JSON. Defaults to
     src/JIM.Web/wwwroot/api/openapi/v1.json.
 
+.PARAMETER NoBuild
+    Run the already-built JIM.Web rather than building it first. For callers that
+    have just built the solution, such as the openapi-document CI job; the build
+    would otherwise be repeated for no benefit.
+
 .EXAMPLE
     ./scripts/Generate-OpenApiDoc.ps1
+
+.EXAMPLE
+    ./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath /tmp/openapi-v1.json
 #>
 [CmdletBinding()]
 param(
-    [string]$OutputPath
+    [string]$OutputPath,
+    [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,7 +62,9 @@ if (-not $env:JIM_DB_USERNAME)       { $env:JIM_DB_USERNAME = "jim" }
 if (-not $env:JIM_DB_PASSWORD)       { $env:JIM_DB_PASSWORD = "placeholder" }
 
 Write-Host "Generating OpenAPI document..." -ForegroundColor Cyan
-dotnet run --project $projectPath --no-launch-profile
+$runArgs = @("run", "--project", $projectPath, "--no-launch-profile")
+if ($NoBuild) { $runArgs += "--no-build" }
+dotnet @runArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "OpenAPI generation failed with exit code $LASTEXITCODE"
