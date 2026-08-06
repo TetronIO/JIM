@@ -73,6 +73,18 @@ public class SqlConnectorExportTests
         }
         """;
 
+    /// <summary>
+    /// A composite anchor one of whose parts is a GUID column, which is the case a part bound as text
+    /// cannot survive: no dialect implicitly converts a string to a uniqueidentifier or a RAW(16).
+    /// </summary>
+    private const string CompositeGuidAnchorDocument = """
+        {
+          "objectTypes": [
+            { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "COMPANY_ID", "STAFF_GUID" ] }
+          ]
+        }
+        """;
+
     private const string ManagerReferenceDocument = """
         {
           "objectTypes": [
@@ -82,6 +94,24 @@ public class SqlConnectorExportTests
               "table": "EMPLOYEES",
               "anchorColumns": [ "EMPLOYEE_ID" ],
               "columns": [ { "name": "MANAGER_EMPLOYEE_ID", "referencesObjectType": "Person" } ]
+            }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// The same reference, but pointing at an Object Type whose anchor is a GUID column, so the value
+    /// the reference carries has to reach the database as a GUID.
+    /// </summary>
+    private const string ManagerGuidReferenceDocument = """
+        {
+          "objectTypes": [
+            {
+              "name": "Person",
+              "schema": "HR",
+              "table": "EMPLOYEES",
+              "anchorColumns": [ "STAFF_GUID" ],
+              "columns": [ { "name": "MANAGER_STAFF_GUID", "referencesObjectType": "Person" } ]
             }
           ]
         }
@@ -127,7 +157,7 @@ public class SqlConnectorExportTests
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("4711"),
                 "A database-generated key is the new object's external ID; without it JIM cannot find the row it just created.");
-            Assert.That(provider.ExecutedCommandTexts.Single(), Does.StartWith("INSERT INTO [HR].[EMPLOYEES]"));
+            Assert.That(provider.ExecutedStatementTexts.Single(), Does.StartWith("INSERT INTO [HR].[EMPLOYEES]"));
         });
     }
 
@@ -148,7 +178,7 @@ public class SqlConnectorExportTests
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("4711"));
-            Assert.That(provider.ExecutedCommandTexts.Single(), Does.Contain("RETURNING [EMPLOYEE_ID] INTO"));
+            Assert.That(provider.ExecutedStatementTexts.Single(), Does.Contain("RETURNING [EMPLOYEE_ID] INTO"));
         });
     }
 
@@ -168,9 +198,9 @@ public class SqlConnectorExportTests
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("4711"));
-            Assert.That(provider.ExecutedCommandTexts.Single(), Does.Not.Contain("OUTPUT"),
+            Assert.That(provider.ExecutedStatementTexts.Single(), Does.Not.Contain("OUTPUT"),
                 "The anchor was supplied, so there is no generated key to ask the database for.");
-            Assert.That(provider.ExecutedCommands.Single().Parameters.Values, Does.Contain(4711).And.Contain("Ada"));
+            Assert.That(provider.ExecutedStatements.Single().Parameters.Values, Does.Contain(4711).And.Contain("Ada"));
         });
     }
 
@@ -184,7 +214,7 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        var relatedInsert = provider.ExecutedCommands.Single(command => command.CommandText.Contains("EMPLOYEE_PHONES", StringComparison.Ordinal));
+        var relatedInsert = provider.ExecutedStatements.Single(command => command.CommandText.Contains("EMPLOYEE_PHONES", StringComparison.Ordinal));
 
         Assert.Multiple(() =>
         {
@@ -216,7 +246,7 @@ public class SqlConnectorExportTests
         {
             Assert.That(transaction.Committed, Is.True);
             Assert.That(transaction.RolledBack, Is.False);
-            Assert.That(provider.ExecutedCommands.Select(command => command.Transaction), Is.All.SameAs(transaction),
+            Assert.That(provider.ExecutedStatements.Select(command => command.Transaction), Is.All.SameAs(transaction),
                 "The parent row and its related rows go in together or not at all, so every statement runs in the object's own transaction.");
         });
     }
@@ -281,7 +311,7 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        var update = provider.ExecutedCommands.Single();
+        var update = provider.ExecutedStatements.Single();
 
         Assert.Multiple(() =>
         {
@@ -301,7 +331,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        var update = provider.ExecutedCommands.Single();
+        var update = provider.ExecutedStatements.Single();
         var displayNameParameter = ParameterFor(update, "DISPLAY_NAME");
 
         Assert.Multiple(() =>
@@ -321,7 +351,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        var insert = provider.ExecutedCommands.Single();
+        var insert = provider.ExecutedStatements.Single();
 
         Assert.Multiple(() =>
         {
@@ -340,7 +370,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        var delete = provider.ExecutedCommands.Single();
+        var delete = provider.ExecutedStatements.Single();
 
         Assert.Multiple(() =>
         {
@@ -361,7 +391,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        var delete = provider.ExecutedCommands.Single();
+        var delete = provider.ExecutedStatements.Single();
 
         Assert.Multiple(() =>
         {
@@ -385,13 +415,13 @@ public class SqlConnectorExportTests
         Assert.Multiple(() =>
         {
             Assert.That(results[0].Success, Is.True);
-            Assert.That(provider.ExecutedCommandTexts, Is.EqualTo(new[]
+            Assert.That(provider.ExecutedStatementTexts, Is.EqualTo(new[]
             {
                 "DELETE FROM [HR].[EMPLOYEE_PHONES] WHERE [EMPLOYEE_ID] = @exAnchor0",
                 "DELETE FROM [HR].[EMPLOYEES] WHERE [EMPLOYEE_ID] = @exAnchor0"
             }), "A related row referencing its parent cannot outlive it, so the children go first.");
 
-            Assert.That(provider.ExecutedCommands.Select(command => command.Transaction), Is.All.SameAs(provider.Transactions.Single()));
+            Assert.That(provider.ExecutedStatements.Select(command => command.Transaction), Is.All.SameAs(provider.Transactions.Single()));
         });
     }
 
@@ -586,15 +616,57 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, CompositeAnchorDocument, [pendingExport]);
 
-        var update = provider.ExecutedCommands.Single();
+        var update = provider.ExecutedStatements.Single();
 
         Assert.Multiple(() =>
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(update.CommandText, Does.Contain("WHERE [COMPANY_ID] = @exAnchor0 AND [EMPLOYEE_ID] = @exAnchor1"),
                 "Keying on part of a composite anchor updates another object's row, silently.");
-            Assert.That(update.Parameters["exAnchor0"], Is.EqualTo("7"));
-            Assert.That(update.Parameters["exAnchor1"], Is.EqualTo("4711"));
+            Assert.That(update.Parameters["exAnchor0"], Is.EqualTo(7),
+                "A part of a composed external ID is text in JIM and an integer in the table, so it is bound as the column's own type.");
+            Assert.That(update.Parameters["exAnchor1"], Is.EqualTo(4711));
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ACompositeAnchorPartAgainstAGuidColumn_BindsAGuidRatherThanItsText()
+    {
+        // The case a part bound as text cannot survive: no dialect implicitly converts a string to a
+        // uniqueidentifier, so the statement is refused and every object of the type fails.
+        var identifier = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("COMPANY_ID+STAFF_GUID", AttributeDataType.Text, text: $"7+{identifier:D}"),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, CompositeGuidAnchorDocument, [pendingExport]);
+
+        var update = provider.ExecutedStatements.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(update.Parameters["exAnchor0"], Is.EqualTo(7));
+            Assert.That(update.Parameters["exAnchor1"], Is.EqualTo(provider.ConvertFromGuid(identifier)),
+                "Byte order is dialect-specific, so an anchor part crosses the seam through the provider or it is silently transposed.");
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ACompositeAnchorPartThatIsNotTheColumnsType_FailsThatObjectNamingTheColumnAndItsType()
+    {
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("COMPANY_ID+STAFF_GUID", AttributeDataType.Text, text: "7+not-a-guid"),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, CompositeGuidAnchorDocument, [pendingExport]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("STAFF_GUID").And.Contain("uniqueidentifier"),
+                "The administrator has to be told which column would not take the value, and what type it is.");
+            Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written against an anchor the column cannot hold.");
         });
     }
 
@@ -606,7 +678,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, CompositeAnchorDocument, [pendingExport]);
 
-        Assert.That(provider.ExecutedCommandTexts.Single(),
+        Assert.That(provider.ExecutedStatementTexts.Single(),
             Is.EqualTo("DELETE FROM [HR].[EMPLOYEES] WHERE [COMPANY_ID] = @exAnchor0 AND [EMPLOYEE_ID] = @exAnchor1"));
     }
 
@@ -622,7 +694,7 @@ public class SqlConnectorExportTests
         Assert.Multiple(() =>
         {
             Assert.That(results[0].Success, Is.False);
-            Assert.That(provider.ExecutedCommands, Is.Empty, "Nothing is written against an anchor JIM cannot read.");
+            Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written against an anchor JIM cannot read.");
         });
     }
 
@@ -639,7 +711,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        var bound = provider.ExecutedCommands.Single().Parameters[ParameterFor(provider.ExecutedCommands.Single(), "FTE")];
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "FTE")];
 
         Assert.Multiple(() =>
         {
@@ -657,7 +729,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        var bound = provider.ExecutedCommands.Single().Parameters[ParameterFor(provider.ExecutedCommands.Single(), "FTE")];
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "FTE")];
 
         Assert.That(bound, Is.EqualTo(0.875m));
     }
@@ -672,14 +744,14 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        var bound = provider.ExecutedCommands.Single().Parameters[ParameterFor(provider.ExecutedCommands.Single(), "STAFF_GUID")];
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "STAFF_GUID")];
 
         Assert.That(bound, Is.EqualTo(provider.ConvertFromGuid(identifier)),
             "Byte order is dialect-specific, so a GUID crosses the seam through the provider or it is silently transposed.");
     }
 
     [Test]
-    public async Task ExportAsync_AZonelessDateTime_WritesLocalWallClockTimeInTheConfiguredZone()
+    public async Task ExportAsync_AZonelessDateTimeColumn_WritesLocalWallClockTimeInTheConfiguredZone()
     {
         // JIM holds every date and time in UTC; a column carrying no offset holds wall-clock time in
         // whichever zone the administrator declared, so export has to invert exactly what import applied.
@@ -689,7 +761,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonDocument, [pendingExport], databaseTimeZone: "Europe/London");
 
-        var bound = provider.ExecutedCommands.Single().Parameters[ParameterFor(provider.ExecutedCommands.Single(), "START_DATE")];
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "START_DATE")];
 
         Assert.Multiple(() =>
         {
@@ -699,21 +771,50 @@ public class SqlConnectorExportTests
     }
 
     [Test]
-    public async Task ExportAsync_AZonelessDateTimeInAUtcDatabase_WritesTheValueUnchanged()
+    public async Task ExportAsync_AnOffsetCarryingDateTimeColumn_WritesTheUtcInstantWithoutApplyingTheConfiguredZone()
     {
+        // The Database Time Zone setting exists to interpret columns that carry no offset. A column that
+        // carries one needs no interpreting, and applying the zone to it moves the instant by the zone's
+        // offset without any error (PRD requirement 9).
         var provider = new FakeSqlProvider();
         var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
-            Change("START_DATE", AttributeDataType.DateTime, dateTime: new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc), changeType: PendingExportAttributeChangeType.Update));
+            Change("LAST_REVIEWED", AttributeDataType.DateTime, dateTime: new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc), changeType: PendingExportAttributeChangeType.Update));
 
-        await ExportAsync(provider, PersonDocument, [pendingExport]);
+        await ExportAsync(provider, PersonDocument, [pendingExport], databaseTimeZone: "Europe/London");
 
-        var bound = provider.ExecutedCommands.Single().Parameters[ParameterFor(provider.ExecutedCommands.Single(), "START_DATE")];
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "LAST_REVIEWED")];
 
-        Assert.That(bound, Is.EqualTo(new DateTime(2026, 7, 1, 12, 0, 0)));
+        Assert.Multiple(() =>
+        {
+            Assert.That(bound, Is.EqualTo(new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero)),
+                "An offset-carrying column takes the instant JIM holds; shifting it by the Connected System's zone would write a different moment in time.");
+            Assert.That(((DateTimeOffset)bound!).Offset, Is.EqualTo(TimeSpan.Zero), "JIM holds every value in UTC, so that is the offset it states.");
+        });
     }
 
     [Test]
-    public async Task ExportAsync_AResolvedReference_WritesTheReferencedObjectsAnchor()
+    public async Task ExportAsync_ADateTimeInAUtcDatabase_WritesTheSameInstantToBothKindsOfColumn()
+    {
+        var provider = new FakeSqlProvider();
+        var instant = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("START_DATE", AttributeDataType.DateTime, dateTime: instant, changeType: PendingExportAttributeChangeType.Update),
+            Change("LAST_REVIEWED", AttributeDataType.DateTime, dateTime: instant, changeType: PendingExportAttributeChangeType.Update));
+
+        await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        var update = provider.ExecutedStatements.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(update.Parameters[ParameterFor(update, "START_DATE")], Is.EqualTo(new DateTime(2026, 7, 1, 12, 0, 0)));
+            Assert.That(update.Parameters[ParameterFor(update, "LAST_REVIEWED")], Is.EqualTo(new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero)),
+                "At the UTC default neither kind of column is shifted, so the two carry the same instant.");
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_AResolvedReferenceToANumericColumn_WritesTheReferencedObjectsAnchorAsANumber()
     {
         var provider = new FakeSqlProvider();
         var reference = Change("MANAGER_EMPLOYEE_ID", AttributeDataType.Reference, text: "1234", changeType: PendingExportAttributeChangeType.Update);
@@ -722,11 +823,127 @@ public class SqlConnectorExportTests
         var results = await ExportAsync(provider, ManagerReferenceDocument,
             [Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711), reference)]);
 
+        var bound = provider.ExecutedStatements.Single();
+
         Assert.Multiple(() =>
         {
             Assert.That(results[0].Success, Is.True);
-            Assert.That(provider.ExecutedCommands.Single().Parameters.Values, Does.Contain("1234"));
+            Assert.That(bound.Parameters[ParameterFor(bound, "MANAGER_EMPLOYEE_ID")], Is.EqualTo(1234),
+                "A reference carries the referenced object's anchor as text; the column it goes into is an integer, and that is what is bound.");
         });
+    }
+
+    [Test]
+    public async Task ExportAsync_AResolvedReferenceToAGuidColumn_BindsAGuidRatherThanItsText()
+    {
+        // A uniqueidentifier column takes no implicit conversion from a string, so a reference bound as
+        // text fails the write outright; the same is true of an Oracle RAW(16).
+        var identifier = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var provider = new FakeSqlProvider();
+        var reference = Change("MANAGER_STAFF_GUID", AttributeDataType.Reference, text: identifier.ToString("D"), changeType: PendingExportAttributeChangeType.Update);
+        reference.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var results = await ExportAsync(provider, ManagerGuidReferenceDocument,
+            [Update(Anchor("STAFF_GUID", AttributeDataType.Guid, guid: Guid.NewGuid()), reference)]);
+
+        var bound = provider.ExecutedStatements.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(bound.Parameters[ParameterFor(bound, "MANAGER_STAFF_GUID")], Is.EqualTo(provider.ConvertFromGuid(identifier)),
+                "Byte order is dialect-specific, so a reference crosses the seam through the provider or it is silently transposed.");
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_AResolvedReferenceToAnOracleRaw16Column_BindsAGuidWhereTheAdministratorDeclaredThatColumnAGuid()
+    {
+        // RAW(16) is as commonly a digest as a GUID, so the reinterpretation is an opt-in the export has
+        // to honour exactly as discovery and import do.
+        var identifier = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("STAFF_GUID", "RAW", MaxLength: 16, IsNullable: false),
+            new FakeCatalogueColumn("MANAGER_STAFF_GUID", "RAW", MaxLength: 16));
+
+        var reference = Change("MANAGER_STAFF_GUID", AttributeDataType.Reference, text: identifier.ToString("D"), changeType: PendingExportAttributeChangeType.Update);
+        reference.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var results = await ExportAsync(provider, ManagerGuidReferenceDocument,
+            [Update(Anchor("STAFF_GUID", AttributeDataType.Guid, guid: Guid.NewGuid()), reference)],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        var bound = provider.ExecutedStatements.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(bound.Parameters[ParameterFor(bound, "MANAGER_STAFF_GUID")], Is.EqualTo(provider.ConvertFromGuid(identifier)));
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_AReferenceThatIsNotTheColumnsType_FailsThatObjectAndLeavesTheBatchAlone()
+    {
+        var provider = new FakeSqlProvider();
+        var unusable = Change("MANAGER_STAFF_GUID", AttributeDataType.Reference, text: "not-a-guid", changeType: PendingExportAttributeChangeType.Update);
+        unusable.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var usable = Change("MANAGER_STAFF_GUID", AttributeDataType.Reference, text: Guid.NewGuid().ToString("D"), changeType: PendingExportAttributeChangeType.Update);
+        usable.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var results = await ExportAsync(provider, ManagerGuidReferenceDocument,
+        [
+            Update(Anchor("STAFF_GUID", AttributeDataType.Guid, guid: Guid.NewGuid()), unusable),
+            Update(Anchor("STAFF_GUID", AttributeDataType.Guid, guid: Guid.NewGuid()), usable)
+        ]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("MANAGER_STAFF_GUID").And.Contain("uniqueidentifier"),
+                "The administrator has to be told which attribute, which column and which type would not take the value.");
+            Assert.That(results[1].Success, Is.True, "A value one object cannot write must not poison the batch it arrived in.");
+            Assert.That(provider.ExecutedStatements, Has.Count.EqualTo(1), "Only the object whose value converts is written.");
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_AColumnTheCatalogueDoesNotDescribe_FailsThatObjectAskingForASchemaImport()
+    {
+        // The table changed under the Object Types document. Binding the value as text anyway would have
+        // the database decide what it meant, which is exactly what reading the catalogue is here to stop.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("RETIRED_COLUMN", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("RETIRED_COLUMN").And.Contain("HR.EMPLOYEES"));
+            Assert.That(results[0].ErrorMessage, Does.Contain("Import the schema"),
+                "The Object Types document and the table have diverged, and the message has to say what reconciles them.");
+            Assert.That(provider.ExecutedStatements, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ManyObjectsOfOneObjectType_ReadsTheColumnCatalogueOncePerObjectTypeRatherThanPerObject()
+    {
+        var provider = new FakeSqlProvider();
+
+        await ExportAsync(provider, PersonWithPhonesDocument,
+        [
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711), Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update)),
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4712), Change("DISPLAY_NAME", AttributeDataType.Text, text: "Grace", changeType: PendingExportAttributeChangeType.Update)),
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4713), Change("DISPLAY_NAME", AttributeDataType.Text, text: "Katherine", changeType: PendingExportAttributeChangeType.Update))
+        ]);
+
+        Assert.That(provider.ColumnCatalogueReadCount, Is.EqualTo(2),
+            "One read for the parent table and one for its related table, for the whole batch: a catalogue read per object would be a round trip per object.");
     }
 
     [Test]
@@ -743,7 +960,7 @@ public class SqlConnectorExportTests
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("MANAGER_EMPLOYEE_ID"));
-            Assert.That(provider.ExecutedCommands, Is.Empty,
+            Assert.That(provider.ExecutedStatements, Is.Empty,
                 "A reference JIM has not resolved yet has no anchor to write; writing anything else would point the row at the wrong object.");
             Assert.That(provider.Transactions.Single().Committed, Is.False);
         });
@@ -759,7 +976,7 @@ public class SqlConnectorExportTests
 
         await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: hostileValue))]);
 
-        var insert = provider.ExecutedCommands.Single();
+        var insert = provider.ExecutedStatements.Single();
 
         Assert.Multiple(() =>
         {
@@ -786,7 +1003,7 @@ public class SqlConnectorExportTests
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("Contractor"));
-            Assert.That(provider.ExecutedCommands, Is.Empty);
+            Assert.That(provider.ExecutedStatements, Is.Empty);
         });
     }
 
@@ -849,10 +1066,20 @@ public class SqlConnectorExportTests
         FakeSqlProvider provider,
         string objectTypesDocument,
         IList<PendingExport> pendingExports,
-        string databaseTimeZone = SqlConnectorConstants.DefaultDatabaseTimeZone)
+        string databaseTimeZone = SqlConnectorConstants.DefaultDatabaseTimeZone,
+        Action<List<ConnectedSystemSettingValue>>? configureSettings = null)
     {
+        ArgumentNullException.ThrowIfNull(provider);
+
+        // An export asks the database what its columns are typed as, so every test needs a catalogue to
+        // answer from. A test that declared one of its own keeps it; the rest get the shape below.
+        if (provider.Catalogue.Tables.Count == 0)
+            DeclareTheUsualTables(provider);
+
         using var connector = new SqlConnector { ProviderFactory = _ => provider };
-        connector.OpenExportConnection(SettingValues(connector, objectTypesDocument, databaseTimeZone), null);
+        var settingValues = SettingValues(connector, objectTypesDocument, databaseTimeZone);
+        configureSettings?.Invoke(settingValues);
+        connector.OpenExportConnection(settingValues, null);
 
         try
         {
@@ -862,6 +1089,30 @@ public class SqlConnectorExportTests
         {
             connector.CloseExportConnection();
         }
+    }
+
+    /// <summary>
+    /// The tables these tests write to, as a Microsoft SQL Server catalogue would report them. Both
+    /// kinds of date and time column are present, and both a numeric and a GUID reference target, so a
+    /// test picks the column whose type it is about rather than declaring a catalogue of its own.
+    /// </summary>
+    private static void DeclareTheUsualTables(FakeSqlProvider provider)
+    {
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("COMPANY_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar", MaxLength: 200),
+            new FakeCatalogueColumn("Grace", "nvarchar", MaxLength: 200),
+            new FakeCatalogueColumn("FTE", "decimal", Precision: 5, Scale: 3),
+            new FakeCatalogueColumn("STAFF_GUID", "uniqueidentifier"),
+            new FakeCatalogueColumn("START_DATE", "datetime2"),
+            new FakeCatalogueColumn("LAST_REVIEWED", "datetimeoffset"),
+            new FakeCatalogueColumn("MANAGER_EMPLOYEE_ID", "int"),
+            new FakeCatalogueColumn("MANAGER_STAFF_GUID", "uniqueidentifier"));
+
+        provider.Catalogue.AddTable("HR", "EMPLOYEE_PHONES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("PHONE_NUMBER", "nvarchar", MaxLength: 30));
     }
 
     private static List<ConnectedSystemSettingValue> SettingValues(SqlConnector connector, string objectTypesDocument, string databaseTimeZone = SqlConnectorConstants.DefaultDatabaseTimeZone)
@@ -938,7 +1189,7 @@ public class SqlConnectorExportTests
     /// <summary>
     /// The Connected System Object's external ID value, which is what an update and a delete are keyed on.
     /// </summary>
-    private static ConnectedSystemObjectAttributeValue Anchor(string name, AttributeDataType type, string? text = null, int? number = null)
+    private static ConnectedSystemObjectAttributeValue Anchor(string name, AttributeDataType type, string? text = null, int? number = null, Guid? guid = null)
     {
         var attribute = new ConnectedSystemObjectTypeAttribute { Id = ++_attributeId, Name = name, Type = type, IsExternalId = true };
 
@@ -947,7 +1198,8 @@ public class SqlConnectorExportTests
             Attribute = attribute,
             AttributeId = attribute.Id,
             StringValue = text,
-            IntValue = number
+            IntValue = number,
+            GuidValue = guid
         };
     }
 

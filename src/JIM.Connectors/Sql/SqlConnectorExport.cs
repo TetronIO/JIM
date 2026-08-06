@@ -41,6 +41,15 @@ namespace JIM.Connectors.Sql;
 /// answers for it: a write that had to change something and did not fails the object, while a removal
 /// that found nothing to remove has already reached the end state it asked for.
 /// </para>
+/// <para>
+/// <b>A value is bound as the column's type, not as JIM's.</b> The type an attribute has in JIM does not
+/// say what the column holding it is: a Reference and a composite anchor's parts are both text in JIM
+/// and may be a <c>uniqueidentifier</c> or an exact numeric in the table, and a date and time column may
+/// or may not carry its own offset. So the plan for an Object Type reads the database's own column
+/// catalogue once, and every value is converted to what its column expects before it is bound. The
+/// catalogue is asked rather than the Object Types document because a column retyped in the table would
+/// leave a recorded type stale and silently wrong.
+/// </para>
 /// </remarks>
 internal sealed class SqlConnectorExport
 {
@@ -64,6 +73,7 @@ internal sealed class SqlConnectorExport
     private readonly DbConnection _connection;
     private readonly SqlSchemaConfiguration _configuration;
     private readonly TimeZoneInfo _databaseTimeZone;
+    private readonly SqlTypeMappingOptions _typeMappingOptions;
     private readonly ILogger _logger;
     private readonly Dictionary<string, SqlExportPlan> _plans = new(StringComparer.OrdinalIgnoreCase);
 
@@ -72,12 +82,14 @@ internal sealed class SqlConnectorExport
         DbConnection connection,
         SqlSchemaConfiguration configuration,
         TimeZoneInfo databaseTimeZone,
+        SqlTypeMappingOptions typeMappingOptions,
         ILogger logger)
     {
         _provider = provider;
         _connection = connection;
         _configuration = configuration;
         _databaseTimeZone = databaseTimeZone;
+        _typeMappingOptions = typeMappingOptions;
         _logger = logger;
     }
 
@@ -132,7 +144,10 @@ internal sealed class SqlConnectorExport
     /// </summary>
     private async Task<ConnectedSystemExportResult> ExportObjectAsync(PendingExport pendingExport, CancellationToken cancellationToken)
     {
-        var plan = ResolvePlan(pendingExport);
+        // Deliberately before the transaction opens: the plan's catalogue read is a read of the
+        // database's own metadata, it is shared by every object of the type, and holding a transaction
+        // open across it would lengthen every object's lock window for nothing.
+        var plan = await ResolvePlanAsync(pendingExport, cancellationToken);
 
         await using var transaction = await _connection.BeginTransactionAsync(cancellationToken);
 
@@ -401,7 +416,8 @@ internal sealed class SqlConnectorExport
         foreach (var change in pendingExport.AttributeValueChanges.Where(change => plan.IsRelatedTableAttribute(change.Attribute.Name)))
         {
             var relatedTable = plan.RequireRelatedTable(change.Attribute.Name);
-            var statement = BuildRelatedTableStatement(relatedTable, BuildJoinValues(relatedTable, anchor), change);
+            var relatedColumns = plan.RequireRelatedTableColumns(change.Attribute.Name);
+            var statement = BuildRelatedTableStatement(relatedTable, relatedColumns, BuildJoinValues(relatedTable, anchor), change);
             var rowsAffected = await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
 
             // A removal that matched nothing has already reached the end state it asked for, so it is
@@ -426,9 +442,15 @@ internal sealed class SqlConnectorExport
     /// </remarks>
     private SqlExportStatement BuildRelatedTableStatement(
         SqlRelatedTableConfiguration relatedTable,
+        SqlExportColumnTypes relatedColumns,
         IReadOnlyList<SqlExportColumnValue> joinValues,
         PendingExportAttributeValueChange change)
     {
+        // Refused before anything is generated, so a related table that no longer has the columns the
+        // Object Types document names never produces a statement the database has to reject.
+        foreach (var joinColumnName in joinValues.Select(joinValue => joinValue.ColumnName))
+            relatedColumns.Require(joinColumnName);
+
         if (change.ChangeType == PendingExportAttributeChangeType.RemoveAll)
         {
             var clear = new SqlDeleteCommand
@@ -441,7 +463,8 @@ internal sealed class SqlConnectorExport
             return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues, AddsARow: false);
         }
 
-        var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0), ToDatabaseValue(change));
+        var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0),
+            ToDatabaseValue(change, relatedTable.ValueColumn, relatedColumns.Require(relatedTable.ValueColumn)));
         List<SqlExportColumnValue> boundValues = [.. joinValues, value];
 
         if (change.ChangeType == PendingExportAttributeChangeType.Remove)
@@ -499,7 +522,11 @@ internal sealed class SqlConnectorExport
                 $"The Connected System Object has no external ID value, so JIM cannot tell which row of Object Type '{plan.Name}' to change.");
 
         if (plan.AnchorColumns.Count == 1)
-            return [new SqlExportColumnValue(plan.AnchorColumns[0], AnchorParameterName(0), ToDatabaseValue(externalId))];
+            return
+            [
+                new SqlExportColumnValue(plan.AnchorColumns[0], AnchorParameterName(0),
+                    ToDatabaseValue(externalId, plan.AnchorColumns[0], plan.ParentColumns.Require(plan.AnchorColumns[0])))
+            ];
 
         // A composite anchor reaches JIM as the single Text attribute discovery composes for it, because
         // a Connected System Object is identified by one value. Its parts are separated exactly as the
@@ -512,7 +539,8 @@ internal sealed class SqlConnectorExport
                 "Import the schema and run a Full Import so that external IDs are composed from the anchor the Object Types document now declares.");
 
         return [.. plan.AnchorColumns.Select((anchorColumn, index) =>
-            new SqlExportColumnValue(anchorColumn, AnchorParameterName(index), ResolveAnchorPart(connectedSystemObject, anchorColumn, parts[index])))];
+            new SqlExportColumnValue(anchorColumn, AnchorParameterName(index),
+                ResolveAnchorPart(connectedSystemObject, anchorColumn, plan.ParentColumns.Require(anchorColumn), parts[index])))];
     }
 
     /// <summary>
@@ -521,15 +549,18 @@ internal sealed class SqlConnectorExport
     /// <remarks>
     /// The part columns carry typed values of their own wherever the administrator selected them for
     /// synchronisation, and those are used in preference to anything derived from a string. Where they
-    /// were not selected, the composed external ID is all JIM holds, so the part is bound as the text it
-    /// is and the database converts it exactly as it would any literal compared against that column.
+    /// were not selected, the composed external ID is all JIM holds, so the part is converted to the
+    /// type its column declares: a part left as text is refused outright by a <c>uniqueidentifier</c> or
+    /// a <c>RAW(16)</c> anchor column, and every object of the type would fail against it.
     /// </remarks>
-    private object? ResolveAnchorPart(ConnectedSystemObject connectedSystemObject, string anchorColumn, string part)
+    private object? ResolveAnchorPart(ConnectedSystemObject connectedSystemObject, string anchorColumn, SqlColumnType columnType, string part)
     {
         var value = connectedSystemObject.AttributeValues
             .FirstOrDefault(candidate => string.Equals(candidate.Attribute.Name, anchorColumn, StringComparison.OrdinalIgnoreCase));
 
-        return value == null ? part : ToDatabaseValue(value);
+        return value == null
+            ? ToColumnValue(anchorColumn, columnType, part)
+            : ToDatabaseValue(value, anchorColumn, columnType);
     }
 
     /// <summary>
@@ -608,10 +639,16 @@ internal sealed class SqlConnectorExport
             .Where(change => !forCreate || !IsRemoval(change))
             .ToList();
 
-        return [.. changes.Select((change, index) => new SqlExportColumnValue(
-            change.Attribute.Name,
-            ValueParameterName(index),
-            IsRemoval(change) ? null : ToDatabaseValue(change)))];
+        // The column's own type is required whether or not there is a value to write: a column the
+        // catalogue does not describe is one this Object Type can no longer be written to at all.
+        return [.. changes.Select((change, index) =>
+        {
+            var columnType = plan.ParentColumns.Require(change.Attribute.Name);
+            return new SqlExportColumnValue(
+                change.Attribute.Name,
+                ValueParameterName(index),
+                IsRemoval(change) ? null : ToDatabaseValue(change, change.Attribute.Name, columnType));
+        })];
     }
 
     private static bool IsRemoval(PendingExportAttributeValueChange change) =>
@@ -621,7 +658,14 @@ internal sealed class SqlConnectorExport
     /// Turns a Pending Export's attribute value into what the driver binds, inverting exactly what an
     /// import of the same column does to the value coming the other way.
     /// </summary>
-    private object? ToDatabaseValue(PendingExportAttributeValueChange change)
+    /// <param name="change">The attribute value change to write.</param>
+    /// <param name="columnName">The column it is going into, which is the attribute's own name except in a related table.</param>
+    /// <param name="columnType">
+    /// The type of that column, as the database's own catalogue reports it. It decides what a date and
+    /// time means and what a Reference's anchor has to become; the rest of JIM's types already know
+    /// their own CLR shape.
+    /// </param>
+    private object? ToDatabaseValue(PendingExportAttributeValueChange change, string columnName, SqlColumnType columnType)
     {
         return change.Attribute.Type switch
         {
@@ -630,10 +674,10 @@ internal sealed class SqlConnectorExport
             AttributeDataType.LongNumber => change.LongValue,
             AttributeDataType.Decimal => ToDecimal(change),
             AttributeDataType.Boolean => change.BoolValue,
-            AttributeDataType.DateTime => change.DateTimeValue == null ? null : ToDatabaseDateTime(change.DateTimeValue.Value),
+            AttributeDataType.DateTime => change.DateTimeValue == null ? null : ToDatabaseDateTime(change.DateTimeValue.Value, columnType),
             AttributeDataType.Guid => change.GuidValue == null ? null : _provider.ConvertFromGuid(change.GuidValue.Value),
             AttributeDataType.Binary => change.ByteValue,
-            AttributeDataType.Reference => ToReferenceAnchor(change),
+            AttributeDataType.Reference => ToColumnValue(change.Attribute.Name, columnName, columnType, ToReferenceAnchor(change)),
             _ => throw new NotSupportedException($"Attribute '{change.Attribute.Name}' is a {change.Attribute.Type}, which cannot be written to a database column.")
         };
     }
@@ -643,19 +687,92 @@ internal sealed class SqlConnectorExport
     /// stored value's fields is populated, decided by the attribute's type when it was imported, so
     /// reading them in turn recovers the value without needing the schema again.
     /// </summary>
-    private object? ToDatabaseValue(ConnectedSystemObjectAttributeValue value)
+    /// <remarks>
+    /// The one caller is an anchor, and an anchor's text form is the one thing JIM holds for a column
+    /// whose type it never learned, so a stored string is converted to the column's own type rather than
+    /// left for the database to interpret.
+    /// </remarks>
+    private object? ToDatabaseValue(ConnectedSystemObjectAttributeValue value, string columnName, SqlColumnType columnType)
     {
         return value switch
         {
-            { StringValue: { } text } => text,
+            { StringValue: { } text } => ToColumnValue(value.Attribute.Name, columnName, columnType, text),
             { IntValue: { } number } => number,
             { LongValue: { } number } => number,
             { DecimalValue: { } number } => number,
             { GuidValue: { } identifier } => _provider.ConvertFromGuid(identifier),
             { BoolValue: { } flag } => flag,
-            { DateTimeValue: { } dateTime } => ToDatabaseDateTime(dateTime),
+            { DateTimeValue: { } dateTime } => ToDatabaseDateTime(dateTime, columnType),
             _ => value.ByteValue
         };
+    }
+
+    /// <summary>
+    /// Converts a value JIM holds as text into whatever the column it is going into expects.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two things reach an export as text with no type of their own: a Reference, which carries the
+    /// referenced object's anchor, and one part of a composed external ID. A database implicitly
+    /// converts a string to a numeric or a character column, so binding text there works by accident;
+    /// against a SQL Server <c>uniqueidentifier</c> or an Oracle <c>RAW(16)</c> it does not, and the
+    /// statement is refused with a message about types rather than about the object.
+    /// </para>
+    /// <para>
+    /// A value that will not convert fails its object here, naming the attribute, the column and the
+    /// column's type. Binding it anyway would leave the database to decide what it meant, which is the
+    /// whole thing reading the catalogue exists to stop.
+    /// </para>
+    /// </remarks>
+    private object ToColumnValue(string columnName, SqlColumnType columnType, string text) =>
+        ToColumnValue(columnName, columnName, columnType, text);
+
+    private object ToColumnValue(string attributeName, string columnName, SqlColumnType columnType, string text)
+    {
+        var attributeType = MapColumnType(attributeName, columnName, columnType);
+
+        try
+        {
+            return attributeType switch
+            {
+                AttributeDataType.Text => text,
+                AttributeDataType.Number => int.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture),
+                AttributeDataType.LongNumber => long.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture),
+                AttributeDataType.Decimal => DecimalAttributeValue.TryParse(text, out var number)
+                    ? number
+                    : throw new FormatException($"'{text}' is not a decimal number."),
+                AttributeDataType.Guid => IdentifierParser.TryFromString(text, out var identifier)
+                    ? _provider.ConvertFromGuid(identifier)
+                    : throw new FormatException($"'{text}' is not a GUID."),
+                AttributeDataType.Boolean => bool.Parse(text),
+                AttributeDataType.Binary => Convert.FromHexString(text),
+                AttributeDataType.DateTime => ToDatabaseDateTime(
+                    DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), columnType),
+                _ => throw new FormatException($"a {attributeType} column cannot be written from a text value.")
+            };
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
+        {
+            throw new InvalidOperationException(
+                $"Attribute '{attributeName}' holds '{text}', which JIM cannot write to column '{columnName}' of type '{columnType.TypeName}': {ex.Message} " +
+                "The value is left unwritten rather than bound as text for the database to interpret; check the Synchronisation Rule flowing this attribute, and that the column is the one the Object Type means.", ex);
+        }
+    }
+
+    /// <summary>
+    /// The JIM attribute type a column's SQL type maps onto, for the dialect this export is speaking.
+    /// </summary>
+    private AttributeDataType MapColumnType(string attributeName, string columnName, SqlColumnType columnType)
+    {
+        try
+        {
+            return _provider.MapColumnType(columnType, _typeMappingOptions);
+        }
+        catch (SqlTypeMappingException ex)
+        {
+            throw new InvalidOperationException(
+                $"Attribute '{attributeName}' is written to column '{columnName}', which JIM has no attribute type for. {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -678,18 +795,30 @@ internal sealed class SqlConnectorExport
     }
 
     /// <summary>
-    /// Inverts the interpretation an import applies to a date and time column carrying no offset. JIM
-    /// holds every value in UTC; a zoneless column holds wall-clock time in the zone the administrator
-    /// declared for this Connected System, so that is what is written back into it.
+    /// Inverts exactly what an import applies to a date and time coming the other way.
     /// </summary>
     /// <remarks>
-    /// The value leaves with an unspecified kind, matching the column: a kind of UTC would have some
-    /// drivers convert it a second time. Where the Connected System is configured for UTC (the default),
-    /// this is the identity conversion and the value is written exactly as JIM holds it.
+    /// <para>
+    /// An import can tell the two kinds of column apart because the driver hands back a
+    /// <see cref="DateTimeOffset"/> for one and a <see cref="DateTime"/> for the other. An export has no
+    /// such signal in the value, so it takes the distinction from the column's own type, which is why
+    /// the catalogue is read at all.
+    /// </para>
+    /// <para>
+    /// A column carrying its own offset takes the instant JIM holds, stated as UTC: the Database Time
+    /// Zone setting exists to interpret columns that state nothing, and applying it here would move the
+    /// instant by the zone's offset without any error (PRD requirement 9). A zoneless column holds
+    /// wall-clock time in the zone the administrator declared, so that is what is written into it, with
+    /// an unspecified kind to match: a kind of UTC would have some drivers convert it a second time.
+    /// Where the Connected System is configured for UTC (the default), both are the identity conversion.
+    /// </para>
     /// </remarks>
-    private DateTime ToDatabaseDateTime(DateTime value)
+    private object ToDatabaseDateTime(DateTime value, SqlColumnType columnType)
     {
         var utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+        if (_provider.ColumnCarriesAnOffset(columnType))
+            return new DateTimeOffset(utc, TimeSpan.Zero);
 
         return DateTime.SpecifyKind(TimeZoneInfo.ConvertTimeFromUtc(utc, _databaseTimeZone), DateTimeKind.Unspecified);
     }
@@ -777,7 +906,12 @@ internal sealed class SqlConnectorExport
     /// Works out where an object of this Pending Export's type is written, refusing configuration that
     /// could not be written to before anything is attempted.
     /// </summary>
-    private SqlExportPlan ResolvePlan(PendingExport pendingExport)
+    /// <remarks>
+    /// Resolved lazily and kept for the batch, because every Pending Export of the same type answers to
+    /// the same plan and the catalogue read behind it is a round trip. An Object Type nobody exports in
+    /// this batch therefore costs nothing at all.
+    /// </remarks>
+    private async Task<SqlExportPlan> ResolvePlanAsync(PendingExport pendingExport, CancellationToken cancellationToken)
     {
         var objectTypeName = ResolveObjectTypeName(pendingExport)
             ?? throw new SqlSchemaConfigurationException(
@@ -796,9 +930,28 @@ internal sealed class SqlConnectorExport
                 $"Object Type '{configuration.Name}' reads its objects from a SELECT statement, which is not something JIM can write to. " +
                 "Point the Object Type at a table to export to it.");
 
-        plan = new SqlExportPlan(configuration);
+        var parentColumns = await ReadColumnTypesAsync(configuration.SchemaName, configuration.TableName!, cancellationToken);
+        var relatedTableColumns = new Dictionary<string, SqlExportColumnTypes>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var relatedTable in configuration.RelatedTables)
+            relatedTableColumns[relatedTable.AttributeName] = await ReadColumnTypesAsync(relatedTable.SchemaName, relatedTable.TableName, cancellationToken);
+
+        plan = new SqlExportPlan(configuration, parentColumns, relatedTableColumns);
         _plans[objectTypeName] = plan;
         return plan;
+    }
+
+    /// <summary>
+    /// Asks the database what one table's columns are typed as.
+    /// </summary>
+    private async Task<SqlExportColumnTypes> ReadColumnTypesAsync(string? schemaName, string tableName, CancellationToken cancellationToken)
+    {
+        var columns = await SqlCatalogueReader.ReadColumnsAsync(_provider, _connection, schemaName, tableName, cancellationToken);
+
+        _logger.Debug("SqlConnectorExport: '{TableName}' has {ColumnCount} column(s) this export can write to",
+            QualifiedName(schemaName, tableName), columns.Count);
+
+        return new SqlExportColumnTypes(QualifiedName(schemaName, tableName), columns);
     }
 
     /// <summary>
@@ -840,10 +993,16 @@ internal sealed record SqlExportStatement(string CommandText, IReadOnlyList<SqlE
 internal sealed class SqlExportPlan
 {
     private readonly Dictionary<string, SqlRelatedTableConfiguration> _relatedTables;
+    private readonly IReadOnlyDictionary<string, SqlExportColumnTypes> _relatedTableColumns;
 
-    internal SqlExportPlan(SqlObjectTypeConfiguration configuration)
+    internal SqlExportPlan(
+        SqlObjectTypeConfiguration configuration,
+        SqlExportColumnTypes parentColumns,
+        IReadOnlyDictionary<string, SqlExportColumnTypes> relatedTableColumns)
     {
         Configuration = configuration;
+        ParentColumns = parentColumns;
+        _relatedTableColumns = relatedTableColumns;
         _relatedTables = configuration.RelatedTables.ToDictionary(relatedTable => relatedTable.AttributeName, StringComparer.OrdinalIgnoreCase);
 
         ComposedAnchorName = configuration.AnchorColumns.Count > 1
@@ -852,6 +1011,11 @@ internal sealed class SqlExportPlan
     }
 
     internal SqlObjectTypeConfiguration Configuration { get; }
+
+    /// <summary>
+    /// What the database says the parent table's columns are typed as, read once for the batch.
+    /// </summary>
+    internal SqlExportColumnTypes ParentColumns { get; }
 
     internal string Name => Configuration.Name;
 
@@ -880,6 +1044,58 @@ internal sealed class SqlExportPlan
 
     internal SqlRelatedTableConfiguration RequireRelatedTable(string attributeName) => _relatedTables[attributeName];
 
+    /// <summary>
+    /// What the database says one related table's columns are typed as.
+    /// </summary>
+    internal SqlExportColumnTypes RequireRelatedTableColumns(string attributeName) => _relatedTableColumns[attributeName];
+
     internal bool IsComposedAnchorAttribute(string attributeName) =>
         ComposedAnchorName != null && string.Equals(attributeName, ComposedAnchorName, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// What one table's columns are typed as, as the database's own catalogue reports them.
+/// </summary>
+/// <remarks>
+/// Read from the catalogue rather than recorded in the Object Types document, because the document is
+/// administrator-authored configuration that no database update touches: a column retyped in the table
+/// would leave a recorded type stale, and a value bound as the wrong type is exactly the failure this
+/// exists to prevent.
+/// </remarks>
+internal sealed class SqlExportColumnTypes
+{
+    private readonly Dictionary<string, SqlColumnType> _columnTypes;
+
+    internal SqlExportColumnTypes(string qualifiedTableName, IEnumerable<SqlDiscoveredColumn> columns)
+    {
+        QualifiedTableName = qualifiedTableName;
+        _columnTypes = columns.ToDictionary(column => column.Name, column => column.ColumnType, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The table as an administrator names it, for the messages a failure is reported through.
+    /// </summary>
+    internal string QualifiedTableName { get; }
+
+    /// <summary>
+    /// The type of one column.
+    /// </summary>
+    /// <remarks>
+    /// A column the catalogue does not describe fails the object rather than falling back to binding a
+    /// string: the table has changed under the Object Types document, and letting the database interpret
+    /// an untyped value is how a write ends up meaning something nobody asked for.
+    /// </remarks>
+    /// <exception cref="SqlSchemaConfigurationException">The catalogue describes no such column.</exception>
+    internal SqlColumnType Require(string columnName)
+    {
+        if (_columnTypes.TryGetValue(columnName, out var columnType))
+            return columnType;
+
+        throw new SqlSchemaConfigurationException(_columnTypes.Count == 0
+            ? $"The account JIM connects as can see no columns of '{QualifiedTableName}', so it cannot tell what type to write '{columnName}' as. " +
+              "Either the table has gone, or the account's permissions on it have. Import the schema for this Connected System once the table is visible again, so that JIM writes the columns it actually has."
+            : $"'{QualifiedTableName}' has no column called '{columnName}', so JIM cannot tell what type to write it as, and will not bind it as text for the database to interpret. " +
+              $"The table has changed since this configuration was written. Import the schema for this Connected System, and correct the {SqlConnectorConstants.SettingObjectTypes} document and the Synchronisation Rules that flow to it. " +
+              $"The columns '{QualifiedTableName}' does have are: {string.Join(", ", _columnTypes.Keys)}.");
+    }
 }

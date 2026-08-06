@@ -63,6 +63,33 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal List<FakeExecutedCommand> ExecutedCommands { get; } = [];
 
     /// <summary>
+    /// Every command that was not a schema-catalogue query, which for an export is exactly the
+    /// statements it wrote. An export reads the column catalogue before it writes anything, so a test
+    /// asserting on what was written filters those reads out rather than counting them as writes.
+    /// </summary>
+    internal IReadOnlyList<FakeExecutedCommand> ExecutedStatements =>
+        [.. ExecutedCommands.Where(command => !IsCatalogueQuery(command.CommandText))];
+
+    /// <summary>
+    /// The text of every command that was not a schema-catalogue query, in order.
+    /// </summary>
+    internal IReadOnlyList<string> ExecutedStatementTexts =>
+        [.. ExecutedCommandTexts.Where(commandText => !IsCatalogueQuery(commandText))];
+
+    /// <summary>
+    /// How many times the column catalogue was read, which is what tells a plan resolved once per
+    /// Object Type from one resolved per object.
+    /// </summary>
+    internal int ColumnCatalogueReadCount => ExecutedCommandTexts.Count(commandText => commandText == ColumnsCommandText);
+
+    private bool IsCatalogueQuery(string commandText) =>
+        commandText == TablesCommandText ||
+        commandText == ViewsCommandText ||
+        commandText == ColumnsCommandText ||
+        commandText == PrimaryKeyColumnsCommandText ||
+        commandText == ForeignKeyColumnsCommandText;
+
+    /// <summary>
     /// Every transaction this stand-in handed out, so a test can assert that one was committed on
     /// success and rolled back on failure.
     /// </summary>

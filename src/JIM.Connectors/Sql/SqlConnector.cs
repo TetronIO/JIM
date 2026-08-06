@@ -56,6 +56,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     private ISqlProvider? _exportProvider;
     private SqlSchemaConfiguration? _exportConfiguration;
     private TimeZoneInfo _exportDatabaseTimeZone = TimeZoneInfo.Utc;
+    private SqlTypeMappingOptions _exportTypeMappingOptions = SqlTypeMappingOptions.Default;
 
     /// <summary>
     /// The server certificate this Connector has decided to accept in addition to the operating system's
@@ -478,6 +479,11 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         _exportProvider = provider;
         _exportConfiguration = configuration;
         _exportDatabaseTimeZone = databaseTimeZone;
+
+        // The same opt-ins schema discovery and import map a column's type with: an export reads the
+        // column catalogue to decide how to bind a value, and would otherwise reach a different answer
+        // than the schema the administrator configured the Synchronisation Rules against.
+        _exportTypeMappingOptions = BuildTypeMappingOptions(settingValues);
     }
 
     /// <summary>
@@ -496,7 +502,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         if (_exportConnection == null || _exportProvider == null || _exportConfiguration == null)
             throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
 
-        var export = new SqlConnectorExport(_exportProvider, _exportConnection, _exportConfiguration, _exportDatabaseTimeZone, Log.ForContext<SqlConnector>());
+        var export = new SqlConnectorExport(_exportProvider, _exportConnection, _exportConfiguration, _exportDatabaseTimeZone,
+            _exportTypeMappingOptions, Log.ForContext<SqlConnector>());
         return export.ExecuteAsync(pendingExports, cancellationToken);
     }
 
@@ -514,6 +521,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         _exportProvider = null;
         _exportConfiguration = null;
         _exportDatabaseTimeZone = TimeZoneInfo.Utc;
+        _exportTypeMappingOptions = SqlTypeMappingOptions.Default;
 
         return null;
     }

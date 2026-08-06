@@ -100,6 +100,42 @@ internal static class SqlTypeMapper
     };
 
     /// <summary>
+    /// The date and time types that carry their own UTC offset. Every one of them maps to DateTime like
+    /// its zoneless siblings, so the distinction is invisible to <see cref="Map"/>; it matters only to
+    /// the value conversions either side of it.
+    /// <para>
+    /// The spellings are the ones each catalogue reports, normalised: SQL Server's
+    /// <c>datetimeoffset</c>, and Oracle's <c>TIMESTAMP(n) WITH TIME ZONE</c> and
+    /// <c>TIMESTAMP(n) WITH LOCAL TIME ZONE</c>. PostgreSQL's <c>timestamptz</c> is present on the same
+    /// reasoning as the priority 2 spellings above: adding that provider stays additive.
+    /// </para>
+    /// </summary>
+    private static readonly HashSet<string> OffsetCarryingTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DATETIMEOFFSET",
+        "TIMESTAMP WITH TIME ZONE",
+        "TIMESTAMP WITH LOCAL TIME ZONE",
+        "TIMESTAMPTZ"
+    };
+
+    /// <summary>
+    /// Whether a column states the offset of the values it holds.
+    /// </summary>
+    /// <remarks>
+    /// This is what decides whether the Connected System's Database Time Zone applies to a value. A
+    /// column carrying an offset is unambiguous at the wire level, so it needs no setting to interpret
+    /// it (PRD requirement 9): import takes the instant the driver hands back, and export writes the
+    /// instant JIM holds. A zoneless column states nothing, so its values are wall-clock time in the
+    /// zone the administrator declared, and both directions convert through it.
+    /// </remarks>
+    internal static bool CarriesAnOffset(SqlColumnType columnType)
+    {
+        ArgumentNullException.ThrowIfNull(columnType);
+
+        return OffsetCarryingTypes.Contains(Normalise(columnType.TypeName));
+    }
+
+    /// <summary>
     /// Maps a column's SQL type onto a JIM attribute type.
     /// </summary>
     /// <exception cref="SqlTypeMappingException">The type has no JIM equivalent.</exception>

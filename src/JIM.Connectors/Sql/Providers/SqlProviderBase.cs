@@ -462,6 +462,11 @@ internal abstract class SqlProviderBase : ISqlProvider
         return SqlTypeMapper.Map(DatabaseType, columnType, options);
     }
 
+    public bool ColumnCarriesAnOffset(SqlColumnType columnType)
+    {
+        return SqlTypeMapper.CarriesAnOffset(columnType);
+    }
+
     #endregion
 
     #region Connection setting validation

@@ -250,5 +250,16 @@ internal interface ISqlProvider
     /// </summary>
     AttributeDataType MapColumnType(SqlColumnType columnType, SqlTypeMappingOptions options);
 
+    /// <summary>
+    /// Whether a date and time column states the offset of the values it holds, which is what decides
+    /// whether the Connected System's Database Time Zone applies to them.
+    /// <para>
+    /// It lives behind the seam because the answer is a dialect's own vocabulary (<c>datetimeoffset</c>
+    /// against <c>TIMESTAMP WITH TIME ZONE</c>), and because getting it wrong moves an instant by the
+    /// declared zone's offset without any error.
+    /// </para>
+    /// </summary>
+    bool ColumnCarriesAnOffset(SqlColumnType columnType);
+
     #endregion
 }
