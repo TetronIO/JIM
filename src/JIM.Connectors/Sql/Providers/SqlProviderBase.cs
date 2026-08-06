@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using System.Data.Common;
+using System.Globalization;
 using System.Text;
 
 namespace JIM.Connectors.Sql.Providers;
@@ -172,6 +173,33 @@ internal abstract class SqlProviderBase : ISqlProvider
             throw new ArgumentException(
                 "A keyset page restricted to changed rows needs both the column to compare and the parameter carrying the watermark; one without the other would read everything, or nothing.",
                 nameof(request));
+
+        if (request.RelatedChangeSources.Count > 0 && !request.HasChangeFilter)
+            throw new ArgumentException(
+                "A keyset page cannot watch related tables for changes without a watermark on the source itself: a page reading every row already includes every changed one.",
+                nameof(request));
+
+        ValidateRelatedChangeSources(request.RelatedChangeSources, request.AnchorColumns, nameof(request));
+    }
+
+    /// <summary>
+    /// Refuses a related change source that could not correlate to exactly one parent. Correlating on
+    /// fewer columns than the anchor has matches rows belonging to other objects, which would import a
+    /// stranger's changes as this object's without any error.
+    /// </summary>
+    private static void ValidateRelatedChangeSources(
+        IReadOnlyList<SqlRelatedChangeSource> relatedSources,
+        IReadOnlyList<string> anchorColumns,
+        string argumentName)
+    {
+        foreach (var relatedSource in relatedSources)
+        {
+            if (relatedSource.JoinColumns.Count != anchorColumns.Count)
+                throw new ArgumentException(
+                    $"Related change source '{relatedSource.TableName}' correlates on {relatedSource.JoinColumns.Count} column(s), but the anchor has {anchorColumns.Count}: " +
+                    "correlating on part of an anchor would attribute another object's changes to this one.",
+                    argumentName);
+        }
     }
 
     /// <summary>
@@ -186,8 +214,8 @@ internal abstract class SqlProviderBase : ISqlProvider
 
         // The watermark first: it is the more selective of the two, and on the first page of a run it is
         // the only thing standing between a Delta Import and a full table scan.
-        if (request.HasChangeFilter)
-            predicates.Add($"{QuoteIdentifier(request.ChangeColumn!)} > {GetParameterPlaceholder(request.ChangeParameterName!)}");
+        if (request.ChangeFilter is { } changeFilter)
+            predicates.Add(BuildChangedRowsPredicate(changeFilter));
 
         if (!request.IsFirstPage)
             predicates.Add(BuildKeysetPredicate(request.AnchorColumns, request.LastAnchorParameterNames));
@@ -195,16 +223,70 @@ internal abstract class SqlProviderBase : ISqlProvider
         return predicates.Count == 0 ? string.Empty : $" WHERE {string.Join(" AND ", predicates)}";
     }
 
+    public string BuildChangedRowsPredicate(SqlChangeFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        ValidateRelatedChangeSources(filter.RelatedSources, filter.AnchorColumns, nameof(filter));
+
+        var ownWatermark = $"{QuoteIdentifier(filter.ChangeColumn)} > {GetParameterPlaceholder(filter.ChangeParameterName)}";
+
+        // Nothing else to consider, so the predicate is exactly what it was before related tables could
+        // select a row: a Full Import and Change-Log Table mode generate the statement they always did.
+        if (!filter.HasRelatedSources)
+            return ownWatermark;
+
+        var alternatives = filter.RelatedSources
+            .Select((relatedSource, index) => BuildRelatedChangeExistsPredicate(relatedSource, filter.AnchorColumns, index))
+            .Prepend(ownWatermark);
+
+        return $"({string.Join(" OR ", alternatives)})";
+    }
+
+    /// <summary>
+    /// Renders one related table's correlated existence test: is there a row of it belonging to this
+    /// parent whose own watermark has moved. A row removed from the related table is a change to the
+    /// parent too, and is detected wherever the customer's related table records its removal (a soft
+    /// delete, a tombstone row); a related table that hard-deletes its rows leaves nothing for any
+    /// watermark to compare, and that limitation is the documentation's to state.
+    /// </summary>
+    private string BuildRelatedChangeExistsPredicate(SqlRelatedChangeSource relatedSource, IReadOnlyList<string> anchorColumns, int index)
+    {
+        var alias = QuoteIdentifier(SqlRelatedChangeSource.AliasPrefix + index.ToString(CultureInfo.InvariantCulture));
+        var sourceAlias = QuoteIdentifier(SqlKeysetPageRequest.SourceAlias);
+
+        var correlation = relatedSource.JoinColumns.Select((joinColumn, columnIndex) =>
+            $"{alias}.{QuoteIdentifier(joinColumn)} = {sourceAlias}.{QuoteIdentifier(anchorColumns[columnIndex])}");
+
+        // No watermark for this related table yet means JIM cannot tell which of its rows are new, so
+        // every parent it holds a row for is read. One expensive run beats a missed change.
+        var predicates = relatedSource.WatermarkParameterName == null
+            ? correlation
+            : correlation.Append($"{alias}.{QuoteIdentifier(relatedSource.WatermarkColumn)} > {GetParameterPlaceholder(relatedSource.WatermarkParameterName)}");
+
+        return $"EXISTS (SELECT 1 FROM {QualifyObjectName(relatedSource.SchemaName, relatedSource.TableName)} {alias} WHERE {string.Join(" AND ", predicates)})";
+    }
+
     /// <summary>
     /// Renders what a keyset page reads from: a quoted, schema-qualified object name, or an
     /// administrator-supplied statement wrapped as a named derived table. Identical in both dialects,
     /// so it lives here rather than being written out twice.
     /// </summary>
+    /// <remarks>
+    /// A table or view is named only where a correlated subquery needs to refer back to it. An alias
+    /// nothing refers to changes the statement a database administrator reads in a trace for no gain,
+    /// so every page that needed none yesterday still generates none. A statement standing in for a
+    /// table is always named, because a derived table has to be.
+    /// </remarks>
     protected string BuildFromClause(SqlKeysetPageRequest request)
     {
-        return string.IsNullOrWhiteSpace(request.SelectStatement)
-            ? QualifyObjectName(request.SchemaName, request.ObjectName!)
-            : $"({request.SelectStatement}) {QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}";
+        if (!string.IsNullOrWhiteSpace(request.SelectStatement))
+            return $"({request.SelectStatement}) {QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}";
+
+        var qualifiedObjectName = QualifyObjectName(request.SchemaName, request.ObjectName!);
+
+        return request.RelatedChangeSources.Count == 0
+            ? qualifiedObjectName
+            : $"{qualifiedObjectName} {QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}";
     }
 
     /// <summary>
