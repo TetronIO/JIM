@@ -163,6 +163,26 @@ internal interface ISqlProvider
     string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command);
 
     /// <summary>
+    /// Generates a plain INSERT, for a row whose key JIM supplies and for a related table's rows.
+    /// </summary>
+    /// <remarks>
+    /// Standard SQL in every dialect JIM speaks, so this and its UPDATE and DELETE siblings are
+    /// implemented once rather than per provider. A dialect that genuinely needs its own shape overrides
+    /// the one statement it differs on, which is what keeps a third provider additive.
+    /// </remarks>
+    string BuildInsertCommandText(SqlInsertCommand command);
+
+    /// <summary>
+    /// Generates an UPDATE of the rows a key identifies.
+    /// </summary>
+    string BuildUpdateCommandText(SqlUpdateCommand command);
+
+    /// <summary>
+    /// Generates a DELETE of the rows a key identifies.
+    /// </summary>
+    string BuildDeleteCommandText(SqlDeleteCommand command);
+
+    /// <summary>
     /// Creates the output parameter a generated key is returned through, or null where
     /// <see cref="GeneratedKeyRetrieval"/> is <see cref="SqlGeneratedKeyRetrieval.ResultSet"/> and
     /// there is no parameter to bind.
