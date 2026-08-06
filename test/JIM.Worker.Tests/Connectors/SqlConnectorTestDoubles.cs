@@ -7,6 +7,8 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using NUnit.Framework;
+using Serilog.Core;
+using Serilog.Events;
 using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
@@ -77,6 +79,13 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     /// while its neighbours succeed is expressed here.
     /// </summary>
     internal string? FailWhenCommandTextContains { get; set; }
+
+    /// <summary>
+    /// When set, any command whose text contains this reports that it affected no row, without raising.
+    /// That is how a statement the database accepted but applied to nothing is expressed here: a row an
+    /// UPDATE or a DELETE keys on that is no longer there, or an INSERT a trigger silently discards.
+    /// </summary>
+    internal string? AffectsNoRowsWhenCommandTextContains { get; set; }
 
     /// <summary>
     /// The key this stand-in database generates for an inserted row, handed back through whichever
@@ -548,8 +557,16 @@ internal sealed class FakeDbCommand : DbCommand
         if (generatedKey != null)
             generatedKey.Value = _provider.GeneratedKey;
 
-        return 1;
+        return AffectsNoRows ? 0 : 1;
     }
+
+    /// <summary>
+    /// Whether this stand-in database has been told that this statement matches nothing. A statement
+    /// that affected no row is the one failure a driver never raises, which is exactly why the Connector
+    /// has to read the count back.
+    /// </summary>
+    private bool AffectsNoRows =>
+        _provider.AffectsNoRowsWhenCommandTextContains is { } marker && CommandText.Contains(marker, StringComparison.Ordinal);
 
     public override object? ExecuteScalar()
     {
@@ -1250,6 +1267,38 @@ internal sealed class FakeDbColumn : DbColumn
         NumericScale = column.Scale;
         ColumnSize = column.MaxLength;
         AllowDBNull = column.IsNullable;
+    }
+}
+
+/// <summary>
+/// Holds on to what the Connector logged, so a test can assert on the one outcome that is reported to
+/// the administrator rather than returned: a write the database accepted but applied to nothing, which
+/// the Connector deliberately succeeds and warns about.
+/// </summary>
+internal sealed class CapturedLogSink : ILogEventSink
+{
+    private readonly List<LogEvent> _logEvents = [];
+
+    public void Emit(LogEvent logEvent)
+    {
+        ArgumentNullException.ThrowIfNull(logEvent);
+
+        lock (_logEvents)
+            _logEvents.Add(logEvent);
+    }
+
+    /// <summary>
+    /// Every warning logged so far, rendered as the administrator would read it.
+    /// </summary>
+    internal IReadOnlyList<string> Warnings
+    {
+        get
+        {
+            lock (_logEvents)
+                return [.. _logEvents
+                    .Where(logEvent => logEvent.Level == LogEventLevel.Warning)
+                    .Select(logEvent => logEvent.RenderMessage(CultureInfo.InvariantCulture))];
+        }
     }
 }
 

@@ -8,16 +8,24 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using NUnit.Framework;
+using Serilog;
+using Serilog.Core;
 
 namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
 /// Covers the JIM SQL Connector's export: what it writes for a create, an update and a delete, how it
-/// keeps one object's writes together in a transaction of their own, and how a value crosses back out
-/// of JIM into a database column. No test here touches a database server; the dialect seam and its
-/// connection, command and transaction are substituted instead.
+/// keeps one object's writes together in a transaction of their own, what it does with a statement the
+/// database applied to no row, and how a value crosses back out of JIM into a database column. No test
+/// here touches a database server; the dialect seam and its connection, command and transaction are
+/// substituted instead.
 /// </summary>
+/// <remarks>
+/// Not parallelisable: these tests stand in for Serilog's static logger so that what the Connector told
+/// the administrator can be asserted on.
+/// </remarks>
 [TestFixture]
+[NonParallelizable]
 public class SqlConnectorExportTests
 {
     /// <summary>
@@ -78,6 +86,31 @@ public class SqlConnectorExportTests
           ]
         }
         """;
+
+    private CapturedLogSink _capturedLog = new();
+    private Logger? _testLogger;
+    private ILogger _originalLogger = Logger.None;
+
+    /// <summary>
+    /// The Connector logs through Serilog's static logger, so capturing what it told the administrator
+    /// means standing in for that logger and putting the original back afterwards.
+    /// </summary>
+    [SetUp]
+    public void SetUp()
+    {
+        _capturedLog = new CapturedLogSink();
+        _originalLogger = Log.Logger;
+        _testLogger = new LoggerConfiguration().MinimumLevel.Debug().WriteTo.Sink(_capturedLog).CreateLogger();
+        Log.Logger = _testLogger;
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        Log.Logger = _originalLogger;
+        _testLogger?.Dispose();
+        _testLogger = null;
+    }
 
     #region Create
 
@@ -359,6 +392,184 @@ public class SqlConnectorExportTests
             }), "A related row referencing its parent cannot outlive it, so the children go first.");
 
             Assert.That(provider.ExecutedCommands.Select(command => command.Transaction), Is.All.SameAs(provider.Transactions.Single()));
+        });
+    }
+
+    #endregion
+
+    #region Rows affected
+
+    [Test]
+    public async Task ExportAsync_AnUpdateMatchingNoRow_FailsTheObjectRatherThanConfirmingValuesTheDatabaseNeverTook()
+    {
+        // The Connector confirms an export's values without a confirming import, so an UPDATE that
+        // matched nothing would have JIM record attribute values against a row that does not exist.
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "UPDATE [HR].[EMPLOYEES]" };
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada Lovelace", changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        var transaction = provider.Transactions.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False,
+                "A statement that matched no row is the one failure a driver never raises, so the row count is all that stands between JIM and a confirmed write that never happened.");
+            Assert.That(results[0].ErrorMessage, Does.Contain("HR.EMPLOYEES"), "The administrator has to be told which table was not written to.");
+            Assert.That(results[0].ErrorMessage, Does.Contain("Full Import"), "The Connected System Object is stale, and the message has to say what reconciles it.");
+            Assert.That(transaction.RolledBack, Is.True);
+            Assert.That(transaction.Committed, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_AnUpdateMatchingNoRow_LeavesTheRestOfTheBatchSucceedingAndItsResultsPositional()
+    {
+        // The middle object's statement is the only one naming this column, which is how this stand-in
+        // singles it out; what matters is that exactly one of the three matches no row.
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "[Grace]" };
+
+        var results = await ExportAsync(provider, PersonDocument,
+        [
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+                Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update)),
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4712),
+                Change("Grace", AttributeDataType.Text, text: "Grace", changeType: PendingExportAttributeChangeType.Update)),
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4713),
+                Change("DISPLAY_NAME", AttributeDataType.Text, text: "Katherine", changeType: PendingExportAttributeChangeType.Update))
+        ]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results, Has.Count.EqualTo(3), "JIM matches results to Pending Exports by position, so there is exactly one result per object.");
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False, "The middle object is the one whose row is no longer there.");
+            Assert.That(results[2].Success, Is.True, "An object whose row went missing must not poison the batch it arrived in.");
+            Assert.That(provider.Transactions.Count(transaction => transaction.Committed), Is.EqualTo(2));
+            Assert.That(provider.Transactions.Count(transaction => transaction.RolledBack), Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ADeleteMatchingNoRow_SucceedsAndWarnsBecauseTheRowIsAlreadyGone()
+    {
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "DELETE FROM [HR].[EMPLOYEES]" };
+
+        var results = await ExportAsync(provider, PersonDocument, [Delete(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711))]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True,
+                "The end state a delete asks for is a row that is not there, which is already the case; failing would retry an object that can never succeed.");
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+            Assert.That(_capturedLog.Warnings, Has.Some.Contains("HR.EMPLOYEES"),
+                "A row that went missing before JIM removed it still says something about the Connected System, so it is warned about rather than passed over.");
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ADeleteWhoseRelatedRowsAreAlreadyGone_SucceedsWithoutWarning()
+    {
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "DELETE FROM [HR].[EMPLOYEE_PHONES]" };
+
+        var results = await ExportAsync(provider, PersonWithPhonesDocument, [Delete(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711))]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+            Assert.That(_capturedLog.Warnings, Is.Empty,
+                "An object with no related rows to remove is the ordinary case, not something to tell the administrator about.");
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_RemovingAMultiValuedValueThatTheTableDoesNotHold_Succeeds()
+    {
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "DELETE FROM [HR].[EMPLOYEE_PHONES]" };
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("PhoneNumbers", AttributeDataType.Text, text: "555-0100", plurality: AttributePlurality.MultiValued, changeType: PendingExportAttributeChangeType.Remove));
+
+        var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True, "Removing a value the table does not hold has reached exactly the end state it asked for.");
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ClearingAMultiValuedAttributeThatIsAlreadyEmpty_Succeeds()
+    {
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "DELETE FROM [HR].[EMPLOYEE_PHONES]" };
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("PhoneNumbers", AttributeDataType.Text, plurality: AttributePlurality.MultiValued, changeType: PendingExportAttributeChangeType.RemoveAll));
+
+        var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ARelatedRowInsertMatchingNoRow_FailsTheObject()
+    {
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "INSERT INTO [HR].[EMPLOYEE_PHONES]" };
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("PhoneNumbers", AttributeDataType.Text, text: "555-0100", plurality: AttributePlurality.MultiValued, changeType: PendingExportAttributeChangeType.Add));
+
+        var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False,
+                "An insert that wrote nothing and raised nothing is a trigger or a rule discarding the write; confirming the value would be a lie.");
+            Assert.That(results[0].ErrorMessage, Does.Contain("PhoneNumbers"));
+            Assert.That(provider.Transactions.Single().RolledBack, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateWhoseInsertMatchesNoRow_FailsTheObject()
+    {
+        var provider = new FakeSqlProvider { AffectsNoRowsWhenCommandTextContains = "INSERT INTO [HR].[EMPLOYEES]" };
+        var pendingExport = Create(
+            Change("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"));
+
+        var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False, "JIM would otherwise record a Connected System Object for a row the database never took.");
+            Assert.That(results[0].ErrorMessage, Does.Contain("HR.EMPLOYEES"));
+            Assert.That(provider.Transactions.Single().RolledBack, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateAgainstAGeneratedKeyWhoseInsertMatchesNoRow_FailsTheObject()
+    {
+        // The dialects that return a generated key through a bound parameter can hand one back from a
+        // statement that wrote no row at all, so the key coming back is not on its own proof of a write.
+        var provider = new FakeSqlProvider
+        {
+            GeneratedKeyRetrievalMode = SqlGeneratedKeyRetrieval.OutputParameter,
+            GeneratedKey = 4711m,
+            AffectsNoRowsWhenCommandTextContains = "INSERT INTO [HR].[EMPLOYEES]"
+        };
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(provider.Transactions.Single().RolledBack, Is.True);
         });
     }
 

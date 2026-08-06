@@ -33,6 +33,14 @@ namespace JIM.Connectors.Sql;
 /// Connector configuration is privileged administrator input, but the injection surface it defends is
 /// still exactly value parameterisation and identifier quoting.
 /// </para>
+/// <para>
+/// <b>A statement that matched nothing is not a statement that succeeded.</b> This Connector declares
+/// automatic export confirmation, so JIM records an export's attribute values against the Connected
+/// System Object on a successful result, without a confirming import to check them against. A driver
+/// raises nothing when a statement matches no row, so every write reads its affected-row count back and
+/// answers for it: a write that had to change something and did not fails the object, while a removal
+/// that found nothing to remove has already reached the end state it asked for.
+/// </para>
 /// </remarks>
 internal sealed class SqlConnectorExport
 {
@@ -212,7 +220,10 @@ internal sealed class SqlConnectorExport
             Columns = ToColumnParameters(columnValues)
         };
 
-        await ExecuteAsync(_provider.BuildInsertCommandText(insert), columnValues, transaction, cancellationToken);
+        var rowsAffected = await ExecuteAsync(_provider.BuildInsertCommandText(insert), columnValues, transaction, cancellationToken);
+
+        if (rowsAffected == 0)
+            throw new InvalidOperationException(InsertWroteNothingMessage(plan.QualifiedTableName));
 
         return (ComposeExternalId(suppliedAnchor), suppliedAnchor);
     }
@@ -250,6 +261,8 @@ internal sealed class SqlConnectorExport
 
         if (_provider.GeneratedKeyRetrieval == SqlGeneratedKeyRetrieval.ResultSet)
         {
+            // No affected-row count to read: an insert that returns its key as a result set answers with
+            // the key or with nothing at all, and nothing at all is the check below.
             generatedKey = await command.ExecuteScalarAsync(cancellationToken);
         }
         else
@@ -258,7 +271,12 @@ internal sealed class SqlConnectorExport
                 ?? throw new NotSupportedException($"The {_provider.DisplayName} provider returns a generated key through a bound parameter but supplied none for it.");
 
             command.Parameters.Add(keyParameter);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+
+            // A bound output parameter can come back holding a value from a statement that wrote no row,
+            // so the key arriving is not on its own evidence that the row did.
+            if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
+                throw new InvalidOperationException(InsertWroteNothingMessage(plan.QualifiedTableName));
+
             generatedKey = keyParameter.Value;
         }
 
@@ -295,7 +313,16 @@ internal sealed class SqlConnectorExport
                 KeyColumns = ToColumnParameters(anchor)
             };
 
-            await ExecuteAsync(_provider.BuildUpdateCommandText(update), [.. columnValues, .. anchor], transaction, cancellationToken);
+            var rowsAffected = await ExecuteAsync(_provider.BuildUpdateCommandText(update), [.. columnValues, .. anchor], transaction, cancellationToken);
+
+            // The row this object is meant to be is not there. JIM confirms an export's values without
+            // reading them back, so carrying on would record attribute values against a row that does
+            // not exist, and nothing downstream would ever notice.
+            if (rowsAffected == 0)
+                throw new InvalidOperationException(
+                    $"No row of '{plan.QualifiedTableName}' is identified by this Connected System Object's external ID, so the update changed nothing and is being rolled back. " +
+                    $"Either the row was deleted outside JIM, or its anchor column(s) ({string.Join(", ", plan.AnchorColumns)}) no longer hold the values JIM recorded for it. " +
+                    "The Connected System Object is stale either way: run a Full Import against this Connected System to reconcile it with the table.");
         }
 
         await ApplyRelatedChangesAsync(plan, anchor, pendingExport, transaction, cancellationToken);
@@ -329,6 +356,8 @@ internal sealed class SqlConnectorExport
                 KeyColumns = ToColumnParameters(joinValues)
             };
 
+            // The affected-row count is deliberately not read: an object with no values in this related
+            // table has no rows here to remove, which is the ordinary case rather than a fault.
             await ExecuteAsync(_provider.BuildDeleteCommandText(delete), joinValues, transaction, cancellationToken);
         }
 
@@ -339,7 +368,17 @@ internal sealed class SqlConnectorExport
             KeyColumns = ToColumnParameters(anchor)
         };
 
-        await ExecuteAsync(_provider.BuildDeleteCommandText(parentDelete), anchor, transaction, cancellationToken);
+        var rowsAffected = await ExecuteAsync(_provider.BuildDeleteCommandText(parentDelete), anchor, transaction, cancellationToken);
+
+        // Deliberately a success, and deliberately not a failure: the end state this export asked for is
+        // a row that is not there, and that is already the case. Failing it would retry a Pending Export
+        // that can never succeed, for as long as the object exists. Do not "fix" this into a throw. The
+        // warning is here because a row that went missing before JIM removed it still says something
+        // about the Connected System the administrator should see.
+        if (rowsAffected == 0)
+            _logger.Warning(
+                "SqlConnectorExport: Pending Export {PendingExportId} deleted no row of '{TableName}'; the row this Connected System Object identifies had already gone, so the delete is being treated as done",
+                pendingExport.Id, plan.QualifiedTableName);
 
         return ConnectedSystemExportResult.Succeeded();
     }
@@ -363,8 +402,16 @@ internal sealed class SqlConnectorExport
         {
             var relatedTable = plan.RequireRelatedTable(change.Attribute.Name);
             var statement = BuildRelatedTableStatement(relatedTable, BuildJoinValues(relatedTable, anchor), change);
+            var rowsAffected = await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
 
-            await ExecuteAsync(statement.CommandText, statement.BoundValues, transaction, cancellationToken);
+            // A removal that matched nothing has already reached the end state it asked for, so it is
+            // left alone. An add that matched nothing wrote nothing while raising nothing, which is a
+            // trigger or a rule discarding the write; confirming that value would be a lie.
+            if (statement.AddsARow && rowsAffected == 0)
+                throw new InvalidOperationException(
+                    $"Attribute '{change.Attribute.Name}' added no row to '{QualifiedName(relatedTable.SchemaName, relatedTable.TableName)}', though the database raised no error. " +
+                    "A trigger or a rule is discarding the write, so JIM would be confirming a value the table does not hold; the export is being rolled back. " +
+                    "Check what the table's triggers and rules do with an inserted row, and that the Connected System's credentials may write to it.");
         }
     }
 
@@ -391,7 +438,7 @@ internal sealed class SqlConnectorExport
                 KeyColumns = ToColumnParameters(joinValues)
             };
 
-            return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues);
+            return new SqlExportStatement(_provider.BuildDeleteCommandText(clear), joinValues, AddsARow: false);
         }
 
         var value = new SqlExportColumnValue(relatedTable.ValueColumn, ValueParameterName(0), ToDatabaseValue(change));
@@ -406,7 +453,7 @@ internal sealed class SqlConnectorExport
                 KeyColumns = ToColumnParameters(boundValues)
             };
 
-            return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), boundValues);
+            return new SqlExportStatement(_provider.BuildDeleteCommandText(remove), boundValues, AddsARow: false);
         }
 
         var add = new SqlInsertCommand
@@ -416,7 +463,7 @@ internal sealed class SqlConnectorExport
             Columns = ToColumnParameters(boundValues)
         };
 
-        return new SqlExportStatement(_provider.BuildInsertCommandText(add), boundValues);
+        return new SqlExportStatement(_provider.BuildInsertCommandText(add), boundValues, AddsARow: true);
     }
 
     /// <summary>
@@ -674,17 +721,35 @@ internal sealed class SqlConnectorExport
     #region Statements
 
     /// <summary>
-    /// Runs one statement in the object's transaction, with every value bound.
+    /// Runs one statement in the object's transaction, with every value bound, and answers with how many
+    /// rows it affected. Every caller has to decide what none means for the statement it ran, because a
+    /// driver reports it as a success either way.
     /// </summary>
-    private async Task ExecuteAsync(
+    private async Task<int> ExecuteAsync(
         string commandText,
         IReadOnlyList<SqlExportColumnValue> boundValues,
         DbTransaction transaction,
         CancellationToken cancellationToken)
     {
         using var command = CreateCommand(commandText, boundValues, transaction);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// What an administrator is told when an INSERT wrote no row without raising. The database took the
+    /// statement and discarded it, which only a trigger, a rule or an INSTEAD OF view does.
+    /// </summary>
+    private static string InsertWroteNothingMessage(string qualifiedTableName) =>
+        $"No row was written to '{qualifiedTableName}', though the database raised no error. " +
+        "A trigger or a rule is discarding the write, so JIM would be confirming an object the table does not hold; the export is being rolled back. " +
+        "Check what the table's triggers and rules do with an inserted row, and that the Connected System's credentials may write to it.";
+
+    /// <summary>
+    /// A table as an administrator names it, for a message rather than for a statement: what a statement
+    /// is given is quoted by the provider instead.
+    /// </summary>
+    internal static string QualifiedName(string? schemaName, string tableName) =>
+        string.IsNullOrEmpty(schemaName) ? tableName : $"{schemaName}.{tableName}";
 
     private DbCommand CreateCommand(string commandText, IReadOnlyList<SqlExportColumnValue> boundValues, DbTransaction transaction)
     {
@@ -759,7 +824,14 @@ internal sealed record SqlExportColumnValue(string ColumnName, string ParameterN
 /// <summary>
 /// One statement an export runs, with everything bound to it.
 /// </summary>
-internal sealed record SqlExportStatement(string CommandText, IReadOnlyList<SqlExportColumnValue> BoundValues);
+/// <param name="CommandText">The statement, as the provider generated it.</param>
+/// <param name="BoundValues">The values bound to it.</param>
+/// <param name="AddsARow">
+/// Whether this statement has to change something to have done its job. An add that affected no row
+/// wrote nothing and must fail the object; a removal that affected no row has reached the end state it
+/// asked for.
+/// </param>
+internal sealed record SqlExportStatement(string CommandText, IReadOnlyList<SqlExportColumnValue> BoundValues, bool AddsARow);
 
 /// <summary>
 /// Where one Connected System Object Type's objects are written, and what identifies them. Resolved once
@@ -790,6 +862,11 @@ internal sealed class SqlExportPlan
     /// statement is refused before a plan is built for it.
     /// </summary>
     internal string TableName => Configuration.TableName!;
+
+    /// <summary>
+    /// The table as an administrator names it, for the messages an export reports failures through.
+    /// </summary>
+    internal string QualifiedTableName => SqlConnectorExport.QualifiedName(SchemaName, TableName);
 
     internal IReadOnlyList<string> AnchorColumns => Configuration.AnchorColumns;
 
