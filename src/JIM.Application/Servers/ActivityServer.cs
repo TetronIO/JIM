@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.Scheduling;
 using JIM.Models.Security;
 using JIM.Models.Utility;
 using Serilog;
@@ -418,6 +419,16 @@ public class ActivityServer
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId)
     {
         return await Application.Repository.Activity.GetActivitiesByScheduleExecutionAsync(scheduleExecutionId);
+    }
+
+    /// <summary>
+    /// What each Schedule Execution's tasks have left behind, keyed by execution (#1162), for views
+    /// that show a Schedule mid-flight. A step's Worker Task is deleted the moment it finishes, so its
+    /// Activity is the only remaining evidence that the step ran and how it ended.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds)
+    {
+        return await Application.Repository.Activity.GetScheduleStepOutcomesAsync(scheduleExecutionIds);
     }
 
     /// <summary>

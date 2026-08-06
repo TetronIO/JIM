@@ -152,6 +152,8 @@ Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdC
 
 Where a Connected System can accept passwords, its Schema tab carries a Password Channel panel. It has two jobs: showing you the password rules JIM read from the system itself, and letting you check the channel works before you rely on it.
 
+[Passwords](../concepts/passwords.md) explains the channel as a whole: why passwords do not travel through attribute flow, what discovery can and cannot tell you, and how a refused password is resolved.
+
 ### Discovered password policy
 
 JIM reads the target's password policy whenever it retrieves or refreshes the Connected System's schema, and records it, so that configuring a generated password does not mean retyping rules the system already publishes. If a policy is missing, **Refresh Schema** on the Schema tab reads it again. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
@@ -189,7 +191,7 @@ A preflight is not stored. Reachability, permissions and policy all change witho
 
 Open a Connected System Object from the connector space and, where the Connector can set passwords, the object carries a **Set Password** button. This writes the password straight to the Connected System: it is not staged as a Pending Export, not retried, and not stored anywhere in JIM.
 
-Use it for the account whose provisioning password was refused, the person who never received theirs, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
+Use it for the new starter about to sign in for the first time, the account whose provisioning password was refused, and the reset that has to happen now. Routine initial passwords belong on the [Synchronisation Rule](synchronisation-rules.md) that provisions the account, where they happen without anybody watching.
 
 The dialog is built around one rule: **the password is masked from the moment it is generated, and copying it does not require showing it.**
 
@@ -202,13 +204,13 @@ Choose what happens to the password once it is set (requiring a change at the ne
 
 A Connected System that refuses the password says why, and the dialog stays open carrying its own words so you can try another one. Every attempt is recorded as an Activity against the object, whether it succeeded or not; the Activity records that a password was set, never the password.
 
-!!! warning "This is a password-reset primitive"
+!!! warning "This resets the password on whichever account you point it at"
     Anyone who can reach this action can reset the password of any account in this connector space, up to and including privileged ones, subject only to what the Connected System's own service account is permitted to do. Grant the Administrator role accordingly, and scope the service account's rights to the containers JIM manages.
 
 !!! note "Copying and your operating system's clipboard"
     Copying needs an HTTPS connection: browsers deny clipboard access over plain HTTP, and the button says so rather than silently doing nothing. JIM clears the clipboard when the dialog closes where the browser allows it, but your operating system may keep the value in its own clipboard history, which no web page can reach.
 
-The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, with one difference: you supply the password there rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one.
+The same action is available to automation through `Set-JIMConnectedSystemObjectPassword` and the REST API, which can either take a password you supply or generate one against the discovered policy. A generated password is returned to the caller, once, because they asked for it; nothing is stored either way.
 
 ### One password across several Connected Systems
 

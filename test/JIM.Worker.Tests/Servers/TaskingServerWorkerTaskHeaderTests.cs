@@ -46,6 +46,12 @@ public class TaskingServerWorkerTaskHeaderTests
         var mockDbContext = new Mock<JimDbContext>();
         mockDbContext.Setup(db => db.WorkerTasks).Returns(workerTasks.BuildMockDbSet().Object);
 
+        // The header read also fetches each task's run steps (#1162). Temporal Scope Reconciliation
+        // is not a Run Profile execution and records none, so the set is empty rather than absent:
+        // an unstubbed DbSet is null, which is a gap in the double rather than a state the real
+        // context can be in.
+        mockDbContext.Setup(db => db.ActivityPhases).Returns(new List<ActivityPhase>().BuildMockDbSet().Object);
+
         _jim = new JimApplication(new PostgresDataRepository(mockDbContext.Object));
     }
 

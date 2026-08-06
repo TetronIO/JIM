@@ -1292,7 +1292,7 @@ Sets the password on one Connected System Object.
 
 The password is written straight to the Connected System: nothing is staged as a Pending Export, nothing is retried, and JIM stores nothing. The attempt is recorded as an Activity against the object, carrying the outcome and, where the system refused, its verbatim reason.
 
-This is the automation counterpart of the **Set Password** action in the administration portal. You supply the password rather than asking JIM to generate one, because a generated password would have to be returned in a response body and JIM's API never puts a password in one. Use the portal when you want JIM to generate one that follows the discovered policy.
+This is the automation counterpart of the **Set Password** action in the administration portal. Supply the password with `-Password`, or have JIM generate one that follows the Connected System's discovered policy with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
 
 ### Syntax
 
@@ -1342,7 +1342,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Id 3f2a91c4-5b6d-4e7f-8a90-1b
 
 ### Notes
 
-- **This is a password-reset primitive.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
+- **This resets the password on whichever account you point it at.** Anyone who can call it can reset the password of any account in this connector space, subject only to what the Connected System's own service account is permitted to do.
 - The password is taken as a `SecureString` so it does not sit in your session's command history in clear text. It is unwrapped only to be sent over TLS.
 - A Connected System that cannot honour the requested expiry behaviour applies what it can and reports the difference in `ExpiryBehaviourWarning`; the password is still set.
 - A rejected password returns an error carrying the system's own reason. A Connected System that could not be reached is reported distinctly, because nothing was established about the password itself and the same request is worth repeating.

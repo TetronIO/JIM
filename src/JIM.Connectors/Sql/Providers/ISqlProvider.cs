@@ -141,6 +141,13 @@ internal interface ISqlProvider
     /// </summary>
     string BuildKeysetPageCommandText(SqlKeysetPageRequest request);
 
+    /// <summary>
+    /// Renders the predicate selecting the rows a Delta Import considers changed: the source's own
+    /// watermark, or any of its related tables'. Shared by the page read and by the count that tells the
+    /// Activity how much this run is about to read, so the two can never disagree about what a change is.
+    /// </summary>
+    string BuildChangedRowsPredicate(SqlChangeFilter filter);
+
     #endregion
 
     #region Export

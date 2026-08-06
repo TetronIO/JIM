@@ -32,7 +32,16 @@ Get-JIMWorkerTask -Id <guid>
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing Worker Task headers, including status, progress, and initiator.
+Returns one or more `PSCustomObject` instances representing Worker Task headers, including status, progress, and initiator. The step-related properties are:
+
+| Property | Description |
+|----------|-------------|
+| `StepDisplay` | The step the run is on, as one sentence: `Step 3 of 7: Saving changes`. Empty for a task that is not a Run Profile execution, since those record no steps. |
+| `Steps` | The run's steps: `CurrentStepName`, `CurrentStepNumber`, `TotalSteps`, and `Steps`, a list of every step with its `Order`, `Name` and `Status`. `$null` where the task records none. |
+| `ScheduleTotalSteps` | How many step groups the Schedule Execution has, where the task belongs to one. Steps that run concurrently are one group, not several. |
+| `ScheduleCurrentStepIndex` | Which step group the Schedule Execution has reached, 0-based. |
+
+`StepDisplay` is the same sentence the portal shows in **Admin > Operations > Queue**, and the same one `Start-JIMRunProfile -Wait` shows live, so a run reads identically wherever you are watching it from.
 
 ### Examples
 
@@ -42,6 +51,14 @@ Get-JIMWorkerTask
 
 ```powershell title="Get a specific Worker Task"
 Get-JIMWorkerTask -Id "12345678-1234-1234-1234-123456789012"
+```
+
+```powershell title="See what every running task is currently doing"
+Get-JIMWorkerTask | Select-Object Name, Status, StepDisplay
+```
+
+```powershell title="Find runs that have reached their final step"
+Get-JIMWorkerTask | Where-Object { $_.Steps -and $_.Steps.CurrentStepNumber -eq $_.Steps.TotalSteps }
 ```
 
 ---

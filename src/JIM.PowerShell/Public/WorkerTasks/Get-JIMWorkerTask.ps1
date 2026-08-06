@@ -61,14 +61,14 @@ function Get-JIMWorkerTask {
 
         if ($PSCmdlet.ParameterSetName -eq 'ById') {
             Write-Verbose "Getting Worker Task $Id"
-            Invoke-JIMApi -Endpoint "/api/v1/worker-tasks/$Id"
+            Add-JIMWorkerTaskStepDisplay -Task (Invoke-JIMApi -Endpoint "/api/v1/worker-tasks/$Id")
             return
         }
 
         Write-Verbose "Getting Worker Tasks (Page: $Page, PageSize: $PageSize)"
         $response = Invoke-JIMApi -Endpoint "/api/v1/worker-tasks?page=$Page&pageSize=$PageSize"
         foreach ($item in $response.items) {
-            $item
+            Add-JIMWorkerTaskStepDisplay -Task $item
         }
     }
 }

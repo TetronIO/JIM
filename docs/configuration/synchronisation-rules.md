@@ -143,6 +143,8 @@ This applies wherever the deletion happens: during a Synchronisation Run Profile
 
 An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** section of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
 
+For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
+
 It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
@@ -153,7 +155,9 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 - **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
 - **Enable the account once the password is set**<br /> On by default. A provisioned account nobody can sign in to is rarely what was wanted, and directories that refuse to enable an account without a policy-compliant password need the enable to follow the password rather than accompany the create.
 
-**No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped. Getting the password to the person who needs it is a matter for the account's own delivery path (a first sign-in that forces a change, a service desk call, a self-service reset), not for JIM to hold on their behalf. Where you need a password in your hand for a specific account, use the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) instead.
+**No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
+
+**Nobody receives this password, including you.** Its job is to get the account into a working state, since most directories will not enable an account or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) and hand them the value; requiring a change at their next sign-in then does what you would expect. There is no option to set one known password on every account a rule provisions. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
 
 ### What happens after provisioning
 

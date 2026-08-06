@@ -54,7 +54,45 @@ internal sealed record SqlKeysetPageRequest
     internal IReadOnlyList<string> LastAnchorParameterNames { get; init; } = [];
 
     /// <summary>
+    /// The column a Delta Import restricts the read to, so that only rows beyond the persisted watermark
+    /// are returned: a change log's sequence, or a source's last-modified column. Null for a Full Import,
+    /// and null on a Delta Import that has no watermark yet and therefore reads from the beginning.
+    /// </summary>
+    internal string? ChangeColumn { get; init; }
+
+    /// <summary>
+    /// The parameter carrying the watermark <see cref="ChangeColumn"/> is compared against. Set exactly
+    /// when <see cref="ChangeColumn"/> is.
+    /// </summary>
+    internal string? ChangeParameterName { get; init; }
+
+    /// <summary>
+    /// The related tables whose own watermarks also select a row, so that a change confined to one of
+    /// them (a group membership added or revoked) is detected as a change to the object it belongs to.
+    /// Empty for a Full Import, for Change-Log Table mode, and for an object type with no related tables.
+    /// </summary>
+    internal IReadOnlyList<SqlRelatedChangeSource> RelatedChangeSources { get; init; } = [];
+
+    /// <summary>
     /// True when no previous anchor was supplied, so the page starts at the beginning of the ordered set.
     /// </summary>
     internal bool IsFirstPage => LastAnchorParameterNames.Count == 0;
+
+    /// <summary>
+    /// True when the read is restricted to rows beyond a watermark.
+    /// </summary>
+    internal bool HasChangeFilter => ChangeColumn != null;
+
+    /// <summary>
+    /// The predicate this page's changed rows are selected by, or null where the page reads everything.
+    /// </summary>
+    internal SqlChangeFilter? ChangeFilter => HasChangeFilter
+        ? new SqlChangeFilter
+        {
+            ChangeColumn = ChangeColumn!,
+            ChangeParameterName = ChangeParameterName!,
+            AnchorColumns = AnchorColumns,
+            RelatedSources = RelatedChangeSources
+        }
+        : null;
 }
