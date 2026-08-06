@@ -94,13 +94,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The Activity history can now be filtered from automation as thoroughly as from the portal: `GET /api/v1/activities` and `Get-JIMActivity` gain filters for operation, outcome, status, initiator, created date range, Connected System, Run Profile and Schedule.
 - ✨ Those filters combine, so "which of last week's scheduled Full Imports against Contoso AD recorded errors?" is now one call rather than a sift through pages of Activities. The portal, REST API and PowerShell run the same query, so all three answer identically.
 
-#### Schedule Execution visibility (#1196)
-
-- ✨ The Schedules list now shows how each Schedule's last run *ended*, not just when it ran, naming the step a failed run stopped on. Expanding a Schedule lists its recent executions with their outcomes.
-- ✨ A new Schedule Execution view shows every step of a run with its outcome, how long it took, and a link straight to the Activity that produced it, so a failed overnight run no longer has to be pieced together from the Activity history.
-- 🖥️ An Activity that a Schedule produced now says so, linking back to the run it belonged to and the step within it.
-- ✨ The Activity history can now be filtered to work a Schedule produced, either any Schedule or particular ones, turning "last night failed" into "this step has been failing all week". The attribution lives on the Activity, so it survives the Schedule being deleted.
-
 ### Fixed
 
 - 🐛 A Schedule Execution containing a parallel step no longer reports more steps than it has to run. Its progress counts two things: the position it has reached counts step groups, where steps running concurrently are one position, but the total was counting Schedule Step rows, so a Schedule whose six rows form five groups reported "step 5 of 6" as it finished and never reached its own total. Automation reading a Schedule Execution's progress from the REST API sees the corrected figure. Executions that have already run keep the total recorded at the time; the number of groups they had was never stored, and inferring it from what they left behind would replace a wrong figure with a guess.
