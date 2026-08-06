@@ -73,6 +73,40 @@ public static class ConnectedSystemUtilities
     private static bool CoversDescendants(ConnectedSystemContainer container) =>
         container.Selected && container.Scope == ConnectedSystemContainerScope.Subtree;
 
+    /// <summary>
+    /// Recalculates every container's <see cref="ConnectedSystemContainer.Included"/> display flag from the current
+    /// selections and scopes, for the whole of a partition's container hierarchy.
+    /// </summary>
+    /// <remarks>
+    /// A container is "included" when a selected ancestor's search already covers it, so the administrator does not
+    /// need to (and cannot) select it in its own right. Only a <see cref="ConnectedSystemContainerScope.Subtree"/>
+    /// ancestor covers anything beneath it: beneath a <see cref="ConnectedSystemContainerScope.OneLevel"/> ancestor
+    /// nothing is imported at all, so those containers stay selectable. This is the display-side counterpart of the
+    /// coverage rule <see cref="GetTopLevelSelectedContainers"/> applies, and both must agree; if they do not, the
+    /// portal shows one scope and the import performs another.
+    /// </remarks>
+    public static void ApplyContainerInclusion(ConnectedSystemPartition connectedSystemPartition)
+    {
+        if (connectedSystemPartition == null)
+            throw new ArgumentNullException(nameof(connectedSystemPartition));
+
+        foreach (var rootContainer in connectedSystemPartition.Containers ?? [])
+        {
+            // A root container has no ancestor, so nothing can be covering it.
+            rootContainer.Included = false;
+            ApplyContainerInclusion(rootContainer, CoversDescendants(rootContainer));
+        }
+    }
+
+    private static void ApplyContainerInclusion(ConnectedSystemContainer container, bool coveredByAnAncestor)
+    {
+        foreach (var childContainer in container.ChildContainers)
+        {
+            childContainer.Included = coveredByAnAncestor;
+            ApplyContainerInclusion(childContainer, coveredByAnAncestor || CoversDescendants(childContainer));
+        }
+    }
+
     private static void SearchForSelectedChildContainers(ConnectedSystemContainer container, ICollection<ConnectedSystemContainer> selectedContainers)
     {
         if (container.ChildContainers.Count == 0)

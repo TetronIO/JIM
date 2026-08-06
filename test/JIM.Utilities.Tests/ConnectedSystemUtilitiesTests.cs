@@ -460,6 +460,124 @@ public class ConnectedSystemUtilitiesTests
         Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
     }
 
+    #endregion
+
+    #region ApplyContainerInclusion Tests
+
+    // "Included" is the portal's way of saying "you do not need to select this, a selected ancestor already covers
+    // it", and it is what makes a descendant's checkbox disabled. Only a Subtree ancestor covers anything below it;
+    // beneath a OneLevel ancestor, the descendants are not imported at all, so they have to stay selectable. Getting
+    // this wrong locks an administrator out of re-selecting exactly what they just excluded.
+
+    [Test]
+    public void ApplyContainerInclusion_WithSelectedSubtreeParent_MarksDescendantsIncluded()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(parent.Included, Is.False, "a selected container is not included by anything above it");
+            Assert.That(child.Included, Is.True);
+            Assert.That(grandchild.Included, Is.True);
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WithSelectedOneLevelParent_LeavesDescendantsSelectable()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(child.Included, Is.False, "a one-level container does not import from the containers beneath it");
+            Assert.That(grandchild.Included, Is.False);
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WithSubtreeContainerBeneathAOneLevelParent_MarksItsOwnDescendantsIncluded()
+    {
+        // Arrange
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", true, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(child.Included, Is.False, "selected in its own right, not covered by the one-level parent");
+            Assert.That(grandchild.Included, Is.True, "covered by the child's own subtree search");
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WithNothingSelected_MarksNothingIncluded()
+    {
+        // Arrange
+        var child = CreateContainer("Child", false);
+        var parent = CreateContainer("Parent", false, child);
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(parent.Included, Is.False);
+            Assert.That(child.Included, Is.False);
+        });
+    }
+
+    [Test]
+    public void ApplyContainerInclusion_WhenAContainerIsNarrowed_ClearsInclusionBeneathIt()
+    {
+        // Arrange - the state left behind by a previous pass, which narrowing must undo rather than leave stale
+        var grandchild = CreateContainer("Grandchild", false);
+        var child = CreateContainer("Child", false, grandchild);
+        var parent = CreateContainer("Parent", true, child);
+        child.Included = true;
+        grandchild.Included = true;
+        parent.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = CreatePartitionWithContainers(parent);
+
+        // Act
+        ConnectedSystemUtilities.ApplyContainerInclusion(partition);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(child.Included, Is.False);
+            Assert.That(grandchild.Included, Is.False);
+        });
+    }
+
+    #endregion
+
+    #region Container Scope Tests (model defaults)
+
     [Test]
     public void ConnectedSystemContainer_ByDefault_IsSubtreeScoped()
     {
