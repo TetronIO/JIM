@@ -495,16 +495,22 @@ internal sealed class SqlConnectorExport
     /// </remarks>
     private static List<SqlExportColumnValue>? ResolveSuppliedAnchor(SqlExportPlan plan, IReadOnlyList<SqlExportColumnValue> columnValues)
     {
-        var supplied = plan.AnchorColumns
-            .Select(anchorColumn => columnValues.FirstOrDefault(columnValue => string.Equals(columnValue.ColumnName, anchorColumn, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        var supplied = new List<SqlExportColumnValue>(plan.AnchorColumns.Count);
 
-        if (supplied.Any(columnValue => columnValue == null))
-            return null;
+        for (var index = 0; index < plan.AnchorColumns.Count; index++)
+        {
+            var anchorColumn = plan.AnchorColumns[index];
+            var columnValue = columnValues.FirstOrDefault(candidate => string.Equals(candidate.ColumnName, anchorColumn, StringComparison.OrdinalIgnoreCase));
 
-        // Renamed onto the anchor parameters, because these values key the related-table rows that
-        // follow the insert rather than the insert's own column list.
-        return [.. supplied.Select((columnValue, index) => columnValue! with { ParameterName = AnchorParameterName(index) })];
+            if (columnValue == null)
+                return null;
+
+            // Renamed onto the anchor parameters, because these values key the related-table rows that
+            // follow the insert rather than the insert's own column list.
+            supplied.Add(columnValue with { ParameterName = AnchorParameterName(index) });
+        }
+
+        return supplied;
     }
 
     /// <summary>
@@ -738,7 +744,7 @@ internal sealed class SqlConnectorExport
     private static string? ResolveObjectTypeName(PendingExport pendingExport)
     {
         return pendingExport.ConnectedSystemObject?.Type?.Name
-            ?? pendingExport.AttributeValueChanges.FirstOrDefault()?.Attribute?.ConnectedSystemObjectType?.Name;
+            ?? pendingExport.AttributeValueChanges.FirstOrDefault()?.Attribute.ConnectedSystemObjectType?.Name;
     }
 
     #endregion
