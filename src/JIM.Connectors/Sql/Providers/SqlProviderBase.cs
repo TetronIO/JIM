@@ -192,14 +192,13 @@ internal abstract class SqlProviderBase : ISqlProvider
         IReadOnlyList<string> anchorColumns,
         string argumentName)
     {
-        foreach (var relatedSource in relatedSources)
-        {
-            if (relatedSource.JoinColumns.Count != anchorColumns.Count)
-                throw new ArgumentException(
-                    $"Related change source '{relatedSource.TableName}' correlates on {relatedSource.JoinColumns.Count} column(s), but the anchor has {anchorColumns.Count}: " +
-                    "correlating on part of an anchor would attribute another object's changes to this one.",
-                    argumentName);
-        }
+        var mismatched = relatedSources.FirstOrDefault(relatedSource => relatedSource.JoinColumns.Count != anchorColumns.Count);
+
+        if (mismatched != null)
+            throw new ArgumentException(
+                $"Related change source '{mismatched.TableName}' correlates on {mismatched.JoinColumns.Count} column(s), but the anchor has {anchorColumns.Count}: " +
+                "correlating on part of an anchor would attribute another object's changes to this one.",
+                argumentName);
     }
 
     /// <summary>

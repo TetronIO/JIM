@@ -680,14 +680,16 @@ internal sealed class SqlConnectorImport
     {
         var relatedWatermarks = new Dictionary<string, SqlDeltaValue>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var relatedTable in plan.RelatedTables)
-        {
-            var configuration = relatedTable.Configuration;
-            if (configuration.WatermarkColumn == null)
-                continue;
+        // Only the related tables declaring a watermark column have one to capture. A Full Import reaches
+        // here with tables that do not, which is deliberate: see the remarks above.
+        var watermarked = plan.RelatedTables
+            .Select(relatedTable => relatedTable.Configuration)
+            .Where(configuration => configuration.WatermarkColumn != null);
 
+        foreach (var configuration in watermarked)
+        {
             var source = _provider.QualifyObjectName(configuration.SchemaName, configuration.TableName);
-            var described = SqlConnectorWatermark.Describe(await ReadHighestValueAsync(source, configuration.WatermarkColumn));
+            var described = SqlConnectorWatermark.Describe(await ReadHighestValueAsync(source, configuration.WatermarkColumn!));
 
             if (described != null)
                 relatedWatermarks[configuration.AttributeName] = described;
