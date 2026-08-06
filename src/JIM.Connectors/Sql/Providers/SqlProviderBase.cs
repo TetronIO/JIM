@@ -160,10 +160,51 @@ internal abstract class SqlProviderBase : ISqlProvider
         if (request.AnchorColumns.Count == 0)
             throw new ArgumentException("A keyset page needs at least one anchor column to order and seek on.", nameof(request));
 
+        if (string.IsNullOrWhiteSpace(request.ObjectName) == string.IsNullOrWhiteSpace(request.SelectStatement))
+            throw new ArgumentException("A keyset page must read from exactly one source: a table or view, or a statement standing in for one.", nameof(request));
+
         if (!request.IsFirstPage && request.LastAnchorParameterNames.Count != request.AnchorColumns.Count)
             throw new ArgumentException(
                 $"A keyset page must supply one last-anchor parameter per anchor column: {request.AnchorColumns.Count} anchor column(s) but {request.LastAnchorParameterNames.Count} parameter(s).",
                 nameof(request));
+
+        if (string.IsNullOrWhiteSpace(request.ChangeColumn) != string.IsNullOrWhiteSpace(request.ChangeParameterName))
+            throw new ArgumentException(
+                "A keyset page restricted to changed rows needs both the column to compare and the parameter carrying the watermark; one without the other would read everything, or nothing.",
+                nameof(request));
+    }
+
+    /// <summary>
+    /// Renders everything a keyset page filters on: the seek past the previous page's last row, and the
+    /// restriction to rows beyond a Delta Import's watermark. Identical in both dialects, so it lives
+    /// here rather than being written out twice.
+    /// </summary>
+    /// <returns>The WHERE clause with its leading space, or an empty string where the page filters on nothing.</returns>
+    protected string BuildKeysetWhereClause(SqlKeysetPageRequest request)
+    {
+        var predicates = new List<string>(2);
+
+        // The watermark first: it is the more selective of the two, and on the first page of a run it is
+        // the only thing standing between a Delta Import and a full table scan.
+        if (request.HasChangeFilter)
+            predicates.Add($"{QuoteIdentifier(request.ChangeColumn!)} > {GetParameterPlaceholder(request.ChangeParameterName!)}");
+
+        if (!request.IsFirstPage)
+            predicates.Add(BuildKeysetPredicate(request.AnchorColumns, request.LastAnchorParameterNames));
+
+        return predicates.Count == 0 ? string.Empty : $" WHERE {string.Join(" AND ", predicates)}";
+    }
+
+    /// <summary>
+    /// Renders what a keyset page reads from: a quoted, schema-qualified object name, or an
+    /// administrator-supplied statement wrapped as a named derived table. Identical in both dialects,
+    /// so it lives here rather than being written out twice.
+    /// </summary>
+    protected string BuildFromClause(SqlKeysetPageRequest request)
+    {
+        return string.IsNullOrWhiteSpace(request.SelectStatement)
+            ? QualifyObjectName(request.SchemaName, request.ObjectName!)
+            : $"({request.SelectStatement}) {QuoteIdentifier(SqlKeysetPageRequest.SourceAlias)}";
     }
 
     /// <summary>

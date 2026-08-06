@@ -140,12 +140,11 @@ internal class SqlServerProvider : SqlProviderBase
 
         // TOP takes a bound parameter, so the page size is a value like any other.
         var select = $"SELECT TOP ({GetParameterPlaceholder(request.PageSizeParameterName)}) {BuildColumnList(request.SelectColumns)}";
-        var from = $"FROM {QualifyObjectName(request.SchemaName, request.ObjectName)}";
+        var from = $"FROM {BuildFromClause(request)}";
+        var where = BuildKeysetWhereClause(request);
         var orderBy = BuildAnchorOrderByClause(request.AnchorColumns);
 
-        return request.IsFirstPage
-            ? $"{select} {from} {orderBy}"
-            : $"{select} {from} WHERE {BuildKeysetPredicate(request.AnchorColumns, request.LastAnchorParameterNames)} {orderBy}";
+        return $"{select} {from}{where} {orderBy}";
     }
 
     #endregion

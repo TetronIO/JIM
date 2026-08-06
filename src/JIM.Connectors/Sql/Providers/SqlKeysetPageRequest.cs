@@ -14,12 +14,25 @@ namespace JIM.Connectors.Sql.Providers;
 /// </summary>
 internal sealed record SqlKeysetPageRequest
 {
+    /// <summary>
+    /// The name an administrator-supplied statement is given when it stands in for a table, because a
+    /// derived table has to be named. Chosen so no real object collides with it.
+    /// </summary>
+    internal const string SourceAlias = "JIM_SOURCE";
+
     internal string? SchemaName { get; init; }
 
     /// <summary>
-    /// The primary table or view being read.
+    /// The primary table or view being read. Null when <see cref="SelectStatement"/> is supplied
+    /// instead; exactly one of the two is always set.
     /// </summary>
-    internal required string ObjectName { get; init; }
+    internal string? ObjectName { get; init; }
+
+    /// <summary>
+    /// An administrator-supplied SELECT statement standing in for a table or view, wrapped as a derived
+    /// table so the page is ordered, seeked and limited around it exactly as it would be around a table.
+    /// </summary>
+    internal string? SelectStatement { get; init; }
 
     internal required IReadOnlyList<string> SelectColumns { get; init; }
 
@@ -41,7 +54,25 @@ internal sealed record SqlKeysetPageRequest
     internal IReadOnlyList<string> LastAnchorParameterNames { get; init; } = [];
 
     /// <summary>
+    /// The column a Delta Import restricts the read to, so that only rows beyond the persisted watermark
+    /// are returned: a change log's sequence, or a source's last-modified column. Null for a Full Import,
+    /// and null on a Delta Import that has no watermark yet and therefore reads from the beginning.
+    /// </summary>
+    internal string? ChangeColumn { get; init; }
+
+    /// <summary>
+    /// The parameter carrying the watermark <see cref="ChangeColumn"/> is compared against. Set exactly
+    /// when <see cref="ChangeColumn"/> is.
+    /// </summary>
+    internal string? ChangeParameterName { get; init; }
+
+    /// <summary>
     /// True when no previous anchor was supplied, so the page starts at the beginning of the ordered set.
     /// </summary>
     internal bool IsFirstPage => LastAnchorParameterNames.Count == 0;
+
+    /// <summary>
+    /// True when the read is restricted to rows beyond a watermark.
+    /// </summary>
+    internal bool HasChangeFilter => ChangeColumn != null;
 }
