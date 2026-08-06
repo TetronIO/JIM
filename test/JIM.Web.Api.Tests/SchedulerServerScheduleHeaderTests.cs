@@ -66,12 +66,12 @@ public class SchedulerServerScheduleHeaderTests
         var result = await _application.Scheduler.GetScheduleHeadersAsync(1, 20);
 
         Assert.That(result.Results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Results[0].LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Failed));
             Assert.That(result.Results[0].LastExecutionCurrentStepIndex, Is.EqualTo(2));
             Assert.That(result.Results[0].StepCount, Is.EqualTo(6));
-        });
+        }
     }
 
     [Test]

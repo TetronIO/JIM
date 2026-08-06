@@ -26,13 +26,13 @@ public class SqlConnectionSettingsTests
 
         var rendered = settings.ToString();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(rendered, Does.Not.Contain("s3cret"),
                 "Anything that reaches a log or an exception message must never carry the credential; a record's generated ToString would.");
             Assert.That(rendered, Does.Contain("sql.example.local"),
                 "Redaction must not cost the diagnostic value of knowing which host was addressed.");
-        });
+        }
     }
 
     [Test]

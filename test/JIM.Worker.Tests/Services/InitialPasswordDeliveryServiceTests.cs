@@ -73,11 +73,11 @@ public class InitialPasswordDeliveryServiceTests
 
         var result = await _service.DeliverAsync(_connector.Object, _target, EnabledConfiguration(), null, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Delivered));
             Assert.That(result.AppliedExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
-        });
+        }
     }
 
     [Test]
@@ -90,13 +90,13 @@ public class InitialPasswordDeliveryServiceTests
 
         var result = await _service.DeliverAsync(_connector.Object, _target, EnabledConfiguration(), null, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
             Assert.That(result.Message, Does.Contain("complexity"),
                 "the target's own reason is the most useful thing an administrator can be shown, and JIM cannot work it out for itself");
-        });
+        }
     }
 
     [Test]
@@ -195,11 +195,11 @@ public class InitialPasswordDeliveryServiceTests
         await _service.DeliverAsync(_connector.Object, _target, configuration, null, CancellationToken.None);
 
         Assert.That(captured, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(captured!.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
             Assert.That(captured!.EnableAccount, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -288,11 +288,11 @@ public class InitialPasswordDeliveryServiceTests
         var result = await _service.DeliverAsync(_connector.Object, _target, configuration,
             new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
             Assert.That(result.Message, Does.Contain("30"), "the administrator needs to know what the target actually requires");
-        });
+        }
         _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
             It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }

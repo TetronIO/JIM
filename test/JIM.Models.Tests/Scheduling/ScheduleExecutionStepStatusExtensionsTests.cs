@@ -22,7 +22,7 @@ public class ScheduleExecutionStepStatusExtensionsTests
     [Test]
     public void ToDisplayString_EveryStatus_ReturnsItsPublishedLabel()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ScheduleExecutionStepStatus.Pending.ToDisplayString(), Is.EqualTo("Pending"));
             Assert.That(ScheduleExecutionStepStatus.Waiting.ToDisplayString(), Is.EqualTo("Waiting"));
@@ -35,7 +35,7 @@ public class ScheduleExecutionStepStatusExtensionsTests
             Assert.That(ScheduleExecutionStepStatus.Failed.ToDisplayString(), Is.EqualTo("Failed"));
             Assert.That(ScheduleExecutionStepStatus.Cancelled.ToDisplayString(), Is.EqualTo("Cancelled"));
             Assert.That(ScheduleExecutionStepStatus.Unknown.ToDisplayString(), Is.EqualTo("Unknown"));
-        });
+        }
     }
 
     /// <summary>
@@ -63,10 +63,10 @@ public class ScheduleExecutionStepStatusExtensionsTests
     [Test]
     public void ToDisplayString_CancelledLabels_UseBritishEnglishSpelling()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(ScheduleExecutionStepStatus.Cancelled.ToDisplayString(), Does.Not.Contain("Canceled"));
             Assert.That(ScheduleExecutionStepStatus.Cancelling.ToDisplayString(), Does.Not.Contain("Canceling"));
-        });
+        }
     }
 }

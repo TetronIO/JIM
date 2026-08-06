@@ -66,11 +66,11 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Connected System not found").IgnoreCase);
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Never);
     }
 
@@ -89,13 +89,13 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — error message must name the system and cite the specific incomplete-configuration reason
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Resurgam AD"));
             Assert.That(result.ErrorMessage, Does.Contain("hierarchy"));
             Assert.That(result.ErrorMessage, Does.Contain("Partitions & Containers"));
-        });
+        }
     }
 
     [Test]
@@ -117,12 +117,12 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — message must include the partition count to aid diagnosis
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("2"));
             Assert.That(result.ErrorMessage, Does.Contain("none").IgnoreCase);
-        });
+        }
     }
 
     [Test]
@@ -152,13 +152,13 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — error must name the selected partition and indicate containers exist but none selected
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("container").IgnoreCase);
             Assert.That(result.ErrorMessage, Does.Contain("DC=resurgam,DC=local"));
             Assert.That(result.ErrorMessage, Does.Contain("2")); // 2 containers in the tree (Corp + Users)
-        });
+        }
     }
 
     [Test]
@@ -187,12 +187,12 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert — task should be created despite incomplete config, with the diagnostic surfaced as a warning
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Warnings, Has.Count.GreaterThan(0));
             Assert.That(result.Warnings[0], Does.Contain("hierarchy"));
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Once);
     }
 
@@ -225,11 +225,11 @@ public class TaskingServerPartitionValidationTests
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Warnings, Is.Empty);
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Once);
         // ServiceSettings should not even be consulted when the configuration is valid
         _mockServiceSettingsRepository.Verify(r => r.GetSettingAsync(It.IsAny<string>()), Times.Never);
@@ -271,12 +271,12 @@ public class TaskingServerPartitionValidationTests
 
         var result = await _application.Tasking.CreateWorkerTaskAsync(BuildSyncTask());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False, "the Run Profile reads scope the administrator has removed from management");
             Assert.That(result.ErrorMessage, Does.Contain("DC=retired,DC=local"));
             Assert.That(result.ErrorMessage, Does.Contain("Retired Full Import"));
-        });
+        }
         _mockTaskingRepository.Verify(r => r.CreateWorkerTaskAsync(It.IsAny<WorkerTask>()), Times.Never);
     }
 

@@ -66,12 +66,12 @@ public class LdapConnectorPartitionsTests
 
         var result = LdapConnectorPartitions.BuildContainerHierarchy(entries, PartitionDn);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result[0].StableId, Is.EqualTo("6f9619ff-8b86-d011-b42d-00c04fc964ff"));
             Assert.That(result[0].ChildContainers[0].StableId, Is.EqualTo("11111111-2222-3333-4444-555555555555"),
                 "nested containers need identity every bit as much as top-level ones");
-        });
+        }
     }
 
     [Test]

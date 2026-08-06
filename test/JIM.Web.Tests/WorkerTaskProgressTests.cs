@@ -91,13 +91,13 @@ public class WorkerTaskProgressTests : JimComponentTestContext
         // The rail's whole job is that a skipped step reads differently from one not reached yet.
         var cut = RenderCell(ImportSaving());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll($"{SegmentSelector}.jim-queue-step--skipped"), Has.Count.EqualTo(1));
             Assert.That(cut.FindAll($"{SegmentSelector}.jim-queue-step--completed"), Has.Count.EqualTo(1));
             Assert.That(cut.FindAll($"{SegmentSelector}.jim-queue-step--active"), Has.Count.EqualTo(1));
             Assert.That(cut.FindAll($"{SegmentSelector}.jim-queue-step--pending"), Has.Count.EqualTo(2));
-        });
+        }
     }
 
     [Test]
@@ -126,11 +126,11 @@ public class WorkerTaskProgressTests : JimComponentTestContext
         // steps. They must render as they always have rather than as an empty rail.
         var cut = RenderCell(steps: null, progressMessage: "Deleting Connected System Objects");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll(RailSelector), Is.Empty);
             Assert.That(Caption(cut), Does.Contain("Deleting Connected System Objects"));
-        });
+        }
     }
 
     [Test]
@@ -139,11 +139,11 @@ public class WorkerTaskProgressTests : JimComponentTestContext
         var cut = RenderCell(steps: null, objectsToProcess: null, objectsProcessed: null,
             progressMessage: "Deleting Connected System Objects");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll(RailSelector), Is.Empty);
             Assert.That(Caption(cut), Does.Contain("Deleting Connected System Objects"));
-        });
+        }
     }
 
     [Test]
@@ -151,11 +151,11 @@ public class WorkerTaskProgressTests : JimComponentTestContext
     {
         var cut = RenderCell(ImportSaving(), status: WorkerTaskStatus.Queued);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll(RailSelector), Is.Empty, "Nothing has run yet, so there is no shape to report");
             Assert.That(cut.Markup, Does.Contain("Waiting"));
-        });
+        }
     }
 
     #endregion
@@ -189,11 +189,11 @@ public class WorkerTaskProgressTests : JimComponentTestContext
         // have passed a weaker check either way.
         var cut = RenderCell(ImportSaving(), progressMessage: "Importing users");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Caption(cut), Does.Not.Contain("Importing users"));
             Assert.That(Caption(cut), Is.EqualTo("Step 3 of 5: Saving changes - 12,480 / 40,000"));
-        });
+        }
     }
 
     [Test]
@@ -209,11 +209,11 @@ public class WorkerTaskProgressTests : JimComponentTestContext
 
         var cut = RenderCell(steps);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll(SegmentSelector), Has.Count.EqualTo(2));
             Assert.That(Caption(cut), Does.Not.Contain("Step "));
-        });
+        }
     }
 
     [Test]

@@ -118,13 +118,13 @@ public class SyncRuleMappingUpdateTests : WorkflowTestBase
         await Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(new[] { detached });
 
         var persisted = await DbContext.SyncRuleMappings.AsNoTracking().SingleAsync(m => m.Id == mapping.Id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.LastUpdated, Is.EqualTo(updatedAt), "the audit timestamp must persist");
             Assert.That(persisted.LastUpdatedByType, Is.EqualTo(ActivityInitiatorType.User), "the initiator type must persist");
             Assert.That(persisted.LastUpdatedById, Is.EqualTo(initiatorId), "the initiator id must persist");
             Assert.That(persisted.LastUpdatedByName, Is.EqualTo("Test Administrator"), "the initiator name must persist");
-        });
+        }
     }
 
     private static SyncRuleMapping BuildDetachedMapping(SyncRuleMapping persisted, int priority, int targetAttributeId)

@@ -37,11 +37,11 @@ public class ThroughputTrackerTests
         Advance(100);
         var suffix = tracker.FormatCompletion(processed: 10000);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(suffix, Does.Contain("avg 100 obj/s"));
             Assert.That(suffix, Does.Contain("1 min 40 sec"));
-        });
+        }
     }
 
     [Test]
@@ -65,12 +65,12 @@ public class ThroughputTrackerTests
     {
         var tracker = CreateTracker();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tracker.FormatCompletion(processed: 10000), Is.Empty, "under a second elapsed");
 
             Advance(100);
             Assert.That(tracker.FormatCompletion(processed: 0), Is.Empty, "nothing processed");
-        });
+        }
     }
 }

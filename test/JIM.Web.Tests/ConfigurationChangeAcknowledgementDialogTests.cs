@@ -62,13 +62,13 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
             "Inbound out-of-scope action", ConfigurationChangeClass.Destructive,
             consequence: "Objects that fall out of this rule's scope will stay joined to their Metaverse Objects.")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("decides whether objects are removed"),
                 "the headline should name what the property governs, not assert a direction");
             Assert.That(provider.Markup, Does.Not.Contain("can remove data"),
                 "claiming data loss over a change that prevents it is how a dialog earns reflex dismissal");
-        });
+        }
     }
 
     [Test]
@@ -117,12 +117,12 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
         var provider = ShowDialog(Preflight(ConfigurationChangeClass.SyncAffecting,
             Item("Enabled", ConfigurationChangeClass.SyncAffecting, oldValue: "Yes", newValue: "No")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("Enabled"));
             Assert.That(provider.Markup, Does.Contain("Yes"));
             Assert.That(provider.Markup, Does.Contain("No"));
-        });
+        }
     }
 
     [Test]
@@ -157,11 +157,11 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
             Preflight(ConfigurationChangeClass.Destructive, Item("Deletion Rule", ConfigurationChangeClass.Destructive)),
             [new ImpactCount { Label = "Would become eligible for deletion", Count = 4812 }]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("Would become eligible for deletion"));
             Assert.That(provider.Markup, Does.Contain("4,812"), "counts are read at a glance; thousands separators are not decoration");
-        });
+        }
     }
 
     [Test]

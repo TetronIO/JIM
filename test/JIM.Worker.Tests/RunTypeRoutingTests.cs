@@ -53,7 +53,7 @@ public class RunTypeRoutingTests
         }
 
         // Document the critical routing decisions
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // CRITICAL: Both import types must use SyncImportTaskProcessor
             // This was a bug where DeltaImport was incorrectly using SyncFullSyncTaskProcessor
@@ -66,7 +66,7 @@ public class RunTypeRoutingTests
             Assert.That(expectedRouting[ConnectedSystemRunType.FullSynchronisation],
                 Is.Not.EqualTo(expectedRouting[ConnectedSystemRunType.DeltaSynchronisation]),
                 "FullSynchronisation and DeltaSynchronisation should use different processors.");
-        });
+        }
     }
 
     /// <summary>

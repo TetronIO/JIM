@@ -148,11 +148,11 @@ public class AdministratorPasswordSetTests
     {
         Assert.ThrowsAsync<ArgumentException>(async () => await SetPasswordAsync("   "));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.PasswordsSet, Is.Empty);
             Assert.That(_connector.OpenCount, Is.Zero);
-        });
+        }
         await Task.CompletedTask;
     }
 
@@ -165,11 +165,11 @@ public class AdministratorPasswordSetTests
     {
         await SetPasswordAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.OpenCount, Is.EqualTo(1));
             Assert.That(_connector.CloseCount, Is.EqualTo(1));
-        });
+        }
     }
 
     /// <summary>
@@ -212,12 +212,12 @@ public class AdministratorPasswordSetTests
 
         var result = await SetPasswordAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
             Assert.That(result.ErrorMessage, Is.EqualTo(reason));
-        });
+        }
     }
 
     /// <summary>
@@ -232,11 +232,11 @@ public class AdministratorPasswordSetTests
 
         var result = await SetPasswordAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
-        });
+        }
     }
 
     [Test]
@@ -246,11 +246,11 @@ public class AdministratorPasswordSetTests
 
         var result = await SetPasswordAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.Transient));
-        });
+        }
     }
 
     #endregion
@@ -263,14 +263,14 @@ public class AdministratorPasswordSetTests
         await SetPasswordAsync();
 
         var activity = CreatedActivities().Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemObject));
             Assert.That(activity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
             Assert.That(activity.ConnectedSystemId, Is.EqualTo(ConnectedSystemId));
             Assert.That(activity.ConnectedSystemObjectId, Is.EqualTo(_csoId));
             Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
-        });
+        }
     }
 
     /// <summary>
@@ -286,11 +286,11 @@ public class AdministratorPasswordSetTests
         await SetPasswordAsync();
 
         var activity = CreatedActivities().Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError));
             Assert.That(activity.ErrorMessage, Does.Contain(reason));
-        });
+        }
     }
 
     /// <summary>
@@ -306,11 +306,11 @@ public class AdministratorPasswordSetTests
         await SetPasswordAsync(options: new PasswordSetOptions { ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn });
 
         var activity = CreatedActivities().Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.Message, Does.Contain(nameof(PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy)));
             Assert.That(activity.Message, Does.Contain("cannot require a change at next sign-in"));
-        });
+        }
     }
 
     /// <summary>
@@ -348,11 +348,11 @@ public class AdministratorPasswordSetTests
             ConnectedSystemId, _csoId, "Correct-Horse-42", new PasswordSetOptions(), apiKey, CancellationToken.None);
 
         var activity = CreatedActivities().Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
             Assert.That(activity.InitiatedById, Is.EqualTo(apiKey.Id));
-        });
+        }
     }
 
     #endregion
@@ -370,11 +370,11 @@ public class AdministratorPasswordSetTests
 
         await SetPasswordAsync(options: options);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.LastOptions?.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
             Assert.That(_connector.LastOptions?.EnableAccount, Is.True);
-        });
+        }
     }
 
     #endregion

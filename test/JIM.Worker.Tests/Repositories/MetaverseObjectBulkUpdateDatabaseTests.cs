@@ -132,12 +132,12 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             .Include(o => o.AttributeValues)
             .SingleAsync(o => o.Id == mvo.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.AttributeValues, Has.Count.EqualTo(2), "both attribute values should be persisted");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId && av.StringValue == "Sales"), Is.True, "original Department value");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DisplayNameId && av.StringValue == "Alice Example"), Is.True, "added Display Name value");
-        });
+        }
     }
 
     /// <summary>
@@ -174,13 +174,13 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             .Include(o => o.AttributeValues)
             .SingleAsync(o => o.Id == mvo.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.AttributeValues, Has.Count.EqualTo(2), "one value removed, one added, one unchanged");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DisplayNameId && av.StringValue == "Alice Example"), Is.True, "unchanged Display Name retained");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.JobTitleId && av.StringValue == "Engineer"), Is.True, "added Job Title persisted");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId), Is.False, "removed Department deleted");
-        });
+        }
     }
 
     /// <summary>
@@ -215,12 +215,12 @@ public class MetaverseObjectBulkUpdateDatabaseTests
         await using (var verifyCreateCtx = NewContext())
         {
             var created = await verifyCreateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(created.DeletionTriggeredBySystemId, Is.EqualTo(7), "bulk create must persist DeletionTriggeredBySystemId");
                 Assert.That(created.DeletionTriggeredBySystemName, Is.EqualTo("HR System"), "bulk create must persist DeletionTriggeredBySystemName");
                 Assert.That(created.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson), "bulk create must persist DeletionPolicySnapshotJson");
-            });
+            }
         }
 
         // A rejoin cancels the scheduled deletion: the markers are cleared together, and the raw bulk update
@@ -232,11 +232,11 @@ public class MetaverseObjectBulkUpdateDatabaseTests
 
         await using var verifyUpdateCtx = NewContext();
         var updated = await verifyUpdateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(updated.DeletionTriggeredBySystemId, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemId");
             Assert.That(updated.DeletionTriggeredBySystemName, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemName");
             Assert.That(updated.DeletionPolicySnapshotJson, Is.Null, "bulk update must persist a cleared DeletionPolicySnapshotJson");
-        });
+        }
     }
 }
