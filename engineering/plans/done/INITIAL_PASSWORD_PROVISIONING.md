@@ -1,6 +1,6 @@
 # Initial Password Generation and Delivery on Provisioning
 
-- **Status:** Doing (Phases 1 to 6 complete; Phase 7 outstanding)
+- **Status:** Done (all seven phases complete)
 - **Note:** Phase 5 is closed. Its four unbuilt items were tracked as [#1221](https://github.com/TetronIO/JIM/issues/1221) and delivered in #1229 (release on configuration change, time-to-live expiry) and #1235 (both portal surfaces, with REST and PowerShell parity for the parked reporting). What remains is a read surface for the discovered policy, and the concept page that ties the whole feature together.
 - **Issue:** [#1121](https://github.com/TetronIO/JIM/issues/1121)
 - **Related:** [#1119](https://github.com/TetronIO/JIM/issues/1119) Password Synchronisation, [#1120](https://github.com/TetronIO/JIM/issues/1120) Defensive password filtering, [#618](https://github.com/TetronIO/JIM/issues/618) Email Notifications
@@ -266,13 +266,17 @@ Endpoints and cmdlets for generator configuration, the on-demand generate afford
 
 **Do not read #1204 as having covered this phase:** that PR delivered surface parity for *setting a password on an object* (`POST .../connector-space/{csoId}/password`, `Set-JIMConnectedSystemObjectPassword`, `Set-JIMMetaverseObjectPassword`), which is a different capability from configuring the generator or reading the discovered policy.
 
-### Phase 7: Documentation and changelog (outstanding)
+### Phase 7: Documentation and changelog ✅
 
 New public documentation page for initial passwords (configuration, policy discovery, what happens on rejection, the security model), LDAP connector reference updates, REST and PowerShell reference updates, `engineering/DEVELOPER_GUIDE.md` for the new component, and a changelog entry.
 
-❌ The dedicated initial-passwords page still does not exist. #1152 and #1204 documented what they each shipped on existing pages (`docs/configuration/connected-systems.md`, `docs/powershell/connected-systems.md`, `docs/powershell/metaverse.md`), and #1229 and #1235 added the Initial Password sections to `docs/configuration/synchronisation-rules.md` and `docs/powershell/synchronisation-rules.md` covering configuration, the four post-provisioning states, clearing a parked account and the output shapes. Changelog entries are in place throughout.
+✅ #1152 and #1204 documented what they each shipped on existing pages (`docs/configuration/connected-systems.md`, `docs/powershell/connected-systems.md`, `docs/powershell/metaverse.md`), #1229 and #1235 added the Initial Password sections to `docs/configuration/synchronisation-rules.md` and `docs/powershell/synchronisation-rules.md`, and #1245 documented generation for automation. Changelog entries are in place throughout.
 
-What remains is the concept-and-how-to page that ties policy discovery, generation, delivery and rejection together in one place rather than across three, and the `DEVELOPER_GUIDE.md` component entry.
+✅ The concept page `docs/concepts/passwords.md` now ties the whole feature together in one place: the password channel and why passwords do not travel through Attribute Flow, what policy discovery can and cannot tell you, where a password comes from (including multi-system reconciliation), initial passwords on provisioning with the four post-provisioning states and the rejection loop, and the five security rules that hold across every surface. The detail pages deep-link to it and it deep-links back, so neither duplicates the other.
+
+✅ `engineering/DEVELOPER_GUIDE.md` carries the component entry as *3b. Password Channel (#1121)*: the contracts, generation, reconciliation, the persistence-free delivery decision and the orchestrating server, plus the five rules a change to this area must not break.
+
+Three statements were also corrected rather than added. `Set-JIMConnectedSystemObjectPassword` and `Set-JIMMetaverseObjectPassword` still told the reader, in their comment-based help and on three docs pages, that JIM would not generate a password for automation because its API never returns one in a response body. #1245 made that untrue and appended the `-Generate` material without retiring the claim it contradicted, so both pages argued with themselves.
 
 ## Success Criteria
 

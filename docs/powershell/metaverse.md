@@ -900,7 +900,7 @@ Sets the same password on several of a person's accounts across Connected System
 
 Resolves the accounts a Metaverse Object is joined to and writes to each named Connected System in turn. There is no transaction across them: a run routinely ends with some accounts changed and others not, so every account's outcome is reported separately.
 
-You supply the password. JIM does not generate one here, because that would mean returning a password in a response body, which this API never does. Use the portal when you want JIM to generate one that satisfies every selected system's discovered policy at once.
+Supply the password with `-Password`, or have JIM generate one that satisfies every selected system's discovered policy at once with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
 
 ### Syntax
 
@@ -979,7 +979,7 @@ Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -AllAcco
 ### Notes
 
 - **You must name the Connected Systems, or pass `-AllAccounts`.** There is no default: setting a password everywhere by default would turn a reset in one system into a reset in all of them.
-- **This is a password-reset primitive.** Anyone who can call it can reset any account in these connector spaces, subject only to what each Connected System's service account is permitted to do.
+- **This resets the passwords on whichever accounts you point it at.** Anyone who can call it can reset any account in these connector spaces, subject only to what each Connected System's service account is permitted to do.
 - One Connected System refusing does not stop the others. Where that happens the person is left with a different password there from the accounts that accepted it, so check every returned outcome rather than the first.
 - A refused password will be refused again if you resend it. Generate a different one, and set it on every account rather than only the one that failed, or the person ends up with two.
 
