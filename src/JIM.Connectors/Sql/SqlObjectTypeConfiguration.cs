@@ -169,4 +169,16 @@ internal sealed record SqlRelatedTableConfiguration
     /// rather than data. Group membership is exactly this shape.
     /// </summary>
     internal string? ReferencesObjectType { get; init; }
+
+    /// <summary>
+    /// The column on this related table whose value moves whenever one of its rows changes. Read by
+    /// Delta Imports in Watermark Column mode, and ignored by every other mode.
+    /// </summary>
+    /// <remarks>
+    /// A change confined to a related table (a group membership added, a phone number revoked) never
+    /// touches the parent row, so the parent's own watermark does not move and the change would go
+    /// undetected. This is what lets the parent be selected on its related tables' evidence as well as
+    /// its own, which is why Watermark Column mode refuses a related table without one.
+    /// </remarks>
+    internal string? WatermarkColumn { get; init; }
 }

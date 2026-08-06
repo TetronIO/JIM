@@ -440,6 +440,73 @@ public class SqlConnectorDeltaImportTests
     }
 
     [Test]
+    public void ValidateSettingValues_TheDocumentedDeltaExampleInWatermarkColumnMode_IsAccepted()
+    {
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+        var settingValues = DeltaSettingValues(connector, SqlConnectorConstants.DeltaConfigurationExample, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+
+        Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
+            "The example shows both modes, so it has to be complete under either one, related tables included.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_WatermarkColumnModeWithARelatedTableThatHasNoWatermarkColumn_IsRefused()
+    {
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "LAST_MODIFIED",
+                  "relatedTables": [
+                    { "attributeName": "PhoneNumbers", "table": "EMPLOYEE_PHONES", "valueColumn": "PHONE_NUMBER", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        Assert.That(ValidationMessageFor(document, SqlConnectorConstants.DeltaImportModeWatermarkColumn),
+            Does.Contain("Person").And.Contain("PhoneNumbers").And.Contain("watermarkColumn"),
+            "A related table with no watermark column can never report a change of its own, and a membership that changes without JIM noticing is exactly the silent drift this mode must not have.");
+    }
+
+    [Test]
+    public void ValidateSettingValues_ChangeLogModeWithARelatedTableThatHasNoWatermarkColumn_IsAccepted()
+    {
+        const string document = """
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    { "attributeName": "PhoneNumbers", "table": "EMPLOYEE_PHONES", "valueColumn": "PHONE_NUMBER", "joinColumns": [ "EMPLOYEE_ID" ] }
+                  ],
+                  "changeLog": {
+                    "table": "EMPLOYEE_CHANGES",
+                    "anchorColumns": [ "EMPLOYEE_ID" ],
+                    "sequenceColumn": "CHANGE_NUMBER",
+                    "changeTypeColumn": "CHANGE_TYPE",
+                    "createValues": [ "I" ],
+                    "updateValues": [ "U" ],
+                    "deleteValues": [ "D" ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
+
+        Assert.That(connector.ValidateSettingValues(DeltaSettingValues(connector, document, SqlConnectorConstants.DeltaImportModeChangeLogTable), _logger), Is.Empty,
+            "A change log records what happened to the object however it happened, so a related table needs no watermark of its own in that mode.");
+    }
+
+    [Test]
     public void ValidateSettingValues_ChangeLogWithNoDeleteValues_IsRefused()
     {
         const string document = """
