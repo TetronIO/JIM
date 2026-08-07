@@ -49,6 +49,35 @@ internal static class SqlAnchorValue
     }
 
     /// <summary>
+    /// Renders an anchor value whose JIM attribute type is not in hand, from what the driver returned.
+    /// </summary>
+    /// <remarks>
+    /// The one caller is an export create against a database-generated key: the value arrives from an
+    /// identity or a sequence, and JIM holds no schema for a column it has never imported. Every branch
+    /// renders exactly as the typed overload above would for the same value, so the external ID this
+    /// produces is the one the confirming import composes for the same row.
+    /// </remarks>
+    internal static string ToTokenString(object value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value switch
+        {
+            string text => text,
+            Guid guid => guid.ToString("D", CultureInfo.InvariantCulture),
+            byte[] bytes => Convert.ToHexString(bytes),
+            DateTimeOffset dateTimeOffset => dateTimeOffset.UtcDateTime.ToString(DateTimeTokenFormat, CultureInfo.InvariantCulture),
+            DateTime dateTime => ToUtc(dateTime).ToString(DateTimeTokenFormat, CultureInfo.InvariantCulture),
+
+            // Never a plain ToString for a number the database generated: 5.00 and 5.0 have to produce
+            // the same string, or a confirming import reads them as two different objects.
+            decimal number => DecimalAttributeValue.ToCanonicalString(number),
+            float or double => DecimalAttributeValue.ToCanonicalString(Convert.ToDecimal(value, CultureInfo.InvariantCulture)),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty
+        };
+    }
+
+    /// <summary>
     /// Parses an anchor value back out of a Connected System Pagination Token. Returns false rather
     /// than throwing so the caller can turn a corrupt or stale token into a clear run error; it must
     /// never round, truncate or guess.

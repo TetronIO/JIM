@@ -132,6 +132,31 @@ public class SyncRuleMapping : IAuditable
     public bool InitialExportOnly { get; set; }
 
     /// <summary>
+    /// Whether this export mapping contributes to an Update export to the Connected System. The export
+    /// evaluation and Drift Correction paths both consult this before evaluating a mapping, so a mapping
+    /// that does not flow on update is never turned into a Pending Export attribute value change.
+    /// Import mappings have no Connected System target and are unaffected.
+    /// </summary>
+    /// <returns>
+    /// False when the mapping is <see cref="InitialExportOnly"/>, or when its target Connected System
+    /// attribute is <see cref="AttributeWritability.WritableOnCreate"/>; otherwise true.
+    /// </returns>
+    public bool FlowsOnUpdateExport()
+    {
+        if (InitialExportOnly)
+            return false;
+
+        // Synchronisation integrity: a WritableOnCreate attribute identifies the object to the Connected
+        // System (a relational primary key, a directory's relative distinguished name), and the system
+        // accepts a value for it only as part of creating the object. Emitting it on an Update Pending
+        // Export would rewrite that identifier and silently sever the link between the Connected System
+        // Object and the row or entry it is anchored to. The exclusion is deliberate and must stay
+        // explicit: authoring-time validation alone cannot prevent it, because targeting the attribute
+        // is legitimate (and necessary) for provisioning.
+        return TargetConnectedSystemAttribute?.Writability != AttributeWritability.WritableOnCreate;
+    }
+
+    /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()

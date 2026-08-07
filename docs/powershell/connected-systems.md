@@ -578,10 +578,19 @@ Object type definitions with their attributes, selection state, and external ID 
 
 Each Object Type also carries `Tags`, the classification key/value pairs the Connected System reported (for example `class-kind` = `structural`, `visibility` = `internal`), and `IsInternal`, derived from them.
 
+Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"
 Get-JIMConnectedSystemObjectType -ConnectedSystemId 3
+```
+
+```powershell title="List the attributes JIM may only set when it creates the object"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 3 |
+    ForEach-Object { $_.attributes } |
+    Where-Object { $_.writability -eq 'WritableOnCreate' } |
+    Select-Object name, type
 ```
 
 ```powershell title="Include the directory's own internal object types"

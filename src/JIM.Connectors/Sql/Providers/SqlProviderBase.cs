@@ -364,6 +364,87 @@ internal abstract class SqlProviderBase : ISqlProvider
             throw new ArgumentException("An insert must write at least one column.", nameof(command));
     }
 
+    /// <summary>
+    /// Refuses a generated-key insert that names no column to return, which would leave the new object
+    /// with no external ID at all.
+    /// </summary>
+    protected static void ValidateInsertReturningGeneratedKeyCommand(SqlInsertCommand command)
+    {
+        ValidateInsertCommand(command);
+
+        if (string.IsNullOrWhiteSpace(command.GeneratedKeyColumn) || string.IsNullOrWhiteSpace(command.GeneratedKeyParameterName))
+            throw new ArgumentException(
+                "An insert that returns a database-generated key must name both the column holding it and the parameter it comes back through.",
+                nameof(command));
+    }
+
+    /// <summary>
+    /// A plain INSERT. Identical in both dialects, so it is written once here; a dialect that genuinely
+    /// differs overrides it.
+    /// </summary>
+    public virtual string BuildInsertCommandText(SqlInsertCommand command)
+    {
+        ValidateInsertCommand(command);
+
+        return $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+               $"({BuildInsertColumnList(command.Columns)}) " +
+               $"VALUES ({BuildInsertValueList(command.Columns)})";
+    }
+
+    /// <summary>
+    /// An UPDATE keyed on every one of the key columns. Identical in both dialects, so it is written
+    /// once here; a dialect that genuinely differs overrides it.
+    /// </summary>
+    public virtual string BuildUpdateCommandText(SqlUpdateCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (command.Columns.Count == 0)
+            throw new ArgumentException("An update must write at least one column.", nameof(command));
+
+        // An update with no key would rewrite every row of the table, which is the one failure here
+        // that no error message downstream would ever attribute to JIM.
+        if (command.KeyColumns.Count == 0)
+            throw new ArgumentException("An update must be keyed on at least one column, or it would rewrite every row of the table.", nameof(command));
+
+        return $"UPDATE {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+               $"SET {BuildAssignmentList(command.Columns)} " +
+               $"WHERE {BuildKeyPredicate(command.KeyColumns)}";
+    }
+
+    /// <summary>
+    /// A DELETE keyed on every one of the key columns. Identical in both dialects, so it is written
+    /// once here; a dialect that genuinely differs overrides it.
+    /// </summary>
+    public virtual string BuildDeleteCommandText(SqlDeleteCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        // Same reasoning as the update above, with a worse outcome: an unkeyed delete empties the table.
+        if (command.KeyColumns.Count == 0)
+            throw new ArgumentException("A delete must be keyed on at least one column, or it would empty the table.", nameof(command));
+
+        return $"DELETE FROM {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+               $"WHERE {BuildKeyPredicate(command.KeyColumns)}";
+    }
+
+    /// <summary>
+    /// Renders an UPDATE's SET list. Values are never interpolated.
+    /// </summary>
+    private string BuildAssignmentList(IReadOnlyList<SqlColumnParameter> columns)
+    {
+        return string.Join(", ", columns.Select(column => $"{QuoteIdentifier(column.ColumnName)} = {GetParameterPlaceholder(column.ParameterName)}"));
+    }
+
+    /// <summary>
+    /// Renders the predicate identifying the rows a statement acts on. Every key column is compared, so
+    /// a composite anchor never matches more rows than the one object it names.
+    /// </summary>
+    private string BuildKeyPredicate(IReadOnlyList<SqlColumnParameter> keyColumns)
+    {
+        return string.Join(" AND ", keyColumns.Select(column => $"{QuoteIdentifier(column.ColumnName)} = {GetParameterPlaceholder(column.ParameterName)}"));
+    }
+
     #endregion
 
     #region Values
@@ -379,6 +460,11 @@ internal abstract class SqlProviderBase : ISqlProvider
     public AttributeDataType MapColumnType(SqlColumnType columnType, SqlTypeMappingOptions options)
     {
         return SqlTypeMapper.Map(DatabaseType, columnType, options);
+    }
+
+    public bool ColumnCarriesAnOffset(SqlColumnType columnType)
+    {
+        return SqlTypeMapper.CarriesAnOffset(columnType);
     }
 
     #endregion
