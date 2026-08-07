@@ -2556,16 +2556,11 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
-                // Determine if any ancestor container is already selected.
-                // If so, this new container is already implicitly included via the ancestor's subtree search,
-                // so we should NOT select it separately (that would cause duplicate imports).
-                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
-
-                // Only auto-select if:
-                // 1. It's a top-level container in a selected partition, OR
-                // 2. No ancestor is selected (meaning this branch wasn't previously covered)
-                // In practice, if parent is selected, we do NOT select the child - it's already covered by subtree.
-                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+                // Whether the new container needs selecting turns on Container Scope: a selected Subtree ancestor's
+                // search already covers it (selecting it too would import the same objects twice), whereas a selected
+                // OneLevel ancestor stops short of it (leaving it unselected would mean the objects just provisioned
+                // into it are never imported). ConnectedSystemUtilities owns that rule for every caller.
+                var shouldSelect = ConnectedSystemUtilities.NewContainerNeedsSelecting(parentContainer, partition.Selected);
 
                 // Create the new container using connector's method to extract display name
                 var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
@@ -2589,16 +2584,8 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                if (hasSelectedAncestor)
-                {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected, implicitly included via subtree)",
-                        containerExternalId);
-                }
-                else
-                {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
-                        containerExternalId, shouldSelect);
-                }
+                Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                    containerExternalId, shouldSelect);
             }
             catch (Exception ex)
             {
@@ -2687,12 +2674,8 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
-                // Determine if any ancestor container is already selected.
-                // If so, this new container is already implicitly included via the ancestor's subtree search.
-                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
-
-                // Only auto-select if no ancestor is selected and it's a top-level container in a selected partition
-                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+                // Scope-aware coverage; see the sibling overload above for why a OneLevel ancestor does not cover this.
+                var shouldSelect = ConnectedSystemUtilities.NewContainerNeedsSelecting(parentContainer, partition.Selected);
 
                 // Create the new container using connector's method to extract display name
                 var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
@@ -2716,16 +2699,8 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                if (hasSelectedAncestor)
-                {
-                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected)",
-                        containerExternalId);
-                }
-                else
-                {
-                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
-                        containerExternalId, shouldSelect);
-                }
+                Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                    containerExternalId, shouldSelect);
             }
             catch (Exception ex)
             {
@@ -3210,22 +3185,6 @@ public class ConnectedSystemServer
         return result;
     }
     #endregion
-
-    /// <summary>
-    /// Checks if any ancestor container in the hierarchy is selected.
-    /// Used to determine if a new child container is already implicitly included via a parent's subtree search.
-    /// </summary>
-    private static bool IsAnyAncestorSelected(ConnectedSystemContainer? container)
-    {
-        var current = container;
-        while (current != null)
-        {
-            if (current.Selected)
-                return true;
-            current = current.ParentContainer;
-        }
-        return false;
-    }
 
     private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
     {
