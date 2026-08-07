@@ -74,6 +74,19 @@ public class SqlConnectorExportTests
         """;
 
     /// <summary>
+    /// An object type identified by a GUID column, which is what an Oracle table keyed on
+    /// <c>RAW(16) DEFAULT SYS_GUID()</c> and a Microsoft SQL Server table keyed on a
+    /// <c>uniqueidentifier</c> both look like.
+    /// </summary>
+    private const string GuidAnchorDocument = """
+        {
+          "objectTypes": [
+            { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "STAFF_GUID" ] }
+          ]
+        }
+        """;
+
+    /// <summary>
     /// A composite anchor one of whose parts is a GUID column, which is the case a part bound as text
     /// cannot survive: no dialect implicitly converts a string to a uniqueidentifier or a RAW(16).
     /// </summary>
@@ -229,6 +242,103 @@ public class SqlConnectorExportTests
             Assert.That(insert.CommandText, Does.Contain("[COMPANY_ID]").And.Contain("[EMPLOYEE_ID]"),
                 "A natural key is written as part of the row, not asked of the database.");
             Assert.That(insert.Parameters.Values, Does.Contain(7).And.Contain(4711));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateAgainstAnOracleRaw16GeneratedKey_ComposesTheExternalIdAnImportOfTheSameRowWouldCompose()
+    {
+        // RAW(16) DEFAULT SYS_GUID() is how an Oracle table generates a GUID key. The driver returns
+        // bytes, so an export that rendered what it was handed composed hex, while an import of the same
+        // row composed the hyphenated form: JIM would never find the object it had just created.
+        var identifier = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+        var provider = new FakeSqlProvider
+        {
+            DialectUnderTest = SqlDatabaseType.Oracle,
+            GeneratedKeyRetrievalMode = SqlGeneratedKeyRetrieval.OutputParameter,
+            GeneratedKey = IdentifierParser.ToRfc4122Bytes(identifier)
+        };
+
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("STAFF_GUID", "RAW", MaxLength: 16, IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "NVARCHAR2", MaxLength: 200));
+
+        var results = await ExportAsync(provider, GuidAnchorDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[0].ExternalId, Is.EqualTo(identifier.ToString("D")),
+                "The external ID is what the confirming import has to match the row by, so it must be the same string that import composes.");
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateSupplyingAGuidAnchor_ComposesTheExternalIdInTheFormAnImportWould()
+    {
+        var identifier = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var provider = new FakeSqlProvider();
+
+        var results = await ExportAsync(provider, GuidAnchorDocument,
+            [Create(Change("STAFF_GUID", AttributeDataType.Guid, guid: identifier), Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[0].ExternalId, Is.EqualTo(identifier.ToString("D")));
+            Assert.That(provider.ExecutedStatements.Single().Parameters.Values, Does.Contain(provider.ConvertFromGuid(identifier)),
+                "The value written to the column still crosses the seam through the provider, whatever the external ID reads as.");
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateSupplyingACompositeAnchorMixingAGuidAndANumber_ComposesBothPartsByTheirOwnType()
+    {
+        var identifier = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("COMPANY_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("STAFF_GUID", "RAW", MaxLength: 16, IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "NVARCHAR2", MaxLength: 200));
+
+        var results = await ExportAsync(provider, CompositeGuidAnchorDocument,
+        [
+            Create(
+                Change("COMPANY_ID", AttributeDataType.Number, number: 7),
+                Change("STAFF_GUID", AttributeDataType.Guid, guid: identifier),
+                Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))
+        ],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[0].ExternalId, Is.EqualTo($"7+{identifier:D}"),
+                "Each part of a composed external ID is rendered by its own column's type, exactly as an import of the same row renders it.");
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateAgainstAnAnchorColumnJimHasNoTypeFor_FailsThatObjectRatherThanGuessingItsExternalId()
+    {
+        // The external ID has to be composed by the anchor column's own type, so a column JIM cannot type
+        // fails the object naming it. Assuming an exact numeric because identities and sequences usually
+        // generate one is what let a GUID key be recorded as hex.
+        var provider = new FakeSqlProvider { GeneratedKey = 4711 };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "geography", IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar", MaxLength: 200));
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("EMPLOYEE_ID").And.Contain("geography"),
+                "The administrator has to be told which column identifies the object type and what type it is.");
+            Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written for an object JIM could never find again.");
         }
     }
 
