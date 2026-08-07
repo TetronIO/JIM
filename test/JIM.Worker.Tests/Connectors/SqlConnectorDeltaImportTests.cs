@@ -1052,7 +1052,7 @@ public class SqlConnectorDeltaImportTests
     /// A date and time as a watermark carries it, so a test states the value it expects rather than its
     /// rendering.
     /// </summary>
-    private static string? TokenFor(DateTime value) => SqlConnectorWatermark.Describe(value)?.Value;
+    private static string? TokenFor(DateTime value) => SqlConnectorWatermark.Describe(new FakeSqlProvider(), value)?.Value;
 
     private static ConnectedSystem PersonSystem() => new()
     {

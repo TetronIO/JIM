@@ -180,7 +180,7 @@ internal sealed class SqlConnectorImport
             // A short page is the end of this object type; a full one may or may not be, and there is no
             // way to tell without asking, so one empty read at the end is unavoidable.
             if (rows.Count == _runProfile.PageSize)
-                result.PaginationTokens.Add(page.ToToken(plan, rows[^1]));
+                result.PaginationTokens.Add(page.ToToken(_provider, plan, rows[^1]));
         }
 
         return result;
@@ -423,7 +423,7 @@ internal sealed class SqlConnectorImport
     /// that the two identify the same object.
     /// </summary>
     /// <exception cref="InvalidDataException">A change-log row does not say which object it is about, which no amount of reading further can recover from.</exception>
-    private static string ComposeChangeAnchorKey(SqlImportPlan plan, SqlChangeLogConfiguration changeLog, IReadOnlyList<object?> anchorValues)
+    private string ComposeChangeAnchorKey(SqlImportPlan plan, SqlChangeLogConfiguration changeLog, IReadOnlyList<object?> anchorValues)
     {
         var parts = new string[anchorValues.Count];
 
@@ -432,7 +432,7 @@ internal sealed class SqlConnectorImport
             var value = anchorValues[index] ?? throw new InvalidDataException(
                 $"Object Type '{plan.Name}' has a change-log row with a NULL value in anchor column '{changeLog.AnchorColumns[index]}', so there is no way to tell which object it is about.");
 
-            parts[index] = SqlAnchorValue.ToTokenString(value, plan.AnchorColumns[index].Type);
+            parts[index] = SqlAnchorValue.ToTokenString(_provider, value, plan.AnchorColumns[index].Type);
         }
 
         return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
@@ -650,7 +650,7 @@ internal sealed class SqlConnectorImport
             // No highest value at all is what an empty change log, or a source nothing has been written
             // to, looks like. Recording nothing for it means the next run reads from the beginning,
             // which is the only answer that cannot miss a change.
-            var described = SqlConnectorWatermark.Describe(await ReadHighestValueAsync(source, changeColumn));
+            var described = SqlConnectorWatermark.Describe(_provider, await ReadHighestValueAsync(source, changeColumn));
             if (described != null)
                 watermark.ObjectTypes[plan.Name] = described;
 
@@ -689,7 +689,7 @@ internal sealed class SqlConnectorImport
         foreach (var configuration in watermarked)
         {
             var source = _provider.QualifyObjectName(configuration.SchemaName, configuration.TableName);
-            var described = SqlConnectorWatermark.Describe(await ReadHighestValueAsync(source, configuration.WatermarkColumn!));
+            var described = SqlConnectorWatermark.Describe(_provider, await ReadHighestValueAsync(source, configuration.WatermarkColumn!));
 
             if (described != null)
                 relatedWatermarks[configuration.AttributeName] = described;
@@ -879,20 +879,19 @@ internal sealed class SqlConnectorImport
     /// <exception cref="InvalidDataException">The value cannot be read for the type it was written with, which would otherwise resume from the wrong place.</exception>
     private object BindDeltaValue(SqlImportPlan plan, SqlDeltaValue deltaValue, string description)
     {
-        if (!SqlAnchorValue.TryFromTokenString(deltaValue.Value, deltaValue.Type, out var value) || value == null)
+        // The token comes back in the shape this dialect's driver binds, GUID byte order included.
+        if (!SqlAnchorValue.TryFromTokenString(_provider, deltaValue.Value, deltaValue.Type, out var value) || value == null)
             throw new InvalidDataException(
                 $"Object Type '{plan.Name}' was replayed a {description} whose value '{deltaValue.Value}' cannot be read as a {deltaValue.Type}. Run a Full Import to re-establish the baseline.");
 
-        // The byte order a GUID is bound in is dialect-specific, so it goes back through the provider
-        // rather than being handed to the driver as it came out of the token.
-        return deltaValue.Type == AttributeDataType.Guid ? _provider.ConvertFromGuid((Guid)value) : value;
+        return value;
     }
 
     /// <summary>
     /// Describes where a page ended, so the next one resumes immediately after it.
     /// </summary>
     /// <exception cref="InvalidDataException">A page ended on a row with nothing to resume from, which would restart the read from the beginning for ever.</exception>
-    private static List<SqlDeltaValue> DescribeKeyset(
+    private List<SqlDeltaValue> DescribeKeyset(
         SqlImportPlan plan,
         IReadOnlyList<SqlDeltaKeysetColumn> keysetColumns,
         object?[] lastRow,
@@ -904,8 +903,8 @@ internal sealed class SqlConnectorImport
                 $"Object Type '{plan.Name}' read a page ending on a row with a NULL value in '{keysetColumn.Name}', which orders the page, so there is nothing to resume the next one from.");
 
             return keysetColumn.Type == null
-                ? SqlConnectorWatermark.Describe(value)!
-                : new SqlDeltaValue(SqlAnchorValue.ToTokenString(value, keysetColumn.Type.Value), keysetColumn.Type.Value);
+                ? SqlConnectorWatermark.Describe(_provider, value)!
+                : new SqlDeltaValue(SqlAnchorValue.ToTokenString(_provider, value, keysetColumn.Type.Value), keysetColumn.Type.Value);
         })];
     }
 
@@ -1142,13 +1141,12 @@ internal sealed class SqlConnectorImport
     {
         var anchorColumn = plan.AnchorColumns[index];
 
-        if (!SqlAnchorValue.TryFromTokenString(tokenValue, anchorColumn.Type, out var value) || value == null)
+        // The token comes back in the shape this dialect's driver binds, GUID byte order included.
+        if (!SqlAnchorValue.TryFromTokenString(_provider, tokenValue, anchorColumn.Type, out var value) || value == null)
             throw new InvalidDataException(
                 $"Object Type '{plan.Name}' was replayed a pagination token whose anchor value for column '{anchorColumn.Name}' cannot be read as a {anchorColumn.Type}. Run a Full Import again to start from the beginning.");
 
-        // The byte order a GUID is bound in is dialect-specific, so it goes back through the provider
-        // rather than being handed to the driver as it came out of the token.
-        return anchorColumn.Type == AttributeDataType.Guid ? _provider.ConvertFromGuid((Guid)value) : value;
+        return value;
     }
 
     #endregion
@@ -1222,7 +1220,7 @@ internal sealed class SqlConnectorImport
 
             try
             {
-                parts[index] = SqlAnchorValue.ToTokenString(value, anchorColumn.Type);
+                parts[index] = SqlAnchorValue.ToTokenString(_provider, value, anchorColumn.Type);
             }
             catch (Exception ex) when (IsValueConversionFailure(ex))
             {
@@ -1248,7 +1246,7 @@ internal sealed class SqlConnectorImport
         // anchor attribute will be.
         if (plan.ReferenceColumns.TryGetValue(column.Name, out var referencedAnchorType))
         {
-            attribute.ReferenceValues.Add(SqlAnchorValue.ToTokenString(value, referencedAnchorType));
+            attribute.ReferenceValues.Add(SqlAnchorValue.ToTokenString(_provider, value, referencedAnchorType));
             return;
         }
 
@@ -1456,7 +1454,7 @@ internal sealed class SqlConnectorImport
 
         if (relatedTable.ReferencedAnchorType != null)
         {
-            attribute.ReferenceValues.Add(SqlAnchorValue.ToTokenString(value, relatedTable.ReferencedAnchorType.Value));
+            attribute.ReferenceValues.Add(SqlAnchorValue.ToTokenString(_provider, value, relatedTable.ReferencedAnchorType.Value));
             return;
         }
 
@@ -1467,7 +1465,7 @@ internal sealed class SqlConnectorImport
     /// The parent this related row belongs to, rendered exactly as the parent's own anchor was so the
     /// two match. Null where a join column is NULL, which can never identify a parent.
     /// </summary>
-    private static string? ComposeRelatedAnchorKey(SqlImportPlan plan, DbDataReader reader, int[] joinOrdinals)
+    private string? ComposeRelatedAnchorKey(SqlImportPlan plan, DbDataReader reader, int[] joinOrdinals)
     {
         var parts = new string[joinOrdinals.Length];
 
@@ -1476,7 +1474,7 @@ internal sealed class SqlConnectorImport
             if (reader.IsDBNull(joinOrdinals[index]))
                 return null;
 
-            parts[index] = SqlAnchorValue.ToTokenString(reader.GetValue(joinOrdinals[index]), plan.AnchorColumns[index].Type);
+            parts[index] = SqlAnchorValue.ToTokenString(_provider, reader.GetValue(joinOrdinals[index]), plan.AnchorColumns[index].Type);
         }
 
         return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
@@ -1616,10 +1614,10 @@ internal sealed record SqlImportPagePosition
         return new SqlImportPagePosition { LastAnchor = parsed.Anchor, PageNumber = parsed.Page };
     }
 
-    internal ConnectedSystemPaginationToken ToToken(SqlImportPlan plan, object?[] lastRow)
+    internal ConnectedSystemPaginationToken ToToken(ISqlProvider provider, SqlImportPlan plan, object?[] lastRow)
     {
         var anchor = plan.AnchorColumns
-            .Select(anchorColumn => SqlAnchorValue.ToTokenString(lastRow[plan.ColumnIndex(anchorColumn.Name)]!, anchorColumn.Type))
+            .Select(anchorColumn => SqlAnchorValue.ToTokenString(provider, lastRow[plan.ColumnIndex(anchorColumn.Name)]!, anchorColumn.Type))
             .ToList();
 
         return new ConnectedSystemPaginationToken(plan.TokenName, JsonSerializer.Serialize(new SqlImportPageToken(anchor, PageNumber + 1)));
