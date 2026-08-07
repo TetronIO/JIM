@@ -441,6 +441,51 @@ public class DriftDetectionTests
     }
 
     /// <summary>
+    /// Drift Correction stages Update exports, so it must not re-assert a Writable On Create attribute:
+    /// rewriting the Connected System's identifier for the object is exactly the corruption that
+    /// writability state exists to prevent.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_WritableOnCreateAttribute_DivergedValueIsNotDrift()
+    {
+        // Arrange
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Diverged from the MVO, but the value may only be set on creation
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        DisplayNameCsoAttr.Writability = AttributeWritability.WritableOnCreate;
+        var exportRule = CreateExportRule(enforceState: true);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert
+        Assert.That(result.HasDrift, Is.False,
+            "A diverged value on a Writable On Create attribute must not be treated as drift; correcting it would rewrite the identifier");
+        Assert.That(result.DriftedAttributes, Is.Empty);
+    }
+
+    /// <summary>
     /// Sibling mappings on the same rule stay drift-corrected when only one mapping is Initial Export
     /// Only: the carve-out is per mapping, not per rule.
     /// </summary>
