@@ -645,24 +645,29 @@ internal sealed class SqlConnectorExport
     /// </remarks>
     private Dictionary<string, AttributeDataType> ResolveAnchorTypes(SqlExportPlan plan)
     {
-        var anchorTypes = new Dictionary<string, AttributeDataType>(StringComparer.OrdinalIgnoreCase);
+        return plan.AnchorColumns.ToDictionary(
+            anchorColumn => anchorColumn,
+            anchorColumn => ResolveAnchorType(plan, anchorColumn),
+            StringComparer.OrdinalIgnoreCase);
+    }
 
-        foreach (var anchorColumn in plan.AnchorColumns)
+    /// <summary>
+    /// The JIM attribute type of one anchor column.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The column's SQL type maps onto no JIM attribute type, so no external ID could be composed from it.</exception>
+    private AttributeDataType ResolveAnchorType(SqlExportPlan plan, string anchorColumn)
+    {
+        var columnType = plan.ParentColumns.Require(anchorColumn);
+
+        try
         {
-            var columnType = plan.ParentColumns.Require(anchorColumn);
-
-            try
-            {
-                anchorTypes[anchorColumn] = _provider.MapColumnType(columnType, _typeMappingOptions);
-            }
-            catch (SqlTypeMappingException ex)
-            {
-                throw new InvalidOperationException(
-                    $"Object Type '{plan.Name}' is identified by column '{anchorColumn}' of type '{columnType.TypeName}', which JIM has no attribute type for, so there is no external ID it could compose that the confirming import would recognise. {ex.Message}", ex);
-            }
+            return _provider.MapColumnType(columnType, _typeMappingOptions);
         }
-
-        return anchorTypes;
+        catch (SqlTypeMappingException ex)
+        {
+            throw new InvalidOperationException(
+                $"Object Type '{plan.Name}' is identified by column '{anchorColumn}' of type '{columnType.TypeName}', which JIM has no attribute type for, so there is no external ID it could compose that the confirming import would recognise. {ex.Message}", ex);
+        }
     }
 
     #endregion
