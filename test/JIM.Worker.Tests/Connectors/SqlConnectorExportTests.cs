@@ -152,13 +152,13 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("4711"),
                 "A database-generated key is the new object's external ID; without it JIM cannot find the row it just created.");
             Assert.That(provider.ExecutedStatementTexts.Single(), Does.StartWith("INSERT INTO [HR].[EMPLOYEES]"));
-        });
+        }
     }
 
     [Test]
@@ -174,12 +174,12 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("4711"));
             Assert.That(provider.ExecutedStatementTexts.Single(), Does.Contain("RETURNING [EMPLOYEE_ID] INTO"));
-        });
+        }
     }
 
     [Test]
@@ -194,14 +194,14 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("4711"));
             Assert.That(provider.ExecutedStatementTexts.Single(), Does.Not.Contain("OUTPUT"),
                 "The anchor was supplied, so there is no generated key to ask the database for.");
             Assert.That(provider.ExecutedStatements.Single().Parameters.Values, Does.Contain(4711).And.Contain("Ada"));
-        });
+        }
     }
 
     [Test]
@@ -216,14 +216,14 @@ public class SqlConnectorExportTests
 
         var relatedInsert = provider.ExecutedStatements.Single(command => command.CommandText.Contains("EMPLOYEE_PHONES", StringComparison.Ordinal));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(relatedInsert.CommandText, Does.StartWith("INSERT INTO [HR].[EMPLOYEE_PHONES]"));
             Assert.That(relatedInsert.Parameters.Values, Does.Contain("555-0100"));
             Assert.That(relatedInsert.Parameters.Values.Select(value => value?.ToString()), Does.Contain("4711"),
                 "A related row belongs to the parent the database has just generated a key for, so it can only be written after the parent row.");
-        });
+        }
     }
 
     #endregion
@@ -242,13 +242,13 @@ public class SqlConnectorExportTests
 
         var transaction = provider.Transactions.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(transaction.Committed, Is.True);
             Assert.That(transaction.RolledBack, Is.False);
             Assert.That(provider.ExecutedStatements.Select(command => command.Transaction), Is.All.SameAs(transaction),
                 "The parent row and its related rows go in together or not at all, so every statement runs in the object's own transaction.");
-        });
+        }
     }
 
     [Test]
@@ -263,13 +263,13 @@ public class SqlConnectorExportTests
 
         var transaction = provider.Transactions.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(transaction.RolledBack, Is.True,
                 "A half-written object is worse than an unwritten one: the parent row must not survive its related rows failing.");
             Assert.That(transaction.Committed, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -286,7 +286,7 @@ public class SqlConnectorExportTests
             Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Katherine"))
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(3), "JIM matches results to Pending Exports by position, so there is exactly one result per object.");
             Assert.That(results[0].Success, Is.True);
@@ -295,7 +295,7 @@ public class SqlConnectorExportTests
             Assert.That(results[2].Success, Is.True, "A failed object must not poison the batch it arrived in.");
             Assert.That(provider.Transactions.Count(transaction => transaction.Committed), Is.EqualTo(2));
             Assert.That(provider.Transactions.Count(transaction => transaction.RolledBack), Is.EqualTo(1));
-        });
+        }
     }
 
     #endregion
@@ -313,13 +313,13 @@ public class SqlConnectorExportTests
 
         var update = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(update.CommandText, Does.StartWith("UPDATE [HR].[EMPLOYEES] SET [DISPLAY_NAME] = @"));
             Assert.That(update.CommandText, Does.Contain("WHERE [EMPLOYEE_ID] = @"));
             Assert.That(update.Parameters.Values, Does.Contain("Ada Lovelace").And.Contain(4711));
-        });
+        }
     }
 
     [Test]
@@ -334,12 +334,12 @@ public class SqlConnectorExportTests
         var update = provider.ExecutedStatements.Single();
         var displayNameParameter = ParameterFor(update, "DISPLAY_NAME");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(update.CommandText, Does.Contain("SET [DISPLAY_NAME] = @"));
             Assert.That(update.Parameters[displayNameParameter], Is.Null,
                 "A single-valued attribute has no value to remove from; removing its value means the column holds nothing.");
-        });
+        }
     }
 
     [Test]
@@ -353,12 +353,12 @@ public class SqlConnectorExportTests
 
         var insert = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(insert.CommandText, Does.StartWith("INSERT INTO [HR].[EMPLOYEE_PHONES] ([EMPLOYEE_ID], [PHONE_NUMBER])"));
             Assert.That(insert.Parameters.Values, Does.Contain("555-0100").And.Contain(4711));
             Assert.That(insert.Transaction, Is.SameAs(provider.Transactions.Single()));
-        });
+        }
     }
 
     [Test]
@@ -372,14 +372,14 @@ public class SqlConnectorExportTests
 
         var delete = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(delete.CommandText, Does.StartWith("DELETE FROM [HR].[EMPLOYEE_PHONES] WHERE [EMPLOYEE_ID] = @"));
             Assert.That(delete.CommandText, Does.Contain("[PHONE_NUMBER] = @"),
                 "Removing one value of a multi-valued attribute removes one related row, never every row the parent has.");
             Assert.That(delete.Parameters.Values, Does.Contain("555-0100").And.Contain(4711));
             Assert.That(delete.Transaction, Is.SameAs(provider.Transactions.Single()));
-        });
+        }
     }
 
     [Test]
@@ -393,11 +393,11 @@ public class SqlConnectorExportTests
 
         var delete = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(delete.CommandText, Is.EqualTo("DELETE FROM [HR].[EMPLOYEE_PHONES] WHERE [EMPLOYEE_ID] = @exAnchor0"));
             Assert.That(delete.Parameters.Values, Does.Contain(4711));
-        });
+        }
     }
 
     #endregion
@@ -412,7 +412,7 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(provider.ExecutedStatementTexts, Is.EqualTo(new[]
@@ -422,7 +422,7 @@ public class SqlConnectorExportTests
             }), "A related row referencing its parent cannot outlive it, so the children go first.");
 
             Assert.That(provider.ExecutedStatements.Select(command => command.Transaction), Is.All.SameAs(provider.Transactions.Single()));
-        });
+        }
     }
 
     #endregion
@@ -442,7 +442,7 @@ public class SqlConnectorExportTests
 
         var transaction = provider.Transactions.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False,
                 "A statement that matched no row is the one failure a driver never raises, so the row count is all that stands between JIM and a confirmed write that never happened.");
@@ -450,7 +450,7 @@ public class SqlConnectorExportTests
             Assert.That(results[0].ErrorMessage, Does.Contain("Full Import"), "The Connected System Object is stale, and the message has to say what reconciles it.");
             Assert.That(transaction.RolledBack, Is.True);
             Assert.That(transaction.Committed, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -470,7 +470,7 @@ public class SqlConnectorExportTests
                 Change("DISPLAY_NAME", AttributeDataType.Text, text: "Katherine", changeType: PendingExportAttributeChangeType.Update))
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(3), "JIM matches results to Pending Exports by position, so there is exactly one result per object.");
             Assert.That(results[0].Success, Is.True);
@@ -478,7 +478,7 @@ public class SqlConnectorExportTests
             Assert.That(results[2].Success, Is.True, "An object whose row went missing must not poison the batch it arrived in.");
             Assert.That(provider.Transactions.Count(transaction => transaction.Committed), Is.EqualTo(2));
             Assert.That(provider.Transactions.Count(transaction => transaction.RolledBack), Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -488,14 +488,14 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [Delete(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711))]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True,
                 "The end state a delete asks for is a row that is not there, which is already the case; failing would retry an object that can never succeed.");
             Assert.That(provider.Transactions.Single().Committed, Is.True);
             Assert.That(_capturedLog.Warnings, Has.Some.Contains("HR.EMPLOYEES"),
                 "A row that went missing before JIM removed it still says something about the Connected System, so it is warned about rather than passed over.");
-        });
+        }
     }
 
     [Test]
@@ -505,13 +505,13 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonWithPhonesDocument, [Delete(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711))]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(provider.Transactions.Single().Committed, Is.True);
             Assert.That(_capturedLog.Warnings, Is.Empty,
                 "An object with no related rows to remove is the ordinary case, not something to tell the administrator about.");
-        });
+        }
     }
 
     [Test]
@@ -523,11 +523,11 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True, "Removing a value the table does not hold has reached exactly the end state it asked for.");
             Assert.That(provider.Transactions.Single().Committed, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -539,11 +539,11 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(provider.Transactions.Single().Committed, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -555,13 +555,13 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonWithPhonesDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False,
                 "An insert that wrote nothing and raised nothing is a trigger or a rule discarding the write; confirming the value would be a lie.");
             Assert.That(results[0].ErrorMessage, Does.Contain("PhoneNumbers"));
             Assert.That(provider.Transactions.Single().RolledBack, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -574,12 +574,12 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False, "JIM would otherwise record a Connected System Object for a row the database never took.");
             Assert.That(results[0].ErrorMessage, Does.Contain("HR.EMPLOYEES"));
             Assert.That(provider.Transactions.Single().RolledBack, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -596,11 +596,11 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(provider.Transactions.Single().RolledBack, Is.True);
-        });
+        }
     }
 
     #endregion
@@ -618,7 +618,7 @@ public class SqlConnectorExportTests
 
         var update = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(update.CommandText, Does.Contain("WHERE [COMPANY_ID] = @exAnchor0 AND [EMPLOYEE_ID] = @exAnchor1"),
@@ -626,7 +626,7 @@ public class SqlConnectorExportTests
             Assert.That(update.Parameters["exAnchor0"], Is.EqualTo(7),
                 "A part of a composed external ID is text in JIM and an integer in the table, so it is bound as the column's own type.");
             Assert.That(update.Parameters["exAnchor1"], Is.EqualTo(4711));
-        });
+        }
     }
 
     [Test]
@@ -643,13 +643,13 @@ public class SqlConnectorExportTests
 
         var update = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(update.Parameters["exAnchor0"], Is.EqualTo(7));
             Assert.That(update.Parameters["exAnchor1"], Is.EqualTo(provider.ConvertFromGuid(identifier)),
                 "Byte order is dialect-specific, so an anchor part crosses the seam through the provider or it is silently transposed.");
-        });
+        }
     }
 
     [Test]
@@ -661,13 +661,13 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, CompositeGuidAnchorDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("STAFF_GUID").And.Contain("uniqueidentifier"),
                 "The administrator has to be told which column would not take the value, and what type it is.");
             Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written against an anchor the column cannot hold.");
-        });
+        }
     }
 
     [Test]
@@ -691,11 +691,11 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, CompositeAnchorDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written against an anchor JIM cannot read.");
-        });
+        }
     }
 
     #endregion
@@ -713,11 +713,11 @@ public class SqlConnectorExportTests
 
         var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "FTE")];
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(bound, Is.TypeOf<decimal>(), "Routing an exact numeric through a floating point type drops digits without any error.");
             Assert.That(bound, Is.EqualTo(0.875m));
-        });
+        }
     }
 
     [Test]
@@ -763,11 +763,11 @@ public class SqlConnectorExportTests
 
         var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "START_DATE")];
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(bound, Is.EqualTo(new DateTime(2026, 7, 1, 13, 0, 0)), "British Summer Time is one hour ahead of UTC on that date.");
             Assert.That(((DateTime)bound!).Kind, Is.EqualTo(DateTimeKind.Unspecified), "The column carries no offset, so neither does the value written into it.");
-        });
+        }
     }
 
     [Test]
@@ -784,12 +784,12 @@ public class SqlConnectorExportTests
 
         var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "LAST_REVIEWED")];
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(bound, Is.EqualTo(new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero)),
                 "An offset-carrying column takes the instant JIM holds; shifting it by the Connected System's zone would write a different moment in time.");
             Assert.That(((DateTimeOffset)bound!).Offset, Is.EqualTo(TimeSpan.Zero), "JIM holds every value in UTC, so that is the offset it states.");
-        });
+        }
     }
 
     [Test]
@@ -805,12 +805,12 @@ public class SqlConnectorExportTests
 
         var update = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(update.Parameters[ParameterFor(update, "START_DATE")], Is.EqualTo(new DateTime(2026, 7, 1, 12, 0, 0)));
             Assert.That(update.Parameters[ParameterFor(update, "LAST_REVIEWED")], Is.EqualTo(new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero)),
                 "At the UTC default neither kind of column is shifted, so the two carry the same instant.");
-        });
+        }
     }
 
     [Test]
@@ -825,12 +825,12 @@ public class SqlConnectorExportTests
 
         var bound = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(bound.Parameters[ParameterFor(bound, "MANAGER_EMPLOYEE_ID")], Is.EqualTo(1234),
                 "A reference carries the referenced object's anchor as text; the column it goes into is an integer, and that is what is bound.");
-        });
+        }
     }
 
     [Test]
@@ -848,12 +848,12 @@ public class SqlConnectorExportTests
 
         var bound = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(bound.Parameters[ParameterFor(bound, "MANAGER_STAFF_GUID")], Is.EqualTo(provider.ConvertFromGuid(identifier)),
                 "Byte order is dialect-specific, so a reference crosses the seam through the provider or it is silently transposed.");
-        });
+        }
     }
 
     [Test]
@@ -876,11 +876,11 @@ public class SqlConnectorExportTests
 
         var bound = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(bound.Parameters[ParameterFor(bound, "MANAGER_STAFF_GUID")], Is.EqualTo(provider.ConvertFromGuid(identifier)));
-        });
+        }
     }
 
     [Test]
@@ -899,14 +899,14 @@ public class SqlConnectorExportTests
             Update(Anchor("STAFF_GUID", AttributeDataType.Guid, guid: Guid.NewGuid()), usable)
         ]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("MANAGER_STAFF_GUID").And.Contain("uniqueidentifier"),
                 "The administrator has to be told which attribute, which column and which type would not take the value.");
             Assert.That(results[1].Success, Is.True, "A value one object cannot write must not poison the batch it arrived in.");
             Assert.That(provider.ExecutedStatements, Has.Count.EqualTo(1), "Only the object whose value converts is written.");
-        });
+        }
     }
 
     [Test]
@@ -920,14 +920,14 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("RETIRED_COLUMN").And.Contain("HR.EMPLOYEES"));
             Assert.That(results[0].ErrorMessage, Does.Contain("Import the schema"),
                 "The Object Types document and the table have diverged, and the message has to say what reconciles them.");
             Assert.That(provider.ExecutedStatements, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -956,14 +956,14 @@ public class SqlConnectorExportTests
         var results = await ExportAsync(provider, ManagerReferenceDocument,
             [Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711), reference)]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("MANAGER_EMPLOYEE_ID"));
             Assert.That(provider.ExecutedStatements, Is.Empty,
                 "A reference JIM has not resolved yet has no anchor to write; writing anything else would point the row at the wrong object.");
             Assert.That(provider.Transactions.Single().Committed, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -978,12 +978,12 @@ public class SqlConnectorExportTests
 
         var insert = provider.ExecutedStatements.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(insert.CommandText, Does.Not.Contain(hostileValue), "A value in the statement text is a value JIM failed to parameterise.");
             Assert.That(insert.CommandText, Does.Not.Contain("DROP"));
             Assert.That(insert.Parameters.Values, Does.Contain(hostileValue));
-        });
+        }
     }
 
     #endregion
@@ -999,12 +999,12 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("Contractor"));
             Assert.That(provider.ExecutedStatements, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -1014,11 +1014,11 @@ public class SqlConnectorExportTests
 
         var results = await ExportAsync(provider, PersonDocument, []);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Is.Empty);
             Assert.That(provider.Transactions, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -1039,12 +1039,12 @@ public class SqlConnectorExportTests
 
         var persistedConnectorData = connector.CloseExportConnection();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persistedConnectorData, Is.Null, "An export carries no state between runs, so it must never overwrite what an import persisted.");
             Assert.That(provider.OpenConnections, Is.All.Matches<FakeDbConnection>(connection => connection.State == System.Data.ConnectionState.Closed),
                 "A connection left open outlives the run on the customer's database.");
-        });
+        }
     }
 
     [Test]
