@@ -346,6 +346,60 @@ public class Rfc4512SchemaParserTests
 
     #endregion
 
+    #region IndexDitContentRules
+
+    [Test]
+    public void IndexDitContentRules_KeysEachRuleByTheClassItGoverns()
+    {
+        var rules = Rfc4512SchemaParser.IndexDitContentRules(
+        [
+            "( 2.5.6.6 NAME 'personContentRule' AUX posixAccount )",
+            "( 2.16.840.1.113730.3.2.2 NAME 'inetOrgPersonContentRule' AUX shadowAccount )"
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rules.Keys, Is.EquivalentTo(new[] { "2.5.6.6", "2.16.840.1.113730.3.2.2" }));
+            Assert.That(rules["2.5.6.6"].AuxiliaryClasses, Is.EquivalentTo(new[] { "posixAccount" }));
+        }
+    }
+
+    [Test]
+    public void IndexDitContentRules_WithNoRulesPublished_ReturnsAnEmptyIndex()
+    {
+        // The ordinary case: a stock OpenLDAP publishes no dITContentRules attribute at all. That means nothing is
+        // suggested, not that nothing is permitted, so it must not read as a discovery failure.
+        Assert.That(Rfc4512SchemaParser.IndexDitContentRules([]), Is.Empty);
+    }
+
+    [Test]
+    public void IndexDitContentRules_WhenTwoRulesGovernTheSameClass_KeepsTheFirst()
+    {
+        var rules = Rfc4512SchemaParser.IndexDitContentRules(
+        [
+            "( 2.5.6.6 NAME 'first' AUX posixAccount )",
+            "( 2.5.6.6 NAME 'second' AUX shadowAccount )"
+        ]);
+
+        Assert.That(rules["2.5.6.6"].Name, Is.EqualTo("first"));
+    }
+
+    [Test]
+    public void IndexDitContentRules_WithAnUnusableRule_SkipsItRatherThanFailing()
+    {
+        // One malformed or class-less rule must not cost an administrator the suggestions from every other rule.
+        var rules = Rfc4512SchemaParser.IndexDitContentRules(
+        [
+            "not a rule at all",
+            "( NAME 'noClassToAttachTo' AUX posixAccount )",
+            "( 2.5.6.6 NAME 'personContentRule' AUX posixAccount )"
+        ]);
+
+        Assert.That(rules.Keys, Is.EquivalentTo(new[] { "2.5.6.6" }));
+    }
+
+    #endregion
+
     #region ParseAttributeTypeDescription
 
     [Test]

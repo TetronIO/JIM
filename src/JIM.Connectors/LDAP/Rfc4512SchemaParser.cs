@@ -169,6 +169,29 @@ internal static class Rfc4512SchemaParser
     }
 
     /// <summary>
+    /// Parses a directory's DIT Content Rule descriptions and keys them by the OID of the structural class each one
+    /// governs.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by OID because that is how a rule names its class, and because that is the only key it is guaranteed to
+    /// have. Rules that cannot be parsed, or that name no class, are skipped rather than failing the discovery.
+    /// Where two rules claim the same structural class the first wins, matching <see cref="IndexObjectClasses"/>.
+    /// </remarks>
+    internal static Dictionary<string, Rfc4512DitContentRuleDescription> IndexDitContentRules(IEnumerable<string> definitions)
+    {
+        var result = new Dictionary<string, Rfc4512DitContentRuleDescription>(StringComparer.Ordinal);
+
+        foreach (var definition in definitions)
+        {
+            var parsed = ParseDitContentRuleDescription(definition);
+            if (parsed?.Oid != null)
+                result.TryAdd(parsed.Oid, parsed);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Parses an RFC 4512 attributeType description string into a structured representation.
     /// </summary>
     internal static Rfc4512AttributeTypeDescription? ParseAttributeTypeDescription(string definition)
