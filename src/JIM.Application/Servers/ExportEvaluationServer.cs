@@ -2473,9 +2473,13 @@ public class ExportEvaluationServer
             }
         }
 
-        // Initial Export Only mappings (#223) flow solely during the provisioning (Create) export; for
-        // Update exports the target attribute is unmanaged by JIM and must be skipped before any evaluation.
-        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || !m.InitialExportOnly))
+        // Some mappings flow solely during the provisioning (Create) export and must be skipped for Update
+        // exports before any evaluation: Initial Export Only mappings (#223), whose target attribute is
+        // unmanaged by JIM once the object is past provisioning, and mappings whose target attribute is
+        // WritableOnCreate, which the Connected System accepts only as part of creating the object.
+        // FlowsOnUpdateExport() carries both rules; see its documentation for why the second one is a
+        // synchronisation integrity guard rather than an optimisation.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || m.FlowsOnUpdateExport()))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)
