@@ -37,7 +37,7 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var objectType = configuration.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.Name, Is.EqualTo("Person"));
             Assert.That(objectType.SchemaName, Is.EqualTo("HR"));
@@ -45,7 +45,7 @@ public class SqlObjectTypeConfigurationTests
             Assert.That(objectType.SelectStatement, Is.Null);
             Assert.That(objectType.IsCustomSelect, Is.False);
             Assert.That(objectType.AnchorColumns, Is.EqualTo(new[] { "EMPLOYEE_ID" }));
-        });
+        }
     }
 
     [Test]
@@ -64,12 +64,12 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var objectType = configuration.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.IsCustomSelect, Is.True);
             Assert.That(objectType.SelectStatement, Does.StartWith("SELECT EMPLOYEE_ID"));
             Assert.That(objectType.TableName, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -97,7 +97,7 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var relatedTable = configuration.ObjectTypes.Single().RelatedTables.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(relatedTable.AttributeName, Is.EqualTo("PhoneNumbers"));
             Assert.That(relatedTable.SchemaName, Is.EqualTo("HR"));
@@ -105,7 +105,64 @@ public class SqlObjectTypeConfigurationTests
             Assert.That(relatedTable.ValueColumn, Is.EqualTo("PHONE_NUMBER"));
             Assert.That(relatedTable.JoinColumns, Is.EqualTo(new[] { "EMPLOYEE_ID" }));
             Assert.That(relatedTable.ReferencesObjectType, Is.Null);
-        });
+        }
+    }
+
+    [Test]
+    public void Parse_ARelatedTableWithItsOwnWatermarkColumn_ReadsIt()
+    {
+        var configuration = SqlSchemaConfiguration.Parse("""
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "watermarkColumn": "LAST_MODIFIED",
+                  "relatedTables": [
+                    {
+                      "attributeName": "PhoneNumbers",
+                      "table": "EMPLOYEE_PHONES",
+                      "valueColumn": "PHONE_NUMBER",
+                      "joinColumns": [ "EMPLOYEE_ID" ],
+                      "watermarkColumn": "ROW_CHANGED"
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        Assert.That(configuration.ObjectTypes.Single().RelatedTables.Single().WatermarkColumn, Is.EqualTo("ROW_CHANGED"),
+            "A change confined to a related table never moves the parent row's own watermark, so the related table needs one of its own.");
+    }
+
+    [Test]
+    public void Parse_ARelatedTableWatermarkColumnThatCannotNameAColumn_IsRefused()
+    {
+        var exception = Assert.Throws<SqlSchemaConfigurationException>(() => SqlSchemaConfiguration.Parse("""
+            {
+              "objectTypes": [
+                {
+                  "name": "Person",
+                  "table": "EMPLOYEES",
+                  "anchorColumns": [ "EMPLOYEE_ID" ],
+                  "relatedTables": [
+                    {
+                      "attributeName": "PhoneNumbers",
+                      "table": "EMPLOYEE_PHONES",
+                      "valueColumn": "PHONE_NUMBER",
+                      "joinColumns": [ "EMPLOYEE_ID" ],
+                      "watermarkColumn": " ROW_CHANGED"
+                    }
+                  ]
+                }
+              ]
+            }
+            """));
+
+        Assert.That(exception!.Message, Does.Contain("PhoneNumbers").And.Contain("watermarkColumn"),
+            "A related table's watermark column is validated exactly as every other identifier in the document is.");
     }
 
     [Test]
@@ -125,11 +182,11 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var column = configuration.ObjectTypes.Single().Columns.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(column.Name, Is.EqualTo("MANAGER_EMPLOYEE_ID"));
             Assert.That(column.ReferencesObjectType, Is.EqualTo("Person"));
-        });
+        }
     }
 
     [Test]
@@ -242,12 +299,12 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("table"));
             Assert.That(exception.Message, Does.Contain("select"));
-        });
+        }
     }
 
     [Test]
@@ -304,11 +361,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("anchorColumns"));
-        });
+        }
     }
 
     [Test]
@@ -355,11 +412,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("attributeName"));
-        });
+        }
     }
 
     [Test]
@@ -381,11 +438,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Enrolment"));
             Assert.That(exception.Message, Does.Contain("Grades"));
-        });
+        }
     }
 
     [Test]
@@ -426,11 +483,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("DEPARTMENT_ID"));
             Assert.That(exception.Message, Does.Contain("Department"));
-        });
+        }
     }
 
     [Test]

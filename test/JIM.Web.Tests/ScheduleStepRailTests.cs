@@ -76,11 +76,11 @@ public class ScheduleStepRailTests : JimComponentTestContext
 
         var marker = cut.Find(StepSelector);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindAll(StepSelector), Has.Count.EqualTo(1));
             Assert.That(marker.GetAttribute("style"), Does.Contain("conic-gradient"));
-        });
+        }
     }
 
     [Test]
@@ -94,11 +94,11 @@ public class ScheduleStepRailTests : JimComponentTestContext
 
         var style = cut.Find(StepSelector).GetAttribute("style");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(style, Does.Contain("from -90deg"));
             Assert.That(style, Does.Contain("var(--mud-palette-error) 0deg 180deg"));
-        });
+        }
     }
 
     [Test]

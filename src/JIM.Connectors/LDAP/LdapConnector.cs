@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -29,18 +29,33 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// <summary>
     /// The containers JIM manages, supplied via <see cref="IConnectorManagedScope"/>. Empty until JIM states a
     /// scope, which it does not do when the Connected System has no container selections, so an unset scope
-    /// permits every write.
+    /// permits every write. Each container carries its own Container Scope, so a One Level container permits
+    /// writes directly within it and not into anything beneath it.
     /// </summary>
-    private IReadOnlyList<string> _managedScope = [];
+    private IReadOnlyList<ConnectedSystemContainer> _managedScope = [];
 
     /// <inheritdoc />
-    public void SetManagedScope(IReadOnlyList<string> selectedContainerExternalIds)
+    public void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> selectedContainers)
     {
-        _managedScope = selectedContainerExternalIds;
+        _managedScope = selectedContainers;
 
         // Applies immediately when an export is already under way, and is otherwise handed to the exporter when
         // one is created.
-        _currentExport?.SetManagedScope(selectedContainerExternalIds);
+        _currentExport?.SetManagedScope(selectedContainers);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same rule the import builds its search scope from and the export guard enforces, so a preview of a
+    /// container deselection counts exactly the objects an import would stop returning and an export would refuse
+    /// to write to. Deliberately free of connection state: a preview asks this without ever opening a connection to
+    /// the directory.
+    /// </remarks>
+    public bool IsWithinContainer(string? objectIdentifier, ConnectedSystemContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+
+        return LdapConnectorUtilities.IsDnWithinContainerScope(objectIdentifier, container);
     }
 
     /// <summary>

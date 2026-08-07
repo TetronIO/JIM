@@ -128,7 +128,18 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// Counts towards an Activity's Pending Export totals exactly as <see cref="PendingExportCreated"/> does; it
     /// is one, and only its intent differs.
     /// </summary>
-    DeprovisionQueued
+    DeprovisionQueued,
+
+    /// <summary>
+    /// Preview only: the Connected System Object would leave import scope and is joined to a Metaverse Object, so
+    /// the obsoletion that follows disconnects the two and recalls whatever the object contributed.
+    ///
+    /// Separate from <see cref="WouldFallOutOfScope"/>, which covers the unjoined objects leaving scope, because
+    /// the two have entirely different consequences and an administrator consents to them differently. An unjoined
+    /// object leaving scope loses JIM nothing; a joined one takes its contributed attribute values out of the
+    /// Metaverse with it and may leave its Metaverse Object with no connectors at all.
+    /// </summary>
+    WouldDisconnectFromMetaverseObject
 }
 
 /// <summary>

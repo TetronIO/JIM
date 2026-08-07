@@ -193,9 +193,15 @@ public class ConnectedSystemAttributeDto
     public bool SelectionLocked { get; set; }
 
     /// <summary>
-    /// Indicates whether this attribute can be written to in the Connected System.
-    /// Read-only attributes can be imported but cannot be targeted by export Attribute Flows.
+    /// Indicates whether this attribute can be written to in the Connected System. One of
+    /// <c>Writable</c>, <c>ReadOnly</c> or <c>WritableOnCreate</c>.
+    /// <c>ReadOnly</c> attributes can be imported but cannot be targeted by export Attribute Flows.
+    /// <c>WritableOnCreate</c> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
+    /// <remarks>
+    /// Read-only: discovered from the Connected System's schema, never set through this API. The value is
+    /// the enum name so that a client can switch on it; the portal renders its own wording.
+    /// </remarks>
     public string Writability { get; set; } = null!;
 
     public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
@@ -387,6 +393,12 @@ public class ConnectedSystemContainerDto
     public string? Description { get; set; }
     public bool Hidden { get; set; }
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// How far beneath this Container objects are imported from, when it is selected.
+    /// </summary>
+    public ConnectedSystemContainerScope Scope { get; set; }
+
     public int? PartitionId { get; set; }
     public int? ConnectedSystemId { get; set; }
     public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
@@ -401,6 +413,7 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Scope = entity.Scope,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,
             ChildContainers = entity.ChildContainers

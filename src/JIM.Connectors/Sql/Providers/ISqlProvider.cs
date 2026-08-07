@@ -141,6 +141,13 @@ internal interface ISqlProvider
     /// </summary>
     string BuildKeysetPageCommandText(SqlKeysetPageRequest request);
 
+    /// <summary>
+    /// Renders the predicate selecting the rows a Delta Import considers changed: the source's own
+    /// watermark, or any of its related tables'. Shared by the page read and by the count that tells the
+    /// Activity how much this run is about to read, so the two can never disagree about what a change is.
+    /// </summary>
+    string BuildChangedRowsPredicate(SqlChangeFilter filter);
+
     #endregion
 
     #region Export
@@ -154,6 +161,26 @@ internal interface ISqlProvider
     /// Generates an INSERT that returns the database-generated key for the new row.
     /// </summary>
     string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command);
+
+    /// <summary>
+    /// Generates a plain INSERT, for a row whose key JIM supplies and for a related table's rows.
+    /// </summary>
+    /// <remarks>
+    /// Standard SQL in every dialect JIM speaks, so this and its UPDATE and DELETE siblings are
+    /// implemented once rather than per provider. A dialect that genuinely needs its own shape overrides
+    /// the one statement it differs on, which is what keeps a third provider additive.
+    /// </remarks>
+    string BuildInsertCommandText(SqlInsertCommand command);
+
+    /// <summary>
+    /// Generates an UPDATE of the rows a key identifies.
+    /// </summary>
+    string BuildUpdateCommandText(SqlUpdateCommand command);
+
+    /// <summary>
+    /// Generates a DELETE of the rows a key identifies.
+    /// </summary>
+    string BuildDeleteCommandText(SqlDeleteCommand command);
 
     /// <summary>
     /// Creates the output parameter a generated key is returned through, or null where
@@ -222,6 +249,17 @@ internal interface ISqlProvider
     /// <see cref="SqlTypeMappingException"/> rather than degrading an unrecognised type to Text.
     /// </summary>
     AttributeDataType MapColumnType(SqlColumnType columnType, SqlTypeMappingOptions options);
+
+    /// <summary>
+    /// Whether a date and time column states the offset of the values it holds, which is what decides
+    /// whether the Connected System's Database Time Zone applies to them.
+    /// <para>
+    /// It lives behind the seam because the answer is a dialect's own vocabulary (<c>datetimeoffset</c>
+    /// against <c>TIMESTAMP WITH TIME ZONE</c>), and because getting it wrong moves an instant by the
+    /// declared zone's offset without any error.
+    /// </para>
+    /// </summary>
+    bool ColumnCarriesAnOffset(SqlColumnType columnType);
 
     #endregion
 }

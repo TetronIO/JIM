@@ -60,11 +60,11 @@ public class ScimAuthenticationStrategyFactoryTests
 
         var strategy = ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(strategy, Is.InstanceOf<ScimOAuthClientCredentialsAuthentication>());
             _credentialProtection.Verify(c => c.Unprotect("encrypted:top-secret"), Times.Once);
-        });
+        }
     }
 
     [Test]
@@ -79,11 +79,11 @@ public class ScimAuthenticationStrategyFactoryTests
 
         var strategy = ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(strategy, Is.InstanceOf<ScimBasicAuthentication>());
             _credentialProtection.Verify(c => c.Unprotect("encrypted:s3cr3t"), Times.Once);
-        });
+        }
     }
 
     [Test]

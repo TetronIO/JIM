@@ -67,6 +67,13 @@ internal sealed record SqlKeysetPageRequest
     internal string? ChangeParameterName { get; init; }
 
     /// <summary>
+    /// The related tables whose own watermarks also select a row, so that a change confined to one of
+    /// them (a group membership added or revoked) is detected as a change to the object it belongs to.
+    /// Empty for a Full Import, for Change-Log Table mode, and for an object type with no related tables.
+    /// </summary>
+    internal IReadOnlyList<SqlRelatedChangeSource> RelatedChangeSources { get; init; } = [];
+
+    /// <summary>
     /// True when no previous anchor was supplied, so the page starts at the beginning of the ordered set.
     /// </summary>
     internal bool IsFirstPage => LastAnchorParameterNames.Count == 0;
@@ -75,4 +82,17 @@ internal sealed record SqlKeysetPageRequest
     /// True when the read is restricted to rows beyond a watermark.
     /// </summary>
     internal bool HasChangeFilter => ChangeColumn != null;
+
+    /// <summary>
+    /// The predicate this page's changed rows are selected by, or null where the page reads everything.
+    /// </summary>
+    internal SqlChangeFilter? ChangeFilter => HasChangeFilter
+        ? new SqlChangeFilter
+        {
+            ChangeColumn = ChangeColumn!,
+            ChangeParameterName = ChangeParameterName!,
+            AnchorColumns = AnchorColumns,
+            RelatedSources = RelatedChangeSources
+        }
+        : null;
 }

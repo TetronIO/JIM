@@ -343,6 +343,18 @@ public interface IMetaverseRepository
     public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId);
 
     /// <summary>
+    /// The named Metaverse Objects, carrying everything their type's deletion rule is evaluated against and the
+    /// Connected System of every object joined to them. For deciding whether a proposed disconnection would leave
+    /// an object eligible for deletion (#1251).
+    /// </summary>
+    /// <param name="metaverseObjectIds">
+    /// The objects to fetch. Callers are expected to chunk: the set comes from a preview's evaluated population and
+    /// can be large, and this builds an <c>IN</c> list.
+    /// </param>
+    public Task<List<MetaverseObjectDisconnectionCandidate>> GetMetaverseObjectDisconnectionCandidatesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
     /// Creates a MetaverseObjectChange record directly in the database.
     /// Used for DELETE operations where the change should not be linked via navigation property
     /// because the MVO is about to be deleted.

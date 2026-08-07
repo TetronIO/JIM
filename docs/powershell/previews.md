@@ -25,13 +25,22 @@ New-JIMConfigurationChangePreview -MetaverseObjectTypeId <int>
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
+
+New-JIMConfigurationChangePreview -ConnectedSystemId <int>
+    [-SelectedPartitionIds <int[]>] [-SelectedContainerIds <int[]>]
+    [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
+
+Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews that type's deletion settings, `-ConnectedSystemId` previews that system's partition and container selection.
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `MetaverseObjectTypeId` | `int` | Yes | | The Metaverse Object Type whose deletion settings are being proposed. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | Yes | | The Connected System whose partition and container selection is being proposed. Accepts pipeline input by property name. |
+| `SelectedPartitionIds` | `int[]` | No | stored selection | The partitions that would be managed. |
+| `SelectedContainerIds` | `int[]` | No | stored selection | The containers that would be managed. Selecting a container selects its whole subtree, so a descendant does not need listing. |
 | `DeletionRule` | `string` | No | stored value | `Manual`, `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `TimeSpan` | No | stored value | The proposed grace period. `[TimeSpan]::Zero` previews no grace period. |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | stored value | The proposed authoritative sources. |
@@ -40,7 +49,11 @@ New-JIMConfigurationChangePreview -MetaverseObjectTypeId <int>
 | `Wait` | `switch` | No | off | Poll until the preview finishes and return the finished preview. |
 | `TimeoutSeconds` | `int` | No | `300` | How long `-Wait` polls before giving up. The preview keeps running; read it later with `Get-JIMConfigurationChangePreview`. |
 
+`MetaverseObjectTypeId` and `ConnectedSystemId` are mutually exclusive: each is mandatory in its own parameter set.
+
 An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do.
+
+An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container.
 
 ### Output
 
@@ -64,6 +77,18 @@ $preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionR
 if (-not $preview.HasFailed -and $preview.ImpactCounts.Count -eq 0) {
     Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
 }
+```
+
+```powershell title="Preview deselecting a container"
+$current = Get-JIMConnectedSystemPartition -ConnectedSystemId 2
+$keep = $current.containers | Where-Object { $_.selected -and $_.name -ne 'Contractors' }
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedContainerIds $keep.id -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+```
+
+```powershell title="Check what a narrowed scope would put on course for deletion"
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedPartitionIds 5 -Wait
+$preview.ImpactCounts | Where-Object TransitionType -eq 'WouldBecomeDeletionEligible'
 ```
 
 ---

@@ -35,6 +35,7 @@ public class ConnectorSchemaAttribute
     /// <summary>
     /// Indicates whether this attribute can be written to in the Connected System.
     /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export Attribute Flows.
+    /// <see cref="AttributeWritability.WritableOnCreate"/> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
     public AttributeWritability Writability { get; set; }
 

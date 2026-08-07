@@ -54,14 +54,14 @@ public class SqlConnectorCertificateTrustTests
 
         Assert.That(results, Is.Empty, "The certificate is one the administrator added, so the connection is expected to succeed on the second attempt.");
         Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(2));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.BuiltConnectionSettings[0].PinnedServerCertificatePath, Is.Null,
                 "The operating system's own trust anchors must always get the first say; JIM's store can only ever add to them.");
             Assert.That(provider.BuiltConnectionSettings[1].PinnedServerCertificatePath, Is.Not.Null);
             Assert.That(System.IO.File.Exists(provider.BuiltConnectionSettings[1].PinnedServerCertificatePath!), Is.True,
                 "The driver takes a trust anchor as a path, so the certificate has to exist on disk while the connection lives.");
-        });
+        }
     }
 
     [Test]
@@ -73,13 +73,13 @@ public class SqlConnectorCertificateTrustTests
         var results = connector.ValidateSettingValues(CreateSettingValues(), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Exception, Is.TypeOf<ServerCertificateRejectedException>(),
                 "A refused certificate has to reach the administrator as the certificate it was, not as a generic connectivity error.");
             Assert.That(((ServerCertificateRejectedException)results[0].Exception!).Diagnostic.Thumbprint, Is.EqualTo(_serverCertificate.Thumbprint));
             Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1), "Nothing vouches for the certificate, so there is nothing to retry with.");
-        });
+        }
     }
 
     [Test]
@@ -94,11 +94,11 @@ public class SqlConnectorCertificateTrustTests
         var results = connector.ValidateSettingValues(CreateSettingValues(), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Exception, Is.TypeOf<FakeDbException>());
             Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -116,11 +116,11 @@ public class SqlConnectorCertificateTrustTests
         var results = connector.ValidateSettingValues(CreateSettingValues(), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].ErrorMessage, Does.Contain("ORA-28759"));
             Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -150,11 +150,11 @@ public class SqlConnectorCertificateTrustTests
 
         var results = connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption), _logger);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connector.ServerCertificateReads, Is.Zero);
             Assert.That(results[0].ErrorMessage, Does.Contain("ORA-12570"), "The driver's own account is what reaches the administrator.");
-        });
+        }
     }
 
     [Test]
@@ -171,11 +171,11 @@ public class SqlConnectorCertificateTrustTests
 
         var results = connector.ValidateSettingValues(CreateOracleSettingValues(SqlConnectorConstants.OracleEncryptionTcps), _logger);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connector.ServerCertificateReads, Is.EqualTo(1));
             Assert.That(results[0].Exception, Is.TypeOf<ServerCertificateRejectedException>());
-        });
+        }
     }
 
     [Test]

@@ -30,7 +30,10 @@ Cancelling the confirmation abandons the save. Nothing is written.
 
 A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the metaverse and reports which of them would be affected, changing nothing.
 
-Previews are available where a surface has an evaluator for it. The first is a Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), which is the change most worth asking about, because it is the one that can make existing objects eligible for deletion the moment it is saved.
+Previews are available where a surface has an evaluator for it:
+
+- A Metaverse Object Type's [deletion settings](metaverse.md#previewing-a-deletion-settings-change), the change most worth asking about because it is the one that can make existing objects eligible for deletion the moment it is saved.
+- A Connected System's [partitions and containers](connected-systems.md#previewing-a-partition-or-container-change), where deselecting one container quietly takes everything beneath it out of import scope.
 
 A preview answers in stages, and each appears as it completes:
 
@@ -76,5 +79,6 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 - [Activities](activities.md) -- every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
 - [Preview cmdlets](../powershell/previews.md) -- starting, reading and cancelling a preview from PowerShell
 - [Metaverse](metaverse.md#previewing-a-deletion-settings-change) -- previewing a change to deletion settings
+- [Connected Systems](connected-systems.md#previewing-a-partition-or-container-change) -- previewing a change to what JIM imports
 - [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation) -- the changed-since indicator
 - [Service Settings](service-settings.md) -- switching configuration change tracking on or off

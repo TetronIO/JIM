@@ -47,12 +47,12 @@ public class ConnectedSystemSchemaTabInternalTypeTests : JimComponentTestContext
     {
         var component = RenderSchemaTab(ConnectedSystemWithDiscoveredSchema());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(component.Markup, Does.Contain("inetOrgPerson"), "An object type an administrator manages must always be drawn.");
             Assert.That(component.Markup, Does.Not.Contain("olcGlobal"));
             Assert.That(component.Markup, Does.Not.Contain("auditAdd"));
-        });
+        }
     }
 
     [Test]
@@ -72,12 +72,12 @@ public class ConnectedSystemSchemaTabInternalTypeTests : JimComponentTestContext
 
         component.Find("button:contains('Show internal object types')").Click();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(component.Markup, Does.Contain("olcGlobal"));
             Assert.That(component.Markup, Does.Contain("auditAdd"));
             Assert.That(component.Markup, Does.Contain("inetOrgPerson"));
-        });
+        }
     }
 
     [Test]
@@ -90,12 +90,12 @@ public class ConnectedSystemSchemaTabInternalTypeTests : JimComponentTestContext
 
         var component = RenderSchemaTab(connectedSystem);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(component.Markup, Does.Contain("auditAdd"));
             Assert.That(component.Markup, Does.Not.Contain("olcGlobal"), "The other internal object type is not selected, so it stays hidden.");
             Assert.That(component.Markup, Does.Contain("1 internal object type is hidden"), "The selected type is shown, so only one is being held back.");
-        });
+        }
     }
 
     [Test]
@@ -117,12 +117,12 @@ public class ConnectedSystemSchemaTabInternalTypeTests : JimComponentTestContext
 
         var component = RenderSchemaTab(connectedSystem);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(component.Markup, Does.Contain("User"));
             Assert.That(component.Markup, Does.Contain("Group"));
             Assert.That(component.Markup, Does.Not.Contain("internal object type"));
-        });
+        }
     }
 
     private IRenderedComponent<ConnectedSystemSchemaTab> RenderSchemaTab(ConnectedSystem connectedSystem)

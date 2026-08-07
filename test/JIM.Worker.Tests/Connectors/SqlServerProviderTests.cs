@@ -64,11 +64,11 @@ public class SqlServerProviderTests
     {
         var parameter = _provider.CreateParameter("pageSize", 500);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parameter.ParameterName, Is.EqualTo("pageSize"), "SqlClient accepts the bare name and adds the prefix itself.");
             Assert.That(parameter.Value, Is.EqualTo(500));
-        });
+        }
     }
 
     [Test]
@@ -95,12 +95,12 @@ public class SqlServerProviderTests
         // The classic break-out attempt: a table called: Employees]; DROP TABLE Users--
         var quoted = _provider.QuoteIdentifier("Employees]; DROP TABLE Users--");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(quoted, Is.EqualTo("[Employees]]; DROP TABLE Users--]"), "Doubling the closing bracket keeps the whole hostile string inside one quoted identifier.");
             Assert.That(quoted.StartsWith('['), Is.True);
             Assert.That(quoted.EndsWith(']'), Is.True);
-        });
+        }
     }
 
     [TestCase("")]
@@ -207,13 +207,13 @@ public class SqlServerProviderTests
 
         var sql = _provider.BuildKeysetPageCommandText(request);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("WHERE ([COMPANY_ID] > @lastAnchor0 OR ([COMPANY_ID] = @lastAnchor0 AND [EMPLOYEE_ID] > @lastAnchor1))"),
                 "SQL Server has no row-value comparison, so a composite anchor must expand into the equivalent OR chain.");
             Assert.That(sql, Does.Contain("ORDER BY [COMPANY_ID], [EMPLOYEE_ID]"),
                 "The ordering must match the comparison exactly or pages overlap or skip rows.");
-        });
+        }
     }
 
     [Test]
@@ -230,6 +230,110 @@ public class SqlServerProviderTests
 
         Assert.Throws<ArgumentException>(() => _provider.BuildKeysetPageCommandText(request),
             "A partial anchor would silently produce a wrong page boundary, so it must fail loudly instead.");
+    }
+
+    [Test]
+    public void BuildKeysetPageCommandText_WatermarkPageWithARelatedTable_AlsoSelectsParentsWhoseRelatedRowsChanged()
+    {
+        var request = new SqlKeysetPageRequest
+        {
+            SchemaName = "dbo",
+            ObjectName = "EMPLOYEES",
+            SelectColumns = ["EMPLOYEE_ID", "FIRST_NAME"],
+            AnchorColumns = ["EMPLOYEE_ID"],
+            PageSizeParameterName = "pageSize",
+            ChangeColumn = "LAST_MODIFIED",
+            ChangeParameterName = "watermark",
+            RelatedChangeSources =
+            [
+                new SqlRelatedChangeSource
+                {
+                    SchemaName = "dbo",
+                    TableName = "EMPLOYEE_PHONES",
+                    JoinColumns = ["EMPLOYEE_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark0"
+                }
+            ]
+        };
+
+        var sql = _provider.BuildKeysetPageCommandText(request);
+
+        Assert.That(sql, Is.EqualTo(
+            "SELECT TOP (@pageSize) [EMPLOYEE_ID], [FIRST_NAME] FROM [dbo].[EMPLOYEES] [JIM_SOURCE] " +
+            "WHERE ([LAST_MODIFIED] > @watermark OR EXISTS (SELECT 1 FROM [dbo].[EMPLOYEE_PHONES] [JIM_RELATED0] " +
+            "WHERE [JIM_RELATED0].[EMPLOYEE_ID] = [JIM_SOURCE].[EMPLOYEE_ID] AND [JIM_RELATED0].[ROW_CHANGED] > @relatedWatermark0)) " +
+            "ORDER BY [EMPLOYEE_ID]"),
+            "A membership added or revoked never moves the parent row's own watermark, so the parent has to be selectable on its related table's evidence too.");
+    }
+
+    [Test]
+    public void BuildKeysetPageCommandText_WatermarkPageWithTwoRelatedTables_OrsOneExistsPerRelatedTable()
+    {
+        var request = new SqlKeysetPageRequest
+        {
+            ObjectName = "EMPLOYEES",
+            SelectColumns = ["EMPLOYEE_ID"],
+            AnchorColumns = ["EMPLOYEE_ID"],
+            PageSizeParameterName = "pageSize",
+            ChangeColumn = "LAST_MODIFIED",
+            ChangeParameterName = "watermark",
+            RelatedChangeSources =
+            [
+                new SqlRelatedChangeSource
+                {
+                    TableName = "EMPLOYEE_PHONES",
+                    JoinColumns = ["EMPLOYEE_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark0"
+                },
+                new SqlRelatedChangeSource
+                {
+                    TableName = "EMPLOYEE_GROUPS",
+                    JoinColumns = ["EMPLOYEE_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark1"
+                }
+            ]
+        };
+
+        var sql = _provider.BuildKeysetPageCommandText(request);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sql, Does.Contain("EXISTS (SELECT 1 FROM [EMPLOYEE_PHONES] [JIM_RELATED0] WHERE [JIM_RELATED0].[EMPLOYEE_ID] = [JIM_SOURCE].[EMPLOYEE_ID] AND [JIM_RELATED0].[ROW_CHANGED] > @relatedWatermark0)"));
+            Assert.That(sql, Does.Contain("EXISTS (SELECT 1 FROM [EMPLOYEE_GROUPS] [JIM_RELATED1] WHERE [JIM_RELATED1].[EMPLOYEE_ID] = [JIM_SOURCE].[EMPLOYEE_ID] AND [JIM_RELATED1].[ROW_CHANGED] > @relatedWatermark1)"),
+                "Each related table carries its own watermark, so each one gets its own correlated subquery rather than being folded into a single join.");
+            Assert.That(sql, Does.Not.Contain("JOIN"),
+                "A join would return one parent row per matching related row, which is how a page silently turns into duplicate objects.");
+        }
+    }
+
+    [Test]
+    public void BuildKeysetPageCommandText_RelatedChangeSourceJoiningOnFewerColumnsThanTheAnchorHas_Throws()
+    {
+        var request = new SqlKeysetPageRequest
+        {
+            ObjectName = "ENROLMENTS",
+            SelectColumns = ["STUDENT_ID", "COURSE_ID"],
+            AnchorColumns = ["STUDENT_ID", "COURSE_ID"],
+            PageSizeParameterName = "pageSize",
+            ChangeColumn = "LAST_MODIFIED",
+            ChangeParameterName = "watermark",
+            RelatedChangeSources =
+            [
+                new SqlRelatedChangeSource
+                {
+                    TableName = "ENROLMENT_GRADES",
+                    JoinColumns = ["STUDENT_ID"],
+                    WatermarkColumn = "ROW_CHANGED",
+                    WatermarkParameterName = "relatedWatermark0"
+                }
+            ]
+        };
+
+        Assert.Throws<ArgumentException>(() => _provider.BuildKeysetPageCommandText(request),
+            "Correlating on part of an anchor would attribute another object's changes to this one, so it must fail loudly instead.");
     }
 
     [Test]
@@ -308,7 +412,7 @@ public class SqlServerProviderTests
 
         var builder = new SqlConnectionStringBuilder(_provider.BuildConnectionString(settings));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(builder.DataSource, Is.EqualTo("sql.example.local,1433"), "SQL Server expresses the port as a comma-separated suffix on the data source.");
             Assert.That(builder.InitialCatalog, Is.EqualTo("HR"));
@@ -317,7 +421,7 @@ public class SqlServerProviderTests
             Assert.That(builder.ConnectTimeout, Is.EqualTo(20));
             Assert.That(builder.Encrypt, Is.EqualTo(SqlConnectionEncryptOption.Mandatory), "TLS enabled means encryption is required, not merely offered.");
             Assert.That(builder.TrustServerCertificate, Is.False, "A blanket trust-server-certificate toggle is explicitly not an acceptable substitute for real trust anchors.");
-        });
+        }
     }
 
     [Test]
@@ -340,12 +444,12 @@ public class SqlServerProviderTests
 
         var builder = new SqlConnectionStringBuilder(_provider.BuildConnectionString(settings));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(builder.Encrypt, Is.EqualTo(SqlConnectionEncryptOption.Optional),
                 "Declining to require encryption still takes it where the server offers it; Optional is not the same as refusing it.");
             Assert.That(builder.TrustServerCertificate, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -353,11 +457,11 @@ public class SqlServerProviderTests
     {
         // SQL Server negotiates TLS on the same port rather than offering a second one, which is where
         // it differs from Oracle Database's separate TCPS listener.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.Tls), Is.EqualTo(1433));
             Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.None), Is.EqualTo(1433));
-        });
+        }
     }
 
     [Test]
@@ -389,11 +493,11 @@ public class SqlServerProviderTests
 
         using var connection = _provider.CreateConnection(_provider.BuildConnectionString(settings));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connection, Is.InstanceOf<SqlConnection>());
             Assert.That(connection.State, Is.EqualTo(ConnectionState.Closed), "Creating a connection must not open it; the caller owns the lifetime.");
-        });
+        }
     }
 
     [Test]
@@ -404,11 +508,11 @@ public class SqlServerProviderTests
 
         using var command = _provider.CreateCommand(connection, "SELECT 1");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(command.CommandText, Is.EqualTo("SELECT 1"));
             Assert.That(command.Connection, Is.SameAs(connection));
-        });
+        }
     }
 
     #endregion
@@ -452,13 +556,13 @@ public class SqlServerProviderTests
     {
         var sql = _provider.TablesCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("INFORMATION_SCHEMA.TABLES"));
             Assert.That(sql, Does.Contain("BASE TABLE"), "Views are enumerated separately so schema discovery can tell them apart.");
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.SchemaName), "Both dialects alias to the same result column names so schema discovery stays dialect-free.");
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.ObjectName));
-        });
+        }
     }
 
     [Test]
@@ -472,12 +576,12 @@ public class SqlServerProviderTests
     {
         var sql = _provider.ColumnsCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("INFORMATION_SCHEMA.COLUMNS"));
             Assert.That(sql, Does.Contain("@" + SqlCatalogueParameters.SchemaName), "Catalogue filters are values, so they must be bound as parameters.");
             Assert.That(sql, Does.Contain("@" + SqlCatalogueParameters.ObjectName));
-        });
+        }
     }
 
     [Test]
@@ -485,12 +589,12 @@ public class SqlServerProviderTests
     {
         var sql = _provider.PrimaryKeyColumnsCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("PRIMARY KEY"));
             Assert.That(sql, Does.Contain("ORDER BY"), "A composite key's column order is part of the anchor's meaning.");
             Assert.That(sql, Does.Contain("@" + SqlCatalogueParameters.ObjectName));
-        });
+        }
     }
 
     [Test]
@@ -498,12 +602,12 @@ public class SqlServerProviderTests
     {
         var sql = _provider.ForeignKeyColumnsCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("sys.foreign_keys"));
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.ReferencedTable), "Reference suggestions need the referenced table and column, not just the owning column.");
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.ReferencedColumn));
-        });
+        }
     }
 
     #endregion

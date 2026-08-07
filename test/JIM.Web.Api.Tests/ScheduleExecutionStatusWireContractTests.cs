@@ -49,11 +49,11 @@ public class ScheduleExecutionStatusWireContractTests
 
         using var document = JsonDocument.Parse(json);
         var statusProperty = document.RootElement.GetProperty(nameof(ScheduleExecutionDto.Status));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(statusProperty.ValueKind, Is.EqualTo(JsonValueKind.String));
             Assert.That(statusProperty.GetString(), Is.EqualTo(expectedWireValue));
-        });
+        }
     }
 
     [Test]
@@ -61,11 +61,11 @@ public class ScheduleExecutionStatusWireContractTests
     {
         // The whole point of the rename: the Activity detail page renders an ActivityStatus chip and a
         // ScheduleExecutionStatus chip beside each other, so the two enums must agree on the word for success.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Enum.GetNames<ScheduleExecutionStatus>(), Does.Contain("Complete"));
             Assert.That(Enum.GetNames<ScheduleExecutionStatus>(), Does.Not.Contain("Completed"));
-        });
+        }
     }
 
     [Test]

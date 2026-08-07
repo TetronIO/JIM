@@ -6,6 +6,7 @@ using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
 using System.Data.Common;
@@ -24,7 +25,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -40,6 +41,22 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     private SqlSchemaConfiguration? _importConfiguration;
     private TimeZoneInfo _importDatabaseTimeZone = TimeZoneInfo.Utc;
     private SqlDeltaImportMode _importDeltaMode = SqlDeltaImportMode.NotSet;
+
+    /// <summary>
+    /// What an open export session needs. Established once by <see cref="OpenExportConnection"/> and held
+    /// for the whole run, because JIM calls <see cref="ExportAsync"/> once per batch against the same
+    /// Connector instance; released by <see cref="CloseExportConnection"/>.
+    /// </summary>
+    /// <remarks>
+    /// Kept separate from the import session's fields rather than shared with them. The two are opened by
+    /// different Run Profiles and closed independently, and a single set of fields would have one run's
+    /// close release the other run's connection.
+    /// </remarks>
+    private DbConnection? _exportConnection;
+    private ISqlProvider? _exportProvider;
+    private SqlSchemaConfiguration? _exportConfiguration;
+    private TimeZoneInfo _exportDatabaseTimeZone = TimeZoneInfo.Utc;
+    private SqlTypeMappingOptions _exportTypeMappingOptions = SqlTypeMappingOptions.Default;
 
     /// <summary>
     /// The server certificate this Connector has decided to accept in addition to the operating system's
@@ -279,7 +296,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         "a change type and a monotonic sequence or timestamp. It is the recommended mode, and the only one that observes a deletion. " +
         "Add a 'changeLog' to every object type naming that table, the columns carrying the anchor, the sequence column, the change type column, " +
         "and which of your own change-type values mean a create, an update and a deletion. " +
-        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn'. " +
+        $"'{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' reads a last-modified or version column on the object type's own table or view, named as its 'watermarkColumn', " +
+        "and one on each of its related tables, named the same way, so that a phone number or a group membership changing is detected as a change to the object it belongs to. " +
         "It needs nothing extra in the database, but it detects creates and updates only: a row that has been deleted has no column left to move, " +
         "so deletions are found only by a Full Import. Example:" + Environment.NewLine + Environment.NewLine +
         SqlConnectorConstants.DeltaConfigurationExample;
@@ -423,6 +441,87 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
         _importConfiguration = null;
         _importDatabaseTimeZone = TimeZoneInfo.Utc;
         _importDeltaMode = SqlDeltaImportMode.NotSet;
+
+        return null;
+    }
+    #endregion
+
+    #region IConnectorExportUsingCalls members
+    /// <summary>
+    /// Opens the connection this export run writes through, and resolves everything it will need for
+    /// every batch: the dialect, the Object Types document, and how zoneless date and time columns are
+    /// to be written.
+    /// </summary>
+    /// <param name="persistedConnectorData">
+    /// The state the last run left behind. Not read: the only state this Connector carries between runs
+    /// is the Delta Import watermark, which an export neither reads nor advances.
+    /// </param>
+    /// <exception cref="InvalidSettingValuesException">A setting a connection cannot be made without is missing or unusable.</exception>
+    /// <exception cref="SqlSchemaConfigurationException">The Object Types document is unusable.</exception>
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var logger = Log.ForContext<SqlConnector>();
+        logger.Verbose($"OpenExportConnection() called for {Name}");
+
+        var settingValues = settings.ToList();
+
+        var provider = TryResolveProvider(settingValues)
+            ?? throw new InvalidSettingValuesException($"Choose a {SqlConnectorConstants.SettingDatabaseType} before running an export.");
+
+        // Parsed before connecting, exactly as an import does: a document that cannot be used makes the
+        // connection pointless, and the administrator's problem is the document either way.
+        var configuration = SqlSchemaConfiguration.Parse(GetString(settingValues, SqlConnectorConstants.SettingObjectTypes));
+        var databaseTimeZone = ResolveDatabaseTimeZone(settingValues);
+
+        _exportConnection = OpenConnection(provider, BuildConnectionSettings(settingValues), settingValues, logger);
+        _exportProvider = provider;
+        _exportConfiguration = configuration;
+        _exportDatabaseTimeZone = databaseTimeZone;
+
+        // The same opt-ins schema discovery and import map a column's type with: an export reads the
+        // column catalogue to decide how to bind a value, and would otherwise reach a different answer
+        // than the schema the administrator configured the Synchronisation Rules against.
+        _exportTypeMappingOptions = BuildTypeMappingOptions(settingValues);
+    }
+
+    /// <summary>
+    /// Applies a batch of Pending Exports, returning one result per Pending Export in the order they
+    /// arrived.
+    /// </summary>
+    /// <param name="progress">
+    /// Deliberately unused. An export acts per object, in a transaction each, and JIM already reports
+    /// accurate per-batch counts around this call, so a step of this Connector's own would say less than
+    /// those counts already do. This is why <see cref="GetPhases"/> declares nothing for an export.
+    /// </param>
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(pendingExports);
+
+        if (_exportConnection == null || _exportProvider == null || _exportConfiguration == null)
+            throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
+
+        var export = new SqlConnectorExport(_exportProvider, _exportConnection, _exportConfiguration, _exportDatabaseTimeZone,
+            _exportTypeMappingOptions, Log.ForContext<SqlConnector>());
+        return export.ExecuteAsync(pendingExports, cancellationToken);
+    }
+
+    /// <summary>
+    /// Releases the export connection, whether the export succeeded or failed.
+    /// </summary>
+    /// <returns>
+    /// Always null. The only state this Connector carries between runs is the Delta Import watermark,
+    /// which an export never touches; returning anything here would overwrite what an import persisted.
+    /// </returns>
+    public string? CloseExportConnection()
+    {
+        _exportConnection?.Dispose();
+        _exportConnection = null;
+        _exportProvider = null;
+        _exportConfiguration = null;
+        _exportDatabaseTimeZone = TimeZoneInfo.Utc;
+        _exportTypeMappingOptions = SqlTypeMappingOptions.Default;
 
         return null;
     }
@@ -962,10 +1061,13 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
 
         if (disposing)
         {
-            // Belt and braces: the Worker closes an import connection explicitly, but a Connector
-            // disposed without that must not leave a session open on a customer's database.
+            // Belt and braces: the Worker closes an import or export connection explicitly, but a
+            // Connector disposed without that must not leave a session open on a customer's database.
             _importConnection?.Dispose();
             _importConnection = null;
+
+            _exportConnection?.Dispose();
+            _exportConnection = null;
 
             _trustedServerCertificateFile?.Dispose();
             _trustedServerCertificateFile = null;

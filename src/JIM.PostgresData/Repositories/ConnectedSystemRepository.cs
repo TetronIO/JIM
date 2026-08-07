@@ -2438,6 +2438,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId) =>
+        Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => new ConnectedSystemObjectScopeCandidate(
+                cso.Id,
+                cso.Type.Name,
+                cso.PartitionId,
+                // The secondary external ID is what a directory Connector derives containment from (the
+                // Distinguished Name); systems without one identify the object by its primary external ID, so fall
+                // back to that rather than reporting the object as unlocatable.
+                cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()
+                ?? cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
+                cso.MetaverseObjectId))
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
     {
         var query = Repository.Database.ConnectedSystemObjects

@@ -259,13 +259,13 @@ internal class OracleProvider : SqlProviderBase
 
     public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command)
     {
-        ValidateInsertCommand(command);
+        ValidateInsertReturningGeneratedKeyCommand(command);
 
         // RETURNING ... INTO writes the generated key into a bound output parameter.
         return $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
                $"({BuildInsertColumnList(command.Columns)}) " +
                $"VALUES ({BuildInsertValueList(command.Columns)}) " +
-               $"RETURNING {QuoteIdentifier(command.GeneratedKeyColumn)} INTO {GetParameterPlaceholder(command.GeneratedKeyParameterName)}";
+               $"RETURNING {QuoteIdentifier(command.GeneratedKeyColumn!)} INTO {GetParameterPlaceholder(command.GeneratedKeyParameterName!)}";
     }
 
     #endregion

@@ -81,11 +81,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy(maxRetries: 3).EvaluateResponse(response, attempt: 3, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.False);
             Assert.That(decision.Reason, Does.Contain("attempt").IgnoreCase);
-        });
+        }
     }
 
     #endregion
@@ -99,11 +99,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy().EvaluateResponse(response, attempt: 1, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.True);
             Assert.That(decision.Delay, Is.EqualTo(TimeSpan.FromSeconds(42)));
-        });
+        }
     }
 
     [Test]
@@ -114,11 +114,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy().EvaluateResponse(response, attempt: 1, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.True);
             Assert.That(decision.Delay, Is.EqualTo(TimeSpan.FromSeconds(90)));
-        });
+        }
     }
 
     [Test]
@@ -128,11 +128,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy().EvaluateResponse(response, attempt: 1, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.True);
             Assert.That(decision.Delay, Is.EqualTo(TimeSpan.Zero));
-        });
+        }
     }
 
     [Test]
@@ -144,11 +144,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy(maxDelaySeconds: 300).EvaluateResponse(response, attempt: 1, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.False);
             Assert.That(decision.Reason, Does.Contain("Retry-After"));
-        });
+        }
     }
 
     [Test]
@@ -158,11 +158,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy(baseDelayMs: 1000).EvaluateResponse(response, attempt: 1, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.True);
             Assert.That(decision.Delay, Is.EqualTo(TimeSpan.FromMilliseconds(1000)));
-        });
+        }
     }
 
     #endregion
@@ -178,11 +178,11 @@ public class ScimRetryPolicyTests
 
         var decision = CreatePolicy(maxRetries: 5, baseDelayMs: 1000).EvaluateResponse(response, attempt, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.True);
             Assert.That(decision.Delay, Is.EqualTo(TimeSpan.FromMilliseconds(expectedMs)));
-        });
+        }
     }
 
     [Test]
@@ -193,11 +193,11 @@ public class ScimRetryPolicyTests
         var decision = CreatePolicy(maxRetries: 20, baseDelayMs: 1000, maxDelaySeconds: 10)
             .EvaluateResponse(response, attempt: 12, Now);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.ShouldRetry, Is.True, "a computed backoff longer than the cap is clamped, not abandoned.");
             Assert.That(decision.Delay, Is.EqualTo(TimeSpan.FromSeconds(10)));
-        });
+        }
     }
 
     [Test]

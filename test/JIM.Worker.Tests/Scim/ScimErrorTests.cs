@@ -32,14 +32,14 @@ public class ScimErrorTests
         var error = JsonSerializer.Deserialize<ScimError>(json, ScimJson.Options);
 
         Assert.That(error, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(error!.Status, Is.EqualTo("400"));
             Assert.That(error.StatusCode, Is.EqualTo(400));
             Assert.That(error.ScimType, Is.EqualTo(ScimErrorTypes.InvalidValue));
             Assert.That(error.Detail, Is.EqualTo("Attribute 'userName' is required."));
             Assert.That(error.Schemas, Does.Contain(ScimUrns.Error));
-        });
+        }
     }
 
     [Test]
@@ -58,12 +58,12 @@ public class ScimErrorTests
         var error = JsonSerializer.Deserialize<ScimError>(json, ScimJson.Options);
 
         Assert.That(error, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(error!.Status, Is.EqualTo("429"));
             Assert.That(error.StatusCode, Is.EqualTo(429));
             Assert.That(error.ScimType, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -82,11 +82,11 @@ public class ScimErrorTests
         var error = JsonSerializer.Deserialize<ScimError>(json, ScimJson.Options);
 
         Assert.That(error, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(error!.StatusCode, Is.EqualTo(409));
             Assert.That(error.ScimType, Is.EqualTo(ScimErrorTypes.Uniqueness));
-        });
+        }
     }
 
     [Test]
@@ -99,11 +99,11 @@ public class ScimErrorTests
         var error = JsonSerializer.Deserialize<ScimError>(json, ScimJson.Options);
 
         Assert.That(error, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(error!.Status, Is.EqualTo("unavailable"));
             Assert.That(error.StatusCode, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -113,12 +113,12 @@ public class ScimErrorTests
 
         var json = JsonSerializer.Serialize(error, ScimJson.Options);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(json, Does.Contain("\"schemas\":[\"urn:ietf:params:scim:api:messages:2.0:Error\"]"));
             Assert.That(json, Does.Contain("\"status\":\"404\""), "status must be emitted as a JSON string per RFC 7644.");
             Assert.That(json, Does.Not.Contain("scimType"), "null optional members must be omitted, not emitted as null.");
-        });
+        }
     }
 
     [Test]
@@ -126,12 +126,12 @@ public class ScimErrorTests
     {
         var error = ScimError.ForStatus(500, "Internal failure.");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(error.Status, Is.EqualTo("500"));
             Assert.That(error.StatusCode, Is.EqualTo(500));
             Assert.That(error.Detail, Is.EqualTo("Internal failure."));
             Assert.That(error.Schemas, Is.EqualTo(new[] { ScimUrns.Error }));
-        });
+        }
     }
 }

@@ -139,13 +139,13 @@ public class ActivitiesControllerTests
         var response = result?.Value as PaginatedResponse<ActivityHeader>;
         var header = response!.Items.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.ScheduleExecutionId, Is.EqualTo(executionId));
             Assert.That(header.ScheduleStepIndex, Is.EqualTo(2));
             Assert.That(header.ScheduledByScheduleId, Is.EqualTo(scheduleId));
             Assert.That(header.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"));
-        });
+        }
     }
 
     [Test]
@@ -177,13 +177,13 @@ public class ActivitiesControllerTests
         var response = result?.Value as PaginatedResponse<ActivityHeader>;
         var header = response!.Items.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.ScheduleExecutionId, Is.Null);
             Assert.That(header.ScheduleStepIndex, Is.Null);
             Assert.That(header.ScheduledByScheduleId, Is.Null);
             Assert.That(header.ScheduledByScheduleName, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -368,11 +368,11 @@ public class ActivitiesControllerTests
             createdFrom: from, createdTo: to);
 
         var arguments = LastActivitiesQueryArguments();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(arguments["createdFrom"], Is.EqualTo(from));
             Assert.That(arguments["createdTo"], Is.EqualTo(to));
-        });
+        }
     }
 
     [Test]
@@ -437,7 +437,7 @@ public class ActivitiesControllerTests
         await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 });
 
         var arguments = LastActivitiesQueryArguments();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(arguments["operationFilter"], Is.Null);
             Assert.That(arguments["outcomeFilter"], Is.Null);
@@ -451,7 +451,7 @@ public class ActivitiesControllerTests
             Assert.That(arguments["initiatedByFilter"], Is.Null);
             Assert.That(arguments["initiatedBySchedule"], Is.Null);
             Assert.That(arguments["scheduleFilter"], Is.Null);
-        });
+        }
     }
 
     /// <summary>
@@ -561,13 +561,13 @@ public class ActivitiesControllerTests
         var detail = result?.Value as ActivityDetailDto;
 
         Assert.That(detail, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detail!.ScheduleExecutionId, Is.EqualTo(executionId));
             Assert.That(detail.ScheduleStepIndex, Is.EqualTo(0));
             Assert.That(detail.ScheduledByScheduleId, Is.EqualTo(scheduleId));
             Assert.That(detail.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"));
-        });
+        }
     }
 
     [Test]
@@ -589,13 +589,13 @@ public class ActivitiesControllerTests
         var detail = result?.Value as ActivityDetailDto;
 
         Assert.That(detail, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detail!.ScheduleExecutionId, Is.Null);
             Assert.That(detail.ScheduleStepIndex, Is.Null);
             Assert.That(detail.ScheduledByScheduleId, Is.Null);
             Assert.That(detail.ScheduledByScheduleName, Is.Null);
-        });
+        }
     }
 
     [Test]

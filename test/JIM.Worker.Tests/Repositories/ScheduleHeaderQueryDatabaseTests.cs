@@ -156,7 +156,7 @@ public class ScheduleHeaderQueryDatabaseTests
         var result = await repository.Scheduling.GetScheduleHeadersAsync(1, 10);
 
         var header = result.Results.Single(h => h.Id == ids[0]);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.StepCount, Is.EqualTo(2));
             Assert.That(header.LastExecutionStatus, Is.EqualTo(ScheduleExecutionStatus.Failed), "the newest execution by QueuedAt is the failed one");
@@ -164,7 +164,7 @@ public class ScheduleHeaderQueryDatabaseTests
             Assert.That(header.LastExecutionTotalSteps, Is.EqualTo(2));
             Assert.That(header.LastExecutionErrorMessage, Is.EqualTo("Connected System unreachable"));
             Assert.That(header.LastExecutionCompletedAt, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -187,7 +187,7 @@ public class ScheduleHeaderQueryDatabaseTests
         var result = await repository.Scheduling.GetScheduleHeadersAsync(1, 10);
 
         var header = result.Results.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.StepCount, Is.EqualTo(0));
             Assert.That(header.LastExecutionId, Is.Null);
@@ -196,7 +196,7 @@ public class ScheduleHeaderQueryDatabaseTests
             Assert.That(header.LastExecutionTotalSteps, Is.Null);
             Assert.That(header.LastExecutionCompletedAt, Is.Null);
             Assert.That(header.LastExecutionErrorMessage, Is.Null);
-        });
+        }
     }
 
     /// <summary>

@@ -153,13 +153,13 @@ internal class SqlServerProvider : SqlProviderBase
 
     public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command)
     {
-        ValidateInsertCommand(command);
+        ValidateInsertReturningGeneratedKeyCommand(command);
 
         // The OUTPUT clause sits between the column list and VALUES, and emits the inserted row's
         // generated key as a single-row result set.
         return $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
                $"({BuildInsertColumnList(command.Columns)}) " +
-               $"OUTPUT INSERTED.{QuoteIdentifier(command.GeneratedKeyColumn)} " +
+               $"OUTPUT INSERTED.{QuoteIdentifier(command.GeneratedKeyColumn!)} " +
                $"VALUES ({BuildInsertValueList(command.Columns)})";
     }
 

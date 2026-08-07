@@ -1763,6 +1763,33 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// How many objects a single fetch of disconnection candidates asks the database for. Bounded because the id
+    /// list becomes an <c>IN</c> clause, and a preview's population can run to hundreds of thousands.
+    /// </summary>
+    private const int DisconnectionCandidateChunkSize = 1000;
+
+    /// <summary>
+    /// The named Metaverse Objects, carrying what their type's deletion rule is evaluated against, for deciding
+    /// whether a proposed disconnection would leave each one eligible for deletion (#1251).
+    /// </summary>
+    /// <remarks>
+    /// Chunked here rather than by the caller so every caller gets it: the ids come from a preview's evaluated
+    /// population, and an unbounded <c>IN</c> list is a query that works in development and times out at customer
+    /// scale.
+    /// </remarks>
+    public async Task<List<MetaverseObjectDisconnectionCandidate>> GetMetaverseObjectDisconnectionCandidatesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectIds);
+
+        var candidates = new List<MetaverseObjectDisconnectionCandidate>(metaverseObjectIds.Count);
+        foreach (var chunk in metaverseObjectIds.Chunk(DisconnectionCandidateChunkSize))
+            candidates.AddRange(await Application.Repository.Metaverse.GetMetaverseObjectDisconnectionCandidatesAsync(chunk));
+
+        return candidates;
+    }
+
+    /// <summary>
     /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
     /// Used for the deleted objects browser.
     /// </summary>

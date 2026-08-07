@@ -87,14 +87,14 @@ public class WorkerTaskStepParityTests
         var header = await GetOneAsync();
 
         Assert.That(header.Steps, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.Steps!.CurrentStepName, Is.EqualTo("Saving changes"));
             Assert.That(header.Steps.CurrentStepNumber, Is.EqualTo(2));
             Assert.That(header.Steps.TotalSteps, Is.EqualTo(3));
             Assert.That(header.Steps.Steps.Select(s => s.Name),
                 Is.EqualTo(new[] { "Importing objects", "Saving changes", "Recording results" }));
-        });
+        }
     }
 
     [Test]
@@ -104,11 +104,11 @@ public class WorkerTaskStepParityTests
         // Schedule the run itself is, which is the question a scheduled overnight batch raises.
         var header = await GetOneAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(header.ScheduleTotalSteps, Is.EqualTo(5));
             Assert.That(header.ScheduleCurrentStepIndex, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]

@@ -57,7 +57,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, PersonSystem(), pageSize: 2);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Pages, Has.Count.EqualTo(3), "Five rows at two per page is two full pages and a short one.");
             Assert.That(run.Pages[0].ImportObjects, Has.Count.EqualTo(2));
@@ -69,7 +69,7 @@ public class SqlConnectorImportTests
                 "An empty pagination token list is how JIM is told there is no more data; returning one forever is an infinite import.");
 
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2, 3, 4, 5 }), "Every row arrives exactly once, in anchor order.");
-        });
+        }
     }
 
     [Test]
@@ -81,13 +81,13 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, PersonSystem(), pageSize: 2);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Pages, Has.Count.EqualTo(3), "A full last page cannot be told from a page with more behind it, so one empty read is unavoidable.");
             Assert.That(run.Pages[2].ImportObjects, Is.Empty);
             Assert.That(run.Pages[2].PaginationTokens, Is.Empty);
             Assert.That(AnchorValues(run), Is.EqualTo(new[] { 1, 2, 3, 4 }));
-        });
+        }
     }
 
     [Test]
@@ -153,12 +153,12 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, PersonSystem(), pageSize: 10);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects.Single().ObjectType, Is.EqualTo("Person"));
             Assert.That(run.ImportObjects.Single().ChangeType, Is.EqualTo(ObjectChangeType.NotSet),
                 "A Full Import states what is there; whether that is a create or an update is JIM's to work out.");
-        });
+        }
     }
 
     [Test]
@@ -192,7 +192,7 @@ public class SqlConnectorImportTests
         var run = await RunImportAsync(provider, PersonDocument, connectedSystem, pageSize: 10);
         var imported = run.ImportObjects.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Attribute(imported, "EMPLOYEE_ID").IntValues, Is.EqualTo(new[] { 1 }));
             Assert.That(Attribute(imported, "DISPLAY_NAME").StringValues, Is.EqualTo(new[] { "Ada" }));
@@ -202,7 +202,7 @@ public class SqlConnectorImportTests
             Assert.That(Attribute(imported, "IS_ACTIVE").BoolValue, Is.True);
             Assert.That(Attribute(imported, "OBJECT_GUID").GuidValues, Is.EqualTo(new[] { guid }));
             Assert.That(Attribute(imported, "PHOTO").ByteValues.Single(), Is.EqualTo(bytes));
-        });
+        }
     }
 
     [Test]
@@ -270,11 +270,11 @@ public class SqlConnectorImportTests
         var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10, databaseTimeZone: "Europe/London");
         var imported = Attribute(run.ImportObjects.Single(), "STARTED");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc)));
             Assert.That(imported.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc), "JIM stores every date and time in UTC, so the kind is never left unspecified.");
-        });
+        }
     }
 
     [Test]
@@ -302,12 +302,12 @@ public class SqlConnectorImportTests
         var run = await RunImportAsync(provider, PersonDocument, DateSystem(), pageSize: 10, databaseTimeZone: "Europe/London");
         var imported = Attribute(run.ImportObjects.Single(), "STARTED");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.DateTimeValue, Is.EqualTo(new DateTime(2026, 7, 15, 7, 0, 0, DateTimeKind.Utc)),
                 "A value that states its own offset needs no setting to interpret it.");
             Assert.That(imported.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
-        });
+        }
     }
 
     #endregion
@@ -368,7 +368,7 @@ public class SqlConnectorImportTests
 
         var relatedQueries = provider.ExecutedCommandTexts.Count(text => text.Contains("EMPLOYEE_PHONES", StringComparison.Ordinal));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(relatedQueries, Is.EqualTo(1),
                 "At 500,000 rows a query per row is the difference between a working Connector and an unusable one.");
@@ -376,7 +376,7 @@ public class SqlConnectorImportTests
             Assert.That(Attribute(ObjectWithAnchor(run, 1), "PhoneNumbers").StringValues, Is.EquivalentTo(new[] { "0100", "0101" }));
             Assert.That(ObjectWithAnchor(run, 2).Attributes.Any(a => a.Name == "PhoneNumbers"), Is.False, "An object with no related rows has no attribute at all.");
             Assert.That(Attribute(ObjectWithAnchor(run, 3), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0300" }));
-        });
+        }
     }
 
     [Test]
@@ -391,12 +391,12 @@ public class SqlConnectorImportTests
 
         var relatedQueries = provider.ExecutedCommandTexts.Count(text => text.Contains("EMPLOYEE_PHONES", StringComparison.Ordinal));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(relatedQueries, Is.EqualTo(2), "Two pages carried rows, and the empty third page has no anchors to gather against.");
             Assert.That(Attribute(ObjectWithAnchor(run, 1), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0100" }));
             Assert.That(Attribute(ObjectWithAnchor(run, 4), "PhoneNumbers").StringValues, Is.EqualTo(new[] { "0400" }));
-        });
+        }
     }
 
     [Test]
@@ -474,7 +474,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, connectedSystem, pageSize: 10);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.ImportObjects, Has.Count.EqualTo(3), "One bad value must not cost the whole page.");
 
@@ -486,7 +486,7 @@ public class SqlConnectorImportTests
 
             Assert.That(ObjectWithAnchor(run, 1).ErrorType, Is.Null);
             Assert.That(ObjectWithAnchor(run, 3).ErrorType, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -530,7 +530,7 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, PersonDocument, PersonSystem(), pageSize: 2);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Progress.ExpectedObjectCounts, Is.EqualTo(new[] { 5 }),
                 "A database states a result-set size cheaply, so the expected count is reported once, on the first call.");
@@ -538,7 +538,7 @@ public class SqlConnectorImportTests
             Assert.That(run.Progress.PhaseKeys, Does.Contain(SqlConnectorPhases.Fetch));
             Assert.That(run.Progress.PhaseKeys.Count(key => key == SqlConnectorPhases.Count), Is.EqualTo(1),
                 "Counting again on every page would make an expensive query the price of paging.");
-        });
+        }
     }
 
     [Test]
@@ -569,13 +569,13 @@ public class SqlConnectorImportTests
 
         var run = await RunImportAsync(provider, document, connectedSystem, pageSize: 10);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(run.Progress.ExpectedObjectCounts, Is.EqualTo(new[] { 3 }), "Both object types are counted, because both are part of the run.");
             Assert.That(run.Pages[0].ImportObjects, Has.Count.EqualTo(3));
             Assert.That(run.Progress.ObjectsRead, Is.EqualTo(new[] { 2, 3 }),
                 "One call drained a page of each object type, so the counters move while the call is still in flight.");
-        });
+        }
     }
 
     #endregion
@@ -624,12 +624,12 @@ public class SqlConnectorImportTests
 
         var result = await connector.ImportAsync(connectedSystem, RunProfile(10), [], null, _logger, cancellation.Token, progress);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ImportObjects.Select(importObject => importObject.ObjectType), Is.All.EqualTo("Person"),
                 "A cancelled run stops at the next page boundary rather than reading everything it was asked for.");
             Assert.That(provider.ExecutedCommandTexts.Any(text => text.Contains("[GROUPS]", StringComparison.Ordinal) && !text.StartsWith("SELECT COUNT", StringComparison.Ordinal)), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -644,13 +644,13 @@ public class SqlConnectorImportTests
         Assert.That(async () => await connector.ImportAsync(PersonSystem(), RunProfile(10), [], null, _logger, CancellationToken.None, new RecordingConnectorProgress()),
             Throws.InstanceOf<Exception>());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connector.CloseImportConnection(), Is.Null,
                 "Nothing needs persisting for a Full Import, and a non-null return would override state JIM already holds.");
             Assert.That(provider.OpenConnections.All(connection => connection.State == System.Data.ConnectionState.Closed), Is.True,
                 "A failed import must still release its connection, or a run leaves a session open on the customer's database.");
-        });
+        }
     }
 
     #endregion

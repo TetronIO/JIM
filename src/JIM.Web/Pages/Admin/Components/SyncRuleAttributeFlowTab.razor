@@ -181,6 +181,12 @@
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
                                 </MudTooltip>
                             }
+                            @if (context.TargetConnectedSystemAttribute.Writability == AttributeWritability.WritableOnCreate)
+                            {
+                                <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
+                                </MudTooltip>
+                            }
                         }
                         @if (MappingIsMvaToSva(context))
                         {
@@ -340,6 +346,12 @@
                             {
                                 <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                                </MudTooltip>
+                            }
+                            @if (attributeFlowRule.TargetConnectedSystemAttribute?.Writability == AttributeWritability.WritableOnCreate)
+                            {
+                                <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
                                 </MudTooltip>
                             }
                         </div>

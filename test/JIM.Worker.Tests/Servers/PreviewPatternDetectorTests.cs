@@ -53,11 +53,11 @@ public class PreviewPatternDetectorTests
     {
         var detector = new CasingChangeDetector();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detector.Detect(Candidate(null, "bob@contoso.com")), Is.Null);
             Assert.That(detector.Detect(Candidate("bob@contoso.com", "")), Is.Null);
-        });
+        }
     }
 
     #endregion
@@ -105,13 +105,13 @@ public class PreviewPatternDetectorTests
     {
         var detector = new EmailDomainChangeDetector();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detector.Detect(Candidate("Sales", "Marketing")), Is.Null, "no at-sign at all");
             Assert.That(detector.Detect(Candidate("bob@@contoso.com", "bob@@fabrikam.com")), Is.Null, "two at-signs is not an address this detector will guess at");
             Assert.That(detector.Detect(Candidate("@contoso.com", "@fabrikam.com")), Is.Null, "an empty local part is a fragment, not an address");
             Assert.That(detector.Detect(Candidate("bob@", "robert@")), Is.Null, "an empty domain is a fragment, not an address");
-        });
+        }
     }
 
     #endregion
@@ -171,13 +171,13 @@ public class PreviewPatternDetectorTests
     {
         var detector = new ContainerChangeDetector();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detector.Detect(Candidate("Sales, Marketing and Support", "Sales, Marketing and Service")), Is.Null,
                 "prose containing a comma is not a distinguished name");
             Assert.That(detector.Detect(Candidate("CN=Bob Smith", "CN=Bob Smith")), Is.Null, "a single relative name has no parent path");
             Assert.That(detector.Detect(Candidate("Sales", "Marketing")), Is.Null);
-        });
+        }
     }
 
     #endregion
@@ -230,14 +230,14 @@ public class PreviewPatternDetectorTests
     {
         var detector = new AffixChangeDetector();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(detector.Detect(Candidate("bsmith", "rjones")), Is.Null);
             Assert.That(detector.Detect(Candidate("bsmith", "bsmith")), Is.Null);
             Assert.That(detector.Detect(Candidate("", "bsmith")), Is.Null,
                 "everything is an affix of an empty value; that is a value being set, not text being added to one");
             Assert.That(detector.Detect(Candidate("bsmith", null)), Is.Null);
-        });
+        }
     }
 
     [Test]

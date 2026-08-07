@@ -514,7 +514,12 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
+    /// <param name="previewActivityId">
+    /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
+    /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
+    /// </param>
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy,
+        string? changeReason = null, Guid? previewActivityId = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -535,7 +540,8 @@ public class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = connectedSystem.Id
+            ConnectedSystemId = connectedSystem.Id,
+            PreviewActivityId = previewActivityId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -2550,16 +2556,11 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
-                // Determine if any ancestor container is already selected.
-                // If so, this new container is already implicitly included via the ancestor's subtree search,
-                // so we should NOT select it separately (that would cause duplicate imports).
-                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
-
-                // Only auto-select if:
-                // 1. It's a top-level container in a selected partition, OR
-                // 2. No ancestor is selected (meaning this branch wasn't previously covered)
-                // In practice, if parent is selected, we do NOT select the child - it's already covered by subtree.
-                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+                // Whether the new container needs selecting turns on Container Scope: a selected Subtree ancestor's
+                // search already covers it (selecting it too would import the same objects twice), whereas a selected
+                // OneLevel ancestor stops short of it (leaving it unselected would mean the objects just provisioned
+                // into it are never imported). ConnectedSystemUtilities owns that rule for every caller.
+                var shouldSelect = ConnectedSystemUtilities.NewContainerNeedsSelecting(parentContainer, partition.Selected);
 
                 // Create the new container using connector's method to extract display name
                 var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
@@ -2583,16 +2584,8 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                if (hasSelectedAncestor)
-                {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected, implicitly included via subtree)",
-                        containerExternalId);
-                }
-                else
-                {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
-                        containerExternalId, shouldSelect);
-                }
+                Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                    containerExternalId, shouldSelect);
             }
             catch (Exception ex)
             {
@@ -2681,12 +2674,8 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
-                // Determine if any ancestor container is already selected.
-                // If so, this new container is already implicitly included via the ancestor's subtree search.
-                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
-
-                // Only auto-select if no ancestor is selected and it's a top-level container in a selected partition
-                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+                // Scope-aware coverage; see the sibling overload above for why a OneLevel ancestor does not cover this.
+                var shouldSelect = ConnectedSystemUtilities.NewContainerNeedsSelecting(parentContainer, partition.Selected);
 
                 // Create the new container using connector's method to extract display name
                 var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
@@ -2710,16 +2699,8 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                if (hasSelectedAncestor)
-                {
-                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected)",
-                        containerExternalId);
-                }
-                else
-                {
-                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
-                        containerExternalId, shouldSelect);
-                }
+                Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                    containerExternalId, shouldSelect);
             }
             catch (Exception ex)
             {
@@ -3204,22 +3185,6 @@ public class ConnectedSystemServer
         return result;
     }
     #endregion
-
-    /// <summary>
-    /// Checks if any ancestor container in the hierarchy is selected.
-    /// Used to determine if a new child container is already implicitly included via a parent's subtree search.
-    /// </summary>
-    private static bool IsAnyAncestorSelected(ConnectedSystemContainer? container)
-    {
-        var current = container;
-        while (current != null)
-        {
-            if (current.Selected)
-                return true;
-            current = current.ParentContainer;
-        }
-        return false;
-    }
 
     private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
     {
@@ -4207,6 +4172,34 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Streams every Connected System Object in a Connected System, reduced to where it sits and what it is joined
+    /// to, for evaluating what a change to the partition and container selection would take out of import scope
+    /// (#1251).
+    /// </summary>
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId)
+    {
+        return Application.Repository.ConnectedSystems.StreamConnectedSystemObjectScopeCandidates(connectedSystemId);
+    }
+
+    /// <summary>
+    /// The Connector's containment rule, for a Connected System whose Connector can express one; null otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Creating the Connector opens no connection to the Connected System, which matters here: a preview asks where
+    /// objects sit using data JIM already holds, and must not reach out to a directory that may be unreachable to
+    /// answer a question about a tick box.
+    /// </remarks>
+    public IConnectorContainment? GetConnectorContainment(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        if (connectedSystem.ConnectorDefinition == null)
+            return null;
+
+        return CreateConnector(connectedSystem) as IConnectorContainment;
+    }
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to find the Obosolete object count for.</param>
@@ -5088,6 +5081,12 @@ public class ConnectedSystemServer
     /// Validates that export Attribute Flow mappings do not target read-only attributes.
     /// Read-only attributes (system-managed, constructed, back-links) cannot be written to
     /// and will cause export failures at runtime.
+    /// <para>
+    /// <see cref="AttributeWritability.WritableOnCreate"/> is deliberately permitted: the value has to
+    /// flow during provisioning or the object can never be created. Keeping it out of Update Pending
+    /// Exports is enforced on the export path by <see cref="SyncRuleMapping.FlowsOnUpdateExport"/>,
+    /// not here.
+    /// </para>
     /// </summary>
     /// <param name="mapping">The mapping to validate.</param>
     /// <exception cref="ArgumentException">Thrown when the target attribute is read-only.</exception>

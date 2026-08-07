@@ -67,12 +67,12 @@ public class ScimConnectorExportTests
 
         var results = await ExportAsync(provider, handler, Create(user, Change("userName", user, "alice")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(results[0].ExternalId, Is.EqualTo("generated-1"));
             Assert.That(provider.Resources, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -86,11 +86,11 @@ public class ScimConnectorExportTests
             Create(user, Change("name.givenName", user, "Alice"), Change("emails.work", user, "alice@example.com")));
 
         var body = BodyOf(handler, HttpMethod.Post);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(body, Does.Contain("\"name\":{\"givenName\":\"Alice\"}"));
             Assert.That(body, Does.Contain("\"emails\":[{\"value\":\"alice@example.com\",\"type\":\"work\"}]"));
-        });
+        }
     }
 
     [Test]
@@ -105,11 +105,11 @@ public class ScimConnectorExportTests
 
         var results = await ExportAsync(provider, handler, Create(user, Change("userName", user, "alice")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.MissingDependency));
-        });
+        }
     }
 
     [Test]
@@ -123,11 +123,11 @@ public class ScimConnectorExportTests
         var results = await ExportAsync(provider, handler,
             Create(user, Change("userName", user, "alice"), Change("notAnAttribute", user, "x")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Post), Is.False);
-        });
+        }
     }
     #endregion
 
@@ -144,12 +144,12 @@ public class ScimConnectorExportTests
             Against("alice", user, PendingExportChangeType.Update, Change("title", user, "Engineer")));
 
         var body = BodyOf(handler, HttpMethod.Patch);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(body, Does.Contain("\"op\":\"replace\"").And.Contain("\"path\":\"title\"").And.Contain("Engineer"));
             Assert.That(body, Does.Not.Contain("userName"), "an attribute JIM did not change is not asserted");
-        });
+        }
     }
 
     [Test]
@@ -183,14 +183,14 @@ public class ScimConnectorExportTests
         var results = await ExportAsync(provider, handler,
             Against("alice", user, PendingExportChangeType.Update, Change("title", user, "Engineer")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(BodyOf(handler, HttpMethod.Put), Does.Contain("Engineer"));
             // userName was never touched by JIM, and it survives the update.
             Assert.That(provider.Resources.Single().Attributes.Keys, Does.Contain("userName"));
             Assert.That(provider.Resources.Single().Attributes.Keys, Does.Contain("title"));
-        });
+        }
     }
 
     [Test]
@@ -204,11 +204,11 @@ public class ScimConnectorExportTests
         var results = await ExportAsync(provider, handler,
             Against("ghost", user, PendingExportChangeType.Update, Change("title", user, "Engineer")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Put), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -226,11 +226,11 @@ public class ScimConnectorExportTests
         var results = await ExportAsync(provider, handler,
             Against("alice", user, PendingExportChangeType.Update, Change("title", user, "Engineer")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.ConcurrencyConflict));
-        });
+        }
     }
 
     [Test]
@@ -247,11 +247,11 @@ public class ScimConnectorExportTests
         var results = await ExportAsync(provider, handler, pendingExport);
 
         var patch = handler.Requests.Last(r => r.Method == HttpMethod.Patch);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(patch.Headers.TryGetValues("If-Match", out var values) ? values.Single() : null, Is.EqualTo(alice.Version));
-        });
+        }
     }
 
     [Test]
@@ -267,11 +267,11 @@ public class ScimConnectorExportTests
 
         var results = await ExportAsync(provider, handler, pendingExport);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.ConcurrencyConflict));
-        });
+        }
     }
 
     [Test]
@@ -306,11 +306,11 @@ public class ScimConnectorExportTests
 
         var results = await ExportAsync(provider, handler, pendingExport);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.False);
             Assert.That(handler.Requests.Any(r => r.Method == HttpMethod.Patch), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -342,11 +342,11 @@ public class ScimConnectorExportTests
                 Change("members", group, "alice", PendingExportAttributeChangeType.Add)));
 
         var body = BodyOf(handler, HttpMethod.Patch);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(body, Does.Contain("\"op\":\"add\""));
             Assert.That(body, Does.Contain("\"value\":[{\"value\":\"alice\"}]"));
-        });
+        }
     }
     #endregion
 
@@ -361,11 +361,11 @@ public class ScimConnectorExportTests
 
         var results = await ExportAsync(provider, handler, Against("alice", user, PendingExportChangeType.Delete));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].Success, Is.True);
             Assert.That(provider.Resources, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -398,12 +398,12 @@ public class ScimConnectorExportTests
 
         // One result per Pending Export, in the order they arrived: that is how JIM pairs an outcome
         // with the change that produced it.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(2));
             Assert.That(results[0].Success, Is.False);
             Assert.That(results[1].Success, Is.True);
-        });
+        }
     }
 
     [Test]
