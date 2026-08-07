@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Connectors;
+using System.Collections.Concurrent;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -197,8 +198,13 @@ public class MultiAccountPasswordSetTests
     [Test]
     public async Task SetPasswordOnAccountsAsync_ReportsEachOutcomeAsItLandsAsync()
     {
-        var reported = new List<AccountPasswordSetOutcome>();
-        await SetOnAsync(progress: new Progress<AccountPasswordSetOutcome>(reported.Add));
+        // A concurrent collection rather than a List, because the callbacks are not serialised: NUnit's
+        // SafeSynchronizationContext hands each Progress<T> callback to its own thread pool thread, so all three
+        // can run at once even though the product reports the accounts strictly one at a time. Two concurrent
+        // List<T>.Add calls can write the same index, and the outcome that loses is gone with no error anywhere;
+        // that is what failed this test on main, reproducibly at roughly one run in thirteen.
+        var reported = new ConcurrentQueue<AccountPasswordSetOutcome>();
+        await SetOnAsync(progress: new Progress<AccountPasswordSetOutcome>(reported.Enqueue));
 
         // Progress<T> posts to the captured context, so the reports may arrive after the call returns.
         var deadline = DateTime.UtcNow.AddSeconds(5);
