@@ -15,114 +15,76 @@ public class ConnectedSystemUtilitiesTests
         _nextId = 1;
     }
 
-    #region GetAllSelectedContainers Tests
+    #region NewContainerNeedsSelecting Tests
 
     [Test]
-    public void GetAllSelectedContainers_WithNullPartition_ThrowsArgumentNullException()
+    public void NewContainerNeedsSelecting_AtTheTopOfASelectedPartition_ReturnsTrue()
     {
-        // Arrange
-        ConnectedSystemPartition? partition = null;
-
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() =>
-            ConnectedSystemUtilities.GetAllSelectedContainers(partition!));
+        // A container with no parent is covered by nothing, so the partition's own selection decides.
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(null, partitionSelected: true), Is.True);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithNullContainers_ThrowsArgumentException()
+    public void NewContainerNeedsSelecting_AtTheTopOfAnUnselectedPartition_ReturnsFalse()
     {
-        // Arrange
-        var partition = new ConnectedSystemPartition { Containers = null };
-
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() =>
-            ConnectedSystemUtilities.GetAllSelectedContainers(partition));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(null, partitionSelected: false), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithNoSelectedContainers_ReturnsEmptyList()
+    public void NewContainerNeedsSelecting_BeneathASelectedSubtreeParent_ReturnsFalse()
     {
-        // Arrange
-        var partition = CreatePartitionWithContainers(
-            CreateContainer("Root1", false),
-            CreateContainer("Root2", false));
+        // The parent's search already returns the new container's objects; selecting it too would import them twice.
+        var parent = CreateContainer("Parent", true);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Is.Empty);
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithSelectedRootContainer_ReturnsRootContainer()
+    public void NewContainerNeedsSelecting_BeneathASelectedOneLevelParent_ReturnsTrue()
     {
-        // Arrange
-        var partition = CreatePartitionWithContainers(
-            CreateContainer("Root1", true),
-            CreateContainer("Root2", false));
+        // The parent's search stops at the objects held directly within it, so it never reaches the new container.
+        var parent = CreateContainer("Parent", true, ConnectedSystemContainerScope.OneLevel);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Name, Is.EqualTo("Root1"));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.True);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithSelectedChildContainer_ReturnsChildContainer()
+    public void NewContainerNeedsSelecting_BeneathAnUnselectedParent_ReturnsFalse()
     {
-        // Arrange
-        var child1 = CreateContainer("Child1", true);
-        var child2 = CreateContainer("Child2", false);
-        var root = CreateContainer("Root", false, child1, child2);
-        var partition = CreatePartitionWithContainers(root);
+        // Nothing beneath an unselected parent is in scope, so a new container there must not put itself in scope.
+        var parent = CreateContainer("Parent", false);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Name, Is.EqualTo("Child1"));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithSelectedParentAndChild_ReturnsBoth()
+    public void NewContainerNeedsSelecting_BeneathAOneLevelParentUnderASubtreeGrandparent_ReturnsFalse()
     {
-        // Arrange
-        var child = CreateContainer("Child", true);
-        var parent = CreateContainer("Parent", true, child);
-        var partition = CreatePartitionWithContainers(parent);
+        // Coverage is inherited from any Subtree ancestor, not only the immediate parent.
+        var parent = CreateContainer("Parent", true, ConnectedSystemContainerScope.OneLevel);
+        CreateContainer("Grandparent", true, ConnectedSystemContainerScope.Subtree, parent);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(2));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Parent"));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Child"));
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     [Test]
-    public void GetAllSelectedContainers_WithDeepHierarchy_ReturnsAllSelected()
+    public void NewContainerNeedsSelecting_BeneathAnUnselectedParentUnderASelectedOneLevelGrandparent_ReturnsFalse()
     {
-        // Arrange - Create a 4-level hierarchy with some selected at each level
-        var level4a = CreateContainer("Level4a", false);
-        var level3a = CreateContainer("Level3a", true, level4a);
-        var level2a = CreateContainer("Level2a", false, level3a);
-        var level2b = CreateContainer("Level2b", true);
-        var level1 = CreateContainer("Level1", true, level2a, level2b);
-        var partition = CreatePartitionWithContainers(level1);
+        // The grandparent's OneLevel search does not reach the parent, so the whole branch is out of scope.
+        var parent = CreateContainer("Parent", false);
+        CreateContainer("Grandparent", true, ConnectedSystemContainerScope.OneLevel, parent);
 
-        // Act
-        var result = ConnectedSystemUtilities.GetAllSelectedContainers(partition);
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
+    }
 
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(3));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Level1"));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Level2b"));
-        Assert.That(result.Select(c => c.Name), Contains.Item("Level3a"));
+    [Test]
+    public void NewContainerNeedsSelecting_BeneathAnUnselectedParentUnderASelectedSubtreeGrandparent_ReturnsFalse()
+    {
+        // The grandparent's Subtree search reaches every level beneath it, including the new container.
+        var parent = CreateContainer("Parent", false);
+        CreateContainer("Grandparent", true, ConnectedSystemContainerScope.Subtree, parent);
+
+        Assert.That(ConnectedSystemUtilities.NewContainerNeedsSelecting(parent, partitionSelected: true), Is.False);
     }
 
     #endregion
@@ -604,13 +566,17 @@ public class ConnectedSystemUtilitiesTests
         return partition;
     }
 
-    private static ConnectedSystemContainer CreateContainer(string name, bool selected, params ConnectedSystemContainer[] children)
+    private static ConnectedSystemContainer CreateContainer(string name, bool selected, params ConnectedSystemContainer[] children) =>
+        CreateContainer(name, selected, ConnectedSystemContainerScope.Subtree, children);
+
+    private static ConnectedSystemContainer CreateContainer(string name, bool selected, ConnectedSystemContainerScope scope, params ConnectedSystemContainer[] children)
     {
         var container = new ConnectedSystemContainer
         {
             Id = _nextId++,
             Name = name,
             Selected = selected,
+            Scope = scope,
             ExternalId = $"OU={name}"
         };
 
