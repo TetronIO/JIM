@@ -5046,6 +5046,12 @@ public class ConnectedSystemServer
     /// Validates that export Attribute Flow mappings do not target read-only attributes.
     /// Read-only attributes (system-managed, constructed, back-links) cannot be written to
     /// and will cause export failures at runtime.
+    /// <para>
+    /// <see cref="AttributeWritability.WritableOnCreate"/> is deliberately permitted: the value has to
+    /// flow during provisioning or the object can never be created. Keeping it out of Update Pending
+    /// Exports is enforced on the export path by <see cref="SyncRuleMapping.FlowsOnUpdateExport"/>,
+    /// not here.
+    /// </para>
     /// </summary>
     /// <param name="mapping">The mapping to validate.</param>
     /// <exception cref="ArgumentException">Thrown when the target attribute is read-only.</exception>

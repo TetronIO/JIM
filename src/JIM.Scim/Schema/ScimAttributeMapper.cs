@@ -305,10 +305,13 @@ public static class ScimAttributeMapper
             : AttributeWritability.Writable;
     }
 
+    /// <summary>
+    /// A flattened sub-attribute is never more writable than the complex attribute containing it. The
+    /// ordering over the writability states lives with the enum, so adding a state cannot silently widen
+    /// what this returns.
+    /// </summary>
     private static AttributeWritability MostRestrictive(AttributeWritability parent, AttributeWritability child)
     {
-        return parent == AttributeWritability.ReadOnly || child == AttributeWritability.ReadOnly
-            ? AttributeWritability.ReadOnly
-            : AttributeWritability.Writable;
+        return parent.MostRestrictive(child);
     }
 }

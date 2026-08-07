@@ -582,4 +582,71 @@ public class ConnectedSystemServerMappingValidationTests
     }
 
     #endregion
+
+    #region Export - Target writability
+
+    /// <summary>
+    /// A read-only target cannot be written at all, so authoring an export Attribute Flow to it is refused.
+    /// </summary>
+    [Test]
+    public void CreateSyncRuleMappingAsync_ExportDirectMapping_ReadOnlyTarget_ThrowsArgumentException()
+    {
+        // Arrange
+        var syncRule = CreateExportSyncRule();
+        var sourceAttr = CreateMetaverseAttribute("Display Name", AttributeDataType.Text);
+        var targetAttr = CreateCsAttribute("whenCreated", AttributeDataType.Text);
+        targetAttr.Writability = AttributeWritability.ReadOnly;
+        var mapping = CreateExportMapping(syncRule, sourceAttr, targetAttr);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(
+            async () => await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator));
+        Assert.That(ex!.Message, Does.Contain("read-only"));
+    }
+
+    /// <summary>
+    /// A Writable On Create target must be accepted at authoring time: the value has to flow during
+    /// provisioning, or the object can never be created. Keeping it out of Update Pending Exports is the
+    /// export path's job, not the authoring validator's.
+    /// </summary>
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportDirectMapping_WritableOnCreateTarget_SucceedsAsync()
+    {
+        // Arrange
+        var syncRule = CreateExportSyncRule();
+        var sourceAttr = CreateMetaverseAttribute("Employee ID", AttributeDataType.Text);
+        var targetAttr = CreateCsAttribute("employee_number", AttributeDataType.Text);
+        targetAttr.Writability = AttributeWritability.WritableOnCreate;
+        var mapping = CreateExportMapping(syncRule, sourceAttr, targetAttr);
+
+        // Act
+        await _application.ConnectedSystems.CreateSyncRuleMappingAsync(mapping, _testInitiator);
+
+        // Assert
+        _mockConnectedSystemRepo.Verify(
+            r => r.CreateSyncRuleMappingAsync(mapping), Times.Once);
+    }
+
+    /// <summary>
+    /// The same acceptance must hold when an existing mapping is updated, not only when one is created.
+    /// </summary>
+    [Test]
+    public async Task UpdateSyncRuleMappingAsync_ExportDirectMapping_WritableOnCreateTarget_SucceedsAsync()
+    {
+        // Arrange
+        var syncRule = CreateExportSyncRule();
+        var sourceAttr = CreateMetaverseAttribute("Employee ID", AttributeDataType.Text);
+        var targetAttr = CreateCsAttribute("employee_number", AttributeDataType.Text);
+        targetAttr.Writability = AttributeWritability.WritableOnCreate;
+        var mapping = CreateExportMapping(syncRule, sourceAttr, targetAttr);
+
+        // Act
+        await _application.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping, _testInitiator);
+
+        // Assert
+        _mockConnectedSystemRepo.Verify(
+            r => r.UpdateSyncRuleMappingAsync(mapping), Times.Once);
+    }
+
+    #endregion
 }
