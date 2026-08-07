@@ -116,6 +116,15 @@ internal sealed class SqlConnectorSchema
         var anchorColumnNames = new HashSet<string>(configuration.AnchorColumns, StringComparer.OrdinalIgnoreCase);
         var writability = source.IsTable ? AttributeWritability.Writable : AttributeWritability.ReadOnly;
 
+        // An anchor column of a table is the row's primary key, which is exactly what
+        // WritableOnCreate describes: JIM has to supply it to insert a row whose key is a natural
+        // identifier (an employee number rather than an identity column), and must never rewrite it
+        // afterwards. Read-Only would refuse the Attribute Flow that provisions the object, and
+        // Writable would let an Update Pending Export rewrite the key and orphan the Connected System
+        // Object. A view or a SELECT statement is not an export target at all, so its anchor stays
+        // Read-Only along with everything else that source exposes.
+        var anchorWritability = source.IsTable ? AttributeWritability.WritableOnCreate : AttributeWritability.ReadOnly;
+
         foreach (var column in columns)
         {
             var isAnchor = anchorColumnNames.Contains(column.Name);
@@ -134,7 +143,7 @@ internal sealed class SqlConnectorSchema
                 AttributePlurality.SingleValued,
                 required: !column.IsNullable,
                 className: null,
-                writability: isAnchor ? AttributeWritability.ReadOnly : writability));
+                writability: isAnchor ? anchorWritability : writability));
         }
 
         await AddRelatedTableAttributesAsync(configuration, objectType, writability);

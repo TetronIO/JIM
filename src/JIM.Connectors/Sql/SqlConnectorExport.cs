@@ -583,6 +583,15 @@ internal sealed class SqlConnectorExport
             if (columnValue == null)
                 return null;
 
+            // An anchor flowed with nothing in it is not the database's to generate either: the column
+            // is named in the INSERT, and what it would compose to is an empty external ID that JIM
+            // could never find the row by again.
+            if (columnValue.Value == null)
+                throw new InvalidOperationException(
+                    $"Object Type '{plan.Name}' has a create whose anchor column '{anchorColumn}' was flowed with no value. " +
+                    "The anchor is what identifies the new object, so JIM would record a Connected System Object it could never find the row for; the create is being rolled back. " +
+                    "Check the Synchronisation Rule flowing this attribute, or leave the column unmapped so that the database generates the key.");
+
             // Renamed onto the anchor parameters, because these values key the related-table rows that
             // follow the insert rather than the insert's own column list.
             supplied.Add(columnValue with { ParameterName = AnchorParameterName(index) });
@@ -639,6 +648,9 @@ internal sealed class SqlConnectorExport
             .Where(change => !forCreate || !IsRemoval(change))
             .ToList();
 
+        if (!forCreate)
+            RefuseAnchorColumns(plan, changes);
+
         // The column's own type is required whether or not there is a value to write: a column the
         // catalogue does not describe is one this Object Type can no longer be written to at all.
         return [.. changes.Select((change, index) =>
@@ -649,6 +661,41 @@ internal sealed class SqlConnectorExport
                 ValueParameterName(index),
                 IsRemoval(change) ? null : ToDatabaseValue(change, change.Attribute.Name, columnType));
         })];
+    }
+
+    /// <summary>
+    /// Refuses an update that would write one of the Object Type's anchor columns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Defence in depth. Do not remove this as redundant.</b> Discovery marks a table-backed Object
+    /// Type's anchor columns <see cref="AttributeWritability.WritableOnCreate"/>, and the engine keeps
+    /// such an attribute out of every Update Pending Export
+    /// (<c>SyncRuleMapping.FlowsOnUpdateExport</c>). This guard is what stands behind that, for a
+    /// Pending Export staged before a schema import recorded the writability, or reaching the Connector
+    /// by any other route.
+    /// </para>
+    /// <para>
+    /// Synchronisation integrity is the reason it is a hard failure rather than a dropped column. An
+    /// UPDATE rewriting a primary key succeeds: it finds the row, changes it, and raises nothing. What
+    /// it leaves behind is a Connected System Object anchored to a key no row has any more, and this
+    /// Connector confirms an export's values without reading them back, so nothing downstream would
+    /// ever notice.
+    /// </para>
+    /// </remarks>
+    private static void RefuseAnchorColumns(SqlExportPlan plan, IReadOnlyList<PendingExportAttributeValueChange> changes)
+    {
+        var anchorChange = changes.FirstOrDefault(change =>
+            plan.AnchorColumns.Any(anchorColumn => string.Equals(anchorColumn, change.Attribute.Name, StringComparison.OrdinalIgnoreCase)));
+
+        if (anchorChange == null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Object Type '{plan.Name}' has an update that would write anchor column '{anchorChange.Attribute.Name}', which is the primary key of the row this Connected System Object is anchored to. " +
+            "A primary key cannot be rewritten: the row would keep a key JIM no longer holds for it, and the object would be orphaned without any error, so the update is being rolled back. " +
+            "The attribute is set on creation only, and JIM does not flow one on an update; import the schema for this Connected System so that its writability is current, and check the Synchronisation Rule targeting it. " +
+            "A business identifier that has genuinely been reissued is rejoined by an Object Matching Rule, not by rewriting the anchor.");
     }
 
     private static bool IsRemoval(PendingExportAttributeValueChange change) =>

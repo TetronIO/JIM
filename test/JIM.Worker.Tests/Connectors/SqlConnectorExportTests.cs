@@ -205,6 +205,75 @@ public class SqlConnectorExportTests
     }
 
     [Test]
+    public async Task ExportAsync_ACreateSupplyingACompositeNaturalKey_ComposesTheExternalIdAnImportOfTheSameRowWouldCompose()
+    {
+        // Both parts of the key are authored by Synchronisation Rules, which is the only way an Object
+        // Type identified by several columns can be provisioned: a database generates one key per row,
+        // never a composite one.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Create(
+            Change("COMPANY_ID", AttributeDataType.Number, number: 7),
+            Change("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"));
+
+        var results = await ExportAsync(provider, CompositeAnchorDocument, [pendingExport]);
+
+        var insert = provider.ExecutedStatements.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[0].ExternalId, Is.EqualTo("7+4711"),
+                "An import of the same row composes its external ID from the same parts, separated the same way; a different composition would make the object unfindable.");
+            Assert.That(insert.CommandText, Does.StartWith("INSERT INTO [HR].[EMPLOYEES]"));
+            Assert.That(insert.CommandText, Does.Contain("[COMPANY_ID]").And.Contain("[EMPLOYEE_ID]"),
+                "A natural key is written as part of the row, not asked of the database.");
+            Assert.That(insert.Parameters.Values, Does.Contain(7).And.Contain(4711));
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateSupplyingOnlyPartOfACompositeAnchor_FailsThatObjectRatherThanHalfWritingIt()
+    {
+        var provider = new FakeSqlProvider();
+        var pendingExport = Create(
+            Change("COMPANY_ID", AttributeDataType.Number, number: 7),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"));
+
+        var results = await ExportAsync(provider, CompositeAnchorDocument, [pendingExport]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False,
+                "A partly supplied composite anchor is neither JIM's to compose nor the database's to generate.");
+            Assert.That(results[0].ErrorMessage, Does.Contain("Person"));
+            Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written for an object JIM could not identify.");
+            Assert.That(provider.Transactions.Single().Committed, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_ACreateSupplyingAnAnchorColumnWithNoValue_FailsThatObjectRatherThanRecordingAnEmptyExternalId()
+    {
+        // A supplied anchor holding nothing would compose to an empty external ID, and JIM would record
+        // a Connected System Object it could never find the row for again.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Create(
+            Change("EMPLOYEE_ID", AttributeDataType.Number),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"));
+
+        var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("EMPLOYEE_ID"));
+            Assert.That(provider.ExecutedStatements, Is.Empty);
+            Assert.That(provider.Transactions.Single().Committed, Is.False);
+        }
+    }
+
+    [Test]
     public async Task ExportAsync_ACreateWithMultiValuedValues_WritesTheRelatedRowsAgainstTheGeneratedKey()
     {
         var provider = new FakeSqlProvider { GeneratedKey = 4711 };
@@ -339,6 +408,58 @@ public class SqlConnectorExportTests
             Assert.That(update.CommandText, Does.Contain("SET [DISPLAY_NAME] = @"));
             Assert.That(update.Parameters[displayNameParameter], Is.Null,
                 "A single-valued attribute has no value to remove from; removing its value means the column holds nothing.");
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AnUpdateWhoseChangesIncludeAnAnchorColumn_FailsThatObjectRatherThanRewritingThePrimaryKey()
+    {
+        // The engine already keeps a Writable On Create attribute out of an Update Pending Export. This
+        // is the Connector's own guard behind it, because rewriting a primary key severs the link
+        // between the Connected System Object and its row without raising anything.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("EMPLOYEE_ID", AttributeDataType.Number, number: 9000, changeType: PendingExportAttributeChangeType.Update),
+            Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update));
+
+        var results = await ExportAsync(provider, PersonDocument, [pendingExport]);
+
+        var transaction = provider.Transactions.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("Person").And.Contain("EMPLOYEE_ID"),
+                "The administrator has to be told which Object Type and which column the update would have rewritten.");
+            Assert.That(provider.ExecutedStatements, Is.Empty, "The whole object is refused, not just the offending column.");
+            Assert.That(transaction.RolledBack, Is.True);
+            Assert.That(transaction.Committed, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AnUpdateWhoseChangesIncludeAnAnchorColumn_LeavesTheRestOfTheBatchSucceedingAndItsResultsPositional()
+    {
+        var provider = new FakeSqlProvider();
+
+        var results = await ExportAsync(provider, PersonDocument,
+        [
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+                Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada", changeType: PendingExportAttributeChangeType.Update)),
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4712),
+                Change("EMPLOYEE_ID", AttributeDataType.Number, number: 9000, changeType: PendingExportAttributeChangeType.Update)),
+            Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4713),
+                Change("DISPLAY_NAME", AttributeDataType.Text, text: "Katherine", changeType: PendingExportAttributeChangeType.Update))
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(3), "JIM matches results to Pending Exports by position, so there is exactly one result per object.");
+            Assert.That(results[0].Success, Is.True);
+            Assert.That(results[1].Success, Is.False, "The middle object is the one that would have rewritten its own anchor.");
+            Assert.That(results[2].Success, Is.True, "A refused object must not poison the batch it arrived in.");
+            Assert.That(provider.Transactions.Count(transaction => transaction.Committed), Is.EqualTo(2));
+            Assert.That(provider.Transactions.Count(transaction => transaction.RolledBack), Is.EqualTo(1));
         }
     }
 
