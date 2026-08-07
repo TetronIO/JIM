@@ -226,6 +226,12 @@
                                 <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
                             </MudTooltip>
                         }
+                        @if (IsCreateOnlyAttribute(context))
+                        {
+                            <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Set on creation only</MudChip>
+                            </MudTooltip>
+                        }
                     </MudTd>
                     <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
                         @if (context.Values.Count == 1)
@@ -673,6 +679,16 @@
         var value = group.Values[0];
         var attributeId = value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
         return _unmanagedAttributeIds.Contains(attributeId);
+    }
+
+    /// <summary>
+    /// Whether the Connected System will only accept a value for this attribute when the object is created.
+    /// Unlike Initial Export Only, this is a property of the discovered schema rather than of the Attribute
+    /// Flow, so it holds whatever the Synchronisation Rules say and needs no rule lookup.
+    /// </summary>
+    private static bool IsCreateOnlyAttribute(AttributeGroup group)
+    {
+        return group.Values[0].Attribute?.Writability == AttributeWritability.WritableOnCreate;
     }
 
     private int GetExternalIdSortOrder(AttributeGroup group)

@@ -1479,6 +1479,16 @@ public class ExportEvaluationServer
                         candidateAttributeIds.Contains(singleSource.MetaverseAttribute.Id);
                     if (isDirectCandidateFlow)
                     {
+                        // Synchronisation integrity: recall stages Update exports, and a WritableOnCreate
+                        // attribute must never reach one. Clearing or removing a value from it would rewrite
+                        // the Connected System's identifier for the object and sever the link to the row or
+                        // entry the Connected System Object is anchored to, which is the exact corruption
+                        // that writability state exists to prevent. The reference is deliberately left as the
+                        // target holds it; this is not routed to the fallback path, because the fallback
+                        // would only reach the same exclusion in CreateAttributeValueChanges.
+                        if (mapping.TargetConnectedSystemAttribute!.Writability == AttributeWritability.WritableOnCreate)
+                            continue;
+
                         if (!flowsByAttribute.TryGetValue(singleSource!.MetaverseAttribute!.Id, out var flows))
                         {
                             flows = [];
@@ -2473,9 +2483,13 @@ public class ExportEvaluationServer
             }
         }
 
-        // Initial Export Only mappings (#223) flow solely during the provisioning (Create) export; for
-        // Update exports the target attribute is unmanaged by JIM and must be skipped before any evaluation.
-        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || !m.InitialExportOnly))
+        // Some mappings flow solely during the provisioning (Create) export and must be skipped for Update
+        // exports before any evaluation: Initial Export Only mappings (#223), whose target attribute is
+        // unmanaged by JIM once the object is past provisioning, and mappings whose target attribute is
+        // WritableOnCreate, which the Connected System accepts only as part of creating the object.
+        // FlowsOnUpdateExport() carries both rules; see its documentation for why the second one is a
+        // synchronisation integrity guard rather than an optimisation.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || m.FlowsOnUpdateExport()))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)

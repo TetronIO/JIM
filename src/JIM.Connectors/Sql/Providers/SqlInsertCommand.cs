@@ -4,9 +4,15 @@
 namespace JIM.Connectors.Sql.Providers;
 
 /// <summary>
-/// Everything a provider needs to generate an INSERT that hands back the key the database generated
-/// for the new row, which the Connector returns as the object's external ID.
+/// Everything a provider needs to generate an INSERT: the row's columns, and where the key comes from.
 /// </summary>
+/// <remarks>
+/// The same record serves both inserts a Connector performs. Where the database generates the row's key
+/// (an identity or a sequence), <see cref="GeneratedKeyColumn"/> names it and the statement hands the
+/// value back, which the Connector returns as the object's external ID. Where JIM supplies the key
+/// itself, or the row has no key of its own (a related table's row), both generated-key members are
+/// left null and the statement is a plain INSERT.
+/// </remarks>
 internal sealed record SqlInsertCommand
 {
     internal string? SchemaName { get; init; }
@@ -20,13 +26,14 @@ internal sealed record SqlInsertCommand
     internal required IReadOnlyList<SqlColumnParameter> Columns { get; init; }
 
     /// <summary>
-    /// The identity, sequence or default-backed column whose generated value is wanted back.
+    /// The identity, sequence or default-backed column whose generated value is wanted back, or null
+    /// where the row's key is supplied rather than generated.
     /// </summary>
-    internal required string GeneratedKeyColumn { get; init; }
+    internal string? GeneratedKeyColumn { get; init; }
 
     /// <summary>
     /// The parameter the generated key is returned through. Named in the statement for dialects that
     /// bind an output parameter; retained for the others so the two paths read the same at the caller.
     /// </summary>
-    internal required string GeneratedKeyParameterName { get; init; }
+    internal string? GeneratedKeyParameterName { get; init; }
 }

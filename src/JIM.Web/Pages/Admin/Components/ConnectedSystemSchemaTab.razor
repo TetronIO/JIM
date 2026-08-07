@@ -488,7 +488,7 @@
                     </MudChipSet>
                 </div>
 
-                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <div>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Writability:</MudText>
@@ -499,9 +499,9 @@
                             @foreach (var writability in GetAvailableSchemaWritabilities())
                             {
                                 <MudChip Value="@writability.Key"
-                                         Color="@(writability.Key == AttributeWritability.ReadOnly ? Color.Warning : Color.Success)"
+                                         Color="@Helpers.GetAttributeWritabilityChipColour(writability.Key)"
                                          Variant="@(_selectedSchemaWritabilities.Contains(writability.Key) ? Variant.Outlined : Variant.Text)">
-                                    @(writability.Key == AttributeWritability.ReadOnly ? "Read-Only" : "Writable") (@writability.Value)
+                                    @Helpers.GetAttributeWritabilityLabel(writability.Key) (@writability.Value)
                                 </MudChip>
                             }
                         </MudChipSet>
@@ -554,7 +554,7 @@
                 }
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
-                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Writability)"><MudText Typo="Typo.button">Writability</MudText></MudTableSortLabel></MudTh>
                 }
@@ -617,14 +617,16 @@
                         @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                     </MudChip>
                 </MudTd>
-                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <MudTd DataLabel="Writability">
-                        <MudChip T="string"
-                                 Color="@(context.Writability == AttributeWritability.ReadOnly ? Color.Warning : Color.Success)"
-                                 Variant="Variant.Outlined">
-                            @(context.Writability == AttributeWritability.ReadOnly ? "Read-Only" : "Writable")
-                        </MudChip>
+                        <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Writability)" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string"
+                                     Color="@Helpers.GetAttributeWritabilityChipColour(context.Writability)"
+                                     Variant="Variant.Outlined">
+                                @Helpers.GetAttributeWritabilityLabel(context.Writability)
+                            </MudChip>
+                        </MudTooltip>
                     </MudTd>
                 }
                 @if (_selectedObjectTypeHasDescriptions)
@@ -703,7 +705,7 @@
     private bool _showInternalObjectTypes;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
-    private bool _selectedObjectTypeHasReadOnlyAttributes;
+    private bool _selectedObjectTypeHasConstrainedAttributes;
     private IReadOnlyCollection<AttributeWritability> _selectedSchemaWritabilities = new List<AttributeWritability>();
     private string _schemaSearchString = "";
     private IReadOnlyCollection<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
@@ -746,7 +748,7 @@
         {
             _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
             _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
-            _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
+            _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
         }
     }
 
@@ -971,7 +973,7 @@
 
         _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
         _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
-        _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
+        _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
     }
 
     /// <summary>
