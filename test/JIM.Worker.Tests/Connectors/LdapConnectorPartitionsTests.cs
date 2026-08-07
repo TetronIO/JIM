@@ -564,4 +564,66 @@ public class LdapConnectorPartitionsTests
     }
 
     #endregion
+
+    #region Display name tests
+
+    // Only Active Directory publishes the 'name' operational attribute. Every other directory leaves it absent, so
+    // the display name has to come from the Distinguished Name itself. Falling back to the whole DN, as this did,
+    // made every row in the portal's Container tree a full DN restating the ancestry the tree already draws.
+
+    [Test]
+    public void BuildContainerHierarchy_WithNoNameAttribute_NamesTheContainerAfterItsLeafRdn()
+    {
+        // Arrange: an OpenLDAP entry, which publishes no 'name' attribute.
+        var entries = new List<LdapConnectorPartitions.ContainerEntry>
+        {
+            new("OU=Corp,DC=contoso,DC=local", null),
+            new("OU=Sales,OU=Corp,DC=contoso,DC=local", null)
+        };
+
+        // Act
+        var result = LdapConnectorPartitions.BuildContainerHierarchy(entries, PartitionDn);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].Name, Is.EqualTo("Corp"), "the display name is the leaf RDN's value, not the whole Distinguished Name");
+            Assert.That(result[0].ChildContainers[0].Name, Is.EqualTo("Sales"));
+            Assert.That(result[0].Id, Is.EqualTo("OU=Corp,DC=contoso,DC=local"), "the Distinguished Name is still the external id");
+        }
+    }
+
+    [Test]
+    public void BuildContainerHierarchy_WithANameAttribute_PrefersTheDirectorysOwnName()
+    {
+        // Arrange: Active Directory supplies 'name', and it is the directory's own answer, so it wins.
+        var entries = new List<LdapConnectorPartitions.ContainerEntry>
+        {
+            new("OU=Corp,DC=contoso,DC=local", "Corporate")
+        };
+
+        // Act
+        var result = LdapConnectorPartitions.BuildContainerHierarchy(entries, PartitionDn);
+
+        // Assert
+        Assert.That(result[0].Name, Is.EqualTo("Corporate"));
+    }
+
+    [Test]
+    public void BuildContainerHierarchy_WithAnEscapedCommaInTheRdn_UnescapesTheDisplayName()
+    {
+        // Arrange: RFC 4514 escaping. A naive split on ',' would name this container "Sales\".
+        var entries = new List<LdapConnectorPartitions.ContainerEntry>
+        {
+            new(@"OU=Sales\, EMEA,DC=contoso,DC=local", null)
+        };
+
+        // Act
+        var result = LdapConnectorPartitions.BuildContainerHierarchy(entries, PartitionDn);
+
+        // Assert
+        Assert.That(result[0].Name, Is.EqualTo("Sales, EMEA"));
+    }
+
+    #endregion
 }

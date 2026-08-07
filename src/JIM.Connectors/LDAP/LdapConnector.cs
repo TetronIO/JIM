@@ -1361,17 +1361,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// </summary>
     /// <param name="containerExternalId">The container's DN.</param>
     /// <returns>The container name (e.g., "Sales" from "OU=Sales,DC=example,DC=com").</returns>
-    public string GetContainerDisplayName(string containerExternalId)
-    {
-        if (string.IsNullOrEmpty(containerExternalId))
-            return string.Empty;
-
-        // The display name is the (unescaped) value of the leaf RDN's first component, e.g. "Sales" from "OU=Sales".
-        if (LdapDistinguishedName.TryParse(containerExternalId, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0)
-            return parsedDn.LeafRdn.Components[0].Value;
-
-        return containerExternalId;
-    }
+    public string GetContainerDisplayName(string containerExternalId) =>
+        LdapConnectorUtilities.GetContainerDisplayNameFromDn(containerExternalId);
     #endregion
 
     #region IConnectorCertificateAware members
