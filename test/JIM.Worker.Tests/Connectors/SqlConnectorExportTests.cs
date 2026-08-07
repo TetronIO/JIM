@@ -321,6 +321,28 @@ public class SqlConnectorExportTests
     }
 
     [Test]
+    public async Task ExportAsync_ACreateAgainstAnAnchorColumnJimHasNoTypeFor_FailsThatObjectRatherThanGuessingItsExternalId()
+    {
+        // The external ID has to be composed by the anchor column's own type, so a column JIM cannot type
+        // fails the object naming it. Assuming an exact numeric because identities and sequences usually
+        // generate one is what let a GUID key be recorded as hex.
+        var provider = new FakeSqlProvider { GeneratedKey = 4711 };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "geography", IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "nvarchar", MaxLength: 200));
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorMessage, Does.Contain("EMPLOYEE_ID").And.Contain("geography"),
+                "The administrator has to be told which column identifies the object type and what type it is.");
+            Assert.That(provider.ExecutedStatements, Is.Empty, "Nothing is written for an object JIM could never find again.");
+        }
+    }
+
+    [Test]
     public async Task ExportAsync_ACreateSupplyingOnlyPartOfACompositeAnchor_FailsThatObjectRatherThanHalfWritingIt()
     {
         var provider = new FakeSqlProvider();

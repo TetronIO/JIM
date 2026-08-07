@@ -246,6 +246,48 @@ public class SqlAnchorValueTests
 
     #endregion
 
+    #region Agreement across the shapes a driver hands a value back in
+
+    /// <summary>
+    /// The same logical anchor, in each CLR shape it reaches this class as. An export binds the shape
+    /// JIM holds the value in; an import receives whatever the driver chose to return for the column,
+    /// and the two are routinely different (Oracle answers every NUMBER column with a decimal, whatever
+    /// its precision). Both have to compose the same string, or an exported object cannot be found by
+    /// the import that confirms it.
+    /// </summary>
+    private static IEnumerable<TestCaseData> EquivalentShapes()
+    {
+        yield return new TestCaseData(AttributeDataType.Number, 4711, 4711m).SetName("Number: an int and the decimal Oracle returns for a NUMBER(10)");
+        yield return new TestCaseData(AttributeDataType.Number, 4711, (short)4711).SetName("Number: an int and a smallint");
+        yield return new TestCaseData(AttributeDataType.LongNumber, 4711L, 4711m).SetName("LongNumber: a long and the decimal Oracle returns");
+        yield return new TestCaseData(AttributeDataType.Decimal, 5m, 5.00m).SetName("Decimal: the same number at two scales");
+        yield return new TestCaseData(AttributeDataType.Decimal, 4711m, 4711L).SetName("Decimal: a decimal and an exact integer of the same value");
+        yield return new TestCaseData(AttributeDataType.Text, "EMP-0042", "EMP-0042").SetName("Text: a string either way");
+        yield return new TestCaseData(AttributeDataType.Binary, new byte[] { 0xDE, 0xAD }, new byte[] { 0xDE, 0xAD }).SetName("Binary: bytes either way");
+    }
+
+    [TestCaseSource(nameof(EquivalentShapes))]
+    public void ToTokenString_TheSameValueInEitherShapeADriverReturnsIt_ComposesTheSameToken(AttributeDataType type, object exportShape, object importShape)
+    {
+        Assert.That(SqlAnchorValue.ToTokenString(_sqlServer, importShape, type),
+            Is.EqualTo(SqlAnchorValue.ToTokenString(_sqlServer, exportShape, type)));
+    }
+
+    [Test]
+    public void ToTokenString_AZonelessDateTime_ComposesTheSameTokenWhateverKindItArrivesWith()
+    {
+        // A zoneless column holds wall-clock time in the Connected System's declared Database Time Zone.
+        // An export binds it with an unspecified kind so that no driver converts it a second time, and an
+        // import reads it back the same way, so the two must agree without either applying an offset.
+        var wallClock = new DateTime(2026, 7, 14, 23, 0, 0, DateTimeKind.Unspecified);
+
+        Assert.That(SqlAnchorValue.ToTokenString(_sqlServer, wallClock, AttributeDataType.DateTime),
+            Is.EqualTo(SqlAnchorValue.ToTokenString(_sqlServer, DateTime.SpecifyKind(wallClock, DateTimeKind.Utc), AttributeDataType.DateTime)),
+            "An unspecified kind is taken to be UTC already; converting from the host's local time would move the anchor by whichever machine ran the run.");
+    }
+
+    #endregion
+
     #region Dates
 
     [Test]

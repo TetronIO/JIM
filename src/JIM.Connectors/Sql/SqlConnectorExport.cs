@@ -208,9 +208,14 @@ internal sealed class SqlConnectorExport
         var columnValues = BuildParentColumnValues(plan, pendingExport, forCreate: true);
         var suppliedAnchor = ResolveSuppliedAnchor(plan, columnValues);
 
+        // Resolved before a row is written: the external ID is what JIM will identify the new object by
+        // for the rest of its life, so an anchor column this export could not compose one from fails the
+        // object while there is still nothing to undo.
+        var anchorTypes = ResolveAnchorTypes(plan);
+
         var (externalId, anchor) = suppliedAnchor == null
-            ? await InsertReturningGeneratedKeyAsync(plan, columnValues, transaction, cancellationToken)
-            : await InsertWithSuppliedAnchorAsync(plan, columnValues, suppliedAnchor, transaction, cancellationToken);
+            ? await InsertReturningGeneratedKeyAsync(plan, anchorTypes, columnValues, transaction, cancellationToken)
+            : await InsertWithSuppliedAnchorAsync(plan, anchorTypes, columnValues, suppliedAnchor, transaction, cancellationToken);
 
         await ApplyRelatedChangesAsync(plan, anchor, pendingExport, transaction, cancellationToken);
 
@@ -223,6 +228,7 @@ internal sealed class SqlConnectorExport
     /// </summary>
     private async Task<(string ExternalId, IReadOnlyList<SqlExportColumnValue> Anchor)> InsertWithSuppliedAnchorAsync(
         SqlExportPlan plan,
+        IReadOnlyDictionary<string, AttributeDataType> anchorTypes,
         IReadOnlyList<SqlExportColumnValue> columnValues,
         IReadOnlyList<SqlExportColumnValue> suppliedAnchor,
         DbTransaction transaction,
@@ -240,7 +246,7 @@ internal sealed class SqlConnectorExport
         if (rowsAffected == 0)
             throw new InvalidOperationException(InsertWroteNothingMessage(plan.QualifiedTableName));
 
-        return (ComposeExternalId(plan, suppliedAnchor), suppliedAnchor);
+        return (ComposeExternalId(anchorTypes, suppliedAnchor), suppliedAnchor);
     }
 
     /// <summary>
@@ -249,6 +255,7 @@ internal sealed class SqlConnectorExport
     /// </summary>
     private async Task<(string ExternalId, IReadOnlyList<SqlExportColumnValue> Anchor)> InsertReturningGeneratedKeyAsync(
         SqlExportPlan plan,
+        IReadOnlyDictionary<string, AttributeDataType> anchorTypes,
         IReadOnlyList<SqlExportColumnValue> columnValues,
         DbTransaction transaction,
         CancellationToken cancellationToken)
@@ -281,7 +288,7 @@ internal sealed class SqlConnectorExport
         }
         else
         {
-            var keyParameter = _provider.CreateGeneratedKeyParameter(GeneratedKeyParameterName, ResolveAnchorType(plan, anchorColumn))
+            var keyParameter = _provider.CreateGeneratedKeyParameter(GeneratedKeyParameterName, anchorTypes[anchorColumn])
                 ?? throw new NotSupportedException($"The {_provider.DisplayName} provider returns a generated key through a bound parameter but supplied none for it.");
 
             command.Parameters.Add(keyParameter);
@@ -300,7 +307,7 @@ internal sealed class SqlConnectorExport
                 "Nothing would identify the new object, so the write is being rolled back; check that the column is backed by an identity, a sequence or a default.");
 
         var anchor = new[] { new SqlExportColumnValue(anchorColumn, AnchorParameterName(0), generatedKey) };
-        return (ComposeExternalId(plan, anchor), anchor);
+        return (ComposeExternalId(anchorTypes, anchor), anchor);
     }
 
     /// <summary>
@@ -618,27 +625,44 @@ internal sealed class SqlConnectorExport
     /// <see cref="ISqlProvider.ConvertToGuid"/>, which is the same round trip the row itself makes.
     /// </para>
     /// </remarks>
-    private string ComposeExternalId(SqlExportPlan plan, IReadOnlyList<SqlExportColumnValue> anchor)
+    private string ComposeExternalId(IReadOnlyDictionary<string, AttributeDataType> anchorTypes, IReadOnlyList<SqlExportColumnValue> anchor)
     {
         return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, anchor.Select(columnValue => columnValue.Value == null
             ? string.Empty
-            : SqlAnchorValue.ToTokenString(_provider, columnValue.Value, ResolveAnchorType(plan, columnValue.ColumnName))));
+            : SqlAnchorValue.ToTokenString(_provider, columnValue.Value, anchorTypes[columnValue.ColumnName])));
     }
 
     /// <summary>
-    /// The JIM attribute type of one anchor column, which decides both how a database-generated key is
+    /// The JIM attribute type of each anchor column, which decides both how a database-generated key is
     /// returned and how the external ID is composed from it.
     /// </summary>
     /// <remarks>
     /// Taken from the database's own catalogue, as every other type this export binds by is (see the
     /// remarks on this class). That is also where the recorded schema an import composes by came from, so
     /// the two agree by construction rather than by coincidence. An anchor column JIM has no attribute
-    /// type for fails the object here, naming it: guessing an exact numeric because identities and
-    /// sequences usually generate one is how a GUID key came to be rendered as hex.
+    /// type for fails the object here, naming it: assuming an exact numeric because identities and
+    /// sequences usually generate one is how a GUID key came to be recorded as hex.
     /// </remarks>
-    private AttributeDataType ResolveAnchorType(SqlExportPlan plan, string anchorColumn)
+    private Dictionary<string, AttributeDataType> ResolveAnchorTypes(SqlExportPlan plan)
     {
-        return MapColumnType(anchorColumn, anchorColumn, plan.ParentColumns.Require(anchorColumn));
+        var anchorTypes = new Dictionary<string, AttributeDataType>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var anchorColumn in plan.AnchorColumns)
+        {
+            var columnType = plan.ParentColumns.Require(anchorColumn);
+
+            try
+            {
+                anchorTypes[anchorColumn] = _provider.MapColumnType(columnType, _typeMappingOptions);
+            }
+            catch (SqlTypeMappingException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Object Type '{plan.Name}' is identified by column '{anchorColumn}' of type '{columnType.TypeName}', which JIM has no attribute type for, so there is no external ID it could compose that the confirming import would recognise. {ex.Message}", ex);
+            }
+        }
+
+        return anchorTypes;
     }
 
     #endregion
