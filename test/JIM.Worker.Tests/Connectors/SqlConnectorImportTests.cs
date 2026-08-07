@@ -141,6 +141,96 @@ public class SqlConnectorImportTests
             "A Connected System Object is identified by one value, so a composite anchor is projected as the composed attribute schema discovery declared.");
     }
 
+    [Test]
+    public async Task ImportAsync_AnOracleRaw16Anchor_ReadsEveryRowAndPagesOnTheGuidTheBytesMean()
+    {
+        // The shape that made this Connector unusable against Oracle: a primary key declared
+        // RAW(16) DEFAULT SYS_GUID(). The driver hands back bytes, never a Guid, and composing the
+        // anchor without the dialect's own byte order failed every row of the run.
+        const string document = """
+            {
+              "objectTypes": [
+                { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "STAFF_GUID" ] }
+              ]
+            }
+            """;
+
+        var identifiers = new[]
+        {
+            Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            Guid.Parse("550e8400-e29b-41d4-a716-446655440000"),
+            Guid.Parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+        };
+
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["STAFF_GUID", "DISPLAY_NAME"],
+            [IdentifierParser.ToRfc4122Bytes(identifiers[0]), "Ada"],
+            [IdentifierParser.ToRfc4122Bytes(identifiers[1]), "Grace"],
+            [IdentifierParser.ToRfc4122Bytes(identifiers[2]), "Katherine"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("STAFF_GUID", AttributeDataType.Guid, isExternalId: true),
+                    Attribute("DISPLAY_NAME", AttributeDataType.Text))
+            ]
+        };
+
+        // Two rows a page, so the run also has to write an anchor into a pagination token and bind it
+        // back as the boundary of the next page.
+        var run = await RunImportAsync(provider, document, connectedSystem, pageSize: 2);
+
+        var imported = run.ImportObjects
+            .Select(importObject => Attribute(importObject, "STAFF_GUID").GuidValues.Single())
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.Pages, Has.Count.GreaterThan(1), "Three rows at two a page means the pagination token was replayed at least once.");
+            Assert.That(imported, Is.EquivalentTo(identifiers),
+                "Oracle stores a GUID big-endian; reading it as Microsoft byte order transposes the first three components with no error raised.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_ACompositeAnchorMixingAGuidAndANumber_ComposesTheExternalIdFromBothParts()
+    {
+        const string document = """
+            {
+              "objectTypes": [
+                { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "COMPANY_ID", "STAFF_GUID" ] }
+              ]
+            }
+            """;
+
+        var identifier = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["COMPANY_ID", "STAFF_GUID", "DISPLAY_NAME"],
+            [7, IdentifierParser.ToRfc4122Bytes(identifier), "Ada"]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("COMPANY_ID", AttributeDataType.Number),
+                    Attribute("STAFF_GUID", AttributeDataType.Guid),
+                    Attribute("DISPLAY_NAME", AttributeDataType.Text),
+                    Attribute("COMPANY_ID+STAFF_GUID", AttributeDataType.Text, isExternalId: true))
+            ]
+        };
+
+        var run = await RunImportAsync(provider, document, connectedSystem, pageSize: 10);
+
+        Assert.That(Attribute(run.ImportObjects.Single(), "COMPANY_ID+STAFF_GUID").StringValues.Single(),
+            Is.EqualTo($"7+{identifier:D}"),
+            "Each part of a composed anchor is rendered by its own type, so a GUID part is the hyphenated form beside a plain integer.");
+    }
+
     #endregion
 
     #region Object shaping
