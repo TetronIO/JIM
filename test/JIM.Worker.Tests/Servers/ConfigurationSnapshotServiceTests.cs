@@ -285,6 +285,42 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesWritableOnCreateAttributeWritability()
+    {
+        // A schema refresh that changes an attribute's writability changes what JIM may export to it, so the
+        // third state has to reach the snapshot with its own value rather than collapsing onto another.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "HR Database",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "employees", Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = 11, Name = "employee_number", Type = AttributeDataType.Text, Selected = true,
+                            Writability = AttributeWritability.WritableOnCreate
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var attribute = Child(Child(snapshot.Root, "objectTypes")!.Children![0], "attributes")!.Children![0];
+        var writability = Child(attribute, "writability")!;
+        Assert.That(writability.Value, Is.EqualTo("WritableOnCreate"));
+        Assert.That(writability.DisplayValue, Is.EqualTo("Writable On Create"),
+            "the diff shows administrators the display value, so it must read as words rather than an enum name");
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
     {
         // Status (Active/Deleting) is runtime state, not configuration; snapshotting it would record phantom
