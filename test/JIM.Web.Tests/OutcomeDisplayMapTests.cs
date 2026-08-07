@@ -49,7 +49,8 @@ public class OutcomeDisplayMapTests
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Would become deletion eligible", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
         (ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Deletion date would change", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
-        (ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "Deprovision queued", "CSO Pending Delete", CausalityTone.Error, Icons.Material.Filled.AutoDelete)
+        (ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued, "Deprovision queued", "CSO Pending Delete", CausalityTone.Error, Icons.Material.Filled.AutoDelete),
+        (ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Would disconnect from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff)
     ];
 
     [Test]

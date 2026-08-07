@@ -211,7 +211,7 @@ public class InitialPasswordProvisioningDatabaseTests
         await using var verify = NewContext();
         var stored = await verify.SyncRuleInitialPasswords.AsNoTracking().SingleAsync(ip => ip.SyncRuleId == syncRuleId);
         var policy = stored.CustomPolicy;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Enabled, Is.True);
             Assert.That(stored.Source, Is.EqualTo(InitialPasswordSource.Custom));
@@ -230,7 +230,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(policy.AppendedDigitCount, Is.EqualTo(3));
             Assert.That(policy.AppendSymbol, Is.True);
             Assert.That(policy.ExcludeAmbiguousCharacters, Is.False);
-        });
+        }
     }
 
     /// <summary>
@@ -333,7 +333,7 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(csoId));
             Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
@@ -345,7 +345,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(stored.CreatedAt, Is.EqualTo(createdAt).Within(TimeSpan.FromMilliseconds(1)));
             Assert.That(stored.LastAttemptedAt, Is.EqualTo(lastAttemptedAt).Within(TimeSpan.FromMilliseconds(1)));
             Assert.That(stored.ExpiresAt, Is.EqualTo(expiresAt).Within(TimeSpan.FromMilliseconds(1)));
-        });
+        }
     }
 
     /// <summary>
@@ -367,7 +367,7 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.SyncRuleId, Is.Null);
             Assert.That(stored.FailureReason, Is.Null);
@@ -376,7 +376,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(stored.ExpiresAt, Is.Null);
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
             Assert.That(stored.AttemptCount, Is.Zero);
-        });
+        }
     }
 
     /// <summary>
@@ -418,12 +418,12 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Id, Is.EqualTo(firstId));
             Assert.That(stored.AttemptCount, Is.EqualTo(2), "the existing record's progress must not be reset by re-staging");
             Assert.That(stored.TargetMessage, Is.EqualTo("The directory was unreachable."));
-        });
+        }
     }
 
     /// <summary>
@@ -504,7 +504,7 @@ public class InitialPasswordProvisioningDatabaseTests
 
         await using var verify = NewContext();
         var stored = await verify.PendingInitialPasswords.AsNoTracking().SingleAsync(p => p.Id == id);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Parked));
             Assert.That(stored.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
@@ -517,7 +517,7 @@ public class InitialPasswordProvisioningDatabaseTests
             Assert.That(stored.ConnectedSystemId, Is.EqualTo(systemId));
             Assert.That(stored.SyncRuleId, Is.EqualTo(syncRuleId));
             Assert.That(stored.CreatedAt, Is.EqualTo(createdAt).Within(TimeSpan.FromMilliseconds(1)), "when the work was staged is not something an attempt changes");
-        });
+        }
     }
 
     /// <summary>

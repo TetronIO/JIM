@@ -317,11 +317,11 @@ public class SqlTypeMapperTests
         var exception = Assert.Throws<SqlTypeMappingException>(() =>
             SqlTypeMapper.Map(databaseType, new SqlColumnType(typeName), SqlTypeMappingOptions.Default));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.SqlTypeName, Is.EqualTo(typeName), "The administrator needs to know which column type JIM could not map.");
             Assert.That(exception.Message, Does.Contain(typeName), "A mapping failure must name the offending type so it can be fixed or excluded.");
-        });
+        }
     }
 
     [Test]

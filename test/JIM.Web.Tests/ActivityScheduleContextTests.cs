@@ -109,11 +109,11 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.ScheduleExecutionId, (Guid?)null)
             .Add(c => c.ScheduleStepIndex, (int?)null));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup.Trim(), Is.Empty);
             Assert.That(cut.HasComponent<MudAlert>(), Is.False);
-        });
+        }
 
         // An Activity with no Schedule behind it must not cost a database round trip either.
         _mockSchedulingRepository.Verify(r => r.GetScheduleExecutionAsync(It.IsAny<Guid>()), Times.Never);
@@ -141,14 +141,14 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.ScheduleStepIndex, 2));
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(ScheduleName)));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // The page-width panel lays the facts out as labelled fields, one per line, matching the Summary
             // panel above it; the step is its own labelled field rather than part of a sentence.
             Assert.That(cut.Markup, Does.Contain(StepLabel));
             // ScheduleStepIndex is 0-based; the display is 1-based, so index 2 reads as "3 of 6".
             Assert.That(cut.Markup, Does.Contain("3 of 6"));
-        });
+        }
     }
 
     /// <summary>
@@ -169,14 +169,14 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.Compact, false));
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(ScheduleName)));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain(ScheduleLabel));
             Assert.That(cut.Markup, Does.Contain(StepLabel));
             Assert.That(cut.Markup, Does.Contain(ScheduleExecutionLabel));
             // The run's outcome, which is what the labelled chip has to be readable as.
             Assert.That(cut.Markup, Does.Contain("Complete"));
-        });
+        }
     }
 
     /// <summary>
@@ -239,12 +239,12 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.ScheduleStepIndex, (int?)null));
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(ScheduleName)));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // Omitted entirely rather than rendered as an empty field.
             Assert.That(cut.Markup, Does.Not.Contain(StepLabel));
             Assert.That(cut.FindComponents<MudItem>(), Has.Count.EqualTo(2));
-        });
+        }
     }
 
     /// <summary>
@@ -262,12 +262,12 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.Compact, false));
 
         cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudPaper>(), Is.True));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.HasComponent<MudAlert>(), Is.False);
             Assert.That(cut.Markup, Does.Contain(PagePanelHeading));
             Assert.That(cut.Markup, Does.Contain("View Schedule Execution"));
-        });
+        }
     }
 
     [Test]
@@ -281,12 +281,12 @@ public class ActivityScheduleContextTests : JimComponentTestContext
             .Add(c => c.Compact, true));
 
         cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudPaper>(), Is.True));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.HasComponent<MudAlert>(), Is.False);
             // Both variants are papers now, so the heading is what tells them apart.
             Assert.That(cut.Markup, Does.Not.Contain(PagePanelHeading));
-        });
+        }
     }
 
     [Test]

@@ -234,11 +234,11 @@ public class RunProgressMetricsTests : JimComponentTestContext
         // would couple the test to a third party's internals for no extra confidence.
         var cut = RenderMetrics();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindComponent<MudProgressLinear>().Instance.Indeterminate, Is.False);
             Assert.That(cut.Find(".jim-run-percent").TextContent.Trim(), Is.EqualTo("33.2%"));
-        });
+        }
     }
 
     [Test]
@@ -276,12 +276,12 @@ public class RunProgressMetricsTests : JimComponentTestContext
     {
         var cut = RenderMetrics(total: 0, secondsRemaining: null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.FindComponent<MudProgressLinear>().Instance.Indeterminate, Is.True);
             Assert.That(cut.FindAll(".jim-run-percent"), Is.Empty);
             Assert.That(Labels(cut), Does.Not.Contain("Remaining"));
-        });
+        }
     }
 
     [Test]
@@ -329,11 +329,11 @@ public class RunProgressMetricsTests : JimComponentTestContext
         // layout does not jump once one arrives.
         var cut = RenderMetrics(objectsPerSecond: null, secondsRemaining: null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(Labels(cut), Does.Contain("Rate"));
             Assert.That(cut.HasComponent<EmptyValue>(), Is.True);
-        });
+        }
     }
 
     [Test]

@@ -248,3 +248,21 @@ public enum ConnectedSystemExportErrorType
     /// </summary>
     ConcurrencyConflict
 }
+
+/// <summary>
+/// How far beneath a selected Connected System Container objects are imported from.
+/// </summary>
+public enum ConnectedSystemContainerScope
+{
+    /// <summary>
+    /// Objects in this Container and in every Container beneath it. The default, and the behaviour
+    /// of every Container selected before this option existed.
+    /// </summary>
+    Subtree = 0,
+
+    /// <summary>
+    /// Objects directly within this Container only. Containers beneath it are not imported from unless
+    /// they are selected in their own right.
+    /// </summary>
+    OneLevel = 1
+}

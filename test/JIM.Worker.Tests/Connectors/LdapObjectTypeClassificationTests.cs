@@ -60,10 +60,10 @@ public class LdapObjectTypeClassificationTests
     private static void AssertClassification(ConnectorSchemaObjectTypeTag? tag, string expectedValue)
     {
         Assert.That(tag, Is.Not.Null, "The connector must report a classification for a class kind it recognises.");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(tag!.Key, Is.EqualTo(ObjectTypeTags.Keys.ClassKind));
             Assert.That(tag!.Value, Is.EqualTo(expectedValue));
-        });
+        }
     }
 }

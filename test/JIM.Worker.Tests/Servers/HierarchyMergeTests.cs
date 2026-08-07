@@ -38,13 +38,13 @@ public class HierarchyMergeTests
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, new List<ConnectorPartition>());
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connectedSystem.Partitions, Has.Count.EqualTo(2), "existing partitions must survive an empty discovery");
             Assert.That(result.RemovedPartitions, Is.Empty, "nothing should be reported as removed");
             Assert.That(result.HasChanges, Is.False);
             Assert.That(result.HasSelectedItemsRemoved, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -67,12 +67,12 @@ public class HierarchyMergeTests
             new List<ConnectorPartition> { new() { Id = "DC=keep,DC=local", Name = "Keep" } });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connectedSystem.Partitions.Select(p => p.ExternalId), Is.EquivalentTo(new[] { "DC=keep,DC=local" }));
             Assert.That(result.RemovedPartitions, Has.Count.EqualTo(1));
             Assert.That(result.RemovedPartitions[0].ExternalId, Is.EqualTo("DC=gone,DC=local"));
-        });
+        }
     }
 
     #endregion
@@ -92,13 +92,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("DC=test,DC=local"));
             Assert.That(item.Name, Is.EqualTo("test.local"));
             Assert.That(item.WasSelected, Is.True);
             Assert.That(item.ItemType, Is.EqualTo(HierarchyItemType.Partition));
-        });
+        }
     }
 
     [Test]
@@ -114,13 +114,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("OU=Users,DC=test,DC=local"));
             Assert.That(item.Name, Is.EqualTo("Users"));
             Assert.That(item.WasSelected, Is.False);
             Assert.That(item.ItemType, Is.EqualTo(HierarchyItemType.Container));
-        });
+        }
     }
 
     #endregion
@@ -140,13 +140,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("OU=HR,DC=test,DC=local"));
             Assert.That(item.OldName, Is.EqualTo("Human Resources"));
             Assert.That(item.NewName, Is.EqualTo("People Operations"));
             Assert.That(item.ItemType, Is.EqualTo(HierarchyItemType.Container));
-        });
+        }
     }
 
     #endregion
@@ -166,13 +166,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("OU=Contractors,DC=test,DC=local"));
             Assert.That(item.Name, Is.EqualTo("Contractors"));
             Assert.That(item.OldParentExternalId, Is.EqualTo("OU=Vendors,DC=test,DC=local"));
             Assert.That(item.NewParentExternalId, Is.EqualTo("OU=Users,DC=test,DC=local"));
-        });
+        }
     }
 
     [Test]
@@ -188,11 +188,11 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.OldParentExternalId, Is.Null);
             Assert.That(item.NewParentExternalId, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -208,11 +208,11 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.OldParentExternalId, Is.Not.Null);
             Assert.That(item.NewParentExternalId, Is.Null);
-        });
+        }
     }
 
     #endregion
@@ -247,7 +247,7 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.HasChanges, Is.True);
             Assert.That(result.HasSelectedItemsRemoved, Is.True);
@@ -255,7 +255,7 @@ public class HierarchyMergeTests
             Assert.That(result.RemovedContainers, Has.Count.EqualTo(1));
             Assert.That(result.RenamedContainers, Has.Count.EqualTo(1));
             Assert.That(result.MovedContainers, Has.Count.EqualTo(1));
-        });
+        }
 
         // Verify summary includes all change types
         var summary = result.GetSummary();
@@ -343,11 +343,11 @@ public class HierarchyMergeTests
         parent.AddChildContainer(child);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parent.ChildContainers, Contains.Item(child));
             Assert.That(child.ParentContainer, Is.SameAs(parent));
-        });
+        }
     }
 
     [Test]
@@ -475,14 +475,14 @@ public class HierarchyMergeTests
         var found3 = lookup.TryGetValue("OU=USERS,DC=TEST,DC=LOCAL", out var container3);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(found1, Is.True);
             Assert.That(found2, Is.True);
             Assert.That(found3, Is.True);
             Assert.That(container1, Is.SameAs(container2));
             Assert.That(container2, Is.SameAs(container3));
-        });
+        }
     }
 
     #endregion
@@ -513,7 +513,7 @@ public class HierarchyMergeTests
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
 
         var container = connectedSystem.Partitions![0].Containers!.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(container.Selected, Is.True, "a rename in the directory must not deselect a managed container");
             Assert.That(container.ExternalId, Is.EqualTo("OU=Colleagues,DC=test,DC=local"), "the new Distinguished Name must be adopted");
@@ -522,7 +522,7 @@ public class HierarchyMergeTests
             Assert.That(result.RemovedContainers, Is.Empty, "nothing left the directory");
             Assert.That(result.AddedContainers, Is.Empty, "nothing arrived in the directory");
             Assert.That(result.HasSelectedItemsRemoved, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -544,13 +544,13 @@ public class HierarchyMergeTests
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
 
         var container = connectedSystem.Partitions![0].Containers!.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(container.Selected, Is.True);
             Assert.That(container.ExternalId, Is.EqualTo("OU=Users,OU=Retired,DC=test,DC=local"));
             Assert.That(result.RemovedContainers, Is.Empty);
             Assert.That(result.HasSelectedItemsRemoved, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -571,12 +571,12 @@ public class HierarchyMergeTests
 
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.RemovedContainers, Has.Count.EqualTo(1));
             Assert.That(result.RemovedContainers[0].ExternalId, Is.EqualTo("OU=Users,DC=test,DC=local"));
             Assert.That(result.HasSelectedItemsRemoved, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -598,12 +598,12 @@ public class HierarchyMergeTests
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
 
         var container = connectedSystem.Partitions![0].Containers!.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(container.Selected, Is.True);
             Assert.That(result.RemovedContainers, Is.Empty);
             Assert.That(result.AddedContainers, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -625,11 +625,11 @@ public class HierarchyMergeTests
         ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
 
         var container = connectedSystem.Partitions![0].Containers!.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(container.StableId, Is.EqualTo("6f9619ff-8b86-d011-b42d-00c04fc964ff"));
             Assert.That(container.Selected, Is.True);
-        });
+        }
     }
 
     /// <summary>
@@ -653,13 +653,13 @@ public class HierarchyMergeTests
 
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connectedSystem.Partitions![0].Containers!.Select(c => c.ExternalId),
                 Is.EquivalentTo(new[] { "OU=Users,DC=test,DC=local", "OU=Contractors,DC=test,DC=local" }));
             Assert.That(result.AddedContainers, Has.Count.EqualTo(1));
             Assert.That(result.RemovedContainers, Is.Empty, "a container that was just discovered has not been removed from the directory");
-        });
+        }
     }
 
     private static ConnectedSystem SystemWithOneContainer(string containerExternalId, string containerName, string? stableId, bool selected)

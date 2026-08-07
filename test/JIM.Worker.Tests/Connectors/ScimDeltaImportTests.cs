@@ -49,12 +49,12 @@ public class ScimDeltaImportTests
     {
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.FullImport, ScimDeltaStrategy.Auto, Capabilities(true), Watermark);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
             Assert.That(plan.Filter, Is.Null);
             Assert.That(plan.WarningMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -62,12 +62,12 @@ public class ScimDeltaImportTests
     {
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.Auto, Capabilities(true), Watermark);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.LastModifiedFilter));
             Assert.That(plan.Filter, Is.EqualTo("meta.lastModified gt \"2026-07-30T10:00:00Z\""));
             Assert.That(plan.WarningMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -77,13 +77,13 @@ public class ScimDeltaImportTests
         // establishes the watermark, where failing the run would leave it permanently unavailable.
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.Auto, Capabilities(true), watermark: null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
             Assert.That(plan.Filter, Is.Null);
             Assert.That(plan.WarningMessage, Is.Not.Null);
             Assert.That(plan.WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
-        });
+        }
     }
 
     [Test]
@@ -91,12 +91,12 @@ public class ScimDeltaImportTests
     {
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.Auto, Capabilities(false), Watermark);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
             Assert.That(plan.WarningMessage, Is.Not.Null);
             Assert.That(plan.WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
-        });
+        }
     }
 
     [Test]
@@ -105,12 +105,12 @@ public class ScimDeltaImportTests
         // The override exists because providers do support filtering without advertising it.
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.LastModifiedFilter, Capabilities(false), Watermark);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.LastModifiedFilter));
             Assert.That(plan.Filter, Is.Not.Null);
             Assert.That(plan.WarningMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -118,12 +118,12 @@ public class ScimDeltaImportTests
     {
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.FullScan, Capabilities(true), Watermark);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
             Assert.That(plan.Filter, Is.Null);
             Assert.That(plan.WarningMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -131,11 +131,11 @@ public class ScimDeltaImportTests
     {
         var plan = ScimImportPlan.Create(ConnectedSystemRunType.DeltaImport, ScimDeltaStrategy.LastModifiedFilter, Capabilities(true), watermark: null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
             Assert.That(plan.WarningMessage, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -352,12 +352,12 @@ public class ScimDeltaImportTests
 
         var results = await RunImportAsync(handler, ConnectedSystem(), RunProfile(), persistedConnectorData: null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].WarningMessage, Is.Not.Null);
             Assert.That(results[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
             Assert.That(results[0].ImportObjects, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -382,12 +382,12 @@ public class ScimDeltaImportTests
 
         var results = await RunImportAsync(handler, ConnectedSystem(), RunProfile(ConnectedSystemRunType.FullImport, pageSize: 2), null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(2));
             Assert.That(results[0].PersistedConnectorData, Is.Null);
             Assert.That(results[1].PersistedConnectorData, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -409,12 +409,12 @@ public class ScimDeltaImportTests
 
         var results = await RunImportAsync(handler, ConnectedSystem(), RunProfile(), persisted);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].WarningMessage, Is.Not.Null);
             Assert.That(handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query,
                 Does.Not.Contain("filter"));
-        });
+        }
     }
 
     [Test]
@@ -425,13 +425,13 @@ public class ScimDeltaImportTests
 
         var results = await RunImportAsync(handler, ConnectedSystem(ScimConnectorConstants.ChangeDetectionFullScan), RunProfile(), persisted);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query,
                 Does.Not.Contain("filter"));
             // Deliberate configuration, so it is not reported as a shortfall on every run.
             Assert.That(results[0].WarningMessage, Is.Null);
-        });
+        }
     }
     #endregion
 

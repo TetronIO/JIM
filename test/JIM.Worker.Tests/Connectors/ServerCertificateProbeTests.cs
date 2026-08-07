@@ -86,7 +86,7 @@ public class ServerCertificateProbeTests
         var diagnostic = Probe(_host, _port);
 
         Assert.That(diagnostic, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(diagnostic!.Subject, Does.Contain(_host));
             Assert.That(diagnostic!.Issuer, Is.Not.Null.And.Not.Empty);
@@ -95,7 +95,7 @@ public class ServerCertificateProbeTests
             Assert.That(diagnostic!.ValidFrom, Is.Not.Null);
             Assert.That(diagnostic!.ValidTo, Is.Not.Null);
             Assert.That(diagnostic!.Remediation, Is.Not.Null.And.Not.Empty);
-        });
+        }
     }
 
     [Test]
@@ -108,12 +108,12 @@ public class ServerCertificateProbeTests
         var diagnostic = Probe(mismatchedHost!, _port, TrustedCertificates());
 
         Assert.That(diagnostic, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // Reported ahead of the issuer, because trusting the issuer is not what fixes this.
             Assert.That(diagnostic!.FailureReason, Is.EqualTo(ServerCertificateFailureReason.NameMismatch));
             Assert.That(diagnostic!.Remediation, Does.Contain(mismatchedHost!));
-        });
+        }
     }
 
     [Test]
@@ -127,11 +127,11 @@ public class ServerCertificateProbeTests
         var diagnostic = Probe(expiredHost!, int.Parse(expiredPort!), TrustedCertificates());
 
         Assert.That(diagnostic, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(diagnostic!.FailureReason, Is.EqualTo(ServerCertificateFailureReason.Expired));
             Assert.That(diagnostic!.IsExpired, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -140,14 +140,14 @@ public class ServerCertificateProbeTests
         var diagnostic = Probe(_host, _port);
 
         Assert.That(diagnostic, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // The test servers are issued by a certificate authority they send alongside their own certificate,
             // which is what lets an administrator trust the authority instead of repeating this at every renewal.
             Assert.That(diagnostic!.IsSelfSigned, Is.False);
             Assert.That(diagnostic!.IsIssuerCertificateAvailable, Is.True);
             Assert.That(diagnostic!.IssuerThumbprint, Is.Not.EqualTo(diagnostic!.Thumbprint));
-        });
+        }
     }
 
     [Test]
@@ -157,14 +157,14 @@ public class ServerCertificateProbeTests
 
         Assert.That(reading, Is.Not.Null);
         Assert.That(reading!.Chain, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reading!.Chain!.Leaf.Thumbprint, Is.EqualTo(reading!.Diagnostic.Thumbprint));
             Assert.That(reading!.Chain!.Leaf.Data, Is.Not.Empty);
             Assert.That(reading!.Chain!.Issuer, Is.Not.Null);
             Assert.That(reading!.Chain!.Issuer!.Data, Is.Not.Empty);
             Assert.That(reading!.Chain!.Issuer!.Thumbprint, Is.EqualTo(reading!.Diagnostic.IssuerThumbprint));
-        });
+        }
     }
 
     [Test]

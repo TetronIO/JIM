@@ -232,19 +232,21 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
-    /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy
-    /// beneath every selected partition.
+    /// Collects every container the Connected System manages, walking the whole hierarchy beneath every selected
+    /// partition.
     /// </summary>
     /// <remarks>
-    /// This is the scope JIM manages, and it answers two questions that must not diverge: where a rights check
-    /// should be run, and where an export is permitted to write. Selecting a container selects its subtree, so a
-    /// caller comparing against this list should treat a descendant identifier as in scope.
+    /// This is the scope JIM manages, and it answers questions that must not diverge: where a rights check should
+    /// be run, where an export is permitted to write, and which objects a deselection would take out of scope. The
+    /// containers themselves are returned rather than their identifiers because each carries its own
+    /// <see cref="ConnectedSystemContainer.Scope"/>, and a caller that saw only identifiers would have to assume a
+    /// subtree, which is wrong for every <see cref="ConnectedSystemContainerScope.OneLevel"/> container.
     /// </remarks>
-    public static List<string> GetSelectedContainerExternalIds(this ConnectedSystem connectedSystem)
+    public static List<ConnectedSystemContainer> GetSelectedContainers(this ConnectedSystem connectedSystem)
     {
         ArgumentNullException.ThrowIfNull(connectedSystem);
 
-        var selected = new List<string>();
+        var selected = new List<ConnectedSystemContainer>();
         if (connectedSystem.Partitions == null)
             return selected;
 
@@ -256,10 +258,24 @@ public static class ConnectedSystemExtensions
         return selected;
     }
 
-    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<string> selected)
+    /// <summary>
+    /// The external ids of every container the Connected System manages, for callers that genuinely need only the
+    /// identifiers (a rights check, which asks about the container itself rather than about objects within it).
+    /// </summary>
+    /// <remarks>
+    /// Anything deciding whether an *object* is in scope must use <see cref="GetSelectedContainers"/> instead and
+    /// honour each container's scope; an identifier alone cannot express the difference between a subtree and one
+    /// level.
+    /// </remarks>
+    public static List<string> GetSelectedContainerExternalIds(this ConnectedSystem connectedSystem) =>
+        [.. connectedSystem.GetSelectedContainers()
+            .Where(c => !string.IsNullOrEmpty(c.ExternalId))
+            .Select(c => c.ExternalId)];
+
+    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<ConnectedSystemContainer> selected)
     {
-        if (container.Selected && !string.IsNullOrEmpty(container.ExternalId))
-            selected.Add(container.ExternalId);
+        if (container.Selected)
+            selected.Add(container);
 
         foreach (var child in container.ChildContainers)
             CollectSelectedContainers(child, selected);

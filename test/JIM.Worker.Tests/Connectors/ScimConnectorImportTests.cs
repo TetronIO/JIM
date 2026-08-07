@@ -145,12 +145,12 @@ public class ScimConnectorImportTests
         var imported = results.SelectMany(r => r.ImportObjects).ToList();
 
         Assert.That(imported, Has.Count.EqualTo(2));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(imported, Has.All.Property(nameof(ConnectedSystemImportObject.ObjectType)).EqualTo("User"));
             Assert.That(imported[0].Attributes.Single(a => a.Name == "userName").StringValues, Is.EqualTo(new[] { "alice" }));
             Assert.That(imported[0].Attributes.Single(a => a.Name == "id").StringValues, Is.EqualTo(new[] { "alice-id" }));
-        });
+        }
     }
 
     [Test]
@@ -193,11 +193,11 @@ public class ScimConnectorImportTests
         var results = await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "User"), RunProfile(pageSize: 10));
         var imported = results[0].ImportObjects.Single();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(imported.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
             Assert.That(imported.ErrorMessage, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -211,13 +211,13 @@ public class ScimConnectorImportTests
 
         var results = await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "User"), RunProfile(pageSize: 10));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].WarningMessage, Is.Not.Null);
             Assert.That(results[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued));
             // The object is still imported: the warning is about one value, not the whole object.
             Assert.That(results[0].ImportObjects, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -271,11 +271,11 @@ public class ScimConnectorImportTests
 
         var results = await RunImportAsync(handler, ConnectedSystem(selectedObjectTypes: "User"), RunProfile(pageSize: 10));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Has.Count.EqualTo(1));
             Assert.That(results[0].PaginationTokens, Is.Empty);
-        });
+        }
     }
     #endregion
 
@@ -306,11 +306,11 @@ public class ScimConnectorImportTests
         await RunImportAsync(handler, ConnectedSystem(ScimConnectorConstants.PaginationModeCursor, selectedObjectTypes: "User"), RunProfile(pageSize: 10));
 
         var firstUserQuery = handler.Requests.First(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(firstUserQuery, Does.Contain("cursor="));
             Assert.That(firstUserQuery, Does.Not.Contain("startIndex"));
-        });
+        }
     }
 
     [Test]
@@ -369,11 +369,11 @@ public class ScimConnectorImportTests
 
         var results = await RunImportAsync(handler, connectedSystem, RunProfile(pageSize: 10));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].ImportObjects, Is.Empty);
             Assert.That(handler.Requests.Select(r => r.RequestUri!.AbsolutePath), Has.None.EndsWith("/Users"));
-        });
+        }
     }
 
     [Test]

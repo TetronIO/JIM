@@ -89,12 +89,12 @@ public class ChangeHistoryRetentionServerTests
         var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(
             generalCutoff, DateTime.UtcNow.AddDays(-3650), DateTime.UtcNow.AddDays(-365), 100);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.PreviewsDeleted, Is.EqualTo(6),
                 "housekeeping that removes preview data without reporting it leaves nobody able to explain the storage drop");
             Assert.That(sequence, Is.EqualTo(new[] { "previews", "activities" }));
-        });
+        }
     }
 
     [Test]

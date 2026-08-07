@@ -192,7 +192,15 @@ public static class ConfigurationChangeClassifier
         ["externalId"] = C,
         ["containers"] = C,
         ["container"] = C,
-        ["hidden"] = C
+        ["hidden"] = C,
+        // The one container scalar that is not cosmetic. Narrowing a container from Subtree to OneLevel takes every
+        // object below its own level out of scope, which is the container-removal case reached by a different route,
+        // so it carries that case's class. Widening is over-classified as a result: the classifier decides on the key
+        // and how it changed, never on the values, and splitting this one key by direction would mean threading values
+        // through both the classifier and the preflight, whose agreement is the invariant
+        // ContainerSelectionClassificationTests exists to hold. Over-warning on a deliberate, administrator-made
+        // widening is the safer side of that trade; the consequence text distinguishes the two directions.
+        ["scope"] = A
     };
 
     /// <summary>
@@ -208,6 +216,21 @@ public static class ConfigurationChangeClassifier
     private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemRemovalKeys = new(StringComparer.Ordinal)
     {
         ["container"] = A
+    };
+
+    /// <summary>
+    /// Keys whose *appearance* is less consequential than a change to them, classified for that case alone.
+    /// Everything else about the key keeps the class in <see cref="ConnectedSystemKeys"/>.
+    ///
+    /// Only a container's scope needs this. The snapshot holds selected containers only, so selecting a container
+    /// brings its whole node into the snapshot, scope included; the scope scalar arrives as an addition. Nothing has
+    /// left scope in that case, and the selection itself is already classified as a container appearing. Without this,
+    /// selecting any container at all would be reported as destructive, which is precisely the "warn about the wrong
+    /// things" failure the removal table above exists to avoid.
+    /// </summary>
+    private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemAdditionKeys = new(StringComparer.Ordinal)
+    {
+        ["scope"] = B
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> MetaverseObjectTypeKeys = new(StringComparer.Ordinal)
@@ -380,6 +403,13 @@ public static class ConfigurationChangeClassifier
             return removalClass;
         }
 
+        if (changeType == ConfigurationDiffChangeType.Added &&
+            AdditionTableFor(objectType) is { } additionTable &&
+            additionTable.TryGetValue(nodeKey, out var additionClass))
+        {
+            return additionClass;
+        }
+
         var table = TableFor(objectType);
         if (table.TryGetValue(nodeKey, out var result))
             return result;
@@ -442,6 +472,9 @@ public static class ConfigurationChangeClassifier
     /// </summary>
     private static Dictionary<string, ConfigurationChangeClass>? RemovalTableFor(string objectType) =>
         objectType == ConfigurationSnapshotService.ConnectedSystemObjectType ? ConnectedSystemRemovalKeys : null;
+
+    private static Dictionary<string, ConfigurationChangeClass>? AdditionTableFor(string objectType) =>
+        objectType == ConfigurationSnapshotService.ConnectedSystemObjectType ? ConnectedSystemAdditionKeys : null;
 
     /// <summary>
     /// Walks the diff tree yielding every node that actually changed, with how it changed: a removal can carry a

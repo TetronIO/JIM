@@ -38,12 +38,12 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString(original, AttributeDataType.Decimal);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.Decimal, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True, $"'{literal}' is a valid decimal anchor and must parse back.");
             Assert.That(value, Is.EqualTo(original), "Routing a decimal through double would lose digits that a 38-digit Oracle NUMBER key relies on.");
             Assert.That(token, Does.Not.Contain("E").IgnoreCase, "Exponent notation would not compare as the database does.");
-        });
+        }
     }
 
     [Test]
@@ -62,11 +62,11 @@ public class SqlAnchorValueTests
     {
         var parsed = SqlAnchorValue.TryFromTokenString("1.5", AttributeDataType.Decimal, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo(1.5m));
-        });
+        }
     }
 
     [Test]
@@ -87,11 +87,11 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString(4711, AttributeDataType.Number);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.Number, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo(4711));
-        });
+        }
     }
 
     [Test]
@@ -100,11 +100,11 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString(long.MaxValue, AttributeDataType.LongNumber);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.LongNumber, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo(long.MaxValue));
-        });
+        }
     }
 
     [Test]
@@ -113,11 +113,11 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString("EMP-0042", AttributeDataType.Text);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.Text, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo("EMP-0042"));
-        });
+        }
     }
 
     [Test]
@@ -128,12 +128,12 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString(original, AttributeDataType.Guid);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.Guid, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo(original));
             Assert.That(token, Is.EqualTo("550e8400-e29b-41d4-a716-446655440000"), "The canonical hyphenated form is what every provider round-trips predictably.");
-        });
+        }
     }
 
     [Test]
@@ -144,12 +144,12 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString(original, AttributeDataType.DateTime);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.DateTime, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo(original));
             Assert.That(((DateTime)value!).Kind, Is.EqualTo(DateTimeKind.Utc), "JIM stores every DateTime in UTC; an unspecified kind would shift the watermark by the host's offset.");
-        });
+        }
     }
 
     [Test]
@@ -160,11 +160,11 @@ public class SqlAnchorValueTests
         var token = SqlAnchorValue.ToTokenString(original, AttributeDataType.Binary);
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.Binary, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.True);
             Assert.That(value, Is.EqualTo(original));
-        });
+        }
     }
 
     #endregion
@@ -192,11 +192,11 @@ public class SqlAnchorValueTests
     {
         var parsed = SqlAnchorValue.TryFromTokenString(token, AttributeDataType.Number, out var value);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parsed, Is.False);
             Assert.That(value, Is.Null, "A failed parse must not leave a partially converted anchor behind.");
-        });
+        }
     }
 
     #endregion

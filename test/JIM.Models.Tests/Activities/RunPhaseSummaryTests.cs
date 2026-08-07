@@ -71,12 +71,12 @@ public class RunPhaseSummaryTests
         var summary = RunPhaseSummary.From(ImportSaving());
 
         Assert.That(summary, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(summary!.TotalSteps, Is.EqualTo(4));
             Assert.That(summary.Steps, Has.Count.EqualTo(4));
             Assert.That(summary.Steps.Select(s => s.Name), Does.Not.Contain("Reading the file"));
-        });
+        }
     }
 
     [Test]
@@ -113,11 +113,11 @@ public class RunPhaseSummaryTests
     {
         var summary = RunPhaseSummary.From(ImportSaving());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(summary!.CurrentStepName, Is.EqualTo("Saving changes"));
             Assert.That(summary.CurrentStepNumber, Is.EqualTo(3), "1-based, so it reads as 'step 3 of 4'");
-        });
+        }
     }
 
     [Test]
@@ -133,11 +133,11 @@ public class RunPhaseSummaryTests
 
         var summary = RunPhaseSummary.From(phases);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(summary!.CurrentStepName, Is.EqualTo("Importing objects"));
             Assert.That(summary.CurrentStepNumber, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -153,12 +153,12 @@ public class RunPhaseSummaryTests
 
         var summary = RunPhaseSummary.From(phases);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(summary!.CurrentStepName, Is.Null);
             Assert.That(summary.CurrentStepNumber, Is.Null);
             Assert.That(summary.TotalSteps, Is.EqualTo(2), "The run's shape is still worth showing when nothing is running");
-        });
+        }
     }
 
     [Test]
@@ -172,12 +172,12 @@ public class RunPhaseSummaryTests
 
         var summary = RunPhaseSummary.From(phases);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(summary!.CurrentStepName, Is.Null);
             Assert.That(summary.Steps.Last().Status, Is.EqualTo(ActivityPhaseStatus.Failed),
                 "Where a run failed is the one thing a list view most needs to keep showing");
-        });
+        }
     }
 
     [Test]

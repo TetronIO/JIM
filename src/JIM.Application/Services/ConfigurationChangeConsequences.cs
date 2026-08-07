@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Staging;
 
 namespace JIM.Application.Services;
 
@@ -74,6 +75,17 @@ public static class ConfigurationChangeConsequences
                       "deprovisioned on the next synchronisation."
                     : "Selecting this container brings the objects beneath it into scope for import on the next " +
                       "Import Run Profile.",
+
+            // Scope narrows or widens what a selected container imports. Narrowing takes objects out of scope exactly
+            // as deselecting a container does; widening is the reverse, and takes nothing away.
+            (ConfigurationSnapshotService.ConnectedSystemObjectType, "scope") =>
+                newValue == nameof(ConnectedSystemContainerScope.OneLevel)
+                    ? "Importing only the objects held directly in this container stops the objects in the containers " +
+                      "beneath it being imported, unless those containers are selected in their own right. The Connected " +
+                      "System Objects already imported from them become obsolete, and whatever they are joined to is " +
+                      "deprovisioned on the next synchronisation."
+                    : "Importing the whole subtree brings the objects in the containers beneath this one into scope for " +
+                      "import on the next Import Run Profile. Nothing already imported is taken out of scope.",
 
             (ConfigurationSnapshotService.MetaverseObjectTypeObjectType, "deletionRule") =>
                 "This takes effect immediately: Metaverse Objects of this type that already satisfy the new rule become " +

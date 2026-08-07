@@ -92,12 +92,12 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
         }
 
         await using var verify = NewContext();
-        Assert.Multiple(async () =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(await verify.ConfigurationChangePreviews.CountAsync(), Is.EqualTo(1));
             Assert.That(await verify.Activities.CountAsync(), Is.EqualTo(1),
                 "inserting a preview must not re-insert the Activity it belongs to");
-        });
+        }
     }
 
     [Test]
@@ -126,12 +126,12 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
 
         await using var verify = NewContext();
         var reloaded = await verify.ConfigurationChangePreviews.SingleAsync(p => p.ActivityId == activityId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(reloaded.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(reloaded.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
             Assert.That(reloaded.EstimatedDeltaRows, Is.EqualTo(96_240L));
-        });
+        }
     }
 
     [Test]
@@ -152,14 +152,14 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
         var groups = await verify.ConfigurationChangePreviewGroups.Where(g => g.ActivityId == activityId).ToListAsync();
         var deltas = await verify.ConfigurationChangePreviewDeltas.Where(d => d.ActivityId == activityId).ToListAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(groups, Has.Count.EqualTo(2));
             Assert.That(deltas, Has.Count.EqualTo(4));
             Assert.That(deltas.Select(d => d.GroupId).Distinct().Count(), Is.EqualTo(2),
                 "each delta must land under the group whose count it contributed to");
             Assert.That(deltas.All(d => groups.Any(g => g.Id == d.GroupId)), Is.True);
-        });
+        }
     }
 
     [Test]
@@ -182,7 +182,7 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
         var secondPage = await repository.GetPreviewDeltasAsync(activityId, groupId, 2, 10);
         var firstPageAgain = await repository.GetPreviewDeltasAsync(activityId, groupId, 1, 10);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(firstPage.TotalResults, Is.EqualTo(25));
             Assert.That(firstPage.Results, Has.Count.EqualTo(10));
@@ -190,7 +190,7 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
                 "a drill-down that repeats rows between pages is also omitting others");
             Assert.That(firstPageAgain.Results.Select(d => d.Id), Is.EqualTo(firstPage.Results.Select(d => d.Id)),
                 "the same page must return the same rows every time it is asked for");
-        });
+        }
     }
 
     [Test]
@@ -221,7 +221,7 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
         var byAttribute = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "department");
         var noMatch = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "zzz");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(byName.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Ada Lovelace" }));
             Assert.That(byValue.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Grace Hopper" }));
@@ -229,7 +229,7 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
             Assert.That(noMatch.Results, Is.Empty);
             Assert.That(noMatch.TotalResults, Is.EqualTo(0),
                 "the total has to count the matches; a total that ignored the filter would page over rows that are not there");
-        });
+        }
     }
 
     [Test]
@@ -260,11 +260,11 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
         var percent = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "%");
         var underscore = await repository.GetPreviewDeltasAsync(activityId, null, 1, 20, "_");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(percent.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Ada Lovelace" }));
             Assert.That(underscore.Results.Select(d => d.ObjectDisplayName), Is.EqualTo(new[] { "Grace Hopper" }));
-        });
+        }
     }
 
     [Test]
@@ -293,7 +293,7 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
 
         await using var verify = NewContext();
         var queued = await verify.ConfigurationChangePreviewWorkerTasks.Include(t => t.Activity).SingleAsync();
-        Assert.Multiple(async () =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(await verify.Activities.CountAsync(), Is.EqualTo(1),
                 "queuing a preview must attach to its Activity, not create a second one");
@@ -301,7 +301,7 @@ public class ConfigurationChangePreviewRepositoryDatabaseTests
             Assert.That(queued.Surface, Is.EqualTo(ConfigurationChangePreviewSurface.MetaverseObjectType));
             Assert.That(queued.TargetId, Is.EqualTo(11));
             Assert.That(queued.ProposedConfigurationPayload, Does.Contain("AllTriggersLost"));
-        });
+        }
     }
 
     private static ConfigurationChangePreviewGroup NewGroup(Guid activityId,

@@ -178,7 +178,7 @@ public class PendingExportMergeFetchDatabaseTests
         var result = await repository.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId);
 
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.ConnectedSystemObject, Is.Null,
                 "Merge fetch must not load the target CSO navigation - the merge logic never reads it, and for a large group it can be hundreds of thousands of rows.");
@@ -190,7 +190,7 @@ public class PendingExportMergeFetchDatabaseTests
                 "Merge fetch must still load AttributeValueChanges - this is the actual merge input.");
             Assert.That(result!.AttributeValueChanges.All(avc => avc.Attribute != null), Is.True,
                 "Each AttributeValueChange's Attribute must be loaded - GetAttributeChangeMergeKey reads AttributePlurality from it.");
-        });
+        }
     }
 
     /// <summary>

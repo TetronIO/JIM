@@ -2621,6 +2621,35 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.ConnectedSystemObjects.Any()))
             .AsAsyncEnumerable();
 
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectDisconnectionCandidate>> GetMetaverseObjectDisconnectionCandidatesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectIds);
+
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        var ids = metaverseObjectIds as IList<Guid> ?? [.. metaverseObjectIds];
+        return await Repository.Database.MetaverseObjects
+            .Where(mvo => ids.Contains(mvo.Id))
+            .Select(mvo => new MetaverseObjectDisconnectionCandidate(
+                mvo.Id,
+                mvo.CachedDisplayName,
+                mvo.Type.Id,
+                mvo.Type.Name,
+                mvo.Origin,
+                mvo.Type.DeletionRule,
+                mvo.Type.DeletionTriggerMode,
+                mvo.Type.DeletionGracePeriod,
+                mvo.Type.DeletionTriggerConnectedSystemIds,
+                // One entry per joined object, not per system: the engine counts remaining connectors at object
+                // level, so collapsing a system holding two joined objects to one entry would make the first
+                // disconnection look like the last.
+                mvo.ConnectedSystemObjects.Select(cso => cso.ConnectedSystemId).ToList()))
+            .ToListAsync();
+    }
+
     /// <summary>
     /// The objects a change to one Metaverse Object Type's deletion settings could affect: its projected objects
     /// carrying a disconnection mark. The type's current rule is deliberately not part of the filter, because a

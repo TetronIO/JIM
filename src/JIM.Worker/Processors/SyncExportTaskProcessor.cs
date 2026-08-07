@@ -160,7 +160,7 @@ public class SyncExportTaskProcessor
         // as before.
         if (_connector is IConnectorManagedScope scopedConnector)
         {
-            var managedContainers = _connectedSystem.GetSelectedContainerExternalIds();
+            var managedContainers = _connectedSystem.GetSelectedContainers();
             if (managedContainers.Count > 0)
             {
                 scopedConnector.SetManagedScope(managedContainers);

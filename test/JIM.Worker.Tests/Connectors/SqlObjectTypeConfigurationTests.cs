@@ -37,7 +37,7 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var objectType = configuration.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.Name, Is.EqualTo("Person"));
             Assert.That(objectType.SchemaName, Is.EqualTo("HR"));
@@ -45,7 +45,7 @@ public class SqlObjectTypeConfigurationTests
             Assert.That(objectType.SelectStatement, Is.Null);
             Assert.That(objectType.IsCustomSelect, Is.False);
             Assert.That(objectType.AnchorColumns, Is.EqualTo(new[] { "EMPLOYEE_ID" }));
-        });
+        }
     }
 
     [Test]
@@ -64,12 +64,12 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var objectType = configuration.ObjectTypes.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(objectType.IsCustomSelect, Is.True);
             Assert.That(objectType.SelectStatement, Does.StartWith("SELECT EMPLOYEE_ID"));
             Assert.That(objectType.TableName, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -97,7 +97,7 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var relatedTable = configuration.ObjectTypes.Single().RelatedTables.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(relatedTable.AttributeName, Is.EqualTo("PhoneNumbers"));
             Assert.That(relatedTable.SchemaName, Is.EqualTo("HR"));
@@ -105,7 +105,7 @@ public class SqlObjectTypeConfigurationTests
             Assert.That(relatedTable.ValueColumn, Is.EqualTo("PHONE_NUMBER"));
             Assert.That(relatedTable.JoinColumns, Is.EqualTo(new[] { "EMPLOYEE_ID" }));
             Assert.That(relatedTable.ReferencesObjectType, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -182,11 +182,11 @@ public class SqlObjectTypeConfigurationTests
             """);
 
         var column = configuration.ObjectTypes.Single().Columns.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(column.Name, Is.EqualTo("MANAGER_EMPLOYEE_ID"));
             Assert.That(column.ReferencesObjectType, Is.EqualTo("Person"));
-        });
+        }
     }
 
     [Test]
@@ -299,12 +299,12 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("table"));
             Assert.That(exception.Message, Does.Contain("select"));
-        });
+        }
     }
 
     [Test]
@@ -361,11 +361,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("anchorColumns"));
-        });
+        }
     }
 
     [Test]
@@ -412,11 +412,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Person"));
             Assert.That(exception.Message, Does.Contain("attributeName"));
-        });
+        }
     }
 
     [Test]
@@ -438,11 +438,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Enrolment"));
             Assert.That(exception.Message, Does.Contain("Grades"));
-        });
+        }
     }
 
     [Test]
@@ -483,11 +483,11 @@ public class SqlObjectTypeConfigurationTests
             }
             """));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("DEPARTMENT_ID"));
             Assert.That(exception.Message, Does.Contain("Department"));
-        });
+        }
     }
 
     [Test]

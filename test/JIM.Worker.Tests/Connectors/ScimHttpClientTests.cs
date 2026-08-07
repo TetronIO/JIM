@@ -120,11 +120,11 @@ public class ScimHttpClientTests
 
         var resource = await client.GetAsync<TestResource>("Users/abc", CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(resource!.Id, Is.EqualTo("abc"));
             Assert.That(resource.UserName, Is.EqualTo("jbloggs"));
-        });
+        }
     }
 
     [Test]
@@ -148,11 +148,11 @@ public class ScimHttpClientTests
         await client.PostAsync<TestResource>("Users", new TestResource { UserName = "jbloggs" }, CancellationToken.None);
 
         var request = handler.Requests.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(request.Method, Is.EqualTo(HttpMethod.Post));
             Assert.That(request.Body, Does.Contain("jbloggs"));
-        });
+        }
     }
 
     [Test]
@@ -180,12 +180,12 @@ public class ScimHttpClientTests
 
         var resource = await client.GetAsync<TestResource>("Users/abc", CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(resource!.Id, Is.EqualTo("abc"));
             Assert.That(handler.CallCount, Is.EqualTo(2));
             Assert.That(_requestedDelays, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -212,11 +212,11 @@ public class ScimHttpClientTests
         var exception = Assert.ThrowsAsync<ScimRequestException>(
             async () => await client.GetAsync<TestResource>("Users", CancellationToken.None));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
             Assert.That(handler.CallCount, Is.EqualTo(2), "the initial attempt plus one retry, per maxRetries.");
-        });
+        }
     }
 
     [Test]
@@ -227,11 +227,11 @@ public class ScimHttpClientTests
 
         Assert.ThrowsAsync<ScimRequestException>(async () => await client.GetAsync<TestResource>("Users", CancellationToken.None));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(handler.CallCount, Is.EqualTo(1));
             Assert.That(_requestedDelays, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -264,12 +264,12 @@ public class ScimHttpClientTests
 
         var resource = await client.GetAsync<TestResource>("Users/abc", CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(resource!.Id, Is.EqualTo("abc"));
             Assert.That(authentication.InvalidationCount, Is.EqualTo(1));
             Assert.That(handler.CallCount, Is.EqualTo(2));
-        });
+        }
     }
 
     [Test]
@@ -282,12 +282,12 @@ public class ScimHttpClientTests
         var exception = Assert.ThrowsAsync<ScimRequestException>(
             async () => await client.GetAsync<TestResource>("Users", CancellationToken.None));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
             Assert.That(handler.CallCount, Is.EqualTo(2), "one credential refresh only; a wrong secret must not retry forever.");
             Assert.That(authentication.InvalidationCount, Is.EqualTo(1));
-        });
+        }
     }
 
     #endregion
@@ -311,12 +311,12 @@ public class ScimHttpClientTests
         var exception = Assert.ThrowsAsync<ScimRequestException>(
             async () => await client.PostAsync<TestResource>("Users", new TestResource(), CancellationToken.None));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
             Assert.That(exception.ScimType, Is.EqualTo(ScimErrorTypes.Uniqueness));
             Assert.That(exception.Error?.Detail, Is.EqualTo("userName already exists."));
-        });
+        }
     }
 
     [Test]
@@ -333,11 +333,11 @@ public class ScimHttpClientTests
         var exception = Assert.ThrowsAsync<ScimRequestException>(
             async () => await client.GetAsync<TestResource>("Users", CancellationToken.None));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway));
             Assert.That(exception.Error, Is.Null);
-        });
+        }
     }
 
     [Test]
