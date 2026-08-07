@@ -877,6 +877,11 @@ internal sealed class FakeDbCommand : DbCommand
         if (IsNumeric(left) && IsNumeric(right))
             return Convert.ToDecimal(left, CultureInfo.InvariantCulture).CompareTo(Convert.ToDecimal(right, CultureInfo.InvariantCulture));
 
+        // A binary anchor (an Oracle RAW(16) key is the one that matters) orders by its bytes, as both
+        // dialects do. No byte array implements IComparable, so the default comparer would throw.
+        if (left is byte[] leftBytes && right is byte[] rightBytes)
+            return leftBytes.AsSpan().SequenceCompareTo(rightBytes);
+
         return Comparer<object>.Default.Compare(left, right);
     }
 
