@@ -382,8 +382,9 @@ internal class LdapConnectorSchema
             var attributeTypeDefs = ParseAllAttributeTypes(subschemaEntry);
             _logger.Debug("GetRfcSchemaAsync: Parsed {Count} attribute type definitions", attributeTypeDefs.Count);
 
-            // Step 4: Parse all object class definitions
-            var objectClassDefs = ParseAllObjectClasses(subschemaEntry);
+            // Step 4: Parse all object class definitions, reachable by name and by OID
+            var objectClassIndex = ParseAllObjectClasses(subschemaEntry);
+            var objectClassDefs = objectClassIndex.ByName;
             _logger.Debug("GetRfcSchemaAsync: Parsed {Count} object class definitions", objectClassDefs.Count);
 
             // Step 5: Build the connector schema from structural (and optionally auxiliary) object classes
@@ -588,23 +589,15 @@ internal class LdapConnectorSchema
     }
 
     /// <summary>
-    /// Parses all objectClasses values from the subschema entry into a name-keyed dictionary.
+    /// Parses all objectClasses values from the subschema entry, indexed by both name and OID.
     /// </summary>
-    private Dictionary<string, Rfc4512ObjectClassDescription> ParseAllObjectClasses(SearchResultEntry subschemaEntry)
+    private static Rfc4512ObjectClassIndex ParseAllObjectClasses(SearchResultEntry subschemaEntry)
     {
-        var result = new Dictionary<string, Rfc4512ObjectClassDescription>(StringComparer.OrdinalIgnoreCase);
-
         if (!subschemaEntry.Attributes.Contains("objectClasses"))
-            return result;
+            return new Rfc4512ObjectClassIndex();
 
-        foreach (string definition in subschemaEntry.Attributes["objectClasses"].GetValues(typeof(string)))
-        {
-            var parsed = Rfc4512SchemaParser.ParseObjectClassDescription(definition);
-            if (parsed?.Name != null && !result.ContainsKey(parsed.Name))
-                result[parsed.Name] = parsed;
-        }
-
-        return result;
+        return Rfc4512SchemaParser.IndexObjectClasses(
+            subschemaEntry.Attributes["objectClasses"].GetValues(typeof(string)).Cast<string>());
     }
 
     /// <summary>
