@@ -1479,6 +1479,16 @@ public class ExportEvaluationServer
                         candidateAttributeIds.Contains(singleSource.MetaverseAttribute.Id);
                     if (isDirectCandidateFlow)
                     {
+                        // Synchronisation integrity: recall stages Update exports, and a WritableOnCreate
+                        // attribute must never reach one. Clearing or removing a value from it would rewrite
+                        // the Connected System's identifier for the object and sever the link to the row or
+                        // entry the Connected System Object is anchored to, which is the exact corruption
+                        // that writability state exists to prevent. The reference is deliberately left as the
+                        // target holds it; this is not routed to the fallback path, because the fallback
+                        // would only reach the same exclusion in CreateAttributeValueChanges.
+                        if (mapping.TargetConnectedSystemAttribute!.Writability == AttributeWritability.WritableOnCreate)
+                            continue;
+
                         if (!flowsByAttribute.TryGetValue(singleSource!.MetaverseAttribute!.Id, out var flows))
                         {
                             flows = [];
