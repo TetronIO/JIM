@@ -131,6 +131,20 @@ $schema = $config.Schema
 # The reference column is a self-reference: MANAGER_EMPLOYEE_ID carries another Person's anchor. That
 # is stated explicitly rather than inferred, which is the connector's contract; a foreign key would
 # only ever be a suggestion, and a view carries none at all.
+#
+# TWO ANCHOR CHOICES BELOW ARE WORKAROUNDS, NOT PREFERENCES. PersonView is anchored on EMAIL rather
+# than the view's own EMPLOYEE_ID, and the seeder starts APP_USERS' generated key at 1,000,000 rather
+# than 1. Both exist for the same reason: JIM resolves references against one flat per-Connected-System
+# lookup keyed only by the external ID value, with no Object Type dimension
+# (SyncImportTaskProcessor.BuildExternalIdLookups). Two Object Types whose anchors share a value space
+# therefore collide the moment either declares a reference, and the Full Import fails outright with
+# "Duplicate primary external ID int value '1' found for CSO ...". A view over a table shares its
+# table's keys by construction, and independent IDENTITY columns both start at 1, so this Connected
+# System hit it twice. Anchoring the view on a text column puts it in a different lookup dictionary,
+# and moving the generated keys out of the seeded employees' range separates the other pair.
+#
+# Both should be reverted once reference resolution is scoped by Object Type; until then the matrix
+# cannot prove that a table and a view over the same rows coexist in one Connected System.
 $objectTypesJson = @"
 {
   "objectTypes": [
@@ -168,12 +182,12 @@ $objectTypesJson = @"
       "name": "PersonView",
       "schema": "$schema",
       "table": "V_EMPLOYEES",
-      "anchorColumns": [ "EMPLOYEE_ID" ],
+      "anchorColumns": [ "EMAIL" ],
       "watermarkColumn": "LAST_MODIFIED",
       "changeLog": {
         "schema": "$schema",
-        "table": "IDM_CHANGE_LOG",
-        "anchorColumns": [ "EMPLOYEE_ID" ],
+        "table": "V_EMPLOYEES_CHANGE_LOG",
+        "anchorColumns": [ "EMAIL" ],
         "sequenceColumn": "CHANGED_AT",
         "changeTypeColumn": "CHANGE_TYPE",
         "createValues": [ "I" ],
@@ -186,6 +200,9 @@ $objectTypesJson = @"
       "schema": "$schema",
       "table": "APP_USERS",
       "anchorColumns": [ "ID" ],
+      "columns": [
+        { "name": "MANAGER_ID", "referencesObjectType": "AppUser" }
+      ],
       "relatedTables": [
         {
           "attributeName": "Roles",
@@ -319,7 +336,8 @@ Write-TestStep "Step 9" "Selecting Object Types and their attributes"
 # quietly anchoring on something else.
 $anchorColumns = @{
     Person            = "EMPLOYEE_ID"
-    PersonView        = "EMPLOYEE_ID"
+    # EMAIL, not EMPLOYEE_ID; see the Object Types document above for why.
+    PersonView        = "EMAIL"
     AppUser           = "ID"
     NaturalKeyAccount = "ACCOUNT_CODE"
     GuidKeyedPerson   = "PERSON_ID"
@@ -384,14 +402,17 @@ function Add-Scenario16MetaverseAttribute {
     )
 
     $attribute = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq $Name } | Select-Object -First 1
-    if (-not $attribute) {
-        $attribute = New-JIMMetaverseAttribute -Name $Name -Type $Type -Plurality SingleValued -PassThru
-        Write-Host "  Created Metaverse Attribute '$Name' ($Type)" -ForegroundColor Gray
+    if ($attribute) {
+        # Binding is idempotent from the caller's point of view: a second bind of the same attribute to
+        # the same Object Type is a no-op the API accepts, and the setup runs once per provider.
+        Add-JIMMetaverseObjectTypeAttribute -AttributeId $attribute.id -ObjectTypeId $mvUserType.id -ErrorAction SilentlyContinue | Out-Null
+        return $attribute
     }
 
-    # Binding is idempotent from the caller's point of view: a second bind of the same attribute to the
-    # same Object Type is a no-op the API accepts, and the setup runs once per provider.
-    Add-JIMMetaverseObjectTypeAttribute -AttributeId $attribute.id -ObjectTypeId $mvUserType.id -ErrorAction SilentlyContinue | Out-Null
+    # New-JIMMetaverseAttribute binds at creation via -ObjectTypeIds and returns the created attribute
+    # directly; it has no -PassThru, and its plurality parameter is -AttributePlurality.
+    $attribute = New-JIMMetaverseAttribute -Name $Name -Type $Type -AttributePlurality SingleValued -ObjectTypeIds @($mvUserType.id) -ErrorAction Stop
+    Write-Host "  Created Metaverse Attribute '$Name' ($Type), bound to the User Object Type" -ForegroundColor Gray
     return $attribute
 }
 
