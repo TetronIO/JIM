@@ -1,8 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Text;
-
 namespace JIM.Utilities;
 
 /// <summary>
@@ -35,32 +33,13 @@ public static class FriendlyDuration
             (duration.Seconds, "second")
         };
 
-        var written = new StringBuilder();
-        var partsWritten = 0;
-
-        // Two units is the point where the answer stops helping: "1 day 2 hours" is what someone wants to know,
-        // and the trailing minutes and seconds at that scale are noise. Leading zero units are skipped so a
-        // sub-day duration is not padded with "0 days".
-        foreach (var (value, singular) in units.SkipWhile(u => u.Value == 0))
-        {
-            if (partsWritten == 2)
-                break;
-
-            // An interior zero (90 minutes exactly, so zero seconds) simply contributes nothing rather than
-            // consuming one of the two slots.
-            if (value == 0)
-                continue;
-
-            if (partsWritten > 0)
-                written.Append(' ');
-
-            written.Append(value).Append(' ').Append(singular);
-            if (value != 1)
-                written.Append('s');
-
-            partsWritten++;
-        }
-
-        return written.ToString();
+        // Two units is the point where the answer stops helping: "1 day 2 hours" is what someone wants to know, and
+        // the trailing minutes and seconds at that scale are noise. Zero units drop out wherever they sit, so a
+        // sub-day duration is not padded with "0 days" and an interior zero (90 minutes exactly, so no seconds)
+        // does not consume one of the two slots.
+        return string.Join(' ', units
+            .Where(u => u.Value != 0)
+            .Take(2)
+            .Select(u => $"{u.Value} {u.Singular}{(u.Value == 1 ? string.Empty : "s")}"));
     }
 }
