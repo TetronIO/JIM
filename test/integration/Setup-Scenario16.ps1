@@ -11,12 +11,6 @@
     capability row drives, and creates the inbound and outbound Synchronisation Rules the import-side and
     export-side rows need.
 
-    NOT YET EXECUTED. The JIM SQL Connector is registered in neither ConnectorFactory nor
-    SeedingServer.BuiltInConnectors (deliberately, until Phase 8), so no 'JIM SQL Connector' Connector
-    Definition exists to create a Connected System against and this script stops at Step 4. Everything
-    from Step 4 onwards is therefore written but unproven; treat a failure here as a bug in this script
-    until it has had one clean run.
-
     Two configuration choices here are load-bearing rather than incidental:
 
     The Database Time Zone is deliberately NOT UTC. At the UTC default every zone conversion is the
@@ -175,7 +169,17 @@ $objectTypesJson = @"
       "schema": "$schema",
       "table": "V_EMPLOYEES",
       "anchorColumns": [ "EMPLOYEE_ID" ],
-      "watermarkColumn": "LAST_MODIFIED"
+      "watermarkColumn": "LAST_MODIFIED",
+      "changeLog": {
+        "schema": "$schema",
+        "table": "IDM_CHANGE_LOG",
+        "anchorColumns": [ "EMPLOYEE_ID" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     },
     {
       "name": "AppUser",
@@ -190,20 +194,50 @@ $objectTypesJson = @"
           "valueColumn": "ROLE_NAME",
           "joinColumns": [ "USER_ID" ]
         }
-      ]
+      ],
+      "changeLog": {
+        "schema": "$schema",
+        "table": "APP_USERS_CHANGE_LOG",
+        "anchorColumns": [ "ID" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     },
     {
       "name": "NaturalKeyAccount",
       "schema": "$schema",
       "table": "APP_ACCOUNTS_NATURAL",
-      "anchorColumns": [ "ACCOUNT_CODE" ]
+      "anchorColumns": [ "ACCOUNT_CODE" ],
+      "changeLog": {
+        "schema": "$schema",
+        "table": "APP_ACCOUNTS_CHANGE_LOG",
+        "anchorColumns": [ "ACCOUNT_CODE" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     }$(if ($Provider -eq "Oracle") { @"
 ,
     {
       "name": "GuidKeyedPerson",
       "schema": "$schema",
       "table": "GUID_KEYED_PEOPLE",
-      "anchorColumns": [ "PERSON_ID" ]
+      "anchorColumns": [ "PERSON_ID" ],
+      "changeLog": {
+        "schema": "$schema",
+        "table": "GUID_PEOPLE_CHANGE_LOG",
+        "anchorColumns": [ "PERSON_ID" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     }
 "@ })
   ]
@@ -251,13 +285,19 @@ else {
 }
 
 Write-TestStep "Step 7" "Applying settings (this performs the save-time connectivity test)"
-Set-JIMConnectedSystem -Id $system.id -SettingValues $settings | Out-Null
+
+# -ErrorAction Stop on every mutating call, rather than relying on this script's $ErrorActionPreference.
+# A cmdlet exported from a module reads the MODULE's preference variables, not the caller's, so a
+# Write-Error inside JIM.psd1 is non-terminating here however this script sets its own preference. That
+# is how the first run of this script printed "the live connectivity test passed" immediately after the
+# save had been refused, and then failed four steps later with an unrelated-looking message.
+Set-JIMConnectedSystem -Id $system.id -SettingValues $settings -ErrorAction Stop | Out-Null
 Write-Host "  OK Settings saved; the live connectivity test passed" -ForegroundColor Green
 
 # ─── Step 8: Schema discovery ──────────────────────────────────────────────────
 
 Write-TestStep "Step 8" "Discovering the schema"
-Import-JIMConnectedSystemSchema -Id $system.id | Out-Null
+Import-JIMConnectedSystemSchema -Id $system.id -ErrorAction Stop | Out-Null
 
 $objectTypes = Get-JIMConnectedSystem -Id $system.id -ObjectTypes
 $expectedTypes = @("Person", "PersonView", "AppUser", "NaturalKeyAccount")
