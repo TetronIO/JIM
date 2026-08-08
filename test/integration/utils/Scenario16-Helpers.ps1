@@ -128,6 +128,25 @@ function Get-Scenario16ObjectTypeId {
     return $Context.ObjectTypes[$Name].id
 }
 
+function Get-S16AttributeValueText {
+    <#
+    .SYNOPSIS
+        Whichever typed column an attribute value row actually carries, rendered as text.
+    .DESCRIPTION
+        The attribute-values endpoint returns one row per value with a column per data type
+        (StringValue, IntValue, LongValue, DecimalValue, DateTimeValue, GuidValue, BoolValue,
+        ByteValue) and no single generic 'value' field, so a caller has to know which one is populated.
+    #>
+    param([Parameter(Mandatory=$true)]$Value)
+
+    foreach ($property in @('StringValue', 'IntValue', 'LongValue', 'DecimalValue', 'GuidValue', 'BoolValue', 'DateTimeValue', 'ByteValue')) {
+        if ($Value.PSObject.Properties.Name -notcontains $property) { continue }
+        $candidate = $Value.$property
+        if ($null -ne $candidate -and "$candidate" -ne '') { return "$candidate" }
+    }
+    return $null
+}
+
 function Get-S16CsoByAnchor {
     <#
     .SYNOPSIS
@@ -158,8 +177,7 @@ function Get-S16CsoByAnchor {
     foreach ($candidate in $objects) {
         $values = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $Context.ConnectedSystemId -CsoId $candidate.id -AttributeName $AnchorAttributeName -All -Force)
         foreach ($value in $values) {
-            $raw = if ($null -ne $value -and $value.PSObject.Properties.Name -contains 'value') { $value.value } else { $value }
-            if ("$raw" -eq $AnchorValue) { return $candidate }
+            if ((Get-S16AttributeValueText -Value $value) -eq $AnchorValue) { return $candidate }
         }
     }
 
@@ -716,8 +734,21 @@ function ConvertTo-S16Utc {
     param([Parameter(Mandatory=$true)]$Value)
 
     if ($Value -is [datetime]) {
-        if ($Value.Kind -eq [System.DateTimeKind]::Utc) { return $Value }
-        return [System.DateTime]::SpecifyKind($Value, [System.DateTimeKind]::Utc)
+        switch ($Value.Kind) {
+            ([System.DateTimeKind]::Utc) { return $Value }
+
+            # CONVERT, never relabel. ConvertFrom-Json turns the API's trailing-Z instant into a
+            # DateTime of Kind Local, expressed in the TEST HOST's zone. Stamping Utc onto that clock
+            # face keeps the digits and throws the offset away, which silently reports every instant as
+            # wrong by the host's current offset from UTC. It cost a full investigation: on a host in
+            # British Summer Time, every seeded January date agreed (London is UTC+00:00 then, so the
+            # relabel was a no-op) while the one deliberately mid-year value came back an hour out, and
+            # it read exactly like a daylight-saving defect in the Connector. It was this line.
+            ([System.DateTimeKind]::Local) { return $Value.ToUniversalTime() }
+
+            # No zone information survived; the API only ever sends UTC, so that is what it is.
+            default { return [System.DateTime]::SpecifyKind($Value, [System.DateTimeKind]::Utc) }
+        }
     }
 
     return [System.DateTime]::Parse(
@@ -1016,7 +1047,7 @@ function Test-S16NumberShapes {
 
     # Compared numerically rather than as text: Oracle renders 0.25 as '.25', and the difference is
     # rendering rather than value.
-    $importedValue = [decimal]($importedFte[0].value ?? $importedFte[0])
+    $importedValue = [decimal](Get-S16AttributeValueText -Value $importedFte[0])
     $expectedValue = [decimal]$expectedFte
 
     if ($importedValue -ne $expectedValue) {
