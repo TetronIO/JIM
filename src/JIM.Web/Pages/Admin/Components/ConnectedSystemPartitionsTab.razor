@@ -15,30 +15,14 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudAlert Severity="(ConnectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined">
-    @if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
-    {
-        <MudText>Retrieve the hierarchy @PartitionAndHierarchyText hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</MudText>
-    }
-    else
-    {
-        <MudText>
-            <strong>Refreshing the @PartitionAndHierarchyText hierarchy preserves your selections</strong> where possible. Existing partitions and containers are matched
-            by their external ID, so renamed or moved items will keep their selection state. However, if partitions or containers no longer exist in the external system
-            (e.g., deleted OUs, permission changes), they will be removed. Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy.
-        </MudText>
-    }
-    <MudButton
-            Disabled="@_hierarchyBeingRetrieved"
-            Color="ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
-
-            OnClick="HandleImportHierarchyAsync"
-            Variant="Variant.Filled"
-            Class="mt-5"
-            DropShadow="false">
-        @if (ConnectedSystem.Partitions?.Count == 0)
-        {
-            if (_hierarchyBeingRetrieved)
+@* ─── Nothing retrieved yet: the only thing to say is how to start ─── *@
+@if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        <MudText>Retrieve the @PartitionAndHierarchyText hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</MudText>
+        <MudButton Disabled="@_hierarchyBeingRetrieved" Color="Color.Primary" OnClick="HandleImportHierarchyAsync"
+                   Variant="Variant.Filled" Class="mt-5" DropShadow="false">
+            @if (_hierarchyBeingRetrieved)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <span class="ms-2">Retrieving Hierarchy</span>
@@ -47,21 +31,69 @@
             {
                 <text>Retrieve Hierarchy</text>
             }
-        }
-        else
-        {
-            if (_hierarchyBeingRetrieved)
+        </MudButton>
+    </MudAlert>
+}
+else
+{
+    @* ─── What this system currently imports, before anything about how to change it ─── *@
+    <div class="jim-scope-summary" data-testid="jim-scope-summary">
+        <div class="jim-scope-stat">
+            <span class="jim-scope-stat-value">@SelectedContainerCount of @TotalContainerCount</span>
+            <span class="jim-scope-stat-label">Containers selected</span>
+        </div>
+        <div class="jim-scope-stat">
+            <span class="jim-scope-stat-value">@SelectedPartitionCount of @ConnectedSystem.Partitions.Count</span>
+            <span class="jim-scope-stat-label">@(ConnectedSystem.Partitions.Count == 1 ? "Partition" : "Partitions") managed</span>
+        </div>
+    </div>
+
+    @* ─── Guidance, demoted: the timestamp is the useful part, the caveat is read once ─── *@
+    <div class="jim-scope-hint" data-testid="jim-scope-hint">
+        <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" />
+        <span>
+            @if (_hierarchyRetrievedAt.HasValue)
             {
-                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Refreshing Hierarchy</span>
+                var retrievedAt = _hierarchyRetrievedAt.Value;
+                <text>Hierarchy retrieved @retrievedAt.ToLocalTime().ToFriendlyDate()</text>
             }
             else
             {
-                <text>Refresh Hierarchy</text>
+                <text>Hierarchy retrieved from the Connected System</text>
             }
-        }
-    </MudButton>
-</MudAlert>
+        </span>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
+                   OnClick="HandleImportHierarchyAsync" DropShadow="false">
+            @if (_hierarchyBeingRetrieved)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <span class="ms-2">Refreshing</span>
+            }
+            else
+            {
+                <text>Refresh</text>
+            }
+        </MudButton>
+        <MudButton Variant="Variant.Text" Size="Size.Small" DropShadow="false"
+                   OnClick="@(() => _refreshCaveatShown = !_refreshCaveatShown)"
+                   data-testid="jim-scope-hint-disclose">
+            What refreshing does to my selections
+        </MudButton>
+    </div>
+
+    @if (_refreshCaveatShown)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2"
+                  data-testid="jim-scope-hint-caveat">
+            <MudText Typo="Typo.body2">
+                <strong>Refreshing preserves your selections</strong> where possible. Existing partitions and Containers are matched
+                by their external ID, so renamed or moved items keep their selection state. Partitions and Containers that no longer
+                exist in the Connected System (deleted OUs, permission changes) are removed. Make sure the Connected System identity
+                has the permissions needed to retrieve the hierarchy.
+            </MudText>
+        </MudAlert>
+    }
+}
 
 @* Hierarchy Refresh Results Panel *@
 @if (_hierarchyRefreshResult != null && _hierarchyRefreshResult.HasChanges)
@@ -276,87 +308,43 @@
 
 @if (ConnectedSystem.Partitions is { Count: > 0 })
 {
-    <MudText Class="mt-5">Select which @PartitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
     @foreach (var partition in ConnectedSystem.Partitions)
     {
-        <MudPaper Class="mt-5" Outlined="true">
-            <div class="pa-4">
-                <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
-                <MudSwitch @bind-Value="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
+        <MudPaper Class="mt-6" Outlined="true">
+            <div class="jim-scope-partition-head">
+                <span class="jim-scope-partition-name">@partition.Name</span>
+                <MudSwitch T="bool" Value="@partition.Selected" ValueChanged="@(v => PartitionSelectedChanged(partition, v))"
+                           Color="Color.Primary" Label="Manage this partition" Class="ms-auto" />
             </div>
-            <MudDivider />
 
-            <div class="pa-4">
-                <MudText>Select the containers you want to manage in this partition.</MudText>
-
-                @*
-                TODO:
-                <MudButtonGroup Color="Color.Default" Variant="Variant.Outlined" Class="mt-5 mb-5">
-                    <MudButton>Select All</MudButton>
-                    <MudButton>Clear All</MudButton>
-                </MudButtonGroup>
-                *@
-
-                @if (partition.Containers != null)
-                {
-                    <MudTreeView Items="@GetTreeItemData(partition.Containers)" ReadOnly AutoExpand>
-                        <ItemTemplate Context="item">
-                            <MudTreeViewItem @bind-Expanded="@item.Expanded" Items="@item.Children">
-                                <BodyContent>
-                                    @if (item.Value != null)
-                                    {
-                                        @if (item.Value.Included)
-                                        {
-                                            <MudCheckBox T="bool?"
-                                                         Value="@(item.Value.AreAnyChildContainersSelected() ? null : item.Value.Selected)"
-                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
-                                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
-                                                         Disabled="true"
-                                                         title="Included"/>
-                                        }
-                                        else
-                                        {
-                                            <MudCheckBox T="bool?"
-                                                         Value="@(item.Value.AreAnyChildContainersSelected() ? null : item.Value.Selected)"
-                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
-                                                         title="@(item.Value.Selected ? "Selected" : string.Empty)"/>
-                                        }
-                                        <span class="jim-code-inline">@item.Value.Name</span>
-
-                                        @* Scope only means anything on a selected Container, so the control only appears on one *@
-                                        @if (item.Value.Selected)
-                                        {
-                                            var container = item.Value;
-                                            var isOneLevel = container.Scope == ConnectedSystemContainerScope.OneLevel;
-                                            <MudTooltip Arrow="true" Placement="Placement.Top">
-                                                <TooltipContent>
-                                                    <TooltipText Text="@(isOneLevel
-                                                                           ? "Only the objects held directly in this Container are imported. Click to import its whole subtree instead."
-                                                                           : "This Container and every Container beneath it are imported. Click to import only the objects held directly in it.")" />
-                                                </TooltipContent>
-                                                <ChildContent>
-                                                    <MudChip T="string"
-                                                             Variant="Variant.Outlined"
-                                                             Color="@(isOneLevel ? Color.Warning : Color.Primary)"
-                                                             OnClick="@(() => ConnectedSystemContainerScopeChanged(container))"
-                                                             Class="ml-2">
-                                                        @(isOneLevel ? "This level only" : "Whole subtree")
-                                                    </MudChip>
-                                                </ChildContent>
-                                            </MudTooltip>
-                                        }
-                                    }
-                                </BodyContent>
-                            </MudTreeViewItem>
-                        </ItemTemplate>
-                    </MudTreeView>
-                }
-            </div>
+            @if (partition.Selected && ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
+            {
+                <div class="pa-4 pt-0">
+                    @if (partition.Containers != null)
+                    {
+                        <ScopedHierarchyPicker Partition="@partition" OnChanged="OnSelectionEdited" />
+                    }
+                </div>
+            }
         </MudPaper>
     }
 
-    <MudStack Row="true" Class="mt-5" Spacing="2">
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" DropShadow="false">Save Changes</MudButton>
+    @* ─── Committing: what is pending, what it would do, and only then the button ─── *@
+    <div class="jim-scope-actions mt-6">
+        @if (_selectionEdited)
+        {
+            <span class="jim-scope-pending" data-testid="jim-scope-pending">
+                <MudIcon Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" />
+                Unsaved changes to what this Connected System imports
+            </span>
+        }
+        else
+        {
+            <span class="jim-scope-pending jim-scope-pending-clean" data-testid="jim-scope-saved">
+                No unsaved changes
+            </span>
+        }
+
         @* Preview (#1251): deselecting a container takes everything beneath it out of import scope, which obsoletes *@
         @* those objects, disconnects whatever they were joined to, and can leave Metaverse Objects with no          *@
         @* connectors at all. This is the count an administrator needs before saving, not afterwards.                *@
@@ -365,7 +353,11 @@
                    Disabled="@_startingPreview" DropShadow="false">
             Preview Changes
         </MudButton>
-    </MudStack>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync"
+                   DropShadow="false" data-testid="jim-scope-save">
+            Save Changes
+        </MudButton>
+    </div>
 
     @if (_previewActivityId.HasValue)
     {
@@ -405,6 +397,18 @@
 
     private bool _hierarchyBeingRetrieved;
     private HierarchyRefreshResult? _hierarchyRefreshResult;
+    private bool _refreshCaveatShown;
+    private bool _selectionEdited;
+    private DateTime? _hierarchyRetrievedAt;
+
+    /// <summary>How many Containers across every partition are selected, for the summary above the tree.</summary>
+    private int SelectedContainerCount =>
+        (ConnectedSystem.Partitions ?? []).Sum(ContainerSelectionEditor.CountSelected);
+
+    private int TotalContainerCount =>
+        (ConnectedSystem.Partitions ?? []).Sum(ContainerSelectionEditor.CountAll);
+
+    private int SelectedPartitionCount => (ConnectedSystem.Partitions ?? []).Count(p => p.Selected);
 
     // ─── Configuration Change Preview (#1251) ───
     private Guid? _previewActivityId;
@@ -415,6 +419,26 @@
     protected override void OnParametersSet()
     {
         ApplyContainerIncludedToPartitions(ConnectedSystem);
+    }
+
+    /// <summary>
+    /// Records that the administrator has edited the selection, so the action bar can say there is something to save
+    /// and the preview can report itself stale.
+    /// </summary>
+    private void OnSelectionEdited() => _selectionEdited = true;
+
+    /// <summary>
+    /// Deselecting a partition takes every Container within it out of scope too, so its selections are cleared
+    /// rather than left set behind an unmanaged partition, where they would say one thing and do another.
+    /// </summary>
+    private void PartitionSelectedChanged(ConnectedSystemPartition partition, bool selected)
+    {
+        partition.Selected = selected;
+
+        if (!selected)
+            ContainerSelectionEditor.ClearSelection(partition);
+
+        OnSelectionEdited();
     }
 
     private async Task HandleImportHierarchyAsync()
@@ -434,6 +458,8 @@
 
             if (_hierarchyRefreshResult.Success)
             {
+                _hierarchyRetrievedAt = DateTime.UtcNow;
+
                 if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
                 {
                     Snackbar.Add("Hierarchy refreshed with warnings. Some selected items were removed.", Severity.Warning);
@@ -548,6 +574,7 @@
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, previewActivityId: previewActivityId);
         DiscardScopeSelectionPreview();
+        _selectionEdited = false;
         Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
         await OnConnectedSystemChanged.InvokeAsync();
     }
@@ -635,152 +662,6 @@
         _preview = null;
     }
 
-    private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
-    {
-        return containers.Select(connectedSystemContainer => new TreeItemData<ConnectedSystemContainer>
-        {
-            Value = connectedSystemContainer,
-            Children = GetTreeItemData(connectedSystemContainer.ChildContainers)
-        }).ToList();
-    }
-
-    private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
-    {
-        // if included and clicked, change to not included, not selected
-        if (container.Included)
-        {
-            container.Selected = false;
-        }
-        else
-        {
-            // toggle the current setting
-            container.Selected = !container.Selected;
-        }
-
-        container.Included = false;
-
-        // set the right selected/included values for all children. A Subtree container covers everything beneath it,
-        // so its descendants become included and cannot be selected separately. A OneLevel container covers nothing
-        // beneath it, so its descendants stay selectable in their own right.
-        var coversDescendants = container.Selected && container.Scope == ConnectedSystemContainerScope.Subtree;
-        foreach (var child in container.ChildContainers)
-        {
-            child.Included = coversDescendants;
-            child.Selected = false;
-            ApplyContainerStatusDownBranch(child, false, coversDescendants);
-        }
-
-        // set the parent(s) if necessary
-        if (container.ParentContainer != null)
-        {
-            // go up a level. if all children are selected, then make parent selected and all children (recursively) included.
-            CorrectUpwardContainerStatus(container.ParentContainer);
-        }
-
-        // make sure the partition is selected if not already
-        AutoSelectPartitionIfContainersSelected(container);
-    }
-
-    /// <summary>
-    /// Toggles a selected Container between importing its whole subtree and importing only the objects held directly
-    /// in it, then recalculates which Containers a selection now covers.
-    /// </summary>
-    private static void ConnectedSystemContainerScopeChanged(ConnectedSystemContainer container)
-    {
-        container.Scope = container.Scope == ConnectedSystemContainerScope.Subtree
-            ? ConnectedSystemContainerScope.OneLevel
-            : ConnectedSystemContainerScope.Subtree;
-
-        // Narrowing releases the Containers beneath this one, which then have to become selectable again; widening
-        // takes them back. Either way the whole branch's inclusion has to be recalculated rather than nudged.
-        if (container.Partition != null)
-        {
-            ConnectedSystemUtilities.ApplyContainerInclusion(container.Partition);
-            return;
-        }
-
-        // A nested Container reaches its partition through its ancestors.
-        var current = container;
-        while (current.ParentContainer != null)
-            current = current.ParentContainer;
-
-        if (current.Partition != null)
-            ConnectedSystemUtilities.ApplyContainerInclusion(current.Partition);
-    }
-
-    /// <summary>
-    /// Makes sure the partition is selected if any contains in its hierarchy are selected.
-    /// </summary>
-    private static void AutoSelectPartitionIfContainersSelected(ConnectedSystemContainer container)
-    {
-        // this method could probably be optimised. I was having a hard time writing this.
-        // get the partition at the top of the container hierarchy
-        var partition = container.Partition;
-        var areAnyContainersSelected = container.Selected;
-        if (partition != null && areAnyContainersSelected && !partition.Selected)
-        {
-            partition.Selected = true;
-            return;
-        }
-
-        // we need a variable to hold the TLC when we eventually find it
-        ConnectedSystemContainer? topLevelContainer = null;
-
-        // we need a variable to hold the current container as we navigate up the hierarchy
-        var currentContainer = container;
-
-        // keep moving up the container hierarchy until we find the TLC
-        // ReSharper disable once LoopVariableIsNeverChangedInsideLoop : incorrect
-        while (topLevelContainer == null)
-        {
-            if (currentContainer.ParentContainer == null)
-            {
-                // found it! stop looping
-                topLevelContainer = currentContainer;
-                break;
-            }
-
-            // move up one level in the container hierarchy
-            currentContainer = currentContainer.ParentContainer;
-        }
-
-        // it's possible the TLC hasn't been found
-        // ReSharper disable once ConditionIsAlwaysTrueOrFalse : incorrect
-        if (topLevelContainer == null)
-        {
-            Log.Warning("Couldn't find the top-level container. unable to auto-select partition.");
-            return;
-        }
-
-        // we might already know if any containers are selected
-        if (!areAnyContainersSelected)
-        {
-            // we have a TLC! now, are any containers in the hierarchy selected?
-            if (topLevelContainer.Partition is { Containers: not null })
-                if (topLevelContainer.Partition.Containers.Any(IsContainerOrAnyChildrenSelected))
-                    areAnyContainersSelected = true;
-        }
-
-        // does the top-level container have a parent partition?
-        if (topLevelContainer.Partition != null && areAnyContainersSelected)
-            topLevelContainer.Partition.Selected = true;
-    }
-
-    private static bool IsContainerOrAnyChildrenSelected(ConnectedSystemContainer container)
-    {
-        return container.Selected || container.ChildContainers.Any(IsContainerOrAnyChildrenSelected);
-    }
-
-    private static void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
-    {
-        foreach (var child in container.ChildContainers)
-        {
-            child.Included = included;
-            child.Selected = selected;
-            ApplyContainerStatusDownBranch(child, selected, included);
-        }
-    }
-
     private static void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystemInQuestion)
     {
         if (connectedSystemInQuestion.Partitions == null)
@@ -792,25 +673,4 @@
             ConnectedSystemUtilities.ApplyContainerInclusion(partition);
     }
 
-    private static void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
-    {
-        // Rolling every selected child up into its parent replaces their selections with one Subtree selection on the
-        // parent, which would silently discard a child that was deliberately narrowed to its own level. Only roll up
-        // when there is no such intent to lose.
-        if (parentContainer.ChildContainers.All(q => q.Selected && q.Scope == ConnectedSystemContainerScope.Subtree))
-        {
-            parentContainer.Selected = true;
-            parentContainer.Included = false;
-
-            foreach (var childContainer in parentContainer.ChildContainers)
-            {
-                childContainer.Selected = false;
-                childContainer.Included = true;
-                ApplyContainerStatusDownBranch(childContainer, false, true);
-            }
-        }
-
-        if (parentContainer.ParentContainer != null)
-            CorrectUpwardContainerStatus(parentContainer.ParentContainer);
-    }
 }
