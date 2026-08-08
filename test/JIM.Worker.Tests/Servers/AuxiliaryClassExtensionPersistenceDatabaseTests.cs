@@ -2,11 +2,16 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Staging;
+using JIM.Models.Activities;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.PostgresData;
+using JIM.Worker.Tests.Connectors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
+using Serilog;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -572,6 +577,91 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
 
     #endregion
 
+    #region Running a discovery
+
+    /// <summary>
+    /// A Connector is asked to honour cancellation by returning what it has, but one that throws instead must not
+    /// turn an administrator's own cancellation into a failure. A failed run raises an error on the Activity and
+    /// reads as something going wrong; a cancelled one reads as the administrator changing their mind.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_WhenTheConnectorThrowsOnCancellation_RecordsTheRunAsCancelledAsync()
+    {
+        var seeded = await SelectedSeedAsync();
+
+        await using var context = NewContext();
+        var application = new JimApplication(new PostgresDataRepository(context));
+        var connectedSystem = await application.ConnectedSystems.GetConnectedSystemAsync(seeded.ConnectedSystemId);
+
+        // Cancelled from inside the read rather than before the run, which is where it actually happens: the run
+        // starts, the administrator cancels part-way through, and the Connector stops. Cancelling up front would
+        // never reach the Connector at all, and the test would pass without exercising anything.
+        using var cancellation = new CancellationTokenSource();
+
+        var runner = new AuxiliaryClassDiscoveryRunner(application, Log.Logger);
+        var run = await runner.RunAsync(connectedSystem!, AuxiliaryClassDiscoveryScope.FullScan, null,
+            new Activity { Id = Guid.NewGuid() }, new ThrowingUsageConnector(cancellation),
+            new RecordingConnectorProgress(), cancellation.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.Status, Is.EqualTo(AuxiliaryClassDiscoveryStatus.Cancelled));
+            Assert.That(run.ErrorMessage, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A Connector that cannot report class usage is a configuration mistake rather than a run that failed, so it
+    /// must be refused before a run row is written; a Connected System left with an in-progress run nothing is
+    /// working on would block every later attempt.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_ForAConnectorThatCannotReportUsage_LeavesNoRunBehindAsync()
+    {
+        var seeded = await SelectedSeedAsync();
+
+        await using var context = NewContext();
+        var application = new JimApplication(new PostgresDataRepository(context));
+        var connectedSystem = await application.ConnectedSystems.GetConnectedSystemAsync(seeded.ConnectedSystemId);
+
+        var runner = new AuxiliaryClassDiscoveryRunner(application, Log.Logger);
+
+        Assert.That(async () => await runner.RunAsync(connectedSystem!, AuxiliaryClassDiscoveryScope.FullScan, null,
+                new Activity { Id = Guid.NewGuid() }, new UsagelessConnector(), new RecordingConnectorProgress(),
+                CancellationToken.None),
+            Throws.TypeOf<NotSupportedException>());
+
+        await using var readContext = NewContext();
+        Assert.That(await readContext.AuxiliaryClassDiscoveryRuns.CountAsync(), Is.Zero);
+    }
+
+    /// <summary>
+    /// A Connector that is cancelled part-way through a read and throws rather than returning its partial findings.
+    /// </summary>
+    private sealed class ThrowingUsageConnector(CancellationTokenSource cancellation) : IConnector, IConnectorObjectClassUsage
+    {
+        public string Name => "Throwing Test Connector";
+        public string? Description => null;
+        public string? Url => null;
+
+        public Task<ObjectClassUsageResult> ReadObjectClassUsageAsync(ConnectedSystem connectedSystem,
+            ObjectClassUsageRequest request, ILogger logger, CancellationToken cancellationToken,
+            IConnectorProgress progress)
+        {
+            cancellation.Cancel();
+            throw new OperationCanceledException(cancellation.Token);
+        }
+    }
+
+    private sealed class UsagelessConnector : IConnector
+    {
+        public string Name => "Usageless Test Connector";
+        public string? Description => null;
+        public string? Url => null;
+    }
+
+    #endregion
+
     #region Helpers
 
     /// <summary>
@@ -597,6 +687,25 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
         await seed.SaveChangesAsync();
 
         return new SeededSchema(system.Id, person.Id, posixAccount.Id);
+    }
+
+    /// <summary>
+    /// As <see cref="SeedAsync"/>, but with the structural type selected, which is the only kind a discovery run
+    /// samples.
+    /// </summary>
+    private async Task<SeededSchema> SelectedSeedAsync()
+    {
+        var seeded = await SeedAsync();
+
+        // AsTracking, because the fixture's contexts are NoTracking to match JIM.Web; without it this save would
+        // report success and change nothing.
+        await using var update = NewContext();
+        var person = await update.ConnectedSystemObjectTypes.AsTracking()
+            .SingleAsync(objectType => objectType.Id == seeded.PersonId);
+        person.Selected = true;
+        await update.SaveChangesAsync();
+
+        return seeded;
     }
 
     private sealed record SeededSchema(int ConnectedSystemId, int PersonId, int PosixAccountId);

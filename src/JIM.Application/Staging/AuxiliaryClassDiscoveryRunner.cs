@@ -69,6 +69,15 @@ public class AuxiliaryClassDiscoveryRunner
                 ? AuxiliaryClassDiscoveryStatus.Cancelled
                 : AuxiliaryClassDiscoveryStatus.Complete;
         }
+        catch (OperationCanceledException)
+        {
+            // A Connector is asked to stop and return what it has, but one that throws instead is still reporting
+            // the administrator's own cancellation. Recording that as a failure would raise an error on the Activity
+            // for something nobody needs to investigate.
+            run.Status = AuxiliaryClassDiscoveryStatus.Cancelled;
+            _logger.Information("AuxiliaryClassDiscoveryRunner: Discovery of '{ConnectedSystem}' was cancelled after reading {EntriesRead} objects.",
+                connectedSystem.Name, run.EntriesRead);
+        }
         catch (Exception ex)
         {
             // The findings gathered so far are still worth keeping: they are suggestions, and a partial set of them

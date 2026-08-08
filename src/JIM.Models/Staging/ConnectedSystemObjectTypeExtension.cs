@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+
 namespace JIM.Models.Staging;
 
 /// <summary>
@@ -27,12 +29,26 @@ public class ConnectedSystemObjectTypeExtension
     /// <summary>
     /// The Object Type being extended, i.e. the structural class an administrator manages.
     /// </summary>
+    /// <remarks>
+    /// Never serialised, as with <see cref="ExtensionObjectType"/>: an extension is only ever reached as a child of
+    /// its base Object Type, so writing the parent back out would be a cycle. The OpenAPI schema generator has no
+    /// cycle breaking here and walks it to System.Text.Json's 256-level depth limit, which fails the whole document
+    /// and with it the jim.web image build. Callers have <see cref="BaseObjectTypeId"/>.
+    /// </remarks>
+    [JsonIgnore]
     public ConnectedSystemObjectType BaseObjectType { get; set; } = null!;
     public int BaseObjectTypeId { get; set; }
 
     /// <summary>
     /// The Object Type contributing the additional attributes, i.e. the auxiliary class.
     /// </summary>
+    /// <remarks>
+    /// Never serialised, for the reason given on <see cref="BaseObjectType"/>: this points at an Object Type that
+    /// carries extensions of its own, so the schema generator has the same cycle to walk from the other direction.
+    /// Callers have <see cref="ExtensionObjectTypeId"/>, and the auxiliary class's name via the Object Type it
+    /// identifies.
+    /// </remarks>
+    [JsonIgnore]
     public ConnectedSystemObjectType ExtensionObjectType { get; set; } = null!;
     public int ExtensionObjectTypeId { get; set; }
 
