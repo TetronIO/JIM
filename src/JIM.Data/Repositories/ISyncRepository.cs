@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -123,6 +124,26 @@ public interface ISyncRepository
     Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
 
     /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// Widens that method's projection with the stored content hash, schema fingerprint, status,
+    /// and partition, so a Full Import can evaluate the SPEC-1082 skip predicate for every matched
+    /// object without any additional database round trip.
+    /// </summary>
+    Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
+
+    /// <summary>
+    /// SPEC-1082 D6: the ONLY code path permitted to write <see cref="ConnectedSystemObject.ImportStateHash"/>
+    /// and <see cref="ConnectedSystemObject.ImportStateFingerprint"/>. Callers MUST invoke this
+    /// strictly after the batch's attribute-value writes for the given CSOs have committed
+    /// (stamp-ordering invariant): stamping before the values it describes have committed would let
+    /// a crash between the two leave a hash that lies about the CSO's content. Does NOT touch
+    /// <see cref="ConnectedSystemObject.LastUpdated"/> (the #891 Full Synchronisation watermark).
+    /// A no-op for an empty list.
+    /// </summary>
+    Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
+
+    /// <summary>
     /// Batch-loads full CSO entity graphs by their IDs in a single query.
     /// Returns CSOs with Type, Attributes, AttributeValues, and ReferenceValue navigations loaded —
     /// the same shape as GetConnectedSystemObjectByAttributeAsync but for multiple CSOs at once.
@@ -199,10 +220,12 @@ public interface ISyncRepository
     Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
-    /// Gets the count of CSOs joined to a specific MVO across all Connected Systems.
-    /// Used to determine whether an MVO should be deleted when its last CSO is disconnected.
+    /// Gets the Connected System ID of each CSO joined to a specific MVO across all Connected Systems:
+    /// one entry per CSO, duplicates preserved when a system holds multiple joined CSOs.
+    /// Used by the MVO deletion rule evaluation to determine both how many connectors remain and which
+    /// systems they belong to after a disconnection (#119). Replaces the previous count-only query.
     /// </summary>
-    Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
+    Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
     /// Gets the count of CSOs joined to a specific MVO within a single Connected System.
@@ -257,8 +280,15 @@ public interface ISyncRepository
     /// Synchronisation unchanged-object watermark for a no-op confirming import depends on
     /// LastUpdated staying untouched here. Callers are responsible for keeping the in-memory
     /// Connected System Object graph in sync with the persisted delta afterwards.
+    /// <para>
+    /// SPEC-1082 D9: also nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
+    /// <see cref="ConnectedSystemObject.ImportStateFingerprint"/> for every CSO in
+    /// <paramref name="affectedCsoIds"/>, set-based, in the SAME persistence call. This mutates
+    /// attribute values outside the Full Import stamp path (D6/D7), so any stored hash describing
+    /// the CSO's prior content is no longer trustworthy.
+    /// </para>
     /// </summary>
-    Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds);
+    Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds);
 
     /// <summary>
     /// Deletes CSOs and their attribute values without change tracking.
@@ -432,6 +462,15 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets the count of Pending Exports for a Connected System.
     /// Used by the export processor to determine paging.
     /// </summary>
@@ -442,6 +481,138 @@ public interface ISyncRepository
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Records that newly provisioned accounts are owed an initial password.
+    /// <para>
+    /// Staged rather than delivered inline, for the same reason a Pending Export is staged rather than written
+    /// during synchronisation: it keeps a network round trip to the target out of the loop that is persisting
+    /// the results of one that already succeeded. A password JIM could not set must never be able to delay, or
+    /// fail, the record of the account it was for.
+    /// </para>
+    /// <para>
+    /// Ignores accounts already carrying an outstanding record, so re-running an export cannot stage the same
+    /// work twice.
+    /// </para>
+    /// </summary>
+    Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords);
+
+    /// <summary>
+    /// Gets the accounts on a Connected System still waiting for an initial password JIM can act on, oldest
+    /// first, with the Connected System Object each one is owed to.
+    /// <para>
+    /// Parked and expired records are excluded: both mean a person has to do something, and re-attempting them
+    /// on every export would produce the same answer for ever while crowding out work that can succeed.
+    /// </para>
+    /// </summary>
+    /// <param name="maximum">
+    /// An upper bound on one pass, so that a target rejecting everything cannot turn an export run into an
+    /// unbounded sequence of failing password attempts. What is left over is attempted on the next run.
+    /// </param>
+    Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum);
+
+    /// <summary>
+    /// Gets the initial-password configuration of the given Synchronisation Rules, keyed by rule.
+    /// <para>
+    /// Read on its own rather than through a Synchronisation Rule, which materialises Attribute Flows, Object
+    /// Matching Rules and both object types; none of that has anything to say about a password.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// </summary>
+    Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Records the outcome of a delivery attempt against each record: its status, the target's reason, the
+    /// attempt count and when it was tried.
+    /// <para>
+    /// Only those columns are written. Which account the password is owed to, which Connected System it lives
+    /// in, which rule asked for it and when the work was staged are facts about how the record came to exist,
+    /// and an attempt does not change any of them.
+    /// </para>
+    /// </summary>
+    Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts);
+
+    /// <summary>
+    /// Deletes outstanding initial-password records by ID, which is what a delivered password looks like.
+    /// <para>
+    /// The table is a work list, not a history: keeping a row per account JIM has ever given a password to
+    /// would grow it without bound for no benefit, and the Activity already records that the delivery happened.
+    /// </para>
+    /// </summary>
+    Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Returns every parked initial-password record for a Synchronisation Rule to the outstanding state, so the
+    /// next delivery pass attempts it again, and returns how many were released.
+    /// <para>
+    /// Parking stops the retry loop on purpose, which is only safe because this exists: the administrator
+    /// changing the configuration the target objected to is the event that makes another attempt worth making.
+    /// Records in any other state are left alone, because a record awaiting retry is already going to be tried
+    /// and an expired one has outlived the purpose it was created for.
+    /// </para>
+    /// <para>
+    /// The target's reason goes with the release. It described a configuration that no longer exists, so
+    /// keeping it would have the portal report a complaint an administrator has already acted on. The attempt
+    /// count survives: those attempts really were made, and a release is not another one.
+    /// </para>
+    /// </summary>
+    Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId);
+
+    /// <summary>
+    /// Marks every initial-password record on a Connected System whose time to live has passed as expired, and
+    /// returns how many were expired.
+    /// <para>
+    /// Expiry is recorded, never a deletion. An account that quietly stopped being owed a password, with nothing
+    /// left to say so, is the silent loss this whole feature is built to avoid: nobody would learn that it was
+    /// provisioned without a working password.
+    /// </para>
+    /// <para>
+    /// Covers records awaiting retry and parked records alike. Parking waits for an administrator, and one who
+    /// never comes is exactly what an expiry is for; leaving those parked for ever would hold a permanent
+    /// needs-attention marker over work nobody is going to do. A record with no expiry never expires, so rows
+    /// staged before initial passwords carried a time to live are left alone rather than being given one
+    /// retrospectively.
+    /// </para>
+    /// </summary>
+    Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
+
+    /// <summary>
+    /// Counts the accounts needing a person's attention over their initial password, by Synchronisation Rule.
+    /// <para>
+    /// One grouped count for every rule on the page rather than one query per row: this backs a list indicator,
+    /// which is exactly the shape that turns into N+1 queries if each row asks for itself.
+    /// </para>
+    /// <para>
+    /// A rule with nothing outstanding is absent from the result rather than present with zeroes, so a caller
+    /// that renders nothing for a settled rule can do so by lookup failure alone.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
+    /// The Connected System counterpart of
+    /// <see cref="GetInitialPasswordAttentionBySyncRuleAsync"/>, for the Connected Systems list.
+    /// <para>
+    /// Counted against the record's own denormalised Connected System rather than through its Synchronisation
+    /// Rule, so an account whose rule has since been deleted is still counted against the system it lives in.
+    /// </para>
+    /// </summary>
+    Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
+    /// The distinct reasons a target gave for refusing the initial passwords parked against a Synchronisation
+    /// Rule, each with how many accounts it is holding up, most accounts first.
+    /// <para>
+    /// Grouped rather than listed per account because the administrator reading this is fixing a setting: the
+    /// number of distinct reasons is the number of problems, and it is almost always very much smaller than the
+    /// number of accounts.
+    /// </para>
+    /// </summary>
+    Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId);
 
     /// <summary>
     /// Bulk deletes Pending Exports.
@@ -544,6 +715,17 @@ public interface ISyncRepository
     Task UpdateActivityProgressOutOfBandAsync(Activity activity);
 
     /// <summary>
+    /// Records the given phases of a Run Profile execution (#454), inserting phases the Activity
+    /// has not seen before and updating the state of ones it has. Called with the phases declared
+    /// when the run starts, and thereafter with just the phases each transition changed.
+    /// </summary>
+    /// <remarks>
+    /// Narrating a run must never fail it: callers treat a failure here as cosmetic. Writes are
+    /// idempotent, so a retried call is harmless.
+    /// </remarks>
+    Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases);
+
+    /// <summary>
     /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
     /// Returns true if raw SQL was used (RPEIs are outside EF tracking),
     /// false if the EF fallback was used (RPEIs remain tracked).
@@ -621,6 +803,22 @@ public interface ISyncRepository
     Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
 
     /// <summary>
+    /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
+    /// they provision.
+    /// <para>
+    /// Asked at the moment a batch of Creates has succeeded, rather than stamped onto the export when it was
+    /// staged, so that switching initial passwords on takes effect for work already queued. The alternative
+    /// would silently skip every account provisioned between the export being staged and the administrator
+    /// enabling the feature.
+    /// </para>
+    /// <para>
+    /// Also what keeps the work list proportional to the deployments that use it: a system that provisions a
+    /// hundred thousand accounts and asks for no passwords stages nothing at all.
+    /// </para>
+    /// </summary>
+    Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
     /// Gets the object types (schema) for a Connected System.
     /// Used during sync to resolve attribute mappings.
     /// </summary>
@@ -630,6 +828,13 @@ public interface ISyncRepository
     /// Updates a Connected System's fields (e.g., LastSyncCompletedAt watermark).
     /// </summary>
     Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Gets the id-to-display-name map of every Connected System. Used to resolve source system names
+    /// for decision-time deletion policy snapshots (#119): a tiny table fetched at most once per run
+    /// profile execution and cached by the caller, never per Metaverse Object.
+    /// </summary>
+    Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
 
     #endregion
 

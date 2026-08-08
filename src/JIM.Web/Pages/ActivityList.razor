@@ -92,6 +92,7 @@
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">Connected System Run Profile</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SynchronisationRule">Synchronisation Rule</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObject">Metaverse Object</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemObject">Connected System Object</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseAttribute">Metaverse Attribute</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ExampleDataTemplate">Example Data Template</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.DataGeneration">Data Generation</MudSelectItem>
@@ -157,9 +158,8 @@
     LoadingProgressColor="Color.Primary">
     <ToolBarContent>
         <MudSpacer />
-        <MudTextField T="string" Value="@_searchString" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search target or initiator" Margin="Margin.Dense"
-            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
-            Class="mt-0" />
+        <SearchField Value="@_searchString" ValueChanged="@(s => OnSearch(s))"
+                     Placeholder="Search target or initiator" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh>

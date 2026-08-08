@@ -13,7 +13,7 @@ using Serilog;
 using System.Globalization;
 namespace JIM.Connectors.File;
 
-public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles, IConnectorExportUsingFiles
+public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles, IConnectorExportUsingFiles, IConnectorPhases
 {
     #region IConnector members
     public string Name => ConnectorConstants.FileConnectorName;
@@ -36,6 +36,14 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;
     public bool SupportsFilePaths => true;
+
+    public bool SupportsPasswordSet => false;
+
+    public bool SupportsPasswordPolicyDiscovery => false;
+
+    // A delimited file's column names are whatever the file happens to carry, so no standard vocabulary is
+    // claimed; the Attribute Flow editor falls back to matching names against every standard.
+    public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
     #endregion
 
     #region IConnectorSettings members
@@ -475,23 +483,33 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorImportUsingFiles members
-    public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
+    public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         logger.Verbose("ImportAsync() called");
 
         if (string.IsNullOrEmpty(runProfile.FilePath))
             throw new InvalidDataException($"ImportAsync: FilePath is missing or empty!");
 
+        await progress.EnterPhaseAsync(FileConnectorPhases.Read);
+
         var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
         var stopOnFirstError = GetStopOnFirstErrorSetting(connectedSystem.SettingValues);
         var multiValueDelimiter = GetMultiValueDelimiterSetting(connectedSystem.SettingValues);
-        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken);
-            
+        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken, progress);
+
         switch (runProfile.RunType)
         {
             case ConnectedSystemRunType.FullImport:
                 logger.Debug("ImportAsync: Full Import requested");
+
+                // A file import hands everything over in one call, so without stating how many
+                // records the file holds the Activity can only show a bar with no end to it for the
+                // whole read. Counting them is a second pass, but a parse-only one over a file the
+                // read that follows is about to warm the page cache for.
+                await progress.ReportExpectedObjectCountAsync(
+                    await CountDataRecordsAsync(runProfile.FilePath, connectedSystem.SettingValues, logger, cancellationToken));
+
                 return await import.GetFullImportObjectsAsync();
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
@@ -506,17 +524,72 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorExportUsingFiles members
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         var logger = Log.ForContext<FileConnector>();
         logger.Verbose("ExportAsync() called with {Count} Pending Exports", pendingExports.Count);
 
-        var export = new FileConnectorExport(settings, pendingExports, logger);
-        return Task.FromResult(export.Execute());
+        var export = new FileConnectorExport(settings, pendingExports, logger, progress);
+        return export.ExecuteAsync();
+    }
+    #endregion
+
+    #region IConnectorPhases members
+    /// <summary>
+    /// The steps this Connector performs, so an administrator can see the whole journey through a
+    /// file rather than one message at a time. An export merges pending changes into whatever the
+    /// file already holds, so it has three distinct steps; an import is a single pass over the
+    /// file, so claiming more than one step would be a fiction.
+    /// </summary>
+    public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        return runProfile.RunType switch
+        {
+            ConnectedSystemRunType.Export =>
+            [
+                new ConnectorPhase(FileConnectorPhases.LoadExistingFile, FileConnectorPhases.LoadExistingFileName),
+                new ConnectorPhase(FileConnectorPhases.Merge, FileConnectorPhases.MergeName),
+                new ConnectorPhase(FileConnectorPhases.Write, FileConnectorPhases.WriteName)
+            ],
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
+            [
+                new ConnectorPhase(FileConnectorPhases.Read, FileConnectorPhases.ReadName)
+            ],
+            _ => []
+        };
     }
     #endregion
 
     #region private methods
+    /// <summary>
+    /// Counts the data records in a file, so JIM can show how far through reading it a run is.
+    /// </summary>
+    /// <remarks>
+    /// Counts records rather than lines: a quoted field may hold line breaks, and a total that
+    /// overstates the file leaves the progress bar stuck short of complete. Nothing is extracted
+    /// from the fields, so this is a parse-only pass, considerably cheaper than the read that
+    /// follows it.
+    /// </remarks>
+    private static async Task<int> CountDataRecordsAsync(
+        string filePath,
+        IReadOnlyCollection<ConnectedSystemSettingValue> settingValues,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        using var counter = GetCsvReader(filePath, settingValues, logger);
+        var records = 0;
+
+        // The first record is the header row, which is not an object.
+        await counter.CsvReader.ReadAsync();
+        counter.CsvReader.ReadHeader();
+
+        while (!cancellationToken.IsCancellationRequested && await counter.CsvReader.ReadAsync())
+            records++;
+
+        logger.Debug("CountDataRecordsAsync: '{FilePath}' holds {Records} records", LogSanitiser.Sanitise(filePath), records);
+        return records;
+    }
+
     /// <summary>
     /// Helper to simplify opening a file for reading. Takes care of file location and culture specifics.
     /// </summary>

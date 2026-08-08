@@ -44,8 +44,29 @@ Services coordinate through the database, and the database also signals change: 
 - **Listener**: `IDatabaseNotificationListener` (`JIM.Data`) implemented by `PostgresNotificationListener` (`JIM.PostgresData`); one dedicated non-pooled connection per service (`JimDbContext.BuildListenerConnectionString()`), exponential backoff reconnection, `IsConnected`/`ConnectionStateChanged` for fallback gating.
 - **Scheduler**: listens for terminal Worker Tasks belonging to a Schedule Execution and wakes its polling loop (via `AsyncWakeSignal` in `JIM.Utilities`) within ~500ms; the 30-second cycle remains the fallback.
 - **JIM.Web**: `NotificationListenerService` (hosted service) fans events out to the in-process `IUiNotificationService` relay (consumed by Blazor components; Activity progress debounced 200ms) and the `JimNotificationHub` SignalR hub at `/hubs/notifications` for non-Blazor consumers.
+- **Run Profile progress (#202)**: the lightweight progress read path is `IActivityRepository.GetActivityProgressAsync` (scalar projection plus the `ActivityStatCounter` operation breakdown from #1078; never materialises RPEIs), surfaced as `GET /api/v1/activities/{id}/progress` and consumed by the Activity detail page (push-driven via the relay, with adaptive fallback polling) and PowerShell (`Get-JIMActivity -Follow`, `Start-JIMRunProfile -Wait`). Throughput and ETA come from `IActivityEtaTracker` (JIM.Web singleton): a windowed rate over successive progress samples with counter-reset detection, shared by the endpoint and the page so all surfaces agree.
 
 **Rules**: notifications are fire-and-forget hints carrying identifiers only; consumers re-query the database for state and MUST retain a polling fallback (degraded latency, never degraded correctness). Publish new channels via database triggers (delivered on commit, cover every writer), never ad-hoc application-side `pg_notify` calls.
+
+### 3b. Password Channel (#1121)
+
+Passwords do **not** travel through the Metaverse, Attribute Flow, or Pending Exports. That machinery remembers values, compares them, renders them and retries them, which are all the wrong behaviours for a credential, so the password channel runs parallel to it and shares none of it. Public documentation: [Passwords](../docs/concepts/passwords.md).
+
+Key components:
+
+- **Connector contracts** (`JIM.Models/Interfaces`): `IConnectorPasswordManagement` (set a password, run the read-only preflight) and `IConnectorPasswordPolicyDiscovery` (read the target's policy during schema discovery). Both are opt-in capabilities mirrored to `ConnectorDefinition` columns; `LdapConnectorPassword` and `LdapConnectorPasswordPolicy` are the only implementations today.
+- **Generation** (`JIM.Application/Services`): `IPasswordGeneratorService` / `PasswordGeneratorService`, exposed as `JimApplication.PasswordGenerator`, with `PasswordCharacterPools` and the vetted `PasswordWordList` (`Resources/PasswordWords.en.txt`). It returns a `PasswordGenerationAssessment` (entropy, guaranteed character classes, compliance against a `ConnectedSystemPasswordPolicy`) alongside the value. All randomness comes from `RandomNumberGenerator`; `System.Random` is never acceptable here.
+- **Policy reconciliation** (`JIM.Models/Staging`): `PasswordPolicyReconciliation` combines several systems' `PasswordPolicyForSystem` into one requirement set (longest minimum length demanded by any, character classes counted by **all**), and reports `IsUsable = false` where no single password can satisfy them. Callers must refuse rather than proceed: a password accepted on the first account and refused on the second leaves the person mid-change across systems.
+- **Delivery decision** (`JIM.Application/Services/InitialPasswordDeliveryService`): deliberately persistence-free. It decides what to generate, sends it, and classifies the answer into a retryable failure, a policy rejection, or success; the caller records the outcome. That split is why the export path and the administrator's own dialog reach identical decisions instead of growing two copies, and why the retry classification is testable without a database.
+- **Persistence and orchestration** (`JIM.Application/Servers/InitialPasswordDeliveryServer`, exposed as `JimApplication.InitialPasswords`): staging, the delivery pass, release-on-configuration-change, time-to-live expiry, and the grouped attention/rejection reads. `PendingInitialPassword` is the account's outstanding debt, and `PendingInitialPasswordStatus` has only the three states a debt can be in (`Pending`, `Parked`, `Expired`): a delivered row is **deleted**, not marked, because JIM keeps no record of a password having been set beyond the Activity. `InitialPasswordDeliveryOutcome` is the separate per-attempt classification (`Delivered`, `Retry`, `Parked`, `NotApplicable`); do not conflate the two. `PendingInitialPasswordBulkColumns` is guarded by `BulkInsertColumnCompletenessTests`, so a new column that is not bulk-inserted fails a test rather than silently never persisting.
+
+**Rules**:
+
+- **A password value is never persisted, logged, returned in an Activity, put in a change-history snapshot, or placed on a DTO.** The generate endpoints are the single deliberate exception: the caller explicitly asked for a value and is handed it once; nothing is stored even then. Any new surface touching this channel must be reviewed against that rule specifically.
+- **Setting the password must never fail the export that created the account.** `StageInitialPasswordsForBatchAsync` (`ExportExecutionServer`) stages the debt after a successful Create; delivery runs as its own pass at the end of every export run over everything the Connected System still owes. Reporting the export as failed would have JIM retry the create against an account that exists.
+- **Retry only where retrying can help.** A target refusing the password *itself* parks the account, because the same generator configuration produces another password refused for the same reason. Parking clears when the Synchronisation Rule's initial password settings actually change (`SyncRuleInitialPassword.SnapshotDeliverySettings()`, compared explicitly rather than via change capture, which is gated on a Service Setting and swallows exceptions); the comparison used to promise a release before saving must be the same one the save path uses.
+- **Discovered policy values are a floor, not a contract.** Null means "could not read", never "no such rule". Most systems publish nothing, fine-grained policies are detected rather than enumerated, and a custom password filter is discoverable by nothing at all, so the rejection path is a required feature rather than a fallback.
+- **Credential attributes stay denylisted** from import and Attribute Flow selection, including on upgrade (deselect and lock, never delete, so referencing Synchronisation Rules survive).
 
 ### 4. Architecture Diagrams
 
@@ -198,7 +219,7 @@ Rules:
 - **Never compare raw byte arrays from different sources** - parse to `Guid` first, then compare
 - **Use `Guid.ToByteArray()` only for Microsoft-format targets** (AD, SQL Server) - RFC 4122 systems need byte-swapped first 3 components
 
-For full details and connector-specific guidance, see [`docs/plans/doing/GUID_UUID_HANDLING.md`](plans/doing/GUID_UUID_HANDLING.md).
+For full details and connector-specific guidance, see [`engineering/plans/done/GUID_UUID_HANDLING.md`](plans/done/GUID_UUID_HANDLING.md).
 
 ### 3. Database & Migrations
 
@@ -483,6 +504,20 @@ Verify after rebuild with `jim-signing-status`. A healthy state shows:
   ssh agent:          forwarded, 1 key(s) loaded
 ```
 
+**Native Windows checkout (working outside the devcontainer):**
+
+Git Bash's bundled (MSYS) OpenSSH cannot reach the Windows OpenSSH agent's named pipe, so signing must go through the Windows OpenSSH tools instead. With the "OpenSSH Authentication Agent" service running and your key loaded (see the Windows 11 bullet above), configure the clone once:
+
+```bash
+git config gpg.format ssh
+git config user.signingkey "$USERPROFILE/.ssh/id_ed25519.pub"
+git config gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
+git config commit.gpgsign true
+git config core.hooksPath .githooks
+```
+
+Pointing `user.signingkey` at the *public* key makes ssh-keygen sign via the agent, so a passphrase-protected private key never needs decrypting in the shell. The pre-commit hook probes the Windows agent directly when the MSYS `ssh-add` cannot reach it.
+
 **Registering your SSH key as a signing key on GitHub:**
 
 The same physical SSH key can be used for both authentication and signing, but GitHub tracks them as *separate key registrations*. If you have only added your key as an authentication key, commits will be signed but GitHub will display them as "Unverified". To fix:
@@ -707,34 +742,57 @@ public interface IRepository
 **Rule**: Application layer depends on `IRepository`, not concrete implementations.
 
 ### 3. Connector Pattern
-Implement connectors for external systems:
+
+Connectors implement `IConnector` (identity only) plus whichever capability interfaces they support. The four *interaction* interfaces are the ones that move data; a connector implements the import and/or export interface matching how it talks to its system (calls or files), never both mechanisms for the same direction. Authoritative signatures live in `src/JIM.Models/Interfaces/`:
+
 ```csharp
 public interface IConnector
 {
-    Task<ConnectorCapabilities> GetCapabilitiesAsync();
-    Task<bool> TestConnectionAsync();
-    // ... other required methods
+    string Name { get; }
+    string? Description { get; }
+    string? Url { get; }
 }
 
-// Optional interfaces for specific capabilities
-public interface IConnectorImportUsingCalls : IConnector
+// Import via API calls: JIM calls this repeatedly, once per page, until no pagination tokens come back.
+public interface IConnectorImportUsingCalls
 {
-    Task<List<ConnectedSystemObject>> ImportAsync(ConnectedSystem system);
+    void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger);
+
+    Task<ConnectedSystemImportResult> ImportAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile,
+        List<ConnectedSystemPaginationToken> paginationTokens,
+        string? persistedConnectorData,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null);
+
+    void CloseImportConnection();
 }
 
-public interface IConnectorExportUsingCalls : IConnector
+// Export via API calls: one result per Pending Export, in the same order.
+public interface IConnectorExportUsingCalls
 {
-    Task<ConnectorExportResult> ExportAsync(
-        ConnectedSystemObject cso, PendingExport export,
-        CancellationToken cancellationToken = default);
+    void OpenExportConnection(IList<ConnectedSystemSettingValue> settings);
+
+    Task<List<ConnectedSystemExportResult>> ExportAsync(
+        IList<PendingExport> pendingExports,
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null);
+
+    void CloseExportConnection();
 }
 ```
+
+`IConnectorImportUsingFiles` and `IConnectorExportUsingFiles` mirror these without the open/close lifecycle: a file-based connector reads or writes the whole file in a single call.
 
 **Connector Capabilities**: Connectors declare capabilities via `IConnectorCapabilities` properties:
 - `SupportsExport`, `SupportsImport`, `SupportsDeltaImport`, etc.
 - `SupportsParallelExport`: when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
 
-**Rule**: Keep connectors stateless. Store configuration in `ConnectedSystem.Configuration`.
+**Reporting to administrators**: the optional `progressCallback` narrates a connector's internal sub-phases onto the Activity message while a long call is running; it is one of several feedback channels (settings validation, per-object export results, run-level warnings, exceptions, logging), each appropriate to a different moment and severity. The guidance for connector authors is in the public [Writing Custom Connectors](../docs/developer/connectors.md) page; the design rationale is in [`notes/CONNECTOR_SUB_PHASE_PROGRESS.md`](notes/CONNECTOR_SUB_PHASE_PROGRESS.md).
+
+**Rule**: Keep connectors stateless between calls. Anything that must survive to the next run goes in `ConnectedSystemImportResult.PersistedConnectorData`, which JIM stores and replays; anything needed only for the next page goes in `PaginationTokens`.
 
 ### 4. Activity Logging
 Log all significant operations for audit:

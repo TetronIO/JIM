@@ -133,6 +133,65 @@ The action applies regardless of how the object came to be joined: it makes no d
 
 Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
 
+### Seeing what a run has deprovisioned
+
+Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted identity's execution item as a **Pending Export** outcome nested beneath the **MVO Deleted** outcome that caused it, naming the Connected System the account is being removed from, and is counted in the Activity's Pending Exports total. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, identity deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
+
+This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Metaverse Object Housekeeping](activities.md#metaverse-object-housekeeping) batch that deletes identities once their grace period expires.
+
+## Initial password
+
+An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** section of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
+
+For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
+
+It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
+
+The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
+
+### What you configure
+
+- **Password Settings**<br /> Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here. Choosing your own starts from the discovered policy rather than from nothing, and switching between the two never discards what you configured. The generator produces random characters, words, or a pronounceable password, and tells you the minimum length and character classes the result is guaranteed to carry.
+- **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
+- **Enable the account once the password is set**<br /> On by default. A provisioned account nobody can sign in to is rarely what was wanted, and directories that refuse to enable an account without a policy-compliant password need the enable to follow the password rather than accompany the create.
+
+**No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
+
+**Nobody receives this password, including you.** Its job is to get the account into a working state, since most directories will not enable an account or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) and hand them the value; requiring a change at their next sign-in then does what you would expect. There is no option to set one known password on every account a rule provisions. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
+
+### What happens after provisioning
+
+Setting the password is a separate step from creating the account, and deliberately cannot fail the export that created it. The account exists; reporting its export as failed would have JIM retry the create.
+
+The password is therefore delivered in its own pass at the end of every export run, over everything the Connected System still owes rather than only what this run created. An ordinary export run is consequently the retry vehicle: a directory brought back online, or a right granted to JIM's service account, is picked up by the next run that was going to happen anyway, with no separate Run Profile to schedule.
+
+Each account ends up in one of these states, all of them reported on the export's Activity:
+
+| State | Meaning | What clears it |
+|-------|---------|----------------|
+| Delivered | The password was set. | Nothing; the account no longer owes one and JIM keeps no record beyond the Activity. |
+| Retrying | Something JIM cannot control got in the way: the directory was unreachable, or the account was not visible yet (after a create, usually replication catching up). | The next export run over that Connected System. |
+| Parked | The target refused the password itself, for not satisfying the rules in force for that account. Retrying would produce another password refused for the same reason, so JIM stops. | You. See below. |
+| Expired | A week passed without success. JIM stops trying and records the fact rather than quietly forgetting the account. | Nothing automatic; the account needs a password set by other means. |
+
+The target's own words are kept verbatim on a parked account, because why a directory refuses a password is a property of that directory's policy and the single most useful thing to be shown.
+
+### Clearing parked accounts
+
+Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every account parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime, because no password was ever stored: the retry uses your corrected settings by construction.
+
+Saving an unrelated part of the same rule releases nothing. Those accounts were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
+
+The typical loop is therefore: read what the target said on the parked account, correct the generator settings (most often length or the character classes), save, and let the next export run deliver.
+
+### Where JIM tells you
+
+You do not have to go looking. Parked and expired accounts are reported in three places:
+
+- **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the accounts parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
+- **The Initial Password section itself**<br /> The panel heading carries the parked count even while collapsed, and opening it shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and the panel confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
+- **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
+
 ## Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
@@ -180,6 +239,19 @@ The Attribute Flow editor warns you at configuration time when a mapping is Mult
 
 To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`/`Split()` or an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
 
+### Standard Mapping hints
+
+Choosing which Metaverse Attribute a Connected System attribute belongs to is guesswork when the schema is unfamiliar, and the answer is usually already recorded: every built-in Metaverse Attribute documents its counterparts in the SCIM 2.0 and LDAP/Active Directory vocabularies as [Standard Mappings](metaverse.md#standard-mappings). The Attribute Flow editor shows them while you work:
+
+- **The counterpart name sits beside each attribute in the picker**, so `First Name` reads as `givenName` on an LDAP system, and `name.givenName` on a SCIM one. Where a mapping carries a note (`userAccountControl` needs a transform, SCIM `emails` is multi-valued), hovering the counterpart shows it.
+- **The correspondence for the attribute you picked is stated in full.** Choose `givenName` as an import source and the editor says so: "In LDAP/AD, `givenName` corresponds to the Metaverse Attribute First Name", marks that attribute **Suggested** in the picker, and offers a one-click **Use First Name** button. Export works the same way in reverse, naming the Connected System attribute the standard says should receive the value.
+- **More than one attribute can correspond to a name.** LDAP `mail` fits both the single-valued `Email` and the multi-valued `Emails`; both are offered, and JIM does not choose for you.
+- **A correspondence you cannot act on is explained rather than hidden.** Where the standard names an attribute this mapping cannot target, the editor says which and why: the types differ (`accountExpires` arrives as text where `Account Expires` is a date, so an Expression source is needed to convert it), another Attribute Flow already targets it, or the Connected System reports it read-only. The mapping's note is shown alongside, which is usually where the conversion is described.
+
+Which vocabulary applies comes from the Connector: the LDAP Connector declares LDAP/AD, so an LDAP system's editor shows LDAP counterparts and nothing else. Where a Connector declares no vocabulary (the File Connector, for example, since a delimited file's column names are whatever the file carries), the editor matches attribute names against every standard instead and labels whichever one answered.
+
+**The hints are advisory, always.** Nothing is filtered, disabled, or chosen for you: every attribute stays selectable, and an attribute with no counterpart simply shows nothing, which is not an error. Standard Mappings are never consulted during synchronisation; what flows is exactly what your Attribute Flows say. Custom attributes behave identically once you record Standard Mappings against them, and JIM does not distinguish a mapping it seeded from one you authored.
+
 ### Value processing (inbound)
 
 Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping in the Attribute Flow editor. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
@@ -210,6 +282,8 @@ Two behaviours to be aware of:
 
 - The setting is honoured live: enabling it on an existing rule stops future exports of that attribute to already-provisioned objects, and disabling it resumes normal management (the next synchronisation and Drift Correction re-assert the Metaverse value).
 - If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
+
+Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-systems.md#attribute-writability).
 
 ## Attribute Priority
 
@@ -283,6 +357,33 @@ A complete import rule for an HR system might look like:
 
 This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the metaverse.
 
+## Finding a Synchronisation Rule
+
+Once a deployment has more than a handful of rules, the Synchronisation Rules list carries filters above the table so you can narrow it to the rules you care about:
+
+| Filter | Narrows to |
+|--------|------------|
+| **Connected System** | Rules belonging to the systems you pick. Only systems that actually have rules are offered. |
+| **Direction** | Inbound (Import) or Outbound (Export) rules. |
+| **Action** | **Projects** (Import rules that create Metaverse Objects), **Provisions** (Export rules that create Connected System Objects), or **Flow Only** (rules that create nothing and only flow attribute values). |
+| **Status** | Enabled or Disabled rules. |
+
+Each filter accepts several values, and the filters combine: picking two Connected Systems and the Outbound direction shows the outbound rules of either system. Leaving a filter empty means "all".
+
+The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. It filters as you type, so there is nothing to press. Clearing the search box returns the filtered list rather than the full one, so you can keep a filter in place while searching within it.
+
+The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
+
+## Confirming a change before you save it
+
+Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit side by side on the same page: renaming a rule is beside the Deprovisioning Action that decides whether leavers' accounts are deleted. JIM judges each save by the properties that actually changed:
+
+- **Cosmetic changes** (name, description) save straight away with no prompt.
+- **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and remind you that a Full Synchronisation is what puts it into effect.
+- **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted rather than disconnected, or disconnected rather than left joined.
+
+The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
+
 ## Manage Synchronisation Rules
 
 - **JIM portal**<br /> Synchronisation Rules area of the admin UI
@@ -291,6 +392,7 @@ This rule imports full-time employees from the HR system, joins them to existing
 
 ## See also
 
+- [Configuration changes](configuration-changes.md) -- how JIM classifies and confirms configuration changes
 - [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
 - [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting

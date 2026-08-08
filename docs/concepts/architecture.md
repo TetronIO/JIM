@@ -23,7 +23,7 @@ The following diagram shows JIM in the context of the systems and users it inter
 
 --8<-- "assets/diagrams/system-context.svg"
 
-<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
+<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements are not yet available.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Containers
 
@@ -56,6 +56,17 @@ A PowerShell module for automation and scripting. It wraps the REST API and prov
 ### PostgreSQL Database
 
 JIM uses PostgreSQL as its sole data store. The database holds all configuration, identity data (Metaverse Objects, Connected System Objects), Synchronisation Rules, activity history, and credentials (encrypted at rest with AES-256-GCM).
+
+### Real-Time Coordination
+
+The services never call each other directly; they coordinate through the database. As well as acting as the task queue, the database tells the services when something has changed: triggers on the Worker Task and Activity tables publish PostgreSQL `NOTIFY` events on commit, which each service receives over a dedicated `LISTEN` connection.
+
+This is what makes JIM feel live rather than polled:
+
+- The **Scheduler** advances a Schedule to its next step as soon as the current step's tasks finish, instead of waiting up to 30 seconds for its next polling cycle.
+- The **web application** pushes the same events to the browser, so the Operations page and a running Activity's progress update as work happens.
+
+Polling remains as the safety net throughout. If the notification channel is unavailable, every affected surface falls back to polling automatically and nothing stops working; notifications are treated as hints that something is worth re-reading, never as the source of truth. A SignalR hub at `/hubs/notifications` broadcasts the same events for non-Blazor consumers.
 
 ## Layered Architecture
 

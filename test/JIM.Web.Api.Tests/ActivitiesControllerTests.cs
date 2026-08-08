@@ -6,7 +6,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Models;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
@@ -27,6 +29,7 @@ public class ActivitiesControllerTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<ILogger<ActivitiesController>> _mockLogger = null!;
+    private Mock<IActivityEtaTracker> _mockEtaTracker = null!;
     private JimApplication _application = null!;
     private ActivitiesController _controller = null!;
 
@@ -37,8 +40,9 @@ public class ActivitiesControllerTests
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockLogger = new Mock<ILogger<ActivitiesController>>();
+        _mockEtaTracker = new Mock<IActivityEtaTracker>();
         _application = new JimApplication(_mockRepository.Object);
-        _controller = new ActivitiesController(_mockLogger.Object, _application);
+        _controller = new ActivitiesController(_mockLogger.Object, _application, _mockEtaTracker.Object);
     }
 
     #region GetActivitiesAsync tests
@@ -96,6 +100,90 @@ public class ActivitiesControllerTests
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.TotalCount, Is.EqualTo(1));
         Assert.That(response.Items.Count(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_ActivityProducedByASchedule_MapsScheduleAttributionOntoTheHeader()
+    {
+        // Read parity (#1196): the portal shows which Schedule produced an Activity and which step it was, so the
+        // REST list has to say the same.
+        var executionId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete,
+            ScheduleExecutionId = executionId,
+            ScheduleStepIndex = 2,
+            ScheduledByScheduleId = scheduleId,
+            ScheduledByScheduleName = "Nightly Sync"
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity> { activity },
+            TotalResults = 1,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetActivitiesAsync(pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+        var header = response!.Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.ScheduleExecutionId, Is.EqualTo(executionId));
+            Assert.That(header.ScheduleStepIndex, Is.EqualTo(2));
+            Assert.That(header.ScheduledByScheduleId, Is.EqualTo(scheduleId));
+            Assert.That(header.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_ActivityNotProducedByASchedule_LeavesScheduleAttributionNull()
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity> { activity },
+            TotalResults = 1,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetActivitiesAsync(pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+        var header = response!.Items.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.ScheduleExecutionId, Is.Null);
+            Assert.That(header.ScheduleStepIndex, Is.Null);
+            Assert.That(header.ScheduledByScheduleId, Is.Null);
+            Assert.That(header.ScheduledByScheduleName, Is.Null);
+        }
     }
 
     [Test]
@@ -207,6 +295,202 @@ public class ActivitiesControllerTests
 
     #endregion
 
+    #region GetActivitiesAsync filter query parameter tests
+
+    // The Activities query supports considerably more filtering than the endpoint used to expose; these cover
+    // every query parameter reaching the application layer intact. Arguments are read back off the mock's
+    // invocation by parameter name rather than asserted through a nineteen-argument Moq expression, which
+    // would be unreadable and would silently pass if the parameter order changed.
+
+    [Test]
+    public async Task GetActivitiesAsync_WithOperationFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            operation: [ActivityTargetOperationType.Execute, ActivityTargetOperationType.Clear]);
+
+        Assert.That(LastActivitiesQueryArguments()["operationFilter"],
+            Is.EquivalentTo(new[] { ActivityTargetOperationType.Execute, ActivityTargetOperationType.Clear }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithOutcomeFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            outcome: [ActivityOutcomeType.Errors]);
+
+        Assert.That(LastActivitiesQueryArguments()["outcomeFilter"], Is.EquivalentTo(new[] { ActivityOutcomeType.Errors }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithStatusFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            status: [ActivityStatus.FailedWithError]);
+
+        Assert.That(LastActivitiesQueryArguments()["statusFilter"], Is.EquivalentTo(new[] { ActivityStatus.FailedWithError }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithInitiatedById_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+        var principalId = Guid.NewGuid();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, initiatedById: principalId);
+
+        Assert.That(LastActivitiesQueryArguments()["initiatedById"], Is.EqualTo(principalId));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithHasChildActivities_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, hasChildActivities: true);
+
+        Assert.That(LastActivitiesQueryArguments()["hasChildActivities"], Is.True);
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithCreatedRange_PassesBothBoundsToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+        var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            createdFrom: from, createdTo: to);
+
+        var arguments = LastActivitiesQueryArguments();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments["createdFrom"], Is.EqualTo(from));
+            Assert.That(arguments["createdTo"], Is.EqualTo(to));
+        }
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithConnectedSystemFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            connectedSystem: ["Contoso AD", "Fabrikam HR"]);
+
+        Assert.That(LastActivitiesQueryArguments()["connectedSystemFilter"],
+            Is.EquivalentTo(new[] { "Contoso AD", "Fabrikam HR" }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithRunProfileFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 },
+            runProfile: ["Full Import"]);
+
+        Assert.That(LastActivitiesQueryArguments()["runProfileFilter"], Is.EquivalentTo(new[] { "Full Import" }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithInitiatedBy_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, initiatedBy: "alice");
+
+        Assert.That(LastActivitiesQueryArguments()["initiatedByFilter"], Is.EqualTo("alice"));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithScheduledOnly_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, scheduledOnly: false);
+
+        Assert.That(LastActivitiesQueryArguments()["initiatedBySchedule"], Is.False);
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithScheduleIdFilter_PassesFilterToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+        var scheduleId = Guid.NewGuid();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 }, scheduleId: [scheduleId]);
+
+        Assert.That(LastActivitiesQueryArguments()["scheduleFilter"], Is.EquivalentTo(new[] { scheduleId }));
+    }
+
+    [Test]
+    public async Task GetActivitiesAsync_WithNoFilters_PassesNoneOfThemToRepositoryAsync()
+    {
+        SetupAnyActivitiesQuery();
+
+        await _controller.GetActivitiesAsync(new PaginationRequest { Page = 1, PageSize = 20 });
+
+        var arguments = LastActivitiesQueryArguments();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(arguments["operationFilter"], Is.Null);
+            Assert.That(arguments["outcomeFilter"], Is.Null);
+            Assert.That(arguments["statusFilter"], Is.Null);
+            Assert.That(arguments["initiatedById"], Is.Null);
+            Assert.That(arguments["hasChildActivities"], Is.Null);
+            Assert.That(arguments["createdFrom"], Is.Null);
+            Assert.That(arguments["createdTo"], Is.Null);
+            Assert.That(arguments["connectedSystemFilter"], Is.Null);
+            Assert.That(arguments["runProfileFilter"], Is.Null);
+            Assert.That(arguments["initiatedByFilter"], Is.Null);
+            Assert.That(arguments["initiatedBySchedule"], Is.Null);
+            Assert.That(arguments["scheduleFilter"], Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Answers any Activities query with an empty page, so a test can assert on what the controller asked
+    /// for rather than on what came back.
+    /// </summary>
+    private void SetupAnyActivitiesQuery()
+    {
+        _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
+                It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>(),
+                It.IsAny<IEnumerable<ActivityInitiatorType>?>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<IEnumerable<string>?>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(),
+                It.IsAny<bool?>(), It.IsAny<IEnumerable<Guid>?>()))
+            .ReturnsAsync(new PagedResultSet<Activity>
+            {
+                Results = new List<Activity>(),
+                TotalResults = 0,
+                CurrentPage = 1,
+                PageSize = 20
+            });
+    }
+
+    /// <summary>
+    /// The arguments the most recent Activities query received, keyed by parameter name.
+    /// </summary>
+    private IReadOnlyDictionary<string, object?> LastActivitiesQueryArguments()
+    {
+        var invocation = _mockActivityRepo.Invocations
+            .Last(i => i.Method.Name == nameof(IActivityRepository.GetActivitiesAsync));
+
+        return invocation.Method.GetParameters()
+            .Select((parameter, index) => (parameter.Name!, Argument: (object?)invocation.Arguments[index]))
+            .ToDictionary(x => x.Item1, x => x.Argument);
+    }
+
+    #endregion
+
     #region GetActivityAsync tests
 
     [Test]
@@ -250,6 +534,68 @@ public class ActivitiesControllerTests
         Assert.That(detail, Is.Not.Null);
         Assert.That(detail!.Id, Is.EqualTo(activityId));
         Assert.That(detail.TargetName, Is.EqualTo("Test Activity"));
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ActivityProducedByASchedule_MapsScheduleAttributionOntoTheDetail()
+    {
+        var activityId = Guid.NewGuid();
+        var executionId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+        var activity = new Activity
+        {
+            Id = activityId,
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.TrustedCertificate,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete,
+            ScheduleExecutionId = executionId,
+            ScheduleStepIndex = 0,
+            ScheduledByScheduleId = scheduleId,
+            ScheduledByScheduleName = "Nightly Sync"
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))
+            .ReturnsAsync(activity);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ScheduleExecutionId, Is.EqualTo(executionId));
+            Assert.That(detail.ScheduleStepIndex, Is.EqualTo(0));
+            Assert.That(detail.ScheduledByScheduleId, Is.EqualTo(scheduleId));
+            Assert.That(detail.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ActivityNotProducedByASchedule_LeavesScheduleAttributionNull()
+    {
+        var activityId = Guid.NewGuid();
+        var activity = new Activity
+        {
+            Id = activityId,
+            TargetName = "Full Import",
+            TargetType = ActivityTargetType.TrustedCertificate,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))
+            .ReturnsAsync(activity);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ScheduleExecutionId, Is.Null);
+            Assert.That(detail.ScheduleStepIndex, Is.Null);
+            Assert.That(detail.ScheduledByScheduleId, Is.Null);
+            Assert.That(detail.ScheduledByScheduleName, Is.Null);
+        }
     }
 
     [Test]
@@ -357,6 +703,120 @@ public class ActivitiesControllerTests
         var result = await _controller.GetActivityStatsAsync(activityId);
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    #endregion
+
+    #region GetActivityProgressAsync tests
+
+    private static ActivityProgress NewInProgressActivityProgress(Guid id) => new()
+    {
+        ActivityId = id,
+        Status = ActivityStatus.InProgress,
+        Message = "Importing objects from Connected System",
+        ObjectsProcessed = 250,
+        ObjectsToProcess = 1000,
+        Created = DateTime.UtcNow.AddMinutes(-2),
+        Executed = DateTime.UtcNow.AddMinutes(-1),
+        TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+        RunType = JIM.Models.Staging.ConnectedSystemRunType.FullImport,
+        OperationCounts = new Dictionary<string, long> { ["Added"] = 200, ["Updated"] = 50 },
+        TotalErrors = 3
+    };
+
+    [Test]
+    public async Task GetActivityProgressAsync_UnknownActivity_ReturnsNotFound()
+    {
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((ActivityProgress?)null);
+
+        var result = await _controller.GetActivityProgressAsync(Guid.NewGuid());
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_InProgressActivity_ReturnsProgressWithEta()
+    {
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId))
+            .ReturnsAsync(NewInProgressActivityProgress(activityId));
+        _mockEtaTracker.Setup(t => t.RecordSample(activityId, 250, 1000))
+            .Returns(new ActivityEtaEstimate(12.5d, 60d));
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+        var dto = okResult!.Value as ActivityProgressDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Id, Is.EqualTo(activityId));
+        Assert.That(dto!.Status, Is.EqualTo(ActivityStatus.InProgress));
+        Assert.That(dto!.Message, Is.EqualTo("Importing objects from Connected System"));
+        Assert.That(dto!.ObjectsProcessed, Is.EqualTo(250));
+        Assert.That(dto!.ObjectsToProcess, Is.EqualTo(1000));
+        Assert.That(dto!.PercentComplete, Is.EqualTo(25d).Within(0.001));
+        Assert.That(dto!.ObjectsPerSecond, Is.EqualTo(12.5d).Within(0.001));
+        Assert.That(dto!.EstimatedSecondsRemaining, Is.EqualTo(60d).Within(0.001));
+        Assert.That(dto!.ElapsedSeconds, Is.EqualTo(60d).Within(5d));
+        Assert.That(dto!.OperationCounts["Added"], Is.EqualTo(200));
+        Assert.That(dto!.TotalErrors, Is.EqualTo(3));
+        _mockEtaTracker.Verify(t => t.RecordSample(activityId, 250, 1000), Times.Once);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_IndeterminateTotal_ReturnsNullPercentComplete()
+    {
+        var activityId = Guid.NewGuid();
+        var progress = NewInProgressActivityProgress(activityId);
+        progress.ObjectsToProcess = 0;
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId)).ReturnsAsync(progress);
+        _mockEtaTracker.Setup(t => t.RecordSample(activityId, 250, 0))
+            .Returns(new ActivityEtaEstimate(null, null));
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+        var dto = okResult!.Value as ActivityProgressDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.PercentComplete, Is.Null);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_CompletedActivity_ReleasesEtaStateAndRecordsNoSample()
+    {
+        var activityId = Guid.NewGuid();
+        var progress = NewInProgressActivityProgress(activityId);
+        progress.Status = ActivityStatus.Complete;
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId)).ReturnsAsync(progress);
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+        var dto = okResult!.Value as ActivityProgressDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Status, Is.EqualTo(ActivityStatus.Complete));
+        Assert.That(dto!.ObjectsPerSecond, Is.Null);
+        Assert.That(dto!.EstimatedSecondsRemaining, Is.Null);
+        _mockEtaTracker.Verify(t => t.RecordSample(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _mockEtaTracker.Verify(t => t.Remove(activityId), Times.Once);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_QueuedActivity_NeitherRecordsNorRemovesEtaState()
+    {
+        var activityId = Guid.NewGuid();
+        var progress = NewInProgressActivityProgress(activityId);
+        progress.Status = ActivityStatus.NotSet;
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId)).ReturnsAsync(progress);
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockEtaTracker.Verify(t => t.RecordSample(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _mockEtaTracker.Verify(t => t.Remove(It.IsAny<Guid>()), Times.Never);
     }
 
     #endregion

@@ -33,7 +33,7 @@ public class MetaverseObjectDto
             Id = entity.Id,
             Created = entity.Created,
             LastUpdated = entity.LastUpdated,
-            DisplayName = entity.DisplayName,
+            DisplayName = entity.Name,
             Status = entity.Status,
             Origin = entity.Origin,
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate,
@@ -131,7 +131,7 @@ public class MetaverseObjectAttributeValueDto
             GuidValue = entity.GuidValue,
             BoolValue = entity.BoolValue,
             ReferenceValueId = entity.ReferenceValueId,
-            ReferenceValueDisplayName = entity.ReferenceValue?.DisplayName,
+            ReferenceValueDisplayName = entity.ReferenceValue?.Name,
             ContributedBySystemId = entity.ContributedBySystemId,
             ContributedBySystemName = entity.ContributedBySystem?.Name,
             ContributedBySyncRuleId = entity.ContributedBySyncRuleId,
@@ -158,7 +158,7 @@ public class ConnectedSystemObjectReferenceDto
             Id = entity.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id ?? 0,
             ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
-            DisplayName = entity.DisplayNameOrId
+            DisplayName = entity.NameOrId
         };
     }
 }
@@ -199,6 +199,18 @@ public class PendingDeletionDto
     public string Status { get; set; } = null!;
 
     /// <summary>
+    /// The Connected System whose disconnection triggered the scheduled deletion (#119).
+    /// Null for deletions scheduled before trigger recording existed.
+    /// </summary>
+    public int? DeletionTriggeredBySystemId { get; set; }
+
+    /// <summary>
+    /// The display name of the triggering Connected System, captured when the deletion was scheduled
+    /// so it survives deletion of the system itself (#119).
+    /// </summary>
+    public string? DeletionTriggeredBySystemName { get; set; }
+
+    /// <summary>
     /// Creates a DTO from a MetaverseObject entity.
     /// </summary>
     public static PendingDeletionDto FromEntity(MetaverseObject entity)
@@ -226,7 +238,7 @@ public class PendingDeletionDto
         return new PendingDeletionDto
         {
             Id = entity.Id,
-            DisplayName = entity.DisplayName,
+            DisplayName = entity.Name,
             Type = new MetaverseObjectTypeDto
             {
                 Id = entity.Type?.Id ?? 0,
@@ -237,7 +249,9 @@ public class PendingDeletionDto
             DaysUntilDeletion = daysUntilDeletion,
             GracePeriod = entity.Type?.DeletionGracePeriod,
             ConnectedSystemObjectCount = connectorCount,
-            Status = status
+            Status = status,
+            DeletionTriggeredBySystemId = entity.DeletionTriggeredBySystemId,
+            DeletionTriggeredBySystemName = entity.DeletionTriggeredBySystemName
         };
     }
 }

@@ -163,7 +163,6 @@ $portSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Port" }
 $usernameSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Username" }
 $passwordSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Password" }
 $useSSLSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Use Secure Connection (LDAPS)?" }
-$certValidationSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Certificate Validation" }
 $connectionTimeoutSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Connection Timeout" }
 $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 $createContainersSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Create containers as needed?" }
@@ -174,7 +173,6 @@ if ($portSetting) { $ldapSettings[$portSetting.id] = @{ intValue = $DirectoryCon
 if ($usernameSetting) { $ldapSettings[$usernameSetting.id] = @{ stringValue = $DirectoryConfig.BindDN } }
 if ($passwordSetting) { $ldapSettings[$passwordSetting.id] = @{ stringValue = $DirectoryConfig.BindPassword } }
 if ($useSSLSetting) { $ldapSettings[$useSSLSetting.id] = @{ checkboxValue = $DirectoryConfig.UseSSL } }
-if ($certValidationSetting -and $DirectoryConfig.CertValidation) { $ldapSettings[$certValidationSetting.id] = @{ stringValue = $DirectoryConfig.CertValidation } }
 if ($connectionTimeoutSetting) { $ldapSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $ldapSettings[$authTypeSetting.id] = @{ stringValue = $DirectoryConfig.AuthType } }
 if ($createContainersSetting) { $ldapSettings[$createContainersSetting.id] = @{ checkboxValue = $true } }

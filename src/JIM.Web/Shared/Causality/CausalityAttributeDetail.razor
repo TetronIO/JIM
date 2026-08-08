@@ -1,0 +1,139 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality attribute change detail: a toolbar with a search box, count-annotated operation
+   filter chips (All/Set/Add/Remove) and an "n of m" indicator, above a standard MudTable of
+   attribute rows (operation badge, name with demoted type and plurality, value with the previous
+   value struck through where applicable). Filtering is pure C# over the supplied rows; the filter
+   state lives in this component and resets whenever it is recreated (e.g. a Timeline expander
+   reopening). No <TableDensityToggle> here deliberately: this component can render several
+   instances at once in the Timeline view, and a per-instance toggle (each triggering its own
+   preference load) would repeat visually and functionally; Dense="true" mirrors the "Attribute
+   Changes" table on ActivityRunProfileExecutionItemDetail without the toggle.
+
+   The filter box is a plain input rather than the shared <SearchField />, deliberately: it is a
+   knowingly-kept point of contrast against MudBlazor's much taller field, pending a wider review of
+   those. SearchFieldConventionTests does not flag it (it sweeps MudTextField), so this note is the
+   only record of the choice; migrate it when that review happens rather than treating it as an
+   oversight. *@
+
+<div class="attr-toolbar">
+    <label class="attr-search">
+        <MudIcon Icon="@Icons.Material.Filled.Search" aria-hidden="true" />
+        <input type="text" placeholder="Filter attributes…" aria-label="Filter attributes"
+               @bind="_search" @bind:event="oninput" />
+    </label>
+    @if (ShowOperations)
+    {
+        <div class="filter-chips" role="group" aria-label="Filter by operation">
+            <button type="button" class="@(_operationFilter == null ? "on" : null)"
+                    aria-pressed="@(_operationFilter == null ? "true" : "false")"
+                    @onclick="() => _operationFilter = null">All</button>
+            @foreach (var (operation, count) in GetOperationCounts())
+            {
+                <button type="button" class="@(_operationFilter == operation ? "on" : null)"
+                        aria-pressed="@(_operationFilter == operation ? "true" : "false")"
+                        @onclick="() => _operationFilter = operation">@operation · @count</button>
+            }
+        </div>
+    }
+    <span class="attr-meta-count">@GetFilteredRows().Count of @Rows.Count</span>
+</div>
+
+<MudTable Items="@GetFilteredRows()" Hover="true" Dense="true" Outlined="true" Elevation="0">
+    <HeaderContent>
+        @if (ShowOperations)
+        {
+            <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Change</MudText></MudTh>
+        }
+        <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+        <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        @if (ShowOperations)
+        {
+            <MudTd DataLabel="Change" Class="attr-col-shrink">
+                <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Operation)" Class="ml-0">
+                    @context.Operation
+                </MudChip>
+            </MudTd>
+        }
+        <MudTd DataLabel="Attribute" Class="attr-col-shrink">
+            @context.Name
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.TypeAndPlurality</MudText>
+        </MudTd>
+        <MudTd DataLabel="Value">
+            @if (!string.IsNullOrEmpty(context.PreviousValue))
+            {
+                <span class="mud-text-secondary attr-previous-value">@context.PreviousValue</span>
+            }
+            <TextValueDisplay Value="@context.Value" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Class="pa-4">No attributes match the current filter.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    /// <summary>
+    /// The normalised attribute change rows to display.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CausalityAttributeRow> Rows { get; set; } = [];
+
+    /// <summary>
+    /// Whether the rows are attribute *changes*, and so carry a meaningful operation. Set false where they
+    /// are values that identify an object rather than values being written to it: a queued deprovision
+    /// carries the target's distinguished name so the Connector can find the entry, and reporting that as
+    /// "Set" is the same claim the event's "Target identified by" caption exists to correct. The values
+    /// themselves are always shown; only the operation column and its filter chips are suppressed.
+    /// </summary>
+    [Parameter]
+    public bool ShowOperations { get; set; } = true;
+
+    private string _search = string.Empty;
+    private CausalityAttributeOperation? _operationFilter;
+
+    private List<(CausalityAttributeOperation Operation, int Count)> GetOperationCounts()
+    {
+        return new[] { CausalityAttributeOperation.Set, CausalityAttributeOperation.Add, CausalityAttributeOperation.Remove }
+            .Select(operation => (Operation: operation, Count: Rows.Count(r => r.Operation == operation)))
+            .Where(entry => entry.Count > 0)
+            .ToList();
+    }
+
+    private List<CausalityAttributeRow> GetFilteredRows()
+    {
+        IEnumerable<CausalityAttributeRow> rows = Rows;
+
+        if (_operationFilter is { } operation)
+            rows = rows.Where(r => r.Operation == operation);
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var search = _search.Trim();
+            rows = rows.Where(r =>
+                r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (r.Value?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return rows.ToList();
+    }
+
+    /// <summary>
+    /// Chip colour per operation: Set is neutral (Info), Add and Remove are visually distinct
+    /// (Success/Error) to preserve the semantics the previous bespoke CSS conveyed.
+    /// </summary>
+    private static Color GetOperationColor(CausalityAttributeOperation operation)
+    {
+        return operation switch
+        {
+            CausalityAttributeOperation.Add => Color.Success,
+            CausalityAttributeOperation.Remove => Color.Error,
+            _ => Color.Info
+        };
+    }
+}

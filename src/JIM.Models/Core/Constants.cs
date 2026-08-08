@@ -252,6 +252,21 @@ public static class Constants
         /// </summary>
         public const string SyncPageSize = "Sync.PageSize";
 
+        /// <summary>
+        /// The estimated affected-object count above which a configuration change preview (#827) is handed to
+        /// JIM.Worker instead of running in the requesting host's process. Below it, a preview runs in-process so
+        /// the common case (a handful of objects) does not wait for the worker's next poll. Default: 2,500.
+        /// </summary>
+        public const string ConfigurationChangePreviewWorkerThreshold = "Preview.WorkerThreshold";
+
+        /// <summary>
+        /// The estimated delta-row count above which a configuration change preview (#827) asks the administrator
+        /// to choose between a capped and a full set of drill-down rows, instead of quietly capping. Below it the
+        /// preview is capped without a prompt, which is the right answer and not worth a question. Default: 100,000
+        /// rows (roughly 40 MB).
+        /// </summary>
+        public const string ConfigurationChangePreviewFullDataSetPromptThreshold = "Preview.FullDataSetPromptThreshold";
+
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 

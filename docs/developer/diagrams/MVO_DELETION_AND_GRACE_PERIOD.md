@@ -1,8 +1,8 @@
 # MVO Deletion and Grace Period
 
-> Last updated: 2026-07-10, JIM v0.13.0
+> Last updated: 2026-08-02, JIM v0.14.0
 
-This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, and deferred housekeeping cleanup.
+This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, mode-aware rejoin cancellation, and deferred housekeeping cleanup.
 
 ## Deletion Rules
 
@@ -10,7 +10,20 @@ This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from t
 |------|-------|---------|-----------|
 | Manual | 0 | Never | MVO is never automatically deleted. Requires admin intervention. |
 | WhenLastConnectorDisconnected | 1 | All CSOs disconnected | MVO deleted when no CSOs remain joined. Default rule. |
-| WhenAuthoritativeSourceDisconnected | 2 | Specified system disconnects | MVO deleted when ANY system in `DeletionTriggerConnectedSystemIds` disconnects, even if other CSOs remain. |
+| WhenAuthoritativeSourceDisconnected | 2 | Selected source system(s) disconnect | MVO deleted when the systems in `DeletionTriggerConnectedSystemIds` disconnect, per the configured trigger mode below, even if other CSOs remain. |
+
+### Authoritative Source Trigger Modes (#119)
+
+`WhenAuthoritativeSourceDisconnected` carries an `AuthoritativeSourceTriggerMode` (`MetaverseObjectType.DeletionTriggerMode`) controlling how the selected sources trigger deletion:
+
+| Mode | Value | Behaviour |
+|------|-------|-----------|
+| SpecificSourcesDisconnect | 0 | Delete when ANY one of the selected sources disconnects, even if others remain connected. Pre-#119 behaviour; existing configurations read the column default and keep it. |
+| AllSourcesDisconnect | 1 | Delete only once NO selected source retains a joined CSO. Non-source connectors (targets) never block or trigger deletion. Default for new configurations (the model property initialiser). |
+
+The enum-numeric/property-initialiser split is deliberate: existing rows read the added column's default `0` (`SpecificSourcesDisconnect`), preserving #115 behaviour with no backfill, while entities newly constructed in code, the portal, or the API start at the safe default (`AllSourcesDisconnect`).
+
+When a deletion is scheduled or executed, the MVO records `DeletionTriggeredBySystemId` and `DeletionTriggeredBySystemName` (a name snapshot that survives deletion of the system itself) plus `DeletionPolicySnapshotJson`, the decision-time policy snapshot (`MvoDeletionPolicySnapshot`: rule, trigger mode, selected sources, grace period, triggering system, and the listed sources still connected at decision time). The same snapshot is written to the outcome-bearing RPEI (`ActivityRunProfileExecutionItems.DeletionPolicySnapshotJson`) whenever a deletion rule evaluation records an outcome, including evaluated-but-not-triggered decisions, so decisions stay explainable after the configuration changes.
 
 ## Trigger: CSO Disconnection During Sync
 
@@ -31,8 +44,8 @@ flowchart TD
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with recalled + re-elected values<br/>Targets receive removals or a<br/>change-of-value to the survivor]
     QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
 
-    BreakJoin --> CountRemaining[Count remaining CSOs<br/>before break, subtract 1]
-    CountRemaining --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
+    BreakJoin --> GetRemaining[Get joined Connected System ids<br/>one entry per remaining CSO,<br/>excluding the disconnecting CSO]
+    GetRemaining --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate]
 ```
 
 ## Deletion Rule Evaluation
@@ -56,23 +69,58 @@ flowchart TD
 
     CheckTriggers -->|Has entries| IsAuthSource{Disconnecting system<br/>in trigger list?}
     IsAuthSource -->|No| NoAction2([Not an authoritative source<br/>No deletion])
-    IsAuthSource -->|Yes| MarkForDeletion
+    IsAuthSource -->|Yes| CheckMode{Deletion<br/>trigger mode?}
+
+    CheckMode -->|SpecificSources<br/>Disconnect| MarkForDeletion
+    CheckMode -->|AllSources<br/>Disconnect| AnySourceLeft{Any listed source<br/>still holds a<br/>joined CSO?}
+    AnySourceLeft -->|Yes| NoAction3([Not yet - other sources<br/>remain connected])
+    AnySourceLeft -->|No| MarkForDeletion
 ```
+
+The evaluation receives the Connected System id of every CSO still joined after the disconnection (`GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync`, one raw SQL query replacing the previous count-only query), so All mode can test the remaining ids against the trigger list without an extra round trip. The decision-time policy snapshot is built from these same facts before the decision is applied.
 
 ## Grace Period Decision
 
 ```mermaid
 flowchart TD
-    Mark([MarkMvoForDeletionAsync]) --> DedupCheck{MVO already queued<br/>for deletion<br/>in this page?}
+    Mark([MarkMvoForDeletionAsync]) --> RecordTrigger[Record triggering system:<br/>DeletionTriggeredBySystemId<br/>DeletionTriggeredBySystemName]
+    RecordTrigger --> CheckGrace{Grace period<br/>on MVO type?}
+
+    CheckGrace -->|Null or TimeSpan.Zero| DedupCheck{MVO already queued<br/>for deletion<br/>in this page?}
     DedupCheck -->|Yes| Skip([Skip - prevent<br/>double-queueing])
+    DedupCheck -->|No| Immediate[Add MVO to<br/>pendingMvoDeletions batch<br/>Deleted at page boundary]
 
-    DedupCheck -->|No| CheckGrace{Grace period<br/>on MVO type?}
-
-    CheckGrace -->|Null or TimeSpan.Zero| Immediate[Add MVO to<br/>pendingMvoDeletions batch<br/>Deleted at page boundary]
-
-    CheckGrace -->|> 0| Deferred[Set LastConnectorDisconnectedDate<br/>= DateTime.UtcNow<br/>Capture initiator info:<br/>DeletionInitiatedByType<br/>DeletionInitiatedById<br/>DeletionInitiatedByName<br/>Persist via UpdateMetaverseObjectAsync]
+    CheckGrace -->|> 0| Deferred[Set LastConnectorDisconnectedDate<br/>= DateTime.UtcNow<br/>Capture initiator info:<br/>DeletionInitiatedByType<br/>DeletionInitiatedById<br/>DeletionInitiatedByName<br/>Persist DeletionPolicySnapshotJson<br/>at mark-time<br/>Persist via UpdateMetaverseObjectAsync]
     Deferred --> WaitForHousekeeping([Deferred to housekeeping<br/>Eligible after grace period expires])
 ```
+
+## Mode-Aware Rejoin Cancellation (#119)
+
+A rejoin during the grace period only cancels a scheduled deletion when the rejoin falsifies the mode's trigger condition. `ISyncEngine.ShouldCancelScheduledDeletion(mvo, rejoiningSystemId)` is the pure decision, applied at both cancellation paths: `EstablishJoinAsync` (a CSO joins a marked MVO) and the same-page reconnect check in `FlushPendingMvoDeletionsAsync` (an immediate deletion queued earlier in the page).
+
+```mermaid
+flowchart TD
+    Start([ISyncEngine.ShouldCancelScheduledDeletion]) --> GetRule{Deletion<br/>rule?}
+
+    GetRule -->|Manual or<br/>WhenLastConnector<br/>Disconnected| Cancel([Cancel - a connector now exists,<br/>the condition no longer holds])
+
+    GetRule -->|WhenAuthoritative<br/>SourceDisconnected| CheckTriggers{Trigger list<br/>configured?}
+    CheckTriggers -->|Empty| Cancel
+
+    CheckTriggers -->|Has entries| HasTrigger{DeletionTriggeredBy<br/>SystemId recorded?}
+    HasTrigger -->|Null - marked<br/>pre-upgrade| Cancel
+
+    HasTrigger -->|Recorded| CheckMode{Deletion<br/>trigger mode?}
+    CheckMode -->|AllSources<br/>Disconnect| IsListed{Rejoining system<br/>in trigger list?}
+    IsListed -->|Yes| Cancel
+    IsListed -->|No| Keep([Keep scheduled - a non-source<br/>rejoin does not falsify<br/>the all-sources-gone condition])
+
+    CheckMode -->|SpecificSources<br/>Disconnect| IsTrigger{Rejoining system =<br/>recorded triggering<br/>system?}
+    IsTrigger -->|Yes| Cancel
+    IsTrigger -->|No| Keep2([Keep scheduled - the triggering<br/>disconnection has not been undone])
+```
+
+Cancellation clears every deletion marker together (`ClearMvoDeletionMarkers`): `LastConnectorDisconnectedDate`, the `DeletionInitiatedBy*` audit fields, `DeletionTriggeredBySystemId`/`Name`, and `DeletionPolicySnapshotJson`. The null-trigger fallback (cancel on any rejoin) covers rows marked before the triggering system was recorded, rather than stranding a scheduled deletion.
 
 ## Immediate Deletion (Zero Grace Period)
 
@@ -113,7 +161,7 @@ flowchart TD
     Recall --> Done([Done])
 
     Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports for remaining CSOs<br/>whose export rule action is Delete]
-    EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked]
+    EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked<br/>Copies the mark-time<br/>DeletionPolicySnapshotJson onto<br/>the deletion record's RPEI]
     DeleteMVO --> Result{Success?}
     Result -->|Yes| Loop
     Result -->|No| LogError[Log error<br/>Continue with other MVOs<br/>Will retry next cycle]
@@ -130,7 +178,9 @@ stateDiagram-v2
 
     Normal --> [*]: CSO disconnects,<br/>deletion rule triggers,<br/>grace period = 0<br/>(immediate deletion)
 
-    MarkedForDeletion --> Normal: CSO reconnects<br/>during grace period<br/>(grace period resets)
+    MarkedForDeletion --> Normal: Trigger-cancelling rejoin<br/>during grace period<br/>(ShouldCancelScheduledDeletion true,<br/>all deletion markers cleared)
+
+    MarkedForDeletion --> MarkedForDeletion: Non-cancelling rejoin<br/>(trigger condition still holds,<br/>markers unchanged)
 
     MarkedForDeletion --> [*]: Grace period expires,<br/>housekeeping deletes MVO
 
@@ -144,6 +194,9 @@ stateDiagram-v2
         DeletionEligibleDate =
         DisconnectedDate + GracePeriod.
         Original initiator info preserved.
+        DeletionTriggeredBySystemId/Name
+        and DeletionPolicySnapshotJson
+        recorded at mark-time.
     end note
 ```
 
@@ -151,7 +204,13 @@ stateDiagram-v2
 
 - **Internal MVO protection**<br /> MVOs with `Origin = Internal` (admin accounts, service accounts created directly in JIM) are never subject to automatic deletion, regardless of the deletion rule configured on the object type.
 
-- **Grace period reconnection**<br /> If a CSO reconnects to an MVO during the grace period, the MVO is no longer eligible for deletion. The `LastConnectorDisconnectedDate` remains set, but the eligibility query checks for remaining CSOs, so the MVO won't be deleted.
+- **Mode-aware grace period reconnection (#119)**<br /> A CSO reconnecting to a marked MVO only cancels the scheduled deletion when `ShouldCancelScheduledDeletion` says the mode's trigger condition no longer holds: any rejoin for `WhenLastConnectorDisconnected`; any listed source for All mode; only the recorded triggering system for Specific mode. Cancellation clears every deletion marker together; a non-cancelling rejoin leaves the MVO scheduled. Rows marked before the triggering system was recorded fall back to the pre-#119 cancel-on-any-rejoin behaviour.
+
+- **Trigger recording (#119)**<br /> Scheduling a deletion records `DeletionTriggeredBySystemId` and `DeletionTriggeredBySystemName` on the MVO. The id makes Specific-mode cancellation precise (re-deriving "is some source still disconnected" from current state is impossible without join history); the name snapshot survives deletion of the system itself and feeds the Pending Deletions page's "Triggered By" column.
+
+- **Decision-time policy snapshot (#119)**<br /> Every deletion rule evaluation that records an outcome (scheduled, deleted, or evaluated-but-not-triggered) writes an `MvoDeletionPolicySnapshot` to the RPEI, capturing the rule, trigger mode, selected sources, grace period, triggering system, and the sources still connected at decision time. For grace period deletions the snapshot is captured at mark-time on the MVO and copied onto the housekeeping deletion record at execution, so the final record reflects the policy that scheduled the deletion, not the configuration at execution time. The RPEI detail page renders deletion rule context from this snapshot; legacy records without one fall back to current configuration with a caveat.
+
+- **Connected System deletion path parity (#119)**<br /> `MarkOrphanedMvosForDeletionAsync` (invoked when a Connected System is deleted with "evaluate deletion rules" enabled) applies the same mode semantics when deciding which MVOs the system's removal orphans: in All mode, deleting one of two still-connected sources does not mark MVOs whose other source remains. Preview and execution share one query (`QueryMvosOrphanedByConnectedSystemDeletion`), so `ConnectedSystemDeletionPreview` counts always agree with what execution does, and the marking records the deleted system as the trigger with a policy snapshot, exactly as the worker path does.
 
 - **Initiator preservation**<br /> When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
@@ -163,7 +222,7 @@ stateDiagram-v2
 
 - **Capped housekeeping**<br /> Housekeeping processes a maximum of 50 MVOs per cycle (every 60 seconds). This prevents large deletion backlogs from monopolising the worker during idle time.
 
-- **WhenAuthoritativeSourceDisconnected fallback**<br /> If `DeletionTriggerConnectedSystemIds` is empty, the rule falls back to `WhenLastConnectorDisconnected` behaviour. This prevents misconfiguration from causing unexpected deletions.
+- **WhenAuthoritativeSourceDisconnected fallback**<br /> If `DeletionTriggerConnectedSystemIds` is empty, the rule falls back to `WhenLastConnectorDisconnected` behaviour in both trigger modes (evaluation and cancellation alike). This prevents misconfiguration from causing unexpected deletions.
 
 - **Dedup within page**<br /> Multiple CSOs from the same MVO can disconnect in the same sync page. The dedup check in `MarkMvoForDeletionAsync` prevents the same MVO from being queued for immediate deletion twice.
 

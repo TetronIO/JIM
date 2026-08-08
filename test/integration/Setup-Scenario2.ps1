@@ -162,7 +162,6 @@ try {
     $usernameSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Username" }
     $passwordSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Password" }
     $useSSLSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Use Secure Connection (LDAPS)?" }
-    $certValidationSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Certificate Validation" }
     $connectionTimeoutSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Connection Timeout" }
     $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 
@@ -172,9 +171,6 @@ try {
     if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $SourceConfig.BindDN } }
     if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $SourceConfig.BindPassword } }
     if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $SourceConfig.UseSSL } }
-    if ($certValidationSetting -and $SourceConfig.CertValidation) {
-        $sourceSettings[$certValidationSetting.id] = @{ stringValue = $SourceConfig.CertValidation }
-    }
     if ($connectionTimeoutSetting) { $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
     if ($authTypeSetting) { $sourceSettings[$authTypeSetting.id] = @{ stringValue = $SourceConfig.AuthType } }
 
@@ -215,9 +211,6 @@ try {
     if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $TargetConfig.BindDN } }
     if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $TargetConfig.BindPassword } }
     if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $TargetConfig.UseSSL } }
-    if ($certValidationSetting -and $TargetConfig.CertValidation) {
-        $targetSettings[$certValidationSetting.id] = @{ stringValue = $TargetConfig.CertValidation }
-    }
     if ($connectionTimeoutSetting) { $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
     if ($authTypeSetting) { $targetSettings[$authTypeSetting.id] = @{ stringValue = $TargetConfig.AuthType } }
 

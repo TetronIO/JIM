@@ -11,6 +11,12 @@ public interface ITaskingRepository
 
     public Task<WorkerTask?> GetWorkerTaskAsync(Guid id);
 
+    /// <summary>
+    /// The worker task tracking a given Activity, or null when none is queued or processing for it. A worker task
+    /// is deleted on completion, so a null answer means "no longer running", not "never ran".
+    /// </summary>
+    public Task<WorkerTask?> GetWorkerTaskByActivityIdAsync(Guid activityId);
+
     public Task<List<WorkerTask>> GetWorkerTasksAsync();
 
     public Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync();
@@ -31,7 +37,12 @@ public interface ITaskingRepository
 
     public Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync();
 
-    public Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId);
+    /// <summary>
+    /// Gets a lightweight header (status plus live progress from the associated Activity) for the first
+    /// Worker Task belonging to the given Example Data Template, or null if none is queued or processing.
+    /// Lets the template page show progress in place, without loading the whole task or Activity graph.
+    /// </summary>
+    public Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId);
 
     public Task UpdateWorkerTaskAsync(WorkerTask serviceTask);
 

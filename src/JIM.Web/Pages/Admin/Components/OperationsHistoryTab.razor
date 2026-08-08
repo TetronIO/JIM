@@ -51,6 +51,21 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
+                <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filterSchedules"
+                           SelectedValuesChanged="OnScheduleFilterChanged"
+                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
+                    @if (_filterOptions != null)
+                    {
+                        @foreach (var schedule in _filterOptions.Schedules)
+                        {
+                            <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
                 <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterStatuses"
@@ -65,15 +80,20 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
-                              Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Immediate="true" DebounceInterval="500"
-                              OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
+                <SearchField Value="@_filterInitiatedBy"
+                             ValueChanged="OnInitiatedByFilterChanged"
+                             Label="Initiated By"
+                             Placeholder="Search by name..."
+                             DebounceInterval="500"
+                             Margin="Margin.None" />
             </MudItem>
             <MudItem Class="d-flex align-end">
                 <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
                              Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+            </MudItem>
+            <MudItem Class="d-flex align-end">
+                <MudCheckBox T="bool" Value="_filterScheduledOnly" ValueChanged="OnScheduledOnlyFilterChanged"
+                             Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
             </MudItem>
             <MudItem Class="d-flex align-end mb-2">
                 <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
@@ -87,7 +107,7 @@
 
     @* Top pager *@
     <div class="d-flex justify-space-between align-center flex-wrap pa-2"
-         style="border: 1px solid var(--mud-palette-table-lines); border-bottom: none; border-radius: var(--mud-default-borderradius) var(--mud-default-borderradius) 0 0; background-color: var(--mud-palette-surface);">
+         style="border: 1px solid var(--mud-palette-table-lines); border-bottom: none; border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0; background-color: var(--mud-palette-surface);">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
             <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
@@ -117,7 +137,7 @@
     <MudTable T="Activity" Items="@_items"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
               Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
-              Class="dense-body-only no-border-radius">
+              Class="no-border-radius">
         <HeaderContent>
             <MudTh>
                 <MudTableSortLabel SortLabel="connectedsystem" T="Activity"
@@ -132,6 +152,9 @@
                                    SortDirectionChanged="@(dir => OnSortChanged("target", dir))">
                     <MudText Typo="Typo.button">Run Profile</MudText>
                 </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Schedule</MudText>
             </MudTh>
             <MudTh>
                 <MudText Typo="Typo.button">Outcomes</MudText>
@@ -181,6 +204,23 @@
                 @if (!string.IsNullOrEmpty(context.TargetName))
                 {
                     @context.TargetName
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudTd>
+            <MudTd DataLabel="Schedule">
+                @if (!string.IsNullOrEmpty(context.ScheduledByScheduleName))
+                {
+                    <MudStack Spacing="0">
+                        <span>@context.ScheduledByScheduleName</span>
+                        @if (context.ScheduleStepIndex.HasValue)
+                        {
+                            var stepNumber = context.ScheduleStepIndex.Value + 1;
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Step @stepNumber</MudText>
+                        }
+                    </MudStack>
                 }
                 else
                 {
@@ -433,7 +473,7 @@
 
     @* Bottom pager *@
     <div class="d-flex justify-space-between align-center flex-wrap pa-2"
-         style="border: 1px solid var(--mud-palette-table-lines); border-top: none; border-radius: 0 0 var(--mud-default-borderradius) var(--mud-default-borderradius); background-color: var(--mud-palette-surface);">
+         style="border: 1px solid var(--mud-palette-table-lines); border-top: none; border-radius: 0 0 var(--jim-container-radius) var(--jim-container-radius); background-color: var(--mud-palette-surface);">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
             <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
@@ -480,6 +520,11 @@
                     @_selectedActivity.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </div>
+
+            @* Schedule context; renders nothing unless a Schedule produced this Activity. *@
+            <ActivityScheduleContext ScheduleExecutionId="_selectedActivity.ScheduleExecutionId"
+                                     ScheduleStepIndex="_selectedActivity.ScheduleStepIndex"
+                                     Compact="true" />
 
             @* Target Information *@
             <MudPaper Elevation="0" Class="pa-3" Outlined="true">
@@ -771,11 +816,7 @@
                             <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
                                 @_selectedActivity.ErrorMessage
                             </MudText>
-                            @if (!string.IsNullOrEmpty(_selectedActivity.ErrorStackTrace))
-                            {
-                                <MudDivider Class="my-2" />
-                                <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.75rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@_selectedActivity.ErrorStackTrace</pre>
-                            }
+                            <CollapsibleStackTrace StackTrace="@_selectedActivity.ErrorStackTrace" />
                         </ChildContent>
                     </MudExpansionPanel>
                 </MudExpansionPanels>
@@ -793,6 +834,26 @@
 </div>
 
 @code {
+    @* ─── Worker Task preset ─── *@
+    @* This tab shows Worker Task Activities: the operations the worker service executes. There is one
+       Activity query; which Activities a caller wants is the caller's to say, so these two filters are
+       what make it the Operations history rather than the general Activities list. Run Profile executions
+       and Connected System operations, restricted to the operations the worker performs (Execute a Run
+       Profile, Clear a Connected System's objects, Delete a Connected System). Example Data Template and
+       History Retention Cleanup Activities are deliberately not included. *@
+    private static readonly ActivityTargetType[] WorkerTaskTargetTypes =
+    [
+        ActivityTargetType.ConnectedSystemRunProfile,
+        ActivityTargetType.ConnectedSystem
+    ];
+
+    private static readonly ActivityTargetOperationType[] WorkerTaskOperations =
+    [
+        ActivityTargetOperationType.Execute,
+        ActivityTargetOperationType.Clear,
+        ActivityTargetOperationType.Delete
+    ];
+
     private int _currentPage;
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
@@ -816,8 +877,10 @@
     private IReadOnlyCollection<string> _filterConnectedSystems = [];
     private IReadOnlyCollection<string> _filterRunProfiles = [];
     private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<Guid> _filterSchedules = [];
     private string? _filterInitiatedBy;
     private bool _filterHasChildren;
+    private bool _filterScheduledOnly;
 
     private int TotalPages => _totalItems == 0 ? 1 : (int)Math.Ceiling((double)_totalItems / _rowsPerPage);
 
@@ -892,12 +955,23 @@
             var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
             var statuses = _filterStatuses.Any() ? _filterStatuses : null;
             var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+            var schedules = _filterSchedules.Any() ? _filterSchedules : null;
 
             using var refreshJim = JimFactory.Create();
-            var result = await refreshJim.Activities.GetWorkerTaskActivitiesAsync(
-                1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy,
-                _currentSortLabel, _currentSortDescending,
-                _filterHasChildren ? true : null);
+            var result = await refreshJim.Activities.GetActivitiesAsync(
+                page: 1,
+                pageSize: _rowsPerPage,
+                sortBy: _currentSortLabel,
+                sortDescending: _currentSortDescending,
+                operationFilter: WorkerTaskOperations,
+                typeFilter: WorkerTaskTargetTypes,
+                statusFilter: statuses,
+                hasChildActivities: _filterHasChildren ? true : null,
+                connectedSystemFilter: connectedSystems,
+                runProfileFilter: runProfiles,
+                initiatedByFilter: initiatedBy,
+                initiatedBySchedule: _filterScheduledOnly ? true : null,
+                scheduleFilter: schedules);
 
             var fingerprint = BuildFingerprint(result.Results);
             if (fingerprint != _lastDataFingerprint)
@@ -973,18 +1047,23 @@
         var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
         var statuses = _filterStatuses.Any() ? _filterStatuses : null;
         var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+        var schedules = _filterSchedules.Any() ? _filterSchedules : null;
 
         using var jim = JimFactory.Create();
-        var result = await jim.Activities.GetWorkerTaskActivitiesAsync(
-            _currentPage + 1,
-            _rowsPerPage,
-            connectedSystems,
-            runProfiles,
-            statuses,
-            initiatedBy,
-            _currentSortLabel,
-            _currentSortDescending,
-            _filterHasChildren ? true : null);
+        var result = await jim.Activities.GetActivitiesAsync(
+            page: _currentPage + 1,
+            pageSize: _rowsPerPage,
+            sortBy: _currentSortLabel,
+            sortDescending: _currentSortDescending,
+            operationFilter: WorkerTaskOperations,
+            typeFilter: WorkerTaskTargetTypes,
+            statusFilter: statuses,
+            hasChildActivities: _filterHasChildren ? true : null,
+            connectedSystemFilter: connectedSystems,
+            runProfileFilter: runProfiles,
+            initiatedByFilter: initiatedBy,
+            initiatedBySchedule: _filterScheduledOnly ? true : null,
+            scheduleFilter: schedules);
 
         _items = result.Results;
         _totalItems = result.TotalResults;
@@ -1052,6 +1131,13 @@
         await LoadDataAsync();
     }
 
+    private async Task OnScheduleFilterChanged(IReadOnlyCollection<Guid> values)
+    {
+        _filterSchedules = values;
+        _currentPage = 0;
+        await LoadDataAsync();
+    }
+
     private async Task OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
@@ -1073,6 +1159,13 @@
         await LoadDataAsync();
     }
 
+    private async Task OnScheduledOnlyFilterChanged(bool value)
+    {
+        _filterScheduledOnly = value;
+        _currentPage = 0;
+        await LoadDataAsync();
+    }
+
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
     {
         return selectedValues.Count switch
@@ -1081,6 +1174,23 @@
             1 => selectedValues[0],
             _ => $"{selectedValues.Count} selected"
         };
+    }
+
+    /// <summary>
+    /// MultiSelectionTextFunc is typed against the string form of the selected values regardless of the select's T,
+    /// so the Schedule select would otherwise render a raw GUID for a single selection. Map the id back to the
+    /// Schedule's name via the loaded filter options.
+    /// </summary>
+    private string GetScheduleMultiSelectText(IReadOnlyList<string> selectedValues)
+    {
+        if (selectedValues.Count == 0)
+            return string.Empty;
+
+        if (selectedValues.Count > 1)
+            return $"{selectedValues.Count} selected";
+
+        var schedule = _filterOptions?.Schedules.FirstOrDefault(s => s.Id.ToString() == selectedValues[0]);
+        return schedule?.Name ?? selectedValues[0];
     }
 
     private void HandleRowClick(TableRowClickEventArgs<Activity> args)

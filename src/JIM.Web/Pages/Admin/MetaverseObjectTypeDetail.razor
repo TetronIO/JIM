@@ -4,14 +4,17 @@
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
+@using JIM.Models.Preview
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
+@inject IConfigurationChangePreviewStarter PreviewStarter
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -97,13 +100,35 @@
 
                 @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
                 {
+                    @* Deletion Trigger mode (#119): whether every selected source must disconnect, or any one *@
+                    <div class="mt-4">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Deletion Trigger</MudText>
+                        <MudRadioGroup T="AuthoritativeSourceTriggerMode" @bind-Value="_deletionTriggerMode">
+                            <MudStack Spacing="1">
+                                <MudRadio Value="AuthoritativeSourceTriggerMode.AllSourcesDisconnect" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">All sources disconnect</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Delete only once every selected source has disconnected. Resilient to a single
+                                        system failing or being rebuilt. This is the default.
+                                    </MudText>
+                                </MudRadio>
+                                <MudRadio Value="AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect" Color="Color.Primary">
+                                    <MudText Typo="Typo.body1">Specific source(s) disconnect</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Delete when any one of the selected sources disconnects, even if others remain connected.
+                                    </MudText>
+                                </MudRadio>
+                            </MudStack>
+                        </MudRadioGroup>
+                    </div>
+
                     <div class="mt-4">
                         <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
                         @if (_contributingSystems.Any())
                         {
                             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                                 Select the Connected Systems that are authoritative sources for this object type.
-                                When ANY of these systems disconnects, the Metaverse Object will be scheduled for deletion.
+                                At least one contributing system must be selected; nothing is selected by default.
                             </MudText>
                             @foreach (var system in _contributingSystems)
                             {
@@ -119,6 +144,17 @@
                             </MudAlert>
                         }
                     </div>
+
+                    @if (_contributingSystems.Any())
+                    {
+                        @* Live summary (#119): restates trigger mode, sources by name and grace period before Save *@
+                        <div class="mt-4">
+                            <DeletionTriggerSummary ObjectTypeName="@_metaverseObjectType.Name"
+                                TriggerMode="_deletionTriggerMode"
+                                SourceNames="@GetSelectedSourceNames()"
+                                GracePeriod="@GetEditedGracePeriod()" />
+                        </div>
+                    }
                 }
 
                 <MudStack Row="true" Class="mt-5" Spacing="2">
@@ -126,8 +162,34 @@
                         Disabled="@(!CanSave())">
                         Save Changes
                     </MudButton>
+                    @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
+                    @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
+                    <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Outlined" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
+                        Disabled="@(!CanSave() || _startingPreview)">
+                        Preview Changes
+                    </MudButton>
                     <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
                 </MudStack>
+
+                @if (_previewActivityId.HasValue)
+                {
+                    var previewActivityId = _previewActivityId.Value;
+
+                    @if (DeletionSettingsPreviewIsStale)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-6"
+                                  data-testid="jim-preview-stale">
+                            The deletion settings have been edited since this preview ran, so it no longer describes
+                            what saving would do. Preview again for an answer about the current settings.
+                        </MudAlert>
+                    }
+
+                    <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
+                                                     Title="Preview: Deletion Rules"
+                                                     OnPreviewChanged="OnDeletionSettingsPreviewChanged"
+                                                     Class="mt-6" />
+                }
             </MudPaper>
 
             <MudPaper Class="pa-4 mt-6" Outlined="true">
@@ -256,7 +318,7 @@
                 <ToolBarContent>
                     <MudText Typo="Typo.h6">Attributes on this Object Type</MudText>
                     <MudSpacer />
-                    <MudTextField @bind-Value="_attributeSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    <SearchField @bind-Value="_attributeSearchString" Class="mt-0" />
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
                                DropShadow="false" Class="ml-3" OnClick="OpenAddAttributeBindingDialogAsync">Add Attribute</MudButton>
                 </ToolBarContent>
@@ -400,14 +462,24 @@
 
     // Deletion rules state
     private MetaverseObjectDeletionRule _deletionRule;
+    private AuthoritativeSourceTriggerMode _deletionTriggerMode;
     private int _gracePeriodDays;
     private int _gracePeriodHours;
     private int _gracePeriodMinutes;
     private HashSet<int> _selectedAuthoritativeSources = new();
     private List<(int Id, string Name)> _contributingSystems = new();
 
+    // Configuration Change Preview of the deletion settings (#1114). The proposal the preview was started for is
+    // kept beside its Activity id so the panel can be labelled stale the moment the form moves on from it: a
+    // preview presented against settings it did not evaluate is worse than no preview, because it is believed.
+    private Guid? _previewActivityId;
+    private MetaverseObjectTypeDeletionSettingsProposal? _previewedProposal;
+    private ConfigurationChangePreview? _preview;
+    private bool _startingPreview;
+
     // Original values for change detection
     private MetaverseObjectDeletionRule _originalDeletionRule;
+    private AuthoritativeSourceTriggerMode _originalDeletionTriggerMode;
     private int _originalGracePeriodDays;
     private int _originalGracePeriodHours;
     private int _originalGracePeriodMinutes;
@@ -456,15 +528,6 @@
         if (newAction == header.OutboundDeprovisionAction)
             return;
 
-        // offer an optional reason for the configuration change history; cancelling aborts the change
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
-        if (cancelled)
-        {
-            // re-render so the select reverts to the unchanged header value
-            StateHasChanged();
-            return;
-        }
-
         try
         {
             using var jim = JimFactory.Create();
@@ -475,7 +538,27 @@
                 return;
             }
 
+            // This dropdown changes a Synchronisation Rule's Deprovisioning Action without going near the rule editor,
+            // so it needs the same acknowledgement the editor gives: switching to Delete means deprovisioned objects
+            // are deleted in the Connected System rather than disconnected from JIM.
             rule.OutboundDeprovisionAction = newAction;
+            var preflight = await jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(rule);
+            if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                    "Synchronisation Rule", rule.Name))
+            {
+                // re-render so the select reverts to the unchanged header value
+                StateHasChanged();
+                return;
+            }
+
+            // offer an optional reason for the configuration change history; cancelling aborts the change
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+            {
+                StateHasChanged();
+                return;
+            }
+
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             var success = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, user, changeReason: changeReason);
             if (!success)
@@ -511,6 +594,15 @@
         if (_metaverseObjectType == null) return;
 
         _deletionRule = _metaverseObjectType.DeletionRule;
+
+        // Trigger mode (#119): honour the stored mode for an existing WhenAuthoritativeSourceDisconnected
+        // configuration; for any other rule the stored value is meaningless (existing rows read the
+        // behaviour-preserving column default), so pre-select the safe default (All) ready for the
+        // administrator configuring the rule anew.
+        _deletionTriggerMode = _metaverseObjectType.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+            ? _metaverseObjectType.DeletionTriggerMode
+            : AuthoritativeSourceTriggerMode.AllSourcesDisconnect;
+
         var gp = _metaverseObjectType.DeletionGracePeriod ?? TimeSpan.Zero;
         _gracePeriodDays = gp.Days;
         _gracePeriodHours = gp.Hours;
@@ -519,6 +611,7 @@
 
         // Store original values
         _originalDeletionRule = _deletionRule;
+        _originalDeletionTriggerMode = _deletionTriggerMode;
         _originalGracePeriodDays = _gracePeriodDays;
         _originalGracePeriodHours = _gracePeriodHours;
         _originalGracePeriodMinutes = _gracePeriodMinutes;
@@ -528,10 +621,21 @@
     private void ResetDeletionRules()
     {
         _deletionRule = _originalDeletionRule;
+        _deletionTriggerMode = _originalDeletionTriggerMode;
         _gracePeriodDays = _originalGracePeriodDays;
         _gracePeriodHours = _originalGracePeriodHours;
         _gracePeriodMinutes = _originalGracePeriodMinutes;
         _selectedAuthoritativeSources = new HashSet<int>(_originalAuthoritativeSources);
+
+        // Reset means "discard my edits", and the preview is an answer about exactly those edits.
+        DiscardDeletionSettingsPreview();
+    }
+
+    private void DiscardDeletionSettingsPreview()
+    {
+        _previewActivityId = null;
+        _previewedProposal = null;
+        _preview = null;
     }
 
     private void ToggleAuthoritativeSource(int systemId, bool selected)
@@ -548,9 +652,30 @@
         {
             MetaverseObjectDeletionRule.Manual => "Objects must be manually deleted by an administrator.",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => "Delete when all Connected System Objects are disconnected.",
-            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "Delete when any selected authoritative source disconnects.",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "Delete according to the authoritative source trigger below.",
             _ => string.Empty
         };
+    }
+
+    /// <summary>
+    /// The display names of the currently selected authoritative sources, in contributing-system order,
+    /// for the live summary (#119).
+    /// </summary>
+    private List<string> GetSelectedSourceNames()
+    {
+        return _contributingSystems
+            .Where(s => _selectedAuthoritativeSources.Contains(s.Id))
+            .Select(s => s.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The grace period currently entered in the editor fields, or null when zero, for the live summary (#119).
+    /// </summary>
+    private TimeSpan? GetEditedGracePeriod()
+    {
+        var gracePeriod = new TimeSpan(_gracePeriodDays, _gracePeriodHours, _gracePeriodMinutes, 0);
+        return gracePeriod == TimeSpan.Zero ? null : gracePeriod;
     }
 
     private bool CanSave()
@@ -566,9 +691,89 @@
         return HasChanges();
     }
 
+    // ─── Configuration Change Preview (#1114) ───
+
+    /// <summary>
+    /// The deletion settings currently entered, as the preview framework's proposal type. Built from the form
+    /// rather than the entity so the preview evaluates what an administrator is about to save, which is the whole
+    /// point of asking before saving it.
+    /// </summary>
+    private MetaverseObjectTypeDeletionSettingsProposal BuildDeletionSettingsProposal() =>
+        new(_deletionRule,
+            GetEditedGracePeriod(),
+            _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _selectedAuthoritativeSources.OrderBy(id => id).ToList()
+                : [],
+            _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _deletionTriggerMode
+                : _metaverseObjectType?.DeletionTriggerMode ?? AuthoritativeSourceTriggerMode.AllSourcesDisconnect);
+
+    /// <summary>
+    /// Whether the form has moved on from the settings the visible preview was run against.
+    /// </summary>
+    private bool DeletionSettingsPreviewIsStale =>
+        _previewedProposal is not null && !BuildDeletionSettingsProposal().DescribesSameSettingsAs(_previewedProposal);
+
+    private async Task PreviewDeletionRulesAsync()
+    {
+        if (_metaverseObjectType == null || _startingPreview)
+            return;
+
+        _startingPreview = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var proposal = BuildDeletionSettingsProposal();
+
+            // The starter, not StartAndDispatchPreviewAsync: it owns the question of whether a large preview keeps
+            // every drill-down row, and that decision belongs in one place rather than at each surface.
+            var activityId = await PreviewStarter.StartAsync(new ConfigurationChangePreviewRequest
+            {
+                Surface = ConfigurationChangePreviewSurface.MetaverseObjectType,
+                TargetId = _metaverseObjectType.Id,
+                TargetName = _metaverseObjectType.Name,
+                ProposedConfiguration = proposal,
+                InitiatedByType = ActivityInitiatorType.User,
+                InitiatedById = user?.Id,
+                InitiatedByName = user?.Name
+            });
+
+            // Null means the administrator declined the data-set size question, which is a decision not to preview.
+            if (activityId == null)
+                return;
+
+            _previewActivityId = activityId;
+            _previewedProposal = proposal;
+            _preview = null;
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
+        {
+            DiscardDeletionSettingsPreview();
+            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _startingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Records the panel's latest read of the preview, for the save confirmation to state.
+    ///
+    /// Deliberately does not call <c>StateHasChanged</c>. The panel re-reads on every parameter set, so a page that
+    /// re-rendered in response to this callback would set the panel's parameters again, which would refresh again,
+    /// which would raise this again: a render loop that never settles and, worse, cancels and restarts the panel's
+    /// reconciliation poll on every pass, so its delay never elapses and the panel sits on stage 1 for ever. Found
+    /// by driving the portal; no test in the suite could have seen it. Nothing the page renders depends on this
+    /// value, so storing it is enough.
+    /// </summary>
+    private void OnDeletionSettingsPreviewChanged(ConfigurationChangePreview? preview) => _preview = preview;
+
     private bool HasChanges()
     {
         if (_deletionRule != _originalDeletionRule) return true;
+        if (_deletionTriggerMode != _originalDeletionTriggerMode) return true;
         if (_gracePeriodDays != _originalGracePeriodDays) return true;
         if (_gracePeriodHours != _originalGracePeriodHours) return true;
         if (_gracePeriodMinutes != _originalGracePeriodMinutes) return true;
@@ -580,14 +785,23 @@
     {
         if (_metaverseObjectType == null) return;
 
-        // offer an optional reason for the configuration change history; cancelling aborts the save
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
-        if (cancelled)
-            return;
+        // What is on the entity now, so an abandoned save leaves it as it was persisted. The form keeps the
+        // administrator's edits either way; only the entity is rolled back.
+        var persistedRule = _metaverseObjectType.DeletionRule;
+        var persistedGracePeriod = _metaverseObjectType.DeletionGracePeriod;
+        var persistedTriggers = _metaverseObjectType.DeletionTriggerConnectedSystemIds;
+
+        void RollBack()
+        {
+            _metaverseObjectType.DeletionRule = persistedRule;
+            _metaverseObjectType.DeletionGracePeriod = persistedGracePeriod;
+            _metaverseObjectType.DeletionTriggerConnectedSystemIds = persistedTriggers;
+        }
 
         try
         {
-            // Update the object type
+            // Update the object type. Applied to the entity before the preflight runs, because the preflight compares
+            // the entity as it will be saved against its last captured snapshot.
             _metaverseObjectType.DeletionRule = _deletionRule;
             var gracePeriod = new TimeSpan(_gracePeriodDays, _gracePeriodHours, _gracePeriodMinutes, 0);
             _metaverseObjectType.DeletionGracePeriod = gracePeriod == TimeSpan.Zero ? null : gracePeriod;
@@ -595,12 +809,43 @@
                 ? _selectedAuthoritativeSources.ToList()
                 : new List<int>();
 
+            // Trigger mode (#119): only meaningful for WhenAuthoritativeSourceDisconnected; leave the
+            // stored value untouched for other rules so switching rule does not churn change history.
+            if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
+                _metaverseObjectType.DeletionTriggerMode = _deletionTriggerMode;
+
             using var jim = JimFactory.Create();
+
+            // Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects
+            // eligible for deletion, with no synchronisation run in between; the acknowledgement says so, and where
+            // a preview was run it says how many objects that is (#1114).
+            var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(_metaverseObjectType);
+            if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                    "Metaverse Object Type", _metaverseObjectType.Name,
+                    ConfigurationChangePreviewCounts.ForConfirmation(_preview, DeletionSettingsPreviewIsStale)))
+            {
+                RollBack();
+                return;
+            }
+
+            // offer an optional reason for the configuration change history; cancelling aborts the save
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+            {
+                RollBack();
+                return;
+            }
+
+            // The preview is linked only when it actually describes this change. A link to a preview run against
+            // different settings would make the audit assert something untrue about what the administrator read.
+            var previewActivityId = DeletionSettingsPreviewIsStale ? null : _previewActivityId;
+
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason);
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason, previewActivityId);
 
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;
+            _originalDeletionTriggerMode = _deletionTriggerMode;
             _originalGracePeriodDays = _gracePeriodDays;
             _originalGracePeriodHours = _gracePeriodHours;
             _originalGracePeriodMinutes = _gracePeriodMinutes;
@@ -612,6 +857,9 @@
         }
         catch (Exception ex)
         {
+            // The entity was mutated before the save was attempted; leaving it mutated would make a failed save look
+            // like a successful one everywhere else on the page.
+            RollBack();
             Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
         }
     }

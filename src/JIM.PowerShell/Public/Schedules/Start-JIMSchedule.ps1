@@ -83,15 +83,21 @@ function Start-JIMSchedule {
                 if ($Wait) {
                     $startTime = [DateTime]::UtcNow
                     $pollInterval = 5  # seconds
+                    $terminalStatuses = @('Complete', 'Failed', 'Cancelled')
 
                     Write-Verbose "Waiting for execution to complete (timeout: $Timeout)..."
 
                     while ($true) {
                         $currentExecution = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$executionId"
 
-                        # Check if completed (status 2=Completed, 3=Failed, 4=Cancelled)
-                        if ($currentExecution.status -ge 2) {
-                            Write-Verbose "Execution completed with status: $($currentExecution.status)"
+                        # The API serialises ScheduleExecutionStatus by name, never as an ordinal
+                        # (JsonStringEnumConverter with allowIntegerValues:false; see ApiJsonConfiguration),
+                        # so match on the terminal status names. Comparing the string numerically is
+                        # what broke this before: PowerShell types a comparison by its left operand, so
+                        # "$status -ge 2" was a string comparison against '2' that every status name
+                        # satisfied, and the loop exited on its first poll.
+                        if ($currentExecution.status -in $terminalStatuses) {
+                            Write-Verbose "Execution finished with status: $($currentExecution.status)"
                             $execution = $currentExecution
                             break
                         }

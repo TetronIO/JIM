@@ -34,7 +34,11 @@ internal static class Rfc4512SchemaParser
         if (tokens.Count == 0)
             return null;
 
-        var result = new Rfc4512ObjectClassDescription();
+        var result = new Rfc4512ObjectClassDescription
+        {
+            // RFC 4512 § 4.1.1 puts the OID first, immediately after the opening parenthesis.
+            Oid = tokens.Count > 1 && tokens[0] == "(" ? tokens[1] : null
+        };
 
         for (var i = 0; i < tokens.Count; i++)
         {
@@ -42,6 +46,9 @@ internal static class Rfc4512SchemaParser
 
             switch (token)
             {
+                case "OBSOLETE":
+                    result.IsObsolete = true;
+                    break;
                 case "NAME":
                     result.Name = ReadNameValue(tokens, ref i);
                     break;
@@ -400,9 +407,22 @@ internal static class Rfc4512SchemaParser
 /// </summary>
 internal class Rfc4512ObjectClassDescription
 {
+    /// <summary>
+    /// The class's object identifier, which names the enterprise that defined it. This is how the connector tells a
+    /// directory's own configuration and operational classes from the classes an administrator manages.
+    /// </summary>
+    public string? Oid { get; set; }
+
     public string? Name { get; set; }
     public string? Description { get; set; }
     public string? SuperiorName { get; set; }
+
+    /// <summary>
+    /// Whether the directory has declared the class superseded. This is the only statement of "do not use this" the
+    /// schema format offers.
+    /// </summary>
+    public bool IsObsolete { get; set; }
+
     public Rfc4512ObjectClassKind Kind { get; set; } = Rfc4512ObjectClassKind.Structural;
     public List<string> MustAttributes { get; set; } = new();
     public List<string> MayAttributes { get; set; } = new();

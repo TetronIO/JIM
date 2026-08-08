@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Logic;
+using JIM.Models.Preview;
 using JIM.Models.Scheduling;
 using JIM.Models.Search;
 using JIM.Models.Security;
@@ -21,6 +22,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
     public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
+    public virtual DbSet<ActivityPhase> ActivityPhases { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
     public virtual DbSet<ConnectedSystem> ConnectedSystems { get; set; } = null!;
     public virtual DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; } = null!;
@@ -31,7 +33,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectChangeAttributeValue> ConnectedSystemObjectChangeAttributeValues { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemObjectTypeTag> ConnectedSystemObjectTypeTags { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
@@ -39,6 +43,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectorDefinitionFile> ConnectorDefinitionFiles { get; set; } = null!;
     public virtual DbSet<ConnectorDefinitionSetting> ConnectorDefinitionSettings { get; set; } = null!;
     public virtual DbSet<ConnectorPartition> ConnectorPartitions { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreview> ConfigurationChangePreviews { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewGroup> ConfigurationChangePreviewGroups { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewDelta> ConfigurationChangePreviewDeltas { get; set; } = null!;
     public virtual DbSet<ExampleDataObjectType> ExampleDataObjectTypes { get; set; } = null!;
     public virtual DbSet<ExampleDataTemplate> ExampleDataTemplates { get; set; } = null!;
     public virtual DbSet<ExampleDataTemplateAttribute> ExampleDataTemplateAttributes { get; set; } = null!;
@@ -59,6 +66,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
     public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
+    public virtual DbSet<PendingInitialPassword> PendingInitialPasswords { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
     public virtual DbSet<PredefinedSearchAttribute> PredefinedSearchAttributes {  get; set; } = null!;
@@ -74,6 +82,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ObjectMatchingRule> ObjectMatchingRules { get; set; } = null!;
     public virtual DbSet<ObjectMatchingRuleSource> ObjectMatchingRuleSources { get; set; } = null!;
     public virtual DbSet<SyncRule> SyncRules { get; set; } = null!;
+    public virtual DbSet<SyncRuleInitialPassword> SyncRuleInitialPasswords { get; set; } = null!;
     public virtual DbSet<SyncRuleMapping> SyncRuleMappings { get; set; } = null!;
     public virtual DbSet<SyncRuleMappingSource> SyncRuleMappingSources { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
@@ -81,6 +90,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
     public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangePreviewWorkerTask> ConfigurationChangePreviewWorkerTasks { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
     // Connection pooling constants
@@ -218,6 +228,21 @@ public class JimDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Activity phases (#454): the steps of a Run Profile execution, read in run order by the
+        // portal, the API and PowerShell, and entered by key while the run progresses. Both access
+        // patterns get an index, and the key is unique per Activity so entering a phase is
+        // unambiguous. Cascades away with the owning Activity.
+        modelBuilder.Entity<ActivityPhase>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.HasOne<Activity>()
+                .WithMany()
+                .HasForeignKey(p => p.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(p => new { p.ActivityId, p.Order });
+            entity.HasIndex(p => new { p.ActivityId, p.Key }).IsUnique();
+        });
+
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
             .HasMany(rpei => rpei.SyncOutcomes)
@@ -281,6 +306,35 @@ public class JimDbContext : DbContext
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
 
+        // Classification tags have no meaning without the object type they classify, so they go with it. The unique
+        // index enforces the same rule schema import applies in memory: a type is classified a given way once.
+        modelBuilder.Entity<ConnectedSystemObjectType>()
+            .HasMany(csot => csot.Tags)
+            .WithOne(tag => tag.ConnectedSystemObjectType)
+            .HasForeignKey(tag => tag.ConnectedSystemObjectTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
+            .HasIndex(tag => new { tag.ConnectedSystemObjectTypeId, tag.Key, tag.Value })
+            .IsUnique();
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
+            .Property(tag => tag.Key)
+            .HasMaxLength(64);
+
+        modelBuilder.Entity<ConnectedSystemObjectTypeTag>()
+            .Property(tag => tag.Value)
+            .HasMaxLength(256);
+
+        // A Connected System has at most one discovered password policy. Every other child of a Connected System
+        // is a collection, so this one-to-one has to be declared explicitly: EF cannot infer which end is the
+        // dependent. Cascade, because a discovered policy has no meaning without the system it was read from.
+        modelBuilder.Entity<ConnectedSystem>()
+            .HasOne(cs => cs.PasswordPolicy)
+            .WithOne(pp => pp.ConnectedSystem)
+            .HasForeignKey<ConnectedSystemPasswordPolicy>(pp => pp.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
             .WithMany(r => r.StaticMembers);
@@ -332,6 +386,14 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObjectType>()
             .HasMany(mot => mot.Attributes);
 
+        // Authoritative source trigger mode (#119). The store-level default backfills existing rows with
+        // SpecificSourcesDisconnect (0), the behaviour they were configured with before trigger modes
+        // existed (#115), so the migration is behaviour-preserving with no backfill. New entities read the
+        // property initialiser instead and start at the safe default (AllSourcesDisconnect).
+        modelBuilder.Entity<MetaverseObjectType>()
+            .Property(mot => mot.DeletionTriggerMode)
+            .HasDefaultValue(AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
+
         // advisory Standard Mapping metadata (#1104). Mappings are owned by their attribute (cascade delete),
         // and each (attribute, standard, counterpart name) combination exists at most once so the built-in
         // schema synchronisation pass converges rather than duplicates.
@@ -373,6 +435,12 @@ public class JimDbContext : DbContext
         // default backfills existing rows on migration.
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.InitialExportOnly)
+            .HasDefaultValue(false);
+
+        // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
+        // existing Run Profiles); the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
@@ -423,6 +491,38 @@ public class JimDbContext : DbContext
             .HasForeignKey(pe => pe.ConnectedSystemObjectId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // PendingExport: the Synchronisation Rule whose provisioning decision produced a Create.
+        // SetNull rather than Cascade: deleting a rule must not delete exports already staged for accounts it
+        // provisioned. Losing the link simply means the account does not get an initial password, which is the
+        // right outcome once the rule that asked for one is gone.
+        modelBuilder.Entity<PendingExport>()
+            .HasOne(pe => pe.ProvisioningSyncRule)
+            .WithMany()
+            .HasForeignKey(pe => pe.ProvisioningSyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Partial, because the column is set only on a provisioning Create and null on every update and delete,
+        // which at customer scale is the overwhelming majority of a table that is written in bulk on every
+        // export evaluation. The index exists to keep deleting a Synchronisation Rule from scanning the whole
+        // table to null the column out, and rows that are already null are not rows that delete has to visit.
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ProvisioningSyncRuleId)
+            .HasDatabaseName("IX_PendingExports_ProvisioningSyncRuleId")
+            .HasFilter("\"ProvisioningSyncRuleId\" IS NOT NULL");
+
+        // A Synchronisation Rule has at most one initial-password configuration. Cascade, because the
+        // configuration has no meaning without the rule that provisions with it. The generator settings live in
+        // the same table as owned columns: they have no identity of their own and are never queried apart from
+        // the configuration that holds them.
+        modelBuilder.Entity<SyncRule>()
+            .HasOne(sr => sr.InitialPassword)
+            .WithOne(ip => ip.SyncRule)
+            .HasForeignKey<SyncRuleInitialPassword>(ip => ip.SyncRuleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SyncRuleInitialPassword>()
+            .OwnsOne(ip => ip.CustomPolicy);
+
         // DeferredReference: relationships for reference resolution
         modelBuilder.Entity<DeferredReference>()
             .HasOne(dr => dr.SourceCso)
@@ -462,6 +562,14 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
 
+        // PendingExport: partial index for the deferred-reference second pass (#1102).
+        // Rows with unresolved references are rare (usually zero), so the partial index
+        // keeps the common no-deferred-exports probe near-free at any scale.
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ConnectedSystemId)
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_HasUnresolvedReferences")
+            .HasFilter("\"HasUnresolvedReferences\"");
+
         // PendingExport: composite index supporting keyset pagination in export batch collection
         // (ORDER BY CreatedAt, Id with a (CreatedAt, Id) > (cursor) predicate; issue #985).
         modelBuilder.Entity<PendingExport>()
@@ -469,6 +577,37 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
         // PendingExport: filtered unique index to prevent duplicate Pending Exports for the same CSO.
+        // PendingInitialPassword: the account it is owed to. Cascade, because an account that no longer exists
+        // cannot be owed a password.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasOne(pip => pip.ConnectedSystemObject)
+            .WithMany()
+            .HasForeignKey(pip => pip.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The Synchronisation Rule whose configuration governs the delivery. SetNull rather than Cascade:
+        // deleting a rule must not erase the record that an account is still waiting, which is a fact about the
+        // account rather than about the rule. Without a rule there is no configuration to generate from, so the
+        // delivery cannot proceed, and that is a thing an administrator needs to be able to see.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasOne(pip => pip.SyncRule)
+            .WithMany()
+            .HasForeignKey(pip => pip.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // One outstanding initial password per account. A second would mean two deliveries racing to set a
+        // password on the same object, with the later one silently winning.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasIndex(pip => pip.ConnectedSystemObjectId)
+            .IsUnique()
+            .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemObjectId_Unique");
+
+        // What the worker asks for on every export run, and what the portal's needs-attention indicators ask
+        // for on every page load: what is outstanding on this Connected System, in this state.
+        modelBuilder.Entity<PendingInitialPassword>()
+            .HasIndex(pip => new { pip.ConnectedSystemId, pip.Status })
+            .HasDatabaseName("IX_PendingInitialPasswords_ConnectedSystemId_Status");
+
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
         modelBuilder.Entity<PendingExport>()
@@ -600,6 +739,17 @@ public class JimDbContext : DbContext
             .HasIndex(a => new { a.TargetType, a.Created })
             .HasDatabaseName("IX_Activities_TargetType_Created");
 
+        // Schedule attribution on Activities (issue #1196). The Operations History Schedule filter narrows on the
+        // denormalised ScheduledByScheduleId, and the Schedule Execution drill-downs select on ScheduleExecutionId,
+        // which carried no index at all; without both, either query sequential-scans the whole Activities table.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ScheduledByScheduleId)
+            .HasDatabaseName("IX_Activities_ScheduledByScheduleId");
+
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ScheduleExecutionId)
+            .HasDatabaseName("IX_Activities_ScheduleExecutionId");
+
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => o.ActivityRunProfileExecutionItemId)
@@ -608,6 +758,55 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => new { o.ActivityRunProfileExecutionItemId, o.OutcomeType })
             .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
+
+        // Configuration change preview (#827). All three tables hang off the preview's Activity and cascade from it,
+        // so the existing history-retention housekeeping removes preview results with the Activity that owns them;
+        // no separate cleanup, and no way for preview data (which holds attribute values) to outlive its retention.
+        modelBuilder.Entity<ConfigurationChangePreview>(preview =>
+        {
+            // The Activity id IS the preview's key: a preview and its Activity are one thing, and sharing the key
+            // makes the 1:1 unenforceable-by-accident rather than merely conventional.
+            preview.HasKey(p => p.ActivityId);
+
+            preview.HasOne(p => p.Activity)
+                .WithOne()
+                .HasForeignKey<ConfigurationChangePreview>(p => p.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ConfigurationChangePreviewGroup>(group =>
+        {
+            group.HasOne(g => g.Preview)
+                .WithMany(p => p.Groups)
+                .HasForeignKey(g => g.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The summary landing view reads every group for one preview, ordered by size.
+            group.HasIndex(g => g.ActivityId)
+                .HasDatabaseName("IX_ConfigurationChangePreviewGroups_ActivityId");
+        });
+
+        modelBuilder.Entity<ConfigurationChangePreviewDelta>(delta =>
+        {
+            delta.HasOne(d => d.Preview)
+                .WithMany(p => p.Deltas)
+                .HasForeignKey(d => d.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            delta.HasOne(d => d.Group)
+                .WithMany(g => g.Deltas)
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Drill-down is always "the rows of one group of one preview", server-side paginated.
+            delta.HasIndex(d => new { d.ActivityId, d.GroupId })
+                .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_GroupId");
+
+            // Filtering a preview by transition type without picking a group ("show me everything that would be
+            // disconnected") is the other access path, and it must not degrade into a scan of every delta row.
+            delta.HasIndex(d => new { d.ActivityId, d.TransitionType })
+                .HasDatabaseName("IX_ConfigurationChangePreviewDeltas_ActivityId_TransitionType");
+        });
 
         // Performance index for Metaverse Object deletion automation
         // Optimises GetMetaverseObjectsEligibleForDeletionAsync queries
@@ -670,6 +869,13 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ScheduleExecution>()
             .HasIndex(se => new { se.Status, se.QueuedAt })
             .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
+
+        // Index for a Schedule's most recent execution. The Schedules list projects each Schedule's last execution
+        // via a correlated "order by QueuedAt descending, take one" subquery; this composite index makes each of
+        // those an index-backed LIMIT 1 rather than a sort over every execution the Schedule has ever had.
+        modelBuilder.Entity<ScheduleExecution>()
+            .HasIndex(se => new { se.ScheduleId, se.QueuedAt })
+            .HasDatabaseName("IX_ScheduleExecutions_ScheduleId_QueuedAt");
 
         // Index for worker tasks by schedule execution
         modelBuilder.Entity<WorkerTask>()

@@ -81,7 +81,7 @@ public class SyncEngineTests
     {
         var mvo = CreateMvo(deletionRule: MetaverseObjectDeletionRule.Manual);
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 0);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: []);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.NotDeleted));
     }
@@ -92,7 +92,7 @@ public class SyncEngineTests
         var mvo = CreateMvo(deletionRule: MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
         mvo.Origin = MetaverseObjectOrigin.Internal;
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 0);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: []);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.NotDeleted));
     }
@@ -102,7 +102,7 @@ public class SyncEngineTests
     {
         var mvo = CreateMvo(deletionRule: MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 2);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: [2, 3]);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.NotDeleted));
     }
@@ -114,7 +114,7 @@ public class SyncEngineTests
             deletionRule: MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: null);
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 0);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: []);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.DeletedImmediately));
     }
@@ -126,7 +126,7 @@ public class SyncEngineTests
             deletionRule: MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriod: TimeSpan.FromDays(30));
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 0);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: []);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.DeletionScheduled));
         Assert.That(result.GracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
@@ -138,9 +138,10 @@ public class SyncEngineTests
         var mvo = CreateMvo(
             deletionRule: MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
             gracePeriod: null,
-            triggerSystemIds: [1, 2]);
+            triggerSystemIds: [1, 2],
+            triggerMode: AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 5);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: [2, 3, 4, 5, 6]);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.DeletedImmediately));
     }
@@ -150,9 +151,10 @@ public class SyncEngineTests
     {
         var mvo = CreateMvo(
             deletionRule: MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
-            triggerSystemIds: [1, 2]);
+            triggerSystemIds: [1, 2],
+            triggerMode: AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect);
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 99, remainingCsoCount: 3);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 99, remainingConnectedSystemIds: [1, 2, 3]);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.NotDeleted));
     }
@@ -162,7 +164,7 @@ public class SyncEngineTests
     {
         var mvo = new MetaverseObject { Id = Guid.NewGuid() };
 
-        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingCsoCount: 0);
+        var result = _engine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId: 1, remainingConnectedSystemIds: []);
 
         Assert.That(result.Fate, Is.EqualTo(MvoDeletionFate.NotDeleted));
     }
@@ -463,7 +465,8 @@ public class SyncEngineTests
     private static MetaverseObject CreateMvo(
         MetaverseObjectDeletionRule deletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
         TimeSpan? gracePeriod = null,
-        List<int>? triggerSystemIds = null)
+        List<int>? triggerSystemIds = null,
+        AuthoritativeSourceTriggerMode triggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect)
     {
         return new MetaverseObject
         {
@@ -475,7 +478,8 @@ public class SyncEngineTests
                 Name = "Person",
                 DeletionRule = deletionRule,
                 DeletionGracePeriod = gracePeriod,
-                DeletionTriggerConnectedSystemIds = triggerSystemIds ?? []
+                DeletionTriggerConnectedSystemIds = triggerSystemIds ?? [],
+                DeletionTriggerMode = triggerMode
             }
         };
     }

@@ -21,7 +21,14 @@ function Get-JIMRunProfile {
         Filter Run Profiles by name. Supports wildcards (e.g., "Full*").
 
     .OUTPUTS
-        PSCustomObject representing Run Profile(s).
+        PSCustomObject representing Run Profile(s), with these properties:
+        - id, name, connectedSystemId, runType, pageSize
+        - partitionName: the partition targeted, or null when the Run Profile follows every selected partition
+        - targetsDeselectedPartition: true when the targeted partition is no longer selected on the Connected
+          System. Such a Run Profile is inoperable; a deselected partition is not managed by JIM, so
+          Start-JIMRunProfile refuses it rather than reading scope that has been withdrawn.
+        - filePath, verifyImportContentHashes
+        - ConnectedSystemId (added for pipeline chaining)
 
     .EXAMPLE
         Get-JIMRunProfile -ConnectedSystemId 1
@@ -42,6 +49,12 @@ function Get-JIMRunProfile {
         Get-JIMConnectedSystem -Name "HR*" | Get-JIMRunProfile
 
         Gets all Run Profiles for Connected Systems with names starting with "HR".
+
+    .EXAMPLE
+        Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object targetsDeselectedPartition
+
+        Lists the Run Profiles left inoperable by the current partition selections, so an operator can repoint or
+        remove them before a scheduled run fails.
 
     .LINK
         Start-JIMRunProfile

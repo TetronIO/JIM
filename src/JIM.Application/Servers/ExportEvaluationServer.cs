@@ -1479,6 +1479,16 @@ public class ExportEvaluationServer
                         candidateAttributeIds.Contains(singleSource.MetaverseAttribute.Id);
                     if (isDirectCandidateFlow)
                     {
+                        // Synchronisation integrity: recall stages Update exports, and a WritableOnCreate
+                        // attribute must never reach one. Clearing or removing a value from it would rewrite
+                        // the Connected System's identifier for the object and sever the link to the row or
+                        // entry the Connected System Object is anchored to, which is the exact corruption
+                        // that writability state exists to prevent. The reference is deliberately left as the
+                        // target holds it; this is not routed to the fallback path, because the fallback
+                        // would only reach the same exclusion in CreateAttributeValueChanges.
+                        if (mapping.TargetConnectedSystemAttribute!.Writability == AttributeWritability.WritableOnCreate)
+                            continue;
+
                         if (!flowsByAttribute.TryGetValue(singleSource!.MetaverseAttribute!.Id, out var flows))
                         {
                             flows = [];
@@ -1601,6 +1611,22 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Records which Synchronisation Rule's provisioning decision produced an export, for a Create only.
+    /// <para>
+    /// This is the one moment the answer is known for certain. Delivering an initial password happens much
+    /// later, once the account exists in the target and has an external id, and by then working out which rule
+    /// was responsible would mean re-evaluating scope against rules that may have been edited in the meantime:
+    /// expensive, and capable of reaching a different answer than the one that created the account.
+    /// </para>
+    /// <para>
+    /// Deliberately null for updates and deletes. Only a create brings an account into existence, and a stamp on
+    /// anything else would let delivery fire again later in that account's life.
+    /// </para>
+    /// </summary>
+    private static int? ProvisioningRuleFor(PendingExportChangeType changeType, SyncRule exportRule) =>
+        changeType == PendingExportChangeType.Create ? exportRule.Id : null;
+
+    /// <summary>
     /// Creates or updates a PendingExport for an MVO change to a target system.
     /// For provisioning (Create) scenarios, also creates a CSO with Status=PendingProvisioning
     /// to establish the CSO↔MVO relationship before the object exists in the target system.
@@ -1697,7 +1723,8 @@ public class ExportEvaluationServer
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
         await SyncRepo.CreatePendingExportAsync(pendingExport);
@@ -1817,7 +1844,8 @@ public class ExportEvaluationServer
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
         // Save immediately - batching causes memory pressure with large datasets (5000+ objects)
@@ -2204,7 +2232,8 @@ public class ExportEvaluationServer
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
             CreatedAt = DateTime.UtcNow,
-            HasUnresolvedReferences = hasUnresolvedReferences
+            HasUnresolvedReferences = hasUnresolvedReferences,
+            ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
         if (hasUnresolvedReferences)
@@ -2336,6 +2365,22 @@ public class ExportEvaluationServer
         cso.AttributeValues ??= new List<ConnectedSystemObjectAttributeValue>();
         cso.AttributeValues.Add(attributeValue);
 
+        // SPEC-1082 D9: this writes an attribute value outside the Full Import stamp path (D6/D7).
+        // Null both columns in-memory (for the !deferSave EF-tracked SaveChanges path below) AND via
+        // an explicit StampImportStateAsync(null, null) call, which persists regardless of
+        // deferSave/persistence mechanism - the deferred batch flush path does not read these
+        // in-memory properties, so relying on the in-memory assignment alone would leave a stale
+        // hash in the database when deferSave is true. Guarded on the loaded values: this method
+        // runs once per provisioned object, and freshly provisioned PendingProvisioning CSOs are
+        // born with NULL import state (D6 creates NULL-write both columns), so an unguarded call
+        // would add one no-op UPDATE round trip per object at bulk provisioning scale.
+        if (cso.ImportStateHash != null || cso.ImportStateFingerprint != null)
+        {
+            cso.ImportStateHash = null;
+            cso.ImportStateFingerprint = null;
+            await SyncRepo.StampImportStateAsync([(cso.Id, (Guid?)null, (Guid?)null)]);
+        }
+
         // Persist immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
         {
@@ -2438,9 +2483,13 @@ public class ExportEvaluationServer
             }
         }
 
-        // Initial Export Only mappings (#223) flow solely during the provisioning (Create) export; for
-        // Update exports the target attribute is unmanaged by JIM and must be skipped before any evaluation.
-        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || !m.InitialExportOnly))
+        // Some mappings flow solely during the provisioning (Create) export and must be skipped for Update
+        // exports before any evaluation: Initial Export Only mappings (#223), whose target attribute is
+        // unmanaged by JIM once the object is past provisioning, and mappings whose target attribute is
+        // WritableOnCreate, which the Connected System accepts only as part of creating the object.
+        // FlowsOnUpdateExport() carries both rules; see its documentation for why the second one is a
+        // synchronisation integrity guard rather than an optimisation.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || m.FlowsOnUpdateExport()))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)

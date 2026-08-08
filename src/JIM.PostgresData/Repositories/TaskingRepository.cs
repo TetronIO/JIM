@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 using JIM.Utilities;
@@ -33,6 +34,14 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.SynchronisationWorkerTasks.Add(synchronisationWorkerTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case ConfigurationChangePreviewWorkerTask configurationChangePreviewWorkerTask:
+                // Unlike every other task type, this one attaches to an Activity that already exists. Add() walks
+                // the graph and marks every untracked entity it reaches for insertion, so without tracking the
+                // Activity first the insert would try to create it a second time and fail on its primary key.
+                Repository.Database.Entry(configurationChangePreviewWorkerTask.Activity).State = EntityState.Unchanged;
+                Repository.Database.ConfigurationChangePreviewWorkerTasks.Add(configurationChangePreviewWorkerTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             case TemporalScopeReconciliationWorkerTask temporalScopeReconciliationTask:
                 Repository.Database.TemporalScopeReconciliationWorkerTasks.Add(temporalScopeReconciliationTask);
                 await Repository.Database.SaveChangesAsync();
@@ -57,6 +66,13 @@ public class TaskingRepository : ITaskingRepository
             .SingleOrDefaultAsync(st => st.Id == id);
     }
 
+    public async Task<WorkerTask?> GetWorkerTaskByActivityIdAsync(Guid activityId)
+    {
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .SingleOrDefaultAsync(st => st.Activity.Id == activityId);
+    }
+
     public async Task<List<WorkerTask>> GetWorkerTasksAsync()
     {
         return await Repository.Database.WorkerTasks
@@ -72,6 +88,8 @@ public class TaskingRepository : ITaskingRepository
             .Include(st => st.ScheduleExecution)
             .OrderByDescending(q => q.Timestamp)
             .ToListAsync();
+
+        var stepsByActivity = await GetStepsForActivitiesAsync(workerTasks);
 
         foreach (var workerTask in workerTasks)
         {
@@ -91,10 +109,56 @@ public class TaskingRepository : ITaskingRepository
                 ProgressMessage = workerTask.Activity?.Message,
                 ScheduleExecutionId = workerTask.ScheduleExecutionId,
                 ScheduleExecutionName = workerTask.ScheduleExecution?.ScheduleName,
-                ScheduleStepIndex = workerTask.ScheduleStepIndex
+                ScheduleStepIndex = workerTask.ScheduleStepIndex,
+                ScheduleTotalSteps = workerTask.ScheduleExecution?.TotalSteps,
+                ScheduleCurrentStepIndex = workerTask.ScheduleExecution?.CurrentStepIndex,
+                Steps = workerTask.Activity != null && stepsByActivity.TryGetValue(workerTask.Activity.Id, out var steps) ? steps : null
             });
         }
         return workerTaskHeaders;
+    }
+
+    /// <summary>
+    /// The run steps (#454) for every task in the queue that has any, keyed by Activity.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Phases are their own table keyed by ActivityId rather than a navigation off the Activity, so
+    /// they are fetched in one batch and matched up here; the alternative is a query per row, and
+    /// the queue re-reads on every progress notification.
+    /// </para>
+    /// <para>
+    /// Bounded by design: a Worker Task row is deleted once its work completes, so this only ever
+    /// sees work still in flight, at roughly ten phase rows apiece.
+    /// </para>
+    /// <para>
+    /// Every phase is fetched, including a Connector's own, and <see cref="RunPhaseSummary.From"/>
+    /// decides which of them are steps of the run. Filtering to <c>ParentKey == null</c> in SQL
+    /// would be cheaper by a handful of rows and would put a second definition of "what counts as a
+    /// step" outside <see cref="RunPhaseReading"/>, which is the thing that must not happen.
+    /// </para>
+    /// </remarks>
+    private async Task<Dictionary<Guid, RunPhaseSummary>> GetStepsForActivitiesAsync(List<WorkerTask> workerTasks)
+    {
+        var activityIds = workerTasks
+            .Where(t => t.Activity != null)
+            .Select(t => t.Activity!.Id)
+            .Distinct()
+            .ToList();
+
+        if (activityIds.Count == 0)
+            return [];
+
+        var phases = await Repository.Database.ActivityPhases
+            .AsNoTracking()
+            .Where(p => activityIds.Contains(p.ActivityId))
+            .ToListAsync();
+
+        return phases
+            .GroupBy(p => p.ActivityId)
+            .Select(g => new { g.Key, Summary = RunPhaseSummary.From(g) })
+            .Where(x => x.Summary != null)
+            .ToDictionary(x => x.Key, x => x.Summary!);
     }
 
     public async Task<WorkerTask?> GetNextWorkerTaskAsync()
@@ -147,14 +211,32 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
     }
 
-    public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
+    public async Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId)
     {
-        await using var db = new JimDbContext();
-        var result = await db.ExampleDataTemplateWorkerTasks.Where(q => q.TemplateId == templateId).OrderBy(q => q.Id).Select(q => q.Status).Take(1).ToListAsync();
-        if (result.Count == 1)
-            return result[0];
+        var workerTask = await Repository.Database.ExampleDataTemplateWorkerTasks
+            .Include(q => q.Activity)
+            .Where(q => q.TemplateId == templateId)
+            .OrderBy(q => q.Id)
+            .FirstOrDefaultAsync();
 
-        return null;
+        if (workerTask == null)
+            return null;
+
+        return new WorkerTaskHeader
+        {
+            Id = workerTask.Id,
+            Status = workerTask.Status,
+            Timestamp = workerTask.Timestamp,
+            Name = await GetWorkerHeaderNameAsync(workerTask),
+            Type = GetWorkerTaskType(workerTask),
+            InitiatedByType = workerTask.InitiatedByType,
+            InitiatedById = workerTask.InitiatedById,
+            InitiatedByName = workerTask.InitiatedByName,
+            ActivityId = workerTask.Activity?.Id,
+            ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
+            ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
+            ProgressMessage = workerTask.Activity?.Message
+        };
     }
 
     public async Task UpdateWorkerTaskAsync(WorkerTask workerTask)
@@ -290,30 +372,63 @@ public class TaskingRepository : ITaskingRepository
     }
 
     #region private methods
-    private static async Task<string> GetWorkerHeaderNameAsync(WorkerTask workerTask)
+    /// <summary>
+    /// What a Worker Task is called in the queue, derived from whatever it is a task to do.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reads through the repository's own context. It used to open a <see cref="JimDbContext"/> of
+    /// its own, once per Worker Task: an extra pooled connection for every row in the queue, on a
+    /// read that re-runs on every progress notification, and configured from environment variables
+    /// rather than from whatever the caller was working against.
+    /// </para>
+    /// <para>
+    /// Every lookup tolerates its subject having been deleted. A queue row whose configuration has
+    /// gone is not an error state; it is the ordinary consequence of deleting a Connected System
+    /// while one of its tasks is still queued, and the queue is exactly where an administrator
+    /// would go to find out about it.
+    /// </para>
+    /// </remarks>
+    private async Task<string> GetWorkerHeaderNameAsync(WorkerTask workerTask)
     {
-        await using var db = new JimDbContext();
+        var db = Repository.Database;
         switch (workerTask)
         {
             case ExampleDataTemplateWorkerTask dataGenerationTemplateWorkerTask:
             {
                 var templatePart = await db.ExampleDataTemplates.Select(q => new { q.Id, q.Name }).SingleOrDefaultAsync(q => q.Id == dataGenerationTemplateWorkerTask.TemplateId);
-                return templatePart != null ? templatePart.Name : "template not found!";
+                return templatePart?.Name ?? $"Example Data Template {dataGenerationTemplateWorkerTask.TemplateId}";
             }
             case SynchronisationWorkerTask synchronisationWorkerTask:
             {
+                // The Connected System behind the Run Profile is looked up by Single because the
+                // schema guarantees it: ConnectedSystemRunProfiles.ConnectedSystemId cascades on
+                // delete, so a Run Profile whose Connected System has gone cannot exist to be read.
+                // The Run Profile itself is a different matter, and is why the outer lookup tolerates
+                // nothing coming back: deleting a Connected System takes its Run Profiles with it
+                // while leaving any already-queued task behind.
                 var runProfilePart = await db.ConnectedSystemRunProfiles.Select(q => new { q.Id, q.Name, ConnectedSystemName = db.ConnectedSystems.Single(cs => cs.Id == q.ConnectedSystemId).Name }).
                     SingleOrDefaultAsync(q => q.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
 
-                return runProfilePart != null ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}" : "Run Profile not found!";
+                return runProfilePart != null
+                    ? $"{runProfilePart.ConnectedSystemName} - {runProfilePart.Name}"
+                    : $"Run Profile {synchronisationWorkerTask.ConnectedSystemRunProfileId}";
             }
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
-                // use the name of the Connected System
-                return db.ConnectedSystems.Single(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId).Name;
+            {
+                // Named the same way a delete task for a missing system already is, so an orphaned
+                // clear task reads alike. Single() here threw instead, and because the read builds
+                // the whole list before returning, one orphaned row took out every other row with
+                // it, including the ones needed to work out what had happened.
+                var systemToClear = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == clearConnectedSystemObjectsTask.ConnectedSystemId);
+                return systemToClear?.Name ?? $"Connected System {clearConnectedSystemObjectsTask.ConnectedSystemId}";
+            }
             case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
-                // use the name of the Connected System (may be null if already deleted)
-                var systemToDelete = db.ConnectedSystems.SingleOrDefault(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
+            {
+                // The Connected System may be null: this is the task that deletes it.
+                var systemToDelete = await db.ConnectedSystems.SingleOrDefaultAsync(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
                 return systemToDelete?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}";
+            }
             case TemporalScopeReconciliationWorkerTask:
                 // the sweep carries no per-instance configuration, so the feature name is the display name
                 return "Temporal Scope Reconciliation";

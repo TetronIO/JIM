@@ -285,6 +285,42 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesWritableOnCreateAttributeWritability()
+    {
+        // A schema refresh that changes an attribute's writability changes what JIM may export to it, so the
+        // third state has to reach the snapshot with its own value rather than collapsing onto another.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "HR Database",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "employees", Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = 11, Name = "employee_number", Type = AttributeDataType.Text, Selected = true,
+                            Writability = AttributeWritability.WritableOnCreate
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var attribute = Child(Child(snapshot.Root, "objectTypes")!.Children![0], "attributes")!.Children![0];
+        var writability = Child(attribute, "writability")!;
+        Assert.That(writability.Value, Is.EqualTo("WritableOnCreate"));
+        Assert.That(writability.DisplayValue, Is.EqualTo("Writable On Create"),
+            "the diff shows administrators the display value, so it must read as words rather than an enum name");
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
     {
         // Status (Active/Deleting) is runtime state, not configuration; snapshotting it would record phantom
@@ -650,6 +686,52 @@ public class ConfigurationSnapshotServiceTests
         var referencedSet = Child(attributeNode, "referencedDataSets")!.Children!.Single();
         Assert.That(referencedSet.ItemId, Is.EqualTo(30));
         Assert.That(referencedSet.Value, Is.EqualTo("7"), "a referenced data set is captured by its stable id");
+    }
+
+    // -- Metaverse Object Type scope -----------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_MetaverseObjectType_CapturesDeletionTriggerMode()
+    {
+        // The trigger mode (#119) decides whether any one selected source disconnecting deletes the object or
+        // whether every selected source must disconnect first; it must be snapshotted so configuration change
+        // history diffs a mode change rather than reporting "no change".
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerMode = AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect,
+            DeletionTriggerConnectedSystemIds = [3]
+        };
+
+        var snapshot = _service.CreateSnapshot(objectType, HashKey);
+
+        var mode = Child(snapshot.Root, "deletionTriggerMode");
+        Assert.That(mode, Is.Not.Null, "the deletion trigger mode must be snapshotted");
+        Assert.That(mode!.Value, Is.EqualTo("SpecificSourcesDisconnect"));
+        Assert.That(mode!.Label, Is.EqualTo("Deletion trigger mode"));
+    }
+
+    [Test]
+    public void CreateSnapshot_MetaverseObjectType_CapturesAllSourcesDisconnectMode()
+    {
+        // Both mode values must round-trip through the snapshot so a Specific -> All change diffs in
+        // configuration change history.
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerMode = AuthoritativeSourceTriggerMode.AllSourcesDisconnect,
+            DeletionTriggerConnectedSystemIds = [3, 4]
+        };
+
+        var snapshot = _service.CreateSnapshot(objectType, HashKey);
+
+        Assert.That(Child(snapshot.Root, "deletionTriggerMode")!.Value, Is.EqualTo("AllSourcesDisconnect"));
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------

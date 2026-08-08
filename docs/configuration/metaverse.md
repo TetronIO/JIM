@@ -18,12 +18,42 @@ The metaverse schema is administrator-defined. JIM does not impose a fixed schem
 
 ### Deletion behaviour
 
-Each object type has its own rules for when its objects should be deleted from the metaverse. Common choices:
+Each object type has its own rules for when its objects should be deleted from the metaverse, configured on the Object Type's detail page (and equally via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/)). Three Deletion Rules are available:
 
-- **Immediate**<br /> The object is deleted as soon as all its connector links are removed.
-- **Grace period**<br /> The object enters a pending-deletion state and is removed after a configurable period, giving administrators time to intervene if a deletion was triggered in error.
+- **Manual**<br /> Objects are never automatically deleted; an administrator must remove them.
+- **When Last Connector Disconnected**<br /> Objects are deleted once no Connected System Objects remain linked to them.
+- **When Authoritative Source Disconnected**<br /> Objects are deleted when the authoritative source system(s) you select disconnect, even while target-system links remain. This is the usual choice for source-to-target topologies, where an HR system leaving should deprovision the identity everywhere.
 
-The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe identities out.
+#### Authoritative source trigger modes
+
+When the rule is **When Authoritative Source Disconnected**, a **Deletion Trigger** choice governs how the selected sources trigger deletion:
+
+- **All sources disconnect**<br /> Delete only once every selected source has disconnected. Resilient to a single system failing or being rebuilt; while any selected source still holds a link, the object is kept. This is the default for newly configured object types.
+- **Specific source(s) disconnect**<br /> Delete when any one of the selected sources disconnects, even if others remain connected.
+
+Systems you do not select as sources (typically targets) never block or trigger deletion in either mode. At least one source must be selected, and only contributing systems (systems with inbound Synchronisation Rules for the object type) are offered. A live summary beneath the settings restates the configured behaviour in plain language before you save. Configurations created before trigger modes existed keep the **Specific source(s) disconnect** behaviour they were built with; nothing changes on upgrade.
+
+#### Grace period
+
+Rather than deleting immediately when the Deletion Rule triggers, a configurable **grace period** holds the object in a pending-deletion state first, giving administrators time to intervene if a deletion was triggered in error. The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe identities out.
+
+If the identity reappears during the grace period, the scheduled deletion is cancelled; but only when the reappearance undoes what triggered it. Under **When Last Connector Disconnected**, any system reconnecting cancels. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion cancels it. An unrelated system reconnecting never rescues an object whose trigger condition still holds.
+
+#### Previewing a deletion settings change
+
+Deletion settings are the one change in JIM that can make existing Metaverse Objects eligible for deletion the moment it is saved, with no synchronisation run in between. **Preview Changes**, beside Save on the Object Type's Deletion Rules panel, answers what the change would actually do before you make it.
+
+The preview evaluates the objects already marked for deletion (those whose last, or authoritative, connector has gone) twice: once under the settings in force and once under the ones you have entered. Where the two answers differ, it reports which of three things would happen:
+
+- **Would become eligible for deletion**<br /> The object is safe today and would be eligible under the proposed settings. This is the number to read before saving.
+- **Would cease to be eligible for deletion**<br /> The object is eligible today and would stop being so.
+- **Deletion date would change**<br /> The object is neither eligible now nor under the proposal, but the date it becomes eligible on moves.
+
+Objects carrying no disconnection mark cannot be affected by any settings change, so they are not evaluated; the preview is quick even on a large metaverse.
+
+The authoritative sources and the trigger mode are deliberately not part of that evaluation, and the preview says so rather than reporting a misleading zero. They are read at the moment a Connected System Object disconnects, not by the housekeeping pass that acts on objects already marked, so changing them moves no object's deletion date today; what they change is what happens the next time something disconnects.
+
+Saving after a preview states its counts on the confirmation and records the preview against the change's [Activity](activities.md). See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally, and the [preview cmdlets](../powershell/previews.md) for the same evaluation from PowerShell.
 
 ### Custom object types
 
@@ -63,7 +93,9 @@ Built-in attributes are read-only and cannot be deleted, and JIM looks after the
 
 Every built-in attribute documents how it corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, so when you connect a system that speaks either standard you can see at a glance which Metaverse Attribute to target. Where the correspondence needs care, a note explains it: for example, SCIM's `active` maps to `Account Enabled`, while Active Directory's `userAccountControl` needs a transform rather than a direct flow.
 
-Standard Mappings are **for guidance only**; they never affect synchronisation. What flows between your systems is always exactly what your [Attribute Flows](synchronisation-rules.md) say, nothing more. Over time the mappings will also power hints in the Attribute Flow editor, suggested default flows in connector wizards, and schema documentation.
+Standard Mappings are **for guidance only**; they never affect synchronisation. What flows between your systems is always exactly what your [Attribute Flows](synchronisation-rules.md) say, nothing more.
+
+Where they earn their keep is the [Attribute Flow editor](synchronisation-rules.md#standard-mapping-hints): it shows each Metaverse Attribute's counterpart name beside it in the pickers, and names the attribute the standard says your chosen source corresponds to. Suggestions only; every attribute stays selectable, and an attribute with no counterpart is not flagged as a problem. Over time the mappings will also power suggested default flows in connector wizards, and schema documentation.
 
 View a built-in attribute's Standard Mappings from the view action on its row in the Schema area's **Attributes** tab; JIM keeps them up to date automatically. Custom attributes can carry your own Standard Mappings too: add, edit or remove them from the attribute's edit dialog, the REST API (the attribute update endpoint), or PowerShell (`Set-JIMMetaverseAttribute -StandardMappings`), so scripted configuration can record them alongside the attributes themselves. Changes are audited in the attribute's [configuration change history](activities.md#configuration-change-history), and the mappings are returned by the REST API's attribute detail endpoint and `Get-JIMMetaverseAttribute`.
 
@@ -86,6 +118,10 @@ When no values exist, the action is allowed even if configuration still referenc
 
 **Objects** are the identity records: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
 
+## Confirming a configuration change
+
+Changing an object type's deletion behaviour, or an attribute's data type or plurality, is confirmed before it saves. Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects eligible for deletion, with no synchronisation run in between; the confirmation says so. See [Configuration changes](configuration-changes.md).
+
 ## Change history
 
 Schema changes are recorded in [configuration change history](activities.md#configuration-change-history): creating, renaming or re-iconing an Object Type, changing an Object Type's deletion rules, deleting an Object Type, creating an Attribute, updating an Attribute's definition or its Object Type associations, and deleting an Attribute all capture a versioned snapshot alongside who made the change, when, and an optional reason.
@@ -94,7 +130,9 @@ Open an Object Type's history from the Changes tab on its detail page; open an A
 
 ## Pending deletions
 
-Pending deletions track Metaverse Objects awaiting final deletion after all their connector space links have been removed. The grace period (configured per object type) gives administrators time to intervene before deletion is finalised.
+Pending deletions track Metaverse Objects awaiting final deletion: objects whose last connector space link has been removed, and objects scheduled for deletion by an authoritative source disconnecting (which may still hold target-system links during their grace period). The grace period (configured per object type) gives administrators time to intervene before deletion is finalised.
+
+The Pending Deletions page shows each object's status, when it becomes eligible for deletion, and a **Triggered By** column naming the Connected System whose disconnection scheduled the deletion, recorded at the moment the deletion was scheduled, so it stays accurate even if that system is later renamed or removed.
 
 JIM exposes both the list of currently pending deletions and a summary view, which is useful for spotting unexpected mass-deletion events early.
 

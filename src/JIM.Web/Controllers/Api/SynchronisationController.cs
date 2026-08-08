@@ -11,9 +11,11 @@ using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
 using JIM.Models.Activities;
+using JIM.Models.Connectors;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Preview;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -96,8 +98,11 @@ public class SynchronisationController(
         // matching how the Blazor UI does it.
         var pendingExportCount = await _application.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
         var objectCount = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        var configurationDrift = await _application.ConfigurationDrift.GetConnectedSystemDriftAsync(connectedSystemId);
+        var initialPasswordAttention = await _application.InitialPasswords.GetAttentionByConnectedSystemAsync([connectedSystemId]);
 
-        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount));
+        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift,
+            initialPasswordAttention.GetValueOrDefault(connectedSystemId) ?? new InitialPasswordAttention()));
     }
 
     /// <summary>
@@ -264,6 +269,18 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of Connected System {connectedSystemId}."));
         }
 
+        // Validate: a credential attribute can never be managed by JIM. It either cannot be read back meaningfully
+        // or holds credential material that must never enter the Metaverse; passwords are handled by JIM's
+        // dedicated write-only password channel instead of Attribute Flow. Deselecting one stays allowed.
+        if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+            (request.Selected == true || request.IsExternalId == true || request.IsSecondaryExternalId == true))
+        {
+            _logger.LogWarning("Attempted to select credential attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. " +
+                "Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+        }
+
         // Validate: Cannot unselect an External ID or Secondary External ID attribute
         if (request.Selected.HasValue && !request.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
         {
@@ -427,6 +444,234 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in Connected System {connectedSystemId}."));
 
         return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
+    }
+
+
+    /// <summary>
+    /// Get the password policy JIM discovered on a Connected System
+    /// </summary>
+    /// <remarks>
+    /// What the system itself said it will accept, read during a previous connection. Nothing here opens a new
+    /// connection or changes anything.
+    ///
+    /// Every field is nullable, and a null means JIM could not read that rule rather than that no such rule
+    /// exists: a directory withholds what a caller may not see by omitting it rather than refusing. Check
+    /// `hasAnyDiscoveredConstraint` before treating the figures as a description of what the system will accept.
+    /// Where the domain has policies applying to only some accounts, the figures are a floor rather than a
+    /// guarantee; `fineGrainedPolicySignal` says which case this is.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The discovered policy, or an empty one where nothing has been discovered.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/password-policy", Name = "GetConnectedSystemPasswordPolicy")]
+    [ProducesResponseType(typeof(ConnectedSystemPasswordPolicyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetConnectedSystemPasswordPolicyAsync(int connectedSystemId)
+    {
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+
+        // A system with nothing discovered is reported as such rather than as a 404: the system exists, and "we
+        // could not read its policy" is a different answer from "there is no such system".
+        return Ok(ConnectedSystemPasswordPolicyResponse.FromEntity(policy));
+    }
+
+    /// <summary>
+    /// Generate a password that satisfies a Connected System's discovered policy
+    /// </summary>
+    /// <remarks>
+    /// Produces a password and returns it. Nothing is set, staged or stored: the value exists in this response
+    /// and nowhere else, and JIM cannot give it to you again.
+    ///
+    /// **This is the only endpoint in JIM whose response body carries a password**, and that is deliberate. What
+    /// JIM never does is store a password, or return one nobody asked for; here the caller asked and is the only
+    /// party that can use it, so withholding it would make the call pointless. The response is marked
+    /// `no-store` so nothing between JIM and the caller keeps a copy.
+    ///
+    /// Pass the result to the set-password endpoint to apply it. The point of asking JIM rather than inventing
+    /// one is that JIM knows what the target demands: `satisfiesDiscoveredPolicy` says whether the result was
+    /// checked against a real policy, and is false where there is none to check against rather than where the
+    /// password failed one.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="404">No such Connected System.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/generate-password", Name = "GenerateConnectedSystemPassword")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GenerateConnectedSystemPasswordAsync(int connectedSystemId)
+    {
+        // Logs that a password was generated and for which system, never anything about the value, including
+        // its length.
+        _logger.LogInformation("Generating a password against the discovered policy of Connected System {ConnectedSystemId}", connectedSystemId);
+
+        var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (system == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+        var generationPolicy = _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+
+        var password = _application.PasswordGenerator.Generate(generationPolicy);
+        var assessment = _application.PasswordGenerator.Assess(generationPolicy, discoveredPolicy);
+
+        // The one response in JIM that must not be kept by anything on its way back to the caller.
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromGenerated(password, assessment, discoveredPolicy?.HasAnyDiscoveredConstraint == true));
+    }
+
+
+    /// <summary>
+    /// Generate one password that satisfies every named Connected System
+    /// </summary>
+    /// <remarks>
+    /// The counterpart of the single-system generate, for setting one password across a person's accounts. JIM
+    /// reconciles the systems' discovered policies into one set of rules and generates against that: the longest
+    /// minimum length any of them demands, and only the character categories all of them count, since a category
+    /// one system does not recognise cannot help satisfy another's complexity rule.
+    ///
+    /// This is the case that most needs JIM rather than the caller: an administrator would otherwise have to
+    /// guess a password acceptable to the strictest of several systems whose policies they cannot see.
+    ///
+    /// Where no single password can satisfy them all, that is reported as a refusal rather than by handing back
+    /// a password that would be accepted on the first account and refused on the second, after the first has
+    /// already been changed. A system JIM could read nothing from is named in the response rather than passed
+    /// over: the password is about to be set there and JIM cannot promise it will be accepted.
+    ///
+    /// As with the single-system generate, the response body carries the password, is marked `no-store`, and
+    /// nothing about the value is written down or logged.
+    /// </remarks>
+    /// <param name="request">The Connected Systems the password has to work on.</param>
+    /// <response code="200">The generated password, and what JIM can say about it.</response>
+    /// <response code="400">No Connected Systems were named, or their policies cannot be reconciled.</response>
+    /// <response code="404">One of the named Connected Systems does not exist.</response>
+    [HttpPost("connected-systems/generate-password", Name = "GeneratePasswordForSystems")]
+    [ProducesResponseType(typeof(GeneratedPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GeneratePasswordForSystemsAsync([FromBody] GeneratePasswordForSystemsRequest request)
+    {
+        if (request.ConnectedSystemIds.Count == 0)
+            return BadRequest(ApiErrorResponse.BadRequest("At least one Connected System is required."));
+
+        _logger.LogInformation("Generating a password against the reconciled policies of {Count} Connected Systems",
+            request.ConnectedSystemIds.Count);
+
+        var policies = new List<PasswordPolicyForSystem>();
+        foreach (var connectedSystemId in request.ConnectedSystemIds.Distinct())
+        {
+            var system = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (system == null)
+                return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+            policies.Add(new PasswordPolicyForSystem
+            {
+                ConnectedSystemName = system.Name,
+                Policy = await _application.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId)
+            });
+        }
+
+        var reconciliation = _application.PasswordGenerator.Reconcile(policies);
+        if (!reconciliation.IsUsable)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "No single password can satisfy every named Connected System: " + string.Join(" ", reconciliation.Conflicts)));
+
+        var password = _application.PasswordGenerator.Generate(reconciliation.Policy);
+        var assessment = _application.PasswordGenerator.Assess(reconciliation.Policy, targetPolicy: null);
+
+        Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+        Response.Headers.Pragma = "no-cache";
+
+        return Ok(GeneratedPasswordResponse.FromReconciled(password, assessment, reconciliation));
+    }
+
+    /// <summary>
+    /// Set the password on a Connected System Object
+    /// </summary>
+    /// <remarks>
+    /// Writes the password straight to the Connected System. Nothing is staged, retried or stored: there is
+    /// nowhere in JIM to keep a password and no second attempt worth keeping one for. The attempt is recorded as
+    /// an Activity against the object, carrying the outcome and, where the target refused, its verbatim reason.
+    ///
+    /// The password is supplied by the caller. To have JIM produce one that satisfies what the Connected System
+    /// itself demands, call the generate endpoint first and pass the result here.
+    ///
+    /// This resets the password on whichever account it is pointed at: an administrator who can call it can
+    /// reset any account in this connector space, subject only to what the Connected System's own service
+    /// account is permitted to do.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the Connected System Object.</param>
+    /// <param name="request">The password to set, and how to apply it.</param>
+    /// <response code="200">The password was set. The body reports the expiry behaviour actually applied.</response>
+    /// <response code="400">The password was empty, the Connector cannot set passwords, or the Connected System refused the password. The reason is the target's own where there is one.</response>
+    /// <response code="404">No such Connected System, or no such object within it.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    /// <response code="502">The Connected System could not be reached, so it is not known whether the password would be accepted. Try again.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/connector-space/{csoId:guid}/password", Name = "SetConnectedSystemObjectPassword")]
+    [ProducesResponseType(typeof(SetConnectedSystemObjectPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> SetConnectedSystemObjectPasswordAsync(int connectedSystemId, Guid csoId, [FromBody] SetConnectedSystemObjectPasswordRequest request)
+    {
+        // Deliberately logs the object rather than anything about the password. There is nothing about a
+        // password value that belongs in a log line, including its length.
+        _logger.LogInformation("Setting the password on Connected System Object {CsoId} in Connected System {ConnectedSystemId}", csoId, connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for a Connected System Object password set");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(ApiErrorResponse.BadRequest("A password is required."));
+
+        var requestedExpiryBehaviour = request.ExpiryBehaviour ?? PasswordExpiryBehaviour.RequireChangeAtNextSignIn;
+        var options = new PasswordSetOptions
+        {
+            ExpiryBehaviour = requestedExpiryBehaviour,
+            EnableAccount = request.EnableAccount
+        };
+
+        PasswordSetResult result;
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            result = apiKey != null
+                ? await _application.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(connectedSystemId, csoId, request.Password, options, apiKey, HttpContext.RequestAborted)
+                : await _application.ConnectedSystems.SetConnectedSystemObjectPasswordAsync(connectedSystemId, csoId, request.Password, options, initiatedBy, HttpContext.RequestAborted);
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ApiErrorResponse.NotFound(ex.Message));
+        }
+        catch (NotSupportedException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        if (result.Success)
+            return Ok(SetConnectedSystemObjectPasswordResponse.FromResult(result, requestedExpiryBehaviour));
+
+        var reason = result.ErrorMessage ?? "The Connected System refused the password without saying why.";
+        return result.FailureReason switch
+        {
+            // An account that is not there yet is a 404 like any other missing resource, and is commonly just
+            // replication: the caller's move is to wait and repeat the request, not to change the password.
+            PasswordSetFailureReason.TargetObjectNotFound => NotFound(ApiErrorResponse.NotFound(reason)),
+            // Nothing was established about the password itself, so this must not read as a rejection of it.
+            PasswordSetFailureReason.Transient => StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadGateway(reason)),
+            _ => BadRequest(ApiErrorResponse.BadRequest(reason))
+        };
     }
 
     /// <summary>
@@ -850,6 +1095,9 @@ public class SynchronisationController(
         if (request.Selected.HasValue)
             container.Selected = request.Selected.Value;
 
+        if (request.Scope.HasValue)
+            container.Scope = request.Scope.Value;
+
         // Container selection is configuration; the server records the change with an Activity and a versioned snapshot.
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
@@ -861,6 +1109,227 @@ public class SynchronisationController(
         var updated = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
         return Ok(ConnectedSystemContainerDto.FromEntity(updated!));
     }
+
+    /// <summary>
+    /// Preview a change to a Connected System's partition and container selection
+    /// </summary>
+    /// <remarks>
+    /// Answers what a proposed selection would do, without making it (#827/#1251): which Connected System Objects
+    /// would leave import scope, which of those are joined and would disconnect from their Metaverse Object, which
+    /// would come back into scope, and which Metaverse Objects would become eligible for automatic deletion once
+    /// the disconnections land.
+    ///
+    /// This matters because a deselection is silently destructive. The objects beneath a deselected container stop
+    /// being searched, so the next Full Import does not return them, so they are marked obsolete, and the following
+    /// synchronisation disconnects them and recalls whatever they contributed to the Metaverse.
+    ///
+    /// Send the whole selection, not one flag: what a deselection costs depends on the rest of the selection, since
+    /// an object leaves scope only when nothing else still covers it. Omitted lists preview the stored selection.
+    /// Apply the previewed change through <c>PUT connected-systems/{id}/partitions/{partitionId}</c> and
+    /// <c>PUT connected-systems/{id}/containers/{containerId}</c>.
+    ///
+    /// Evaluation is asynchronous. This returns as soon as the proposal itself has been validated, with the
+    /// Activity id to poll; read progress and results from <c>GET /previews/{activityId}</c>, drill-down rows from
+    /// <c>GET /previews/{activityId}/deltas</c>, and abandon a running preview with
+    /// <c>DELETE /previews/{activityId}</c>.
+    ///
+    /// A selection that leaves nothing manageable comes back with a validation finding and is still evaluated; that
+    /// is the answer the caller asked for, not a reason to refuse the request.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The proposed selection.</param>
+    /// <response code="202">The preview was started. Poll the returned Activity id for results.</response>
+    /// <response code="400">A named partition or container does not belong to this Connected System.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/scope-selection/preview", Name = "StartConnectedSystemScopeSelectionPreview")]
+    [ProducesResponseType(typeof(ConfigurationChangePreviewStartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> StartConnectedSystemScopeSelectionPreviewAsync(int connectedSystemId,
+        [FromBody] StartConnectedSystemScopeSelectionPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var currentSelection = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
+        var proposal = new ConnectedSystemScopeSelectionProposal(
+            request.SelectedPartitionIds ?? currentSelection.SelectedPartitionIds,
+            request.SelectedContainerIds ?? currentSelection.SelectedContainerIds);
+
+        // An id naming nothing in this hierarchy is different in kind from a selection the preview disagrees with:
+        // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to a
+        // question the caller did not ask. Everything the selection could be *unwise* about is a validation finding.
+        var unknownIds = UnknownScopeSelectionIds(connectedSystem, proposal);
+        if (unknownIds != null)
+            return BadRequest(unknownIds);
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        var previewRequest = new ConfigurationChangePreviewRequest
+        {
+            Surface = ConfigurationChangePreviewSurface.ConnectedSystem,
+            TargetId = connectedSystem.Id,
+            TargetName = connectedSystem.Name,
+            ProposedConfiguration = proposal,
+            DeltaPersistence = request.DeltaPersistence,
+            InitiatedByType = apiKey != null ? ActivityInitiatorType.ApiKey : ActivityInitiatorType.User,
+            InitiatedById = apiKey?.Id ?? user?.Id,
+            InitiatedByName = apiKey?.Name ?? user?.Name
+        };
+
+        var result = await _application.ConfigurationChangePreviews.StartAndDispatchPreviewAsync(previewRequest);
+
+        _logger.LogInformation("Started partition and container selection preview {ActivityId} for Connected System {Id}",
+            result.ActivityId, connectedSystem.Id);
+
+        return AcceptedAtRoute("GetConfigurationChangePreview", new { activityId = result.ActivityId },
+            ConfigurationChangePreviewStartResponse.FromResult(result));
+    }
+
+    /// <summary>
+    /// The error response for a proposal naming a partition or container this Connected System does not have, or
+    /// null when every id resolves.
+    /// </summary>
+    private static ApiErrorResponse? UnknownScopeSelectionIds(
+        ConnectedSystem connectedSystem, ConnectedSystemScopeSelectionProposal proposal)
+    {
+        var partitions = connectedSystem.Partitions ?? [];
+        var knownPartitionIds = partitions.Select(p => p.Id).ToHashSet();
+        var knownContainerIds = partitions
+            .Where(p => p.Containers != null)
+            .SelectMany(p => FlattenContainerIds(p.Containers!))
+            .ToHashSet();
+
+        var unknownPartitions = proposal.SelectedPartitionIds.Where(id => !knownPartitionIds.Contains(id)).ToList();
+        if (unknownPartitions.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Partition ID(s) {string.Join(", ", unknownPartitions)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        var unknownContainers = proposal.SelectedContainerIds.Where(id => !knownContainerIds.Contains(id)).ToList();
+        if (unknownContainers.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Container ID(s) {string.Join(", ", unknownContainers)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<int> FlattenContainerIds(IEnumerable<ConnectedSystemContainer> containers)
+    {
+        foreach (var container in containers)
+        {
+            yield return container.Id;
+
+            foreach (var childId in FlattenContainerIds(container.ChildContainers))
+                yield return childId;
+        }
+    }
+    #endregion
+
+    #region Capabilities
+
+    /// <summary>
+    /// Get a Connected System's detected capabilities
+    /// </summary>
+    /// <remarks>
+    /// Returns the human-readable facts the Connector has detected about the target system, e.g. an LDAP
+    /// directory's type, vendor, DNS host name, and paging support. These are discovered from the target
+    /// during a previous connection and persisted by JIM; nothing here triggers a new connection. The list is
+    /// empty when the Connector does not detect any capabilities, or when no data has been detected yet
+    /// (for example, before the first successful connection).
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>An ordered list of detected capability facts.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/capabilities", Name = "GetConnectedSystemCapabilities")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectorCapabilityDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemCapabilitiesAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested detected capabilities for Connected System: {Id}", connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        // Null means the Connector does not support capability detection; the API flattens that to an empty
+        // list (the distinction only matters to the portal, which hides the card entirely).
+        var capabilities = await _application.ConnectedSystems.GetConnectedSystemDetectedCapabilitiesAsync(connectedSystemId) ?? [];
+        var dtos = capabilities.Select(ConnectorCapabilityDto.FromEntity);
+        return Ok(dtos);
+    }
+
+    #endregion
+
+    #region Directory Servers
+
+    /// <summary>
+    /// Discover the domain controllers in a Connected System's directory
+    /// </summary>
+    /// <remarks>
+    /// Lists the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site
+    /// each belongs to, using the Connected System's currently saved connectivity settings. Purely informational:
+    /// this never writes to the Preferred Domain Controller setting; only an administrator's own subsequent
+    /// update of the Connected System does that.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
+    /// <returns>The discovered domain controllers.</returns>
+    /// <response code="200">The domain controllers discovered.</response>
+    /// <response code="400">The Connector does not support directory server discovery, or the connected directory is not AD-family.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">JIM could not discover domain controllers, e.g. the directory was unreachable or refused the credentials.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/directory-servers", Name = "GetConnectedSystemDirectoryServers")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectedSystemDirectoryServerDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetConnectedSystemDirectoryServersAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Discovering directory servers for Connected System: {Id}", connectedSystemId);
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (!await _application.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(connectedSystemId))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."));
+
+        try
+        {
+            var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId);
+            return Ok(directoryServers.Select(ConnectedSystemDirectoryServerDto.FromModel));
+        }
+        catch (NotSupportedException ex)
+        {
+            // The capability check above passed (the Connector implements IConnectorDirectoryServers), but the
+            // Connector itself has refused: e.g. the LDAP Connector only discovers domain controllers for
+            // AD-family directories, and the connected directory turned out not to be one.
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        // Fallback dispatcher: any connectivity failure (unreachable directory, refused credentials, a malformed
+        // response) becomes a 502 rather than the generic 500 the global exception handler would otherwise
+        // return, and the cancellation exclusion keeps a genuinely aborted request propagating rather than
+        // being reported as a discovery failure.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to discover directory servers for Connected System {Id}: {Message}",
+                connectedSystemId, LogSanitiser.Sanitise(ex.Message));
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiErrorResponse.BadRequest($"JIM could not discover directory servers: {ex.Message}"));
+        }
+    }
+
     #endregion
 
     /// <summary>
@@ -1274,6 +1743,135 @@ public class SynchronisationController(
         }
     }
 
+    /// <summary>
+    /// Read the certificate a Connected System's server presents
+    /// </summary>
+    /// <remarks>
+    /// Opens a TLS connection to the endpoint this Connected System is configured for, purely to look at the
+    /// certificate the server offers, and refuses it. Nothing is stored: trusting the certificate is a separate,
+    /// explicit call. The endpoint comes from the Connected System's own settings and can never be supplied by the
+    /// caller.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
+    /// <returns>The certificate the server presented and which check it fails.</returns>
+    /// <response code="200">The certificate the server is presenting.</response>
+    /// <response code="400">The Connected System is not configured to make an encrypted connection, so there is no certificate to look at.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">The server could not be reached, which is a connectivity problem rather than a certificate one.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/server-certificate", Name = "GetConnectedSystemServerCertificate")]
+    [ProducesResponseType(typeof(ServerCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetServerCertificateAsync(int connectedSystemId)
+    {
+        return await ReadServerCertificateAsync(connectedSystemId, draftSettingValues: null);
+    }
+
+    /// <summary>
+    /// Read the certificate a Connected System's server presents, using settings that have not been saved
+    /// </summary>
+    /// <remarks>
+    /// The same read as the GET, but taking connectivity settings the caller has entered and not yet saved. JIM
+    /// refuses to save settings that fail validation, and a certificate JIM does not trust is a validation failure,
+    /// so an administrator configuring a new Connected System has an address on screen and nothing in the database;
+    /// without this they could never reach the certificate that is blocking them. The endpoint is still derived by
+    /// the Connected System's own connector, so no address is ever named directly. Nothing is stored, and the draft
+    /// settings are never persisted.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
+    /// <param name="request">The unsaved setting values, keyed by Connector Definition Setting id.</param>
+    /// <returns>The certificate the server presented and which check it fails.</returns>
+    /// <response code="200">The certificate the server is presenting.</response>
+    /// <response code="400">The settings do not describe an encrypted connection, so there is no certificate to look at.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">The server could not be reached, which is a connectivity problem rather than a certificate one.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/server-certificate", Name = "ReadConnectedSystemServerCertificate")]
+    [ProducesResponseType(typeof(ServerCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> ReadServerCertificateAsync(int connectedSystemId, [FromBody] ReadServerCertificateRequest request)
+    {
+        return await ReadServerCertificateAsync(connectedSystemId, ServerCertificateDraftSettings.ToDrafts(request.SettingValues));
+    }
+
+    private async Task<IActionResult> ReadServerCertificateAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues)
+    {
+        _logger.LogDebug("Reading the server certificate for Connected System: {Id}", connectedSystemId);
+        var result = await _application.Certificates.ReadServerCertificateAsync(connectedSystemId, draftSettingValues);
+
+        switch (result.Outcome)
+        {
+            case ServerCertificateReadOutcome.Read:
+                return Ok(new ServerCertificateResponse
+                {
+                    Certificate = result.Diagnostic!,
+                    ReadAt = result.ReadAt ?? DateTime.UtcNow
+                });
+            case ServerCertificateReadOutcome.ConnectedSystemNotFound:
+                return NotFound(ApiErrorResponse.NotFound(result.Message ?? $"Connected System with ID {connectedSystemId} not found."));
+            case ServerCertificateReadOutcome.ServerUnreachable:
+                return StatusCode(StatusCodes.Status502BadGateway, ApiErrorResponse.BadRequest(result.Message ?? "The server could not be reached."));
+            default:
+                return BadRequest(ApiErrorResponse.BadRequest(result.Message ?? "There is no server certificate to look at."));
+        }
+    }
+
+    /// <summary>
+    /// Trust the certificate a Connected System's server presents
+    /// </summary>
+    /// <remarks>
+    /// Reads the certificate from the server again, checks it against the thumbprint supplied, and adds it to the
+    /// JIM certificate store through the audited path. The thumbprint is required and a mismatch is refused: reading
+    /// again at the moment of the decision is what makes a certificate that changed since it was shown detectable
+    /// rather than waved through. Supplying the authority's thumbprint trusts the authority, which survives the
+    /// server's own certificate being renewed.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose server is asked.</param>
+    /// <param name="request">The thumbprint being trusted, and optionally why.</param>
+    /// <returns>The outcome, including the certificate as it now sits in the store.</returns>
+    /// <response code="201">The certificate was added to the JIM certificate store.</response>
+    /// <response code="200">The certificate was already in the store, so there was nothing to do.</response>
+    /// <response code="400">No thumbprint was supplied, or the Connected System is not configured to make an encrypted connection.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="409">The server is presenting a different certificate from the one named, so nothing was trusted.</response>
+    /// <response code="502">The server could not be reached to read its certificate again, so nothing was trusted.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/server-certificate/trust", Name = "TrustConnectedSystemServerCertificate")]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(TrustServerCertificateResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> TrustServerCertificateAsync(int connectedSystemId, [FromBody] TrustServerCertificateRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Thumbprint))
+            return BadRequest(ApiErrorResponse.ValidationError("A thumbprint is required. JIM will not trust whatever a server happens to be presenting."));
+
+        _logger.LogInformation("Trusting the server certificate for Connected System: {Id}", connectedSystemId);
+        var drafts = ServerCertificateDraftSettings.ToDrafts(request.SettingValues);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.Certificates.TrustServerCertificateAsync(connectedSystemId, request.Thumbprint, apiKey, request.ChangeReason, drafts)
+            : await _application.Certificates.TrustServerCertificateAsync(connectedSystemId, request.Thumbprint, await GetCurrentUserAsync(), request.ChangeReason, drafts);
+
+        var response = TrustServerCertificateResponse.FromResult(result);
+
+        return result.Outcome switch
+        {
+            ServerCertificateTrustOutcome.Trusted => StatusCode(StatusCodes.Status201Created, response),
+            ServerCertificateTrustOutcome.AlreadyTrusted => Ok(response),
+            ServerCertificateTrustOutcome.ThumbprintMismatch => Conflict(response),
+            ServerCertificateTrustOutcome.ConnectedSystemNotFound => NotFound(ApiErrorResponse.NotFound(result.Message ?? $"Connected System with ID {connectedSystemId} not found.")),
+            ServerCertificateTrustOutcome.ServerUnreachable => StatusCode(StatusCodes.Status502BadGateway, response),
+            _ => BadRequest(response)
+        };
+    }
+
     #endregion
 
     #region Connector Definitions
@@ -1402,7 +2000,7 @@ public class SynchronisationController(
         SynchronisationWorkerTask workerTask;
         if (initiatedBy != null)
         {
-            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown User");
+            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.NameOrId);
         }
         else
         {
@@ -1468,6 +2066,10 @@ public class SynchronisationController(
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
+        // SPEC-1082 D10: Verification Mode only applies to Full Import runs.
+        if (request.VerifyImportContentHashes && request.RunType != ConnectedSystemRunType.FullImport)
+            return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
+
         // Create the Run Profile
         var runProfile = new ConnectedSystemRunProfile
         {
@@ -1475,7 +2077,8 @@ public class SynchronisationController(
             ConnectedSystemId = connectedSystemId,
             RunType = request.RunType,
             PageSize = request.PageSize,
-            FilePath = request.FilePath
+            FilePath = request.FilePath,
+            VerifyImportContentHashes = request.VerifyImportContentHashes
         };
 
         // Set partition if provided
@@ -1555,6 +2158,16 @@ public class SynchronisationController(
 
         if (request.FilePath != null)
             runProfile.FilePath = request.FilePath;
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import runs. RunType itself is
+        // immutable after create, so validate against the Run Profile's existing RunType.
+        if (request.VerifyImportContentHashes.HasValue)
+        {
+            if (request.VerifyImportContentHashes.Value && runProfile.RunType != ConnectedSystemRunType.FullImport)
+                return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
+
+            runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
+        }
 
         // Update partition if provided
         if (request.PartitionId.HasValue)
@@ -1639,18 +2252,29 @@ public class SynchronisationController(
     /// <summary>
     /// List Synchronisation Rules
     /// </summary>
+    /// <remarks>
+    /// Narrow the list with the <c>connectedSystemIds</c>, <c>directions</c>, <c>actionTypes</c> and
+    /// <c>statuses</c> facets, each of which is repeatable. Facets combine with AND, values within a
+    /// facet combine with OR, and <c>search</c> narrows whatever the facets left.
+    /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
+    /// <param name="filter">Connected System, Direction, Action type, Status and free-text filters.</param>
     /// <returns>A paginated list of Synchronisation Rule headers.</returns>
     [HttpGet("sync-rules", Name = "GetSyncRules")]
     [ProducesResponseType(typeof(PaginatedResponse<SyncRuleHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetSyncRulesAsync([FromQuery] PaginationRequest pagination)
+    public async Task<IActionResult> GetSyncRulesAsync([FromQuery] PaginationRequest pagination, [FromQuery] SyncRuleFilterRequest filter)
     {
         _logger.LogTrace("Requested Synchronisation Rules (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        var rules = await _application.ConnectedSystems.GetSyncRulesAsync();
-        var headers = rules.Select(SyncRuleHeader.FromEntity).AsQueryable();
 
-        var result = headers
+        // Header tier: a list endpoint has no use for each rule's Attribute Flows, Object Matching
+        // Rules and schema graph, and the Synchronisation Rule set is small enough to filter in
+        // memory through the shared SyncRuleFilter every JIM surface uses.
+        var headers = await _application.ConnectedSystems.GetSyncRuleHeadersAsync();
+        var syncRuleFilter = filter.ToFilter();
+        var filtered = (syncRuleFilter.IsEmpty ? headers : headers.Where(syncRuleFilter.Matches)).AsQueryable();
+
+        var result = filtered
             .ApplySortAndFilter(pagination)
             .ToPaginatedResponse(pagination);
 
@@ -1835,6 +2459,128 @@ public class SynchronisationController(
         // Retrieve the updated Synchronisation Rule
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         return Ok(SyncRuleHeader.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Get a Synchronisation Rule's initial password configuration
+    /// </summary>
+    /// <remarks>
+    /// Whether JIM sets an initial password on the accounts this rule provisions, and how it generates one.
+    /// A rule with nothing configured reports the setting switched off with JIM's defaults, which is how it behaves.
+    ///
+    /// No password value is ever returned: passwords are generated at the moment they are set and are not stored.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <response code="200">The initial password configuration.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    [HttpGet("sync-rules/{id:int}/initial-password", Name = "GetSyncRuleInitialPassword")]
+    [ProducesResponseType(typeof(SyncRuleInitialPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSyncRuleInitialPasswordAsync(int id)
+    {
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        // The parked work is reported with the settings that caused it: an administrator scripting a check across
+        // every rule wants the answer in the response they were already fetching, not a second call per rule.
+        var parkedReasons = await _application.InitialPasswords.GetParkedReasonsAsync(id);
+        var attention = await _application.InitialPasswords.GetAttentionBySyncRuleAsync([id]);
+
+        return Ok(SyncRuleInitialPasswordResponse.FromEntity(
+            syncRule.InitialPassword, parkedReasons, attention.GetValueOrDefault(id)));
+    }
+
+    /// <summary>
+    /// Update a Synchronisation Rule's initial password configuration
+    /// </summary>
+    /// <remarks>
+    /// Every field is optional; an omitted one leaves the stored value unchanged. Supplying `customPolicy`
+    /// replaces the generator settings as a set rather than merging field by field, because they only make
+    /// sense together.
+    ///
+    /// Only Export rules that provision can set an initial password: only an account JIM has just created has
+    /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="request">The settings to change.</param>
+    /// <response code="200">The updated initial password configuration.</response>
+    /// <response code="400">The rule does not provision, or the settings cannot be satisfied.</response>
+    /// <response code="404">Synchronisation Rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("sync-rules/{id:int}/initial-password", Name = "UpdateSyncRuleInitialPassword")]
+    [ProducesResponseType(typeof(SyncRuleInitialPasswordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateSyncRuleInitialPasswordAsync(int id, [FromBody] UpdateSyncRuleInitialPasswordRequest request)
+    {
+        _logger.LogInformation("Updating the initial password configuration of Synchronisation Rule: {Id}", id);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for a Synchronisation Rule initial password update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
+
+        var configuration = syncRule.InitialPassword ??= new SyncRuleInitialPassword { SyncRuleId = syncRule.Id };
+
+        if (request.Enabled.HasValue)
+            configuration.Enabled = request.Enabled.Value;
+
+        if (request.Source.HasValue)
+            configuration.Source = request.Source.Value;
+
+        request.CustomPolicy?.ApplyTo(configuration.CustomPolicy);
+
+        if (request.ExpiryBehaviour.HasValue)
+            configuration.ExpiryBehaviour = request.ExpiryBehaviour.Value;
+
+        if (request.EnableAccount.HasValue)
+            configuration.EnableAccount = request.EnableAccount.Value;
+
+        // Refused rather than silently accepted: a rule that never creates an account has nothing to give a
+        // first password to, and storing the setting anyway would have it do nothing while reading as configured.
+        if (configuration.Enabled && !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                "An initial password can only be set by an Export Synchronisation Rule that provisions to the Connected System."));
+
+        // Checked here rather than left to fail per account: an unsatisfiable configuration parks every account
+        // it touches, and the administrator saving it is the person who can fix it.
+        if (configuration.Enabled)
+        {
+            var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId);
+            var policy = configuration.Source == InitialPasswordSource.Custom
+                ? configuration.CustomPolicy
+                : _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+
+            var assessment = _application.PasswordGenerator.Assess(policy, discoveredPolicy);
+            if (!assessment.IsUsable)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"These password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}"));
+        }
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var success = apiKey != null
+            ? await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason)
+            : await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
+
+        if (!success)
+        {
+            var validationErrors = syncRule.Validate();
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Synchronisation Rule validation failed: {string.Join("; ", validationErrors.Select(v => v.Message))}"));
+        }
+
+        _logger.LogInformation("Updated the initial password configuration of Synchronisation Rule: {Id}", id);
+
+        var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
+        return Ok(SyncRuleInitialPasswordResponse.FromEntity(updated!.InitialPassword));
     }
 
     /// <summary>
@@ -2193,6 +2939,9 @@ public class SynchronisationController(
             if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
                 return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
 
+            if (CredentialAttributes.IsCredentialAttribute(csAttr.Name))
+                return BadRequest(ApiErrorResponse.BadRequest(CredentialAttributeFlowRejection(csAttr.Name)));
+
             mapping.TargetConnectedSystemAttributeId = csAttr.Id;
             mapping.TargetConnectedSystemAttribute = csAttr;
 
@@ -2233,6 +2982,9 @@ public class SynchronisationController(
                 // Verify attribute belongs to the Synchronisation Rule's object type
                 if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
                     return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
+
+                if (CredentialAttributes.IsCredentialAttribute(csAttr.Name))
+                    return BadRequest(ApiErrorResponse.BadRequest(CredentialAttributeFlowRejection(csAttr.Name)));
 
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
@@ -2278,6 +3030,15 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Synchronisation Rule mapping: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// The rejection message used whenever an Attribute Flow names a credential attribute as its source or target.
+    /// </summary>
+    private static string CredentialAttributeFlowRejection(string attributeName)
+    {
+        return $"Attribute '{attributeName}' holds credential material and cannot be used in an Attribute Flow. " +
+               "Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.";
     }
 
     /// <summary>

@@ -102,5 +102,18 @@ public enum ActivityTargetType
     /// (for example groups) that referenced them. Created only when a batch actually has work to do; a quiet idle
     /// tick records no Activity at all.
     /// </summary>
-    MetaverseObjectHousekeeping = 23
+    MetaverseObjectHousekeeping = 23,
+
+    /// <summary>
+    /// An operation performed against a single Connected System Object in its Connected System, rather than
+    /// against JIM's copy of it: today, an administrator setting that account's password (issue #1121).
+    /// Guid-keyed via <see cref="Activity.ConnectedSystemObjectId"/>, with
+    /// <see cref="Activity.ConnectedSystemId"/> set alongside it.
+    /// <para>
+    /// Deliberately not <see cref="ConnectedSystem"/>: that target type is categorised as Configuration and
+    /// carries a Connected System's configuration-change history, which a password set is not and must not
+    /// pollute.
+    /// </para>
+    /// </summary>
+    ConnectedSystemObject = 24
 }

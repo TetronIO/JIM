@@ -92,6 +92,15 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false);
+
+    /// <summary>
+    /// Gets the wire standard a Connected System's schema follows, as declared by its Connector. Returns
+    /// <see cref="AttributeStandard.NotSet"/> when the Connector declares none, and for a Connected System
+    /// that no longer exists. Advisory display data for the Attribute Flow editor's Standard Mapping hints
+    /// (#1122); never consulted by the synchronisation engine.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    public Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
@@ -121,6 +130,18 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
 
     /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// </summary>
+    public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
+
+    /// <summary>
+    /// SPEC-1082 D6: the only code path permitted to write ImportStateHash/ImportStateFingerprint,
+    /// and only after the batch's attribute-value writes have committed. Never touches LastUpdated.
+    /// </summary>
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
+
+    /// <summary>
     /// Batch-loads full CSO entity graphs by their IDs.
     /// Returns CSOs with the same Include chain as GetConnectedSystemObjectByAttributeAsync
     /// (Type.Attributes, AttributeValues.Attribute, AttributeValues.ReferenceValue.Type).
@@ -140,6 +161,16 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
 
     /// <summary>
     /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
@@ -215,6 +246,13 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
     /// <returns>Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
+    /// it has been exported, so a caller holding historical ids needs this to tell live rows from gone
+    /// ones without materialising any of them.
+    /// </summary>
+    public Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds);
+
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>
@@ -426,13 +464,6 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Gets the count of Connected System Objects joined to a specific Metaverse Object.
-    /// Used to determine if an MVO has any remaining connectors before deletion.
-    /// </summary>
-    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
-
-    /// <summary>
     /// Gets a Connected System Object by its joined Metaverse Object ID and Connected System.
     /// Used for finding existing CSOs during export evaluation.
     /// </summary>
@@ -603,6 +634,17 @@ public interface IConnectedSystemRepository
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
     Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
 
+    /// <summary>
+    /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
+    /// own id. The inverse of the browsing lookups: a caller holding a reference to a deleted record (a
+    /// causality view naming the record a run deleted) knows that id and nothing about the change record.
+    /// The foreign key to the Connected System Object is nulled when the object goes, which is why
+    /// <see cref="ConnectedSystemObjectChange.DeletedConnectedSystemObjectId"/> exists and is matched here.
+    /// </summary>
+    /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
+    /// <returns>The Deleted change record, or null when there is none for that id.</returns>
+    Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId);
+
     #region Synchronisation Rule Mappings
     /// <summary>
     /// Gets all mappings for a Synchronisation Rule.
@@ -667,6 +709,13 @@ public interface IConnectedSystemRepository
 
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();
     public Task<List<ConnectedSystemHeader>> GetConnectedSystemHeadersAsync();
+
+    /// <summary>
+    /// Returns the display name of every Connected System keyed by id. A lightweight lookup for
+    /// event-time name snapshots (for example deletion policy snapshots, #119); the table is tiny, so a
+    /// single map read replaces per-system queries.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
@@ -752,6 +801,28 @@ public interface IConnectedSystemRepository
     public Task<SyncRule?> GetSyncRuleAsync(int id);
 
     /// <summary>
+    /// Gets just a Synchronisation Rule's initial-password configuration, or null where it sets no initial
+    /// passwords.
+    /// <para>
+    /// Read on the save path to compare what the rule is about to become against what it was, which decides
+    /// whether the accounts parked against it are released. That comparison only needs these few settings, so it
+    /// does not pay for the whole rule graph on every save.
+    /// </para>
+    /// </summary>
+    public Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId);
+
+    /// <summary>
+    /// Gets the password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// <para>
+    /// Read on its own rather than through a Connected System navigation, because the caller that needs it (the
+    /// Synchronisation Rule editor) reaches the system through a rule, whose include chain does not carry it. An
+    /// unloaded navigation is indistinguishable from a target that published no policy, and that difference
+    /// decides whether JIM validates a generator configuration against anything at all.
+    /// </para>
+    /// </summary>
+    public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();
@@ -771,6 +842,20 @@ public interface IConnectedSystemRepository
     /// <param name="partitionId">Optional partition ID to filter by.</param>
     /// <returns>The count of matching Connected System Objects.</returns>
     public Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId);
+
+    /// <summary>
+    /// Streams every Connected System Object in a Connected System, reduced to where it sits and what it is joined
+    /// to, for evaluating what a change to the partition and container selection would take out of import scope
+    /// (#1251).
+    /// </summary>
+    /// <remarks>
+    /// Streamed rather than returned as a list because a preview runs over the whole connector space, and a
+    /// customer's connector space is routinely hundreds of thousands of objects; materialising it would put all of
+    /// them in JIM.Web's process at once. Ordered so a preview re-run over unchanged data produces its groups in
+    /// the same order.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose objects to stream.</param>
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System, where the status is Obosolete.
@@ -860,6 +945,17 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
+    /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
+    /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
+    /// setting-value instances the in-memory system happened to carry (composed with a Setting navigation but no
+    /// FK scalar) were faithfully written back with SettingId 0, failing the export run on a foreign key
+    /// violation the moment a connector first returned close-time state. A watermark write must never be able
+    /// to touch configuration rows.
+    /// </summary>
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
+
+    /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.
     /// Unlike <see cref="UpdateConnectedSystemAsync"/>, which only persists the root plus partitions and
     /// setting values, this method also adds newly-discovered object types/attributes and applies updates to
@@ -878,6 +974,17 @@ public interface IConnectedSystemRepository
     public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
     public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+
+    /// <summary>
+    /// Deletes settings a Connector no longer declares, along with any values administrators saved against them.
+    /// </summary>
+    /// <remarks>
+    /// Detaching the setting from its Connector Definition is not sufficient: the relationship's foreign key is
+    /// nullable, so the row survives with no definition while still being referenced by saved values, and the
+    /// withdrawn setting keeps appearing on Connected Systems that hold one.
+    /// </remarks>
+    public Task DeleteConnectorDefinitionSettingsAsync(IList<ConnectorDefinitionSetting> connectorDefinitionSettings);
+
     public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task DeleteSyncRuleAsync(SyncRule syncRule);
 
@@ -1013,5 +1120,16 @@ public interface IConnectedSystemRepository
     /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
     /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
     Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems, the configuration objects whose change affects that system's
+    /// synchronisation outcomes: its Synchronisation Rules, the Metaverse Object Types those rules target, and the
+    /// Metaverse Attributes those rules reference. Backs the "configuration changed since last Full Synchronisation"
+    /// indicator, which uses these sets to attribute each recorded change to precisely the systems it affects.
+    ///
+    /// Every requested system gets an entry, including ones with no Synchronisation Rules at all (an empty scope, so
+    /// only changes to the system itself count).
+    /// </summary>
+    Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds);
     #endregion
 }

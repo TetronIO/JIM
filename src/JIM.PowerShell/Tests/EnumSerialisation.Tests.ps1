@@ -136,10 +136,10 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
                 Mock Invoke-JIMApi { [PSCustomObject]@{ items = @() } }
 
-                Get-JIMScheduleExecution -Status Completed | Out-Null
+                Get-JIMScheduleExecution -Status Complete | Out-Null
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
-                    $Endpoint -like '*status=Completed*'
+                    $Endpoint -like '*status=Complete*'
                 }
             }
         }
@@ -159,6 +159,32 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
                 }
             }
         }
+
+        It 'Sends deletionTriggerMode as the string enum name (AllSourcesDisconnect)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseObjectType -Name 'Test' -PluralName 'Tests' -DeletionTriggerMode AllSourcesDisconnect -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.deletionTriggerMode -is [string] -and $Body.deletionTriggerMode -eq 'AllSourcesDisconnect'
+                }
+            }
+        }
+
+        It 'Sends deletionTriggerMode as the string enum name (SpecificSourcesDisconnect)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseObjectType -Name 'Test' -PluralName 'Tests' -DeletionTriggerMode SpecificSourcesDisconnect -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.deletionTriggerMode -is [string] -and $Body.deletionTriggerMode -eq 'SpecificSourcesDisconnect'
+                }
+            }
+        }
     }
 
     Context 'Set-JIMMetaverseObjectType' {
@@ -172,6 +198,32 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
 
                 Should -Invoke Invoke-JIMApi -ParameterFilter {
                     $Body -and $Body.ContainsKey('deletionRule') -and $Body.deletionRule -is [string] -and $Body.deletionRule -eq 'WhenAuthoritativeSourceDisconnected'
+                }
+            }
+        }
+
+        It 'Sends deletionTriggerMode as the string enum name (AllSourcesDisconnect)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMMetaverseObjectType -Id 1 -DeletionTriggerMode AllSourcesDisconnect -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Body -and $Body.ContainsKey('deletionTriggerMode') -and $Body.deletionTriggerMode -is [string] -and $Body.deletionTriggerMode -eq 'AllSourcesDisconnect'
+                }
+            }
+        }
+
+        It 'Sends deletionTriggerMode as the string enum name (SpecificSourcesDisconnect)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMMetaverseObjectType -Id 1 -DeletionTriggerMode SpecificSourcesDisconnect -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Body -and $Body.ContainsKey('deletionTriggerMode') -and $Body.deletionTriggerMode -is [string] -and $Body.deletionTriggerMode -eq 'SpecificSourcesDisconnect'
                 }
             }
         }

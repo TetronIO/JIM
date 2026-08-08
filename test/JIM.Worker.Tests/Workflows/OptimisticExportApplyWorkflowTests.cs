@@ -111,8 +111,8 @@ public class OptimisticExportApplyWorkflowTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Export Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => externalId != null
                     ? ConnectedSystemExportResult.Succeeded(externalId)
                     : ConnectedSystemExportResult.Succeeded()).ToList());
@@ -129,8 +129,8 @@ public class OptimisticExportApplyWorkflowTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Export Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
                 exports.Select(_ => ConnectedSystemExportResult.Failed(errorMessage)).ToList());
         return mockConnector;
     }

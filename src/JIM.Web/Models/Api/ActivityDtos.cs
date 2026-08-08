@@ -197,6 +197,28 @@ public class ActivityHeader
     public int ChildActivityCount { get; set; }
 
     /// <summary>
+    /// If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The step within the Schedule Execution that produced this Activity (0-based). Read with
+    /// <see cref="ScheduleExecutionId"/> to identify exactly which step ran. Null when no Schedule produced it.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
+
+    /// <summary>
+    /// If a Schedule produced this Activity, the Schedule's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduledByScheduleId { get; set; }
+
+    /// <summary>
+    /// The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads
+    /// correctly after the Schedule has been renamed or deleted. Null when no Schedule produced this Activity.
+    /// </summary>
+    public string? ScheduledByScheduleName { get; set; }
+
+    /// <summary>
     /// Creates a header DTO from an Activity entity.
     /// </summary>
     public static ActivityHeader FromEntity(Activity activity)
@@ -247,7 +269,13 @@ public class ActivityHeader
             TotalPendingExports = activity.TotalPendingExports,
 
             // Shared
-            TotalErrors = activity.TotalErrors
+            TotalErrors = activity.TotalErrors,
+
+            // Schedule attribution
+            ScheduleExecutionId = activity.ScheduleExecutionId,
+            ScheduleStepIndex = activity.ScheduleStepIndex,
+            ScheduledByScheduleId = activity.ScheduledByScheduleId,
+            ScheduledByScheduleName = activity.ScheduledByScheduleName
         };
     }
 
@@ -369,6 +397,14 @@ public class ActivityDetailDto
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
+    /// Structured detail about the failure, as JSON, where there is something specific worth acting on beyond the
+    /// message. An LDAPS connection refused because of the directory server's certificate records that certificate
+    /// here: its subject, issuer, the names it was issued for, its validity dates, its thumbprint, and which check
+    /// it failed. Null for failures with no structured detail.
+    /// </summary>
+    public string? ErrorDetail { get; set; }
+
+    /// <summary>
     /// The run type if this is a sync activity.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
@@ -404,6 +440,36 @@ public class ActivityDetailDto
     public ActivityRunProfileExecutionStatsDto? ExecutionStats { get; set; }
 
     /// <summary>
+    /// The steps the Run Profile execution moved through (#454), in run order, each with how it
+    /// turned out and how long it took. This is what answers "where did the four hours go?" on a
+    /// run that finished days ago. Empty for other Activity types, and for runs that predate phase
+    /// recording.
+    /// </summary>
+    public List<ActivityPhaseDto> Phases { get; set; } = [];
+
+    /// <summary>
+    /// If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The step within the Schedule Execution that produced this Activity (0-based). Read with
+    /// <see cref="ScheduleExecutionId"/> to identify exactly which step ran. Null when no Schedule produced it.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
+
+    /// <summary>
+    /// If a Schedule produced this Activity, the Schedule's unique identifier. Null otherwise.
+    /// </summary>
+    public Guid? ScheduledByScheduleId { get; set; }
+
+    /// <summary>
+    /// The producing Schedule's name, as a snapshot taken when the Activity was created, so history still reads
+    /// correctly after the Schedule has been renamed or deleted. Null when no Schedule produced this Activity.
+    /// </summary>
+    public string? ScheduledByScheduleName { get; set; }
+
+    /// <summary>
     /// For a configuration-change activity, the optional reason supplied for the change.
     /// </summary>
     public string? ChangeReason { get; set; }
@@ -421,10 +487,14 @@ public class ActivityDetailDto
     /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
-    public static ActivityDetailDto FromEntity(Activity activity, ActivityRunProfileExecutionStats? stats = null)
+    public static ActivityDetailDto FromEntity(
+        Activity activity,
+        ActivityRunProfileExecutionStats? stats = null,
+        IReadOnlyList<ActivityPhase>? phases = null)
     {
         return new ActivityDetailDto
         {
+            Phases = (phases ?? []).OrderBy(p => p.Order).Select(ActivityPhaseDto.FromEntity).ToList(),
             Id = activity.Id,
             ParentActivityId = activity.ParentActivityId,
             Created = activity.Created,
@@ -445,6 +515,7 @@ public class ActivityDetailDto
             WarningMessage = activity.WarningMessage,
             ErrorMessage = activity.ErrorMessage,
             ErrorStackTrace = activity.ErrorStackTrace,
+            ErrorDetail = activity.ErrorDetail,
             ConnectedSystemRunType = activity.ConnectedSystemRunType,
             ConnectedSystemId = activity.ConnectedSystemId,
             ConnectedSystemRunProfileId = activity.ConnectedSystemRunProfileId,
@@ -452,6 +523,10 @@ public class ActivityDetailDto
             MetaverseObjectId = activity.MetaverseObjectId,
             ExampleDataTemplateId = activity.ExampleDataTemplateId,
             ExecutionStats = stats != null ? ActivityRunProfileExecutionStatsDto.FromEntity(stats) : null,
+            ScheduleExecutionId = activity.ScheduleExecutionId,
+            ScheduleStepIndex = activity.ScheduleStepIndex,
+            ScheduledByScheduleId = activity.ScheduledByScheduleId,
+            ScheduledByScheduleName = activity.ScheduledByScheduleName,
             ChangeReason = activity.ChangeReason,
             ConfigurationChangeVersion = activity.ConfigurationChangeVersion,
             ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot)

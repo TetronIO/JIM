@@ -3,8 +3,10 @@
 
 using System.Text;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -209,6 +211,13 @@ public partial class SyncRepository
                 await writer.WriteAsync(cso.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
+            // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+            // This is a two-phase create: parent CSO rows commit here, in phase 1, before attribute
+            // values commit in phase 2. A non-null hash written at this point could survive a phase-2
+            // failure as a permanently believable lie about content that was never actually persisted.
+            // The only legitimate stamp is StampImportStateAsync, run after values commit (D7/D8).
+            await writer.WriteNullAsync();
+            await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -326,6 +335,10 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(cso.ScopeReviewPending);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+                // See BulkInsertCsosOnConnectionAsync above for the full stamp-ordering rationale.
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -385,7 +398,7 @@ public partial class SyncRepository
     /// why <c>LastUpdated</c> must stay untouched here (it is what re-arms the Full Synchronisation
     /// unchanged-object watermark for a no-op confirming import).
     /// </summary>
-    public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
+    public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {
         if (additions.Count == 0 && removalValueIds.Count == 0)
             return;
@@ -395,6 +408,25 @@ public partial class SyncRepository
 
         if (additions.Count > 0)
             await BulkInsertOptimisticApplyAttributeValuesRawAsync(additions);
+
+        // SPEC-1082 D9: null the import state hash/fingerprint for every mutated CSO, set-based,
+        // in the same call. Deliberately does NOT touch LastUpdated (see the class remarks above).
+        if (affectedCsoIds.Count > 0)
+            await NullImportStateForCsosAsync(affectedCsoIds);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D9: sets ImportStateHash and ImportStateFingerprint to NULL for the given CSO IDs,
+    /// via a single set-based UPDATE. Never touches LastUpdated.
+    /// </summary>
+    private async Task NullImportStateForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+            csoIds.ToArray());
     }
 
     /// <summary>
@@ -673,6 +705,219 @@ public partial class SyncRepository
     #endregion
 
     #region Pending Export — Worker-Only Bulk Operations
+
+    public async Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
+    {
+        var staging = pendingInitialPasswords.ToList();
+        if (staging.Count == 0)
+            return;
+
+        foreach (var pending in staging.Where(p => p.Id == Guid.Empty))
+            pending.Id = Guid.NewGuid();
+
+        // ON CONFLICT DO NOTHING against the one-per-account unique index, rather than reading first and then
+        // inserting: re-running an export that already staged this work is an ordinary thing to do.
+        //
+        // Column list comes from the constant so it cannot drift from the model; the parameter order below MUST
+        // match PendingInitialPasswordBulkColumns.PendingInitialPasswords exactly.
+        var columns = BulkSqlHelpers.ToQuotedList(PendingInitialPasswordBulkColumns.PendingInitialPasswords);
+        var placeholders = string.Join(", ", Enumerable.Range(0, PendingInitialPasswordBulkColumns.PendingInitialPasswords.Length).Select(i => $"{{{i}}}"));
+        var sql = $"""
+            INSERT INTO "PendingInitialPasswords" ({columns}) VALUES ({placeholders})
+            ON CONFLICT ("ConnectedSystemObjectId") DO NOTHING
+            """;
+
+        foreach (var pending in staging)
+        {
+            await _context.Database.ExecuteSqlRawAsync(sql,
+                pending.Id,
+                pending.ConnectedSystemObjectId,
+                pending.ConnectedSystemId,
+                BulkSqlHelpers.NullableParam(pending.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+                (int)pending.Status,
+                BulkSqlHelpers.NullableParam((int?)pending.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
+                BulkSqlHelpers.NullableParam(pending.TargetMessage, NpgsqlTypes.NpgsqlDbType.Text),
+                pending.AttemptCount,
+                pending.CreatedAt,
+                BulkSqlHelpers.NullableParam(pending.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(pending.ExpiresAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+        }
+    }
+
+    public async Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
+    {
+        return await _context.PendingInitialPasswords
+            .AsNoTracking()
+            // The delivery pass sets the password on this object, so it comes with the record rather than
+            // being fetched per account; the in-memory provider auto-tracks navigations and cannot tell a
+            // missing Include from a present one, so the guard for this is a RequiresPostgres test.
+            .Include(p => p.ConnectedSystemObject)
+            .ThenInclude(cso => cso.AttributeValues)
+            .Where(p => p.ConnectedSystemId == connectedSystemId && p.Status == PendingInitialPasswordStatus.Pending)
+            .OrderBy(p => p.CreatedAt)
+            .Take(maximum)
+            .ToListAsync();
+    }
+
+    public async Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        return await _context.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .Where(ip => syncRuleIds.Contains(ip.SyncRuleId))
+            .ToDictionaryAsync(ip => ip.SyncRuleId);
+    }
+
+    public async Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await _context.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
+    {
+        var attemptsList = attempts.ToList();
+        if (attemptsList.Count == 0)
+            return;
+
+        // Column list comes from the constant so a migration cannot leave this writer behind; the parameter
+        // order below MUST match PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate, with
+        // the record's Id last.
+        var assignments = string.Join(", ", PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate
+            .Select((column, index) => $"\"{column}\" = {{{index}}}"));
+        var idPlaceholder = $"{{{PendingInitialPasswordBulkColumns.PendingInitialPasswordsAttemptUpdate.Length}}}";
+        var sql = $"""UPDATE "PendingInitialPasswords" SET {assignments} WHERE "Id" = {idPlaceholder}""";
+
+        foreach (var attempt in attemptsList)
+        {
+            await _context.Database.ExecuteSqlRawAsync(sql,
+                (int)attempt.Status,
+                BulkSqlHelpers.NullableParam((int?)attempt.FailureReason, NpgsqlTypes.NpgsqlDbType.Integer),
+                BulkSqlHelpers.NullableParam(attempt.TargetMessage, NpgsqlTypes.NpgsqlDbType.Text),
+                attempt.AttemptCount,
+                BulkSqlHelpers.NullableParam(attempt.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(attempt.ExpiresAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                attempt.Id);
+        }
+    }
+
+    public async Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            """DELETE FROM "PendingInitialPasswords" WHERE "Id" = ANY({0})""", idList);
+    }
+
+    public async Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        // A targeted status mark rather than a write of the entity, so it is deliberately not driven from
+        // PendingInitialPasswordBulkColumns: the three columns here are exactly the ones a release changes, and
+        // a future column must not be swept into it by being added to that list.
+        //
+        // The WHERE clause carries the Parked filter rather than the caller doing it: a record awaiting retry is
+        // already going to be tried, and an expired one has outlived the purpose it was created for, so neither
+        // should be disturbed by an administrator saving a rule.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}, "FailureReason" = NULL, "TargetMessage" = NULL
+            WHERE "SyncRuleId" = {1} AND "Status" = {2}
+            """,
+            (int)PendingInitialPasswordStatus.Pending,
+            syncRuleId,
+            (int)PendingInitialPasswordStatus.Parked);
+    }
+
+    public async Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        // A targeted status mark, deliberately not driven from PendingInitialPasswordBulkColumns for the same
+        // reason as the release above: these are exactly the columns an expiry changes.
+        //
+        // The reason and attempt count are left as they are. They say why the account never got its password,
+        // which is the whole value of recording the expiry rather than deleting the row.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PendingInitialPasswords"
+            SET "Status" = {0}
+            WHERE "ConnectedSystemId" = {1} AND "ExpiresAt" IS NOT NULL AND "ExpiresAt" < {2}
+              AND "Status" <> {0}
+            """,
+            (int)PendingInitialPasswordStatus.Expired,
+            connectedSystemId,
+            asOf);
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        // Grouped in the database rather than by materialising the records: this backs a list indicator, and the
+        // only thing the indicator needs is two numbers per row.
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { SyncRuleId = p.SyncRuleId!.Value, p.Status })
+            .Select(g => new { g.Key.SyncRuleId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.SyncRuleId, c.Status, c.Count)));
+    }
+
+    public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        var counts = await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId) &&
+                        (p.Status == PendingInitialPasswordStatus.Parked || p.Status == PendingInitialPasswordStatus.Expired))
+            .GroupBy(p => new { p.ConnectedSystemId, p.Status })
+            .Select(g => new { g.Key.ConnectedSystemId, g.Key.Status, Count = g.Count() })
+            .ToListAsync();
+
+        return ToAttentionByKey(counts.Select(c => (c.ConnectedSystemId, c.Status, c.Count)));
+    }
+
+    public async Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        return await _context.PendingInitialPasswords
+            .AsNoTracking()
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Max(p => p.FailureReason),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Folds one row per (key, status) into one <see cref="InitialPasswordAttention"/> per key. The query groups
+    /// by status because that is what the database can count in one pass; the surfaces want them side by side.
+    /// </summary>
+    private static Dictionary<int, InitialPasswordAttention> ToAttentionByKey(IEnumerable<(int Key, PendingInitialPasswordStatus Status, int Count)> counts)
+    {
+        return counts
+            .GroupBy(c => c.Key)
+            .ToDictionary(g => g.Key, g => new InitialPasswordAttention
+            {
+                ParkedCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Parked).Sum(c => c.Count),
+                ExpiredCount = g.Where(c => c.Status == PendingInitialPasswordStatus.Expired).Sum(c => c.Count)
+            });
+    }
 
     public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
@@ -1012,7 +1257,9 @@ public partial class SyncRepository
 
     private async Task BulkInsertPendingExportsRawAsync(List<PendingExport> exports)
     {
-        const int columnsPerRow = 14;
+        // Taken from the column list rather than written out, so that adding a column cannot leave the
+        // placeholder count behind it.
+        var columnsPerRow = PendingExportBulkColumns.PendingExports.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
@@ -1026,7 +1273,7 @@ public partial class SyncRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
@@ -1043,6 +1290,7 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.ProvisioningSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -1266,6 +1514,35 @@ public partial class SyncRepository
         }
 
         return targets;
+    }
+
+    /// <summary>
+    /// Gets the Connected System ID of each CSO joined to the given MVO: one row per CSO, duplicates
+    /// preserved when a system holds multiple joined CSOs (#119). Raw SQL per the worker hot-path rule;
+    /// replaces the previous count-only query at the disconnect call sites, so it costs the same single
+    /// round trip. Read-side SELECT: a deliberate projection subset, exempt from the bulk column list rule.
+    /// </summary>
+    public async Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        var systemIds = new List<int>();
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"SELECT ""ConnectedSystemId""
+              FROM ""ConnectedSystemObjects""
+              WHERE ""MetaverseObjectId"" = @mvoId";
+        var mvoIdParameter = command.CreateParameter();
+        mvoIdParameter.ParameterName = "mvoId";
+        mvoIdParameter.Value = metaverseObjectId;
+        command.Parameters.Add(mvoIdParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            systemIds.Add(reader.GetInt32(0));
+
+        return systemIds;
     }
 
     public async Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)

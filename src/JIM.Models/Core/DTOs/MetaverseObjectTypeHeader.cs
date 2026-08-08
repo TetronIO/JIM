@@ -26,6 +26,13 @@ public class MetaverseObjectTypeHeader
     public string? Icon { get; set; }
     public bool HasPredefinedSearches { get; set; }
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
+
+    /// <summary>
+    /// The authoritative source trigger mode (#119); only meaningful when <see cref="DeletionRule"/> is
+    /// <see cref="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected"/>.
+    /// </summary>
+    public AuthoritativeSourceTriggerMode DeletionTriggerMode { get; set; }
+
     public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
@@ -44,6 +51,7 @@ public class MetaverseObjectTypeHeader
             Icon = entity.Icon,
             HasPredefinedSearches = entity.PredefinedSearches?.Count > 0,
             DeletionRule = entity.DeletionRule,
+            DeletionTriggerMode = entity.DeletionTriggerMode,
             DeletionGracePeriod = entity.DeletionGracePeriod
         };
     }

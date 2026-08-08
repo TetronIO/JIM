@@ -100,6 +100,190 @@ Describe 'Get-JIMActivity' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
     }
+
+    Context 'Filter parameters' {
+
+        # The Activity query supports far more filtering than the cmdlet used to expose; these prove each
+        # filter reaches the API as a query parameter rather than being silently dropped.
+
+        It 'Sends no filter query parameters when none are supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -notmatch 'operation=' -and
+                    $Endpoint -notmatch 'outcome=' -and
+                    $Endpoint -notmatch 'status=' -and
+                    $Endpoint -notmatch 'initiatedById=' -and
+                    $Endpoint -notmatch 'hasChildActivities=' -and
+                    $Endpoint -notmatch 'createdFrom=' -and
+                    $Endpoint -notmatch 'createdTo=' -and
+                    $Endpoint -notmatch 'connectedSystem=' -and
+                    $Endpoint -notmatch 'runProfile=' -and
+                    $Endpoint -notmatch 'initiatedBy=' -and
+                    $Endpoint -notmatch 'scheduledOnly=' -and
+                    $Endpoint -notmatch 'scheduleId='
+                }
+            }
+        }
+
+        It 'Sends the Operation filter in the query string, one entry per value' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -Operation Execute, Clear | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'operation=Execute' -and $Endpoint -match 'operation=Clear'
+                }
+            }
+        }
+
+        It 'Sends the Outcome filter in the query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -Outcome Errors | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match 'outcome=Errors' }
+            }
+        }
+
+        It 'Sends the Status filter in the query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -Status FailedWithError | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match 'status=FailedWithError' }
+            }
+        }
+
+        It 'Sends the InitiatedById filter in the query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -InitiatedById '3f2504e0-4f89-11d3-9a0c-0305e82c3301' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'initiatedById=3f2504e0-4f89-11d3-9a0c-0305e82c3301'
+                }
+            }
+        }
+
+        It 'Sends the InitiatedBy name filter in the query string, URL encoded' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -InitiatedBy 'Alice Adams' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'initiatedBy=Alice%20Adams'
+                }
+            }
+        }
+
+        It 'Sends HasChildActivities as false when explicitly set to false' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -HasChildActivities $false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match 'hasChildActivities=false' }
+            }
+        }
+
+        It 'Sends the created date range in the query string as round-trip UTC' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -CreatedFrom ([datetime]::new(2026, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)) `
+                    -CreatedTo ([datetime]::new(2026, 2, 1, 0, 0, 0, [DateTimeKind]::Utc)) | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'createdFrom=2026-01-01T00:00:00' -and $Endpoint -match 'createdTo=2026-02-01T00:00:00'
+                }
+            }
+        }
+
+        It 'Sends the ConnectedSystem filter in the query string, URL encoded, one entry per value' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -ConnectedSystem 'Contoso AD', 'Fabrikam HR' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystem=Contoso%20AD' -and $Endpoint -match 'connectedSystem=Fabrikam%20HR'
+                }
+            }
+        }
+
+        It 'Sends the RunProfile filter in the query string, URL encoded' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -RunProfile 'Full Import' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match 'runProfile=Full%20Import' }
+            }
+        }
+
+        It 'Sends ScheduledOnly in the query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -ScheduledOnly $true | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match 'scheduledOnly=true' }
+            }
+        }
+
+        It 'Sends the ScheduleId filter in the query string, one entry per value' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -ScheduleId '3f2504e0-4f89-11d3-9a0c-0305e82c3301', '6ba7b810-9dad-11d1-80b4-00c04fd430c8' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'scheduleId=3f2504e0-4f89-11d3-9a0c-0305e82c3301' -and
+                    $Endpoint -match 'scheduleId=6ba7b810-9dad-11d1-80b4-00c04fd430c8'
+                }
+            }
+        }
+
+        It 'Combines several filters in one request' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0 } }
+
+                Get-JIMActivity -ConnectedSystem 'Contoso AD' -Status FailedWithError -ScheduledOnly $true | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystem=Contoso%20AD' -and
+                    $Endpoint -match 'status=FailedWithError' -and
+                    $Endpoint -match 'scheduledOnly=true'
+                }
+            }
+        }
+
+        It 'Rejects an unknown Status value at bind time' {
+            { Get-JIMActivity -Status 'NotAStatus' } | Should -Throw
+        }
+    }
 }
 
 Describe 'Get-JIMActivityStats' {
@@ -347,6 +531,109 @@ Describe 'Get-JIMActivityChildren' {
             InModuleScope JIM {
                 $help = Get-Help Get-JIMActivityChildren -Full
                 ($help.Description.Text -join ' ') | Should -Match 'unwrap'
+            }
+        }
+    }
+}
+
+Describe 'Get-JIMActivity -Follow' {
+
+    Context 'Parameter set' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMActivity
+        }
+
+        It 'Should have a Follow parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'Follow'
+        }
+
+        It 'Should require Id and Follow in the Follow parameter set' {
+            $followSet = $command.ParameterSets | Where-Object Name -eq 'Follow'
+            ($followSet.Parameters | Where-Object Name -eq 'Id').IsMandatory | Should -BeTrue
+            ($followSet.Parameters | Where-Object Name -eq 'Follow').IsMandatory | Should -BeTrue
+        }
+
+        It 'Should validate IntervalSeconds between 1 and 300' {
+            $attribute = $command.Parameters['IntervalSeconds'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] }
+            $attribute.MinRange | Should -Be 1
+            $attribute.MaxRange | Should -Be 300
+        }
+
+        It 'Should have a MaxPolls parameter for bounded following' {
+            $command.Parameters.Keys | Should -Contain 'MaxPolls'
+        }
+    }
+
+    Context 'Follow behaviour' {
+
+        It 'Polls the progress endpoint until the Activity completes, then emits the final Activity' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:followPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/progress') {
+                        $script:followPollCount++
+                        $status = if ($script:followPollCount -ge 3) { 'Complete' } else { 'InProgress' }
+                        return [PSCustomObject]@{
+                            status = $status
+                            objectsProcessed = 100 * $script:followPollCount
+                            objectsToProcess = 300
+                            percentComplete = [Math]::Min(100, 33 * $script:followPollCount)
+                            estimatedSecondsRemaining = 10
+                            objectsPerSecond = 50
+                            message = 'Importing objects from Connected System'
+                        }
+                    }
+                    return [PSCustomObject]@{ id = 'final'; status = 'Complete' }
+                }
+
+                $result = Get-JIMActivity -Id ([guid]::NewGuid()) -Follow -IntervalSeconds 1
+
+                Should -Invoke Invoke-JIMApi -Times 3 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '*/activities/*' -and $Endpoint -notlike '*/progress'
+                }
+                $result.status | Should -Be 'Complete'
+            }
+        }
+
+        It 'Stops after MaxPolls when the Activity does not complete' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/progress') {
+                        return [PSCustomObject]@{ status = 'InProgress'; objectsProcessed = 1; objectsToProcess = 10 }
+                    }
+                    return [PSCustomObject]@{ id = 'final'; status = 'InProgress' }
+                }
+
+                Get-JIMActivity -Id ([guid]::NewGuid()) -Follow -IntervalSeconds 1 -MaxPolls 2 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+            }
+        }
+
+        It 'Keeps polling through transient errors rather than aborting' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:flakyPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/progress') {
+                        $script:flakyPollCount++
+                        if ($script:flakyPollCount -eq 1) {
+                            throw 'Transient failure'
+                        }
+                        return [PSCustomObject]@{ status = 'Complete'; objectsProcessed = 10; objectsToProcess = 10 }
+                    }
+                    return [PSCustomObject]@{ id = 'final'; status = 'Complete' }
+                }
+
+                { Get-JIMActivity -Id ([guid]::NewGuid()) -Follow -IntervalSeconds 1 -WarningAction SilentlyContinue | Out-Null } |
+                    Should -Not -Throw
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
             }
         }
     }

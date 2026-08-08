@@ -9,6 +9,7 @@ using JIM.Connectors;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -52,6 +53,12 @@ public class SyncExportTaskProcessor
     /// </summary>
     private bool _csoChangeTrackingEnabled;
 
+    /// <summary>
+    /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
+    /// not track phases get a reporter that records nothing.
+    /// </summary>
+    private readonly ActivityPhaseReporter _phases;
+
     public SyncExportTaskProcessor(
         ISyncServer syncServer,
         ISyncRepository syncRepository,
@@ -62,7 +69,8 @@ public class SyncExportTaskProcessor
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
         Func<ISyncRepositoryScope>? syncRepoFactory = null,
-        IConnectorFactory? connectorFactory = null)
+        IConnectorFactory? connectorFactory = null,
+        ActivityPhaseReporter? phaseReporter = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;
@@ -77,6 +85,7 @@ public class SyncExportTaskProcessor
         _initiatedByType = workerTask.InitiatedByType;
         _initiatedById = workerTask.InitiatedById;
         _initiatedByName = workerTask.InitiatedByName;
+        _phases = phaseReporter ?? ActivityPhaseReporter.None;
     }
 
     /// <summary>
@@ -93,7 +102,7 @@ public class SyncExportTaskProcessor
         Log.Information("PerformExportAsync: Starting export for {SystemName} (RunMode: {RunMode})",
             _connectedSystem.Name, _runMode);
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing export");
+        await _phases.EnterAsync(RunPhaseKeys.ExportPrepare);
 
         // Load settings once at start of export
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
@@ -114,6 +123,14 @@ public class SyncExportTaskProcessor
         if (pendingExportCount == 0)
         {
             Log.Information("PerformExportAsync: No Pending Exports for {SystemName}", _connectedSystem.Name);
+
+            // #1121: still worth a delivery pass. An account whose initial password could not be set last time
+            // is waiting on a retry, and a run with nothing to export is exactly what an administrator does
+            // after granting the missing right or bringing the directory back up.
+            await DeliverOutstandingInitialPasswordsAsync();
+
+            // Last, because the delivery pass above enters a step of its own and narrates into the
+            // Activity's message; the run's outcome has to be what an administrator is left reading.
             await _syncRepo.UpdateActivityMessageAsync(_activity, "No exports to process");
             return;
         }
@@ -133,6 +150,23 @@ public class SyncExportTaskProcessor
             Log.Information("PerformExportAsync: Cancellation requested before export started");
             await _syncRepo.UpdateActivityMessageAsync(_activity, "Cancelled before export");
             return;
+        }
+
+        // Tell the Connector which containers the administrator manages, so it can refuse to write outside them.
+        // Container selection used to apply only on the way in, so an Attribute Flow that moved an object into an
+        // unselected container wrote it where JIM could not read it back: the export went unconfirmed, the next
+        // Full Import treated the object as deleted, and synchronisation then disconnected and re-provisioned it.
+        // Stated only when there is a selection to state; a Connected System with none permits everything, exactly
+        // as before.
+        if (_connector is IConnectorManagedScope scopedConnector)
+        {
+            var managedContainers = _connectedSystem.GetSelectedContainers();
+            if (managedContainers.Count > 0)
+            {
+                scopedConnector.SetManagedScope(managedContainers);
+                Log.Debug("PerformExportAsync: Stated a managed scope of {ContainerCount} selected container(s) to the {Connector} connector",
+                    managedContainers.Count, _connector.Name);
+            }
         }
 
         try
@@ -155,7 +189,9 @@ public class SyncExportTaskProcessor
             };
 
             var throughput = new ThroughputTracker();
+            var enteredDeferredPass = false;
             ExportExecutionResult result;
+            await _phases.EnterAsync(RunPhaseKeys.ExportExecute, $"Exporting {pendingExportCount:N0} changes");
             using (Diagnostics.Connector.StartSpan("ExecuteExports").SetTag("pendingExportCount", pendingExportCount))
             {
                 result = await _syncServer.ExecuteExportsAsync(
@@ -166,10 +202,38 @@ public class SyncExportTaskProcessor
                     _cancellationTokenSource.Token,
                     async progressInfo =>
                     {
-                        _activity.ObjectsProcessed = progressInfo.ProcessedExports;
-                        var message = $"{progressInfo.Message} — {progressInfo.ProcessedExports:N0} of {progressInfo.TotalExports:N0}" +
-                            throughput.FormatThroughput(progressInfo.ProcessedExports, progressInfo.TotalExports);
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, message);
+                        // The counters are what the portal renders the count, rate and time remaining
+                        // from, so the Connector's message travels on its own; repeating the counts
+                        // in it printed the same numbers twice on the Activity.
+                        //
+                        // The window rather than the raw totals: the deferred pass covers only what
+                        // the first pass could not write, so left on the export's totals it reported
+                        // itself finished from the moment it started.
+                        (_activity.ObjectsToProcess, _activity.ObjectsProcessed) = progressInfo.CountingWindow;
+
+                        // The export makes two passes, and the second one is a step of its own: what
+                        // the first pass could not write for want of an object that did not exist yet
+                        // is re-resolved against what now does, then written.
+                        //
+                        // Latched rather than mapped report by report, because the deferred pass goes
+                        // back to reporting ExportPhase.Executing once it starts writing; without the
+                        // latch the rail would step backwards into Exporting mid-pass. Nothing after
+                        // the deferred pass belongs to the first one, so once it starts, it holds.
+                        if (!enteredDeferredPass && progressInfo.Phase == ExportPhase.ResolvingReferences)
+                        {
+                            enteredDeferredPass = true;
+                            await _phases.EnterAsync(RunPhaseKeys.ExportDeferred);
+                        }
+
+                        // A report carrying a Connector phase key is the Connector saying it has moved
+                        // to one of the steps it declared, so it advances the stepper too (#454).
+                        if (!string.IsNullOrEmpty(progressInfo.ConnectorPhaseKey))
+                        {
+                            await _phases.EnterConnectorPhaseAsync(progressInfo.ConnectorPhaseKey, progressInfo.Message);
+                            return;
+                        }
+
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressInfo.Message ?? string.Empty);
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,
@@ -181,14 +245,25 @@ public class SyncExportTaskProcessor
                     });
             }
 
+            // The Connector has nothing left to do, so whichever step it last declared stops being
+            // true here. Coarser than the import's per-call close, and deliberately so: an export
+            // batches, and may run those batches in parallel, so the Connector genuinely is at work
+            // for the whole of ExecuteExportsAsync. Left open, the step was closed by whatever JIM
+            // entered next and took that step's time with it, which on a large export is the whole
+            // of finalising the run's results (#1214).
+            await _phases.ExitConnectorPhasesAsync();
+
             exportSpan.SetTag("successCount", result.SuccessCount);
             exportSpan.SetTag("failedCount", result.FailedCount);
             exportSpan.SetTag("deferredCount", result.DeferredCount);
 
-            // Finalise activity with completion message and stats (RPEIs already persisted per-batch)
+            // Finalise activity stats (RPEIs already persisted per-batch). The completion message it
+            // builds is written at the end of the run rather than here: the steps that follow narrate
+            // into the Activity's message as they are entered, and would bury it.
+            string completionMessage;
             using (Diagnostics.Sync.StartSpan("ProcessExportResult"))
             {
-                await ProcessExportResultAsync(result, throughput);
+                completionMessage = await ProcessExportResultAsync(result, throughput);
             }
 
             // Auto-select any containers created during export.
@@ -198,6 +273,7 @@ public class SyncExportTaskProcessor
                 Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection",
                     result.CreatedContainerExternalIds.Count);
 
+                await _phases.EnterAsync(RunPhaseKeys.ExportSelectNewContainers);
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
                     await _syncServer.RefreshAndAutoSelectContainersWithTriadAsync(
@@ -210,6 +286,15 @@ public class SyncExportTaskProcessor
                         _activity);
                 }
             }
+
+            // #1121: after the export phase, because delivery needs the accounts to exist and to carry the
+            // external ids the Create results assigned. Inside the try so a failure here is reported the same
+            // way any other part of the run is.
+            await DeliverOutstandingInitialPasswordsAsync();
+
+            // The run's own outcome has the last word, after every step that narrates into the
+            // message has finished doing so.
+            await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
 
             exportSpan.SetSuccess();
         }
@@ -224,6 +309,67 @@ public class SyncExportTaskProcessor
             await _syncServer.FailActivityWithErrorAsync(_activity, ex);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Gives the accounts this Connected System has provisioned the initial passwords they are owed (#1121).
+    /// <para>
+    /// Runs over everything outstanding, not only what this run staged, so an export run is also the retry
+    /// vehicle for an account whose password could not be set last time.
+    /// </para>
+    /// </summary>
+    private async Task DeliverOutstandingInitialPasswordsAsync()
+    {
+        // A preview run answers "what would happen"; setting a password is not a preview of anything, and an
+        // account given one cannot be un-given it. Deliberately before entering the step, so a preview run
+        // records it skipped rather than entered-and-instantly-finished.
+        if (_runMode != SyncRunMode.PreviewAndSync)
+            return;
+
+        // Its own step: this opens a second connection to the Connected System and sets passwords on
+        // accounts, which is Connected System work rather than bookkeeping, and it narrates its own
+        // outcome. Without a step of its own that narration landed under whichever step ran last.
+        await _phases.EnterAsync(RunPhaseKeys.ExportDeliverInitialPasswords);
+
+        using var span = Diagnostics.Sync.StartSpan("DeliverInitialPasswords")
+            .SetTag("connectedSystemId", _connectedSystem.Id);
+
+        var result = await _syncServer.DeliverOutstandingInitialPasswordsAsync(
+            _connectedSystem, _connector, _cancellationTokenSource.Token);
+
+        span.SetTag("attempted", result.AttemptedCount);
+        span.SetTag("delivered", result.DeliveredCount);
+        span.SetTag("parked", result.ParkedCount);
+        span.SetTag("expired", result.ExpiredCount);
+
+        if (!result.HasSomethingToReport)
+            return;
+
+        await _syncRepo.UpdateActivityMessageAsync(_activity, DescribeInitialPasswordOutcome(result));
+    }
+
+    /// <summary>
+    /// Puts an initial password pass into words for the Activity, leading with whatever needs an administrator.
+    /// </summary>
+    private static string DescribeInitialPasswordOutcome(InitialPasswordRunResult result)
+    {
+        if (result.ConnectorCannotSetPasswords)
+            return "Initial passwords: this Connected System's Connector cannot set passwords";
+
+        if (result.CouldNotOpenPasswordConnection)
+            return $"Initial passwords: the password connection could not be opened; {result.PasswordConnectionErrorMessage}";
+
+        var parts = new List<string> { $"{result.DeliveredCount:N0} delivered" };
+        if (result.ParkedCount > 0)
+            parts.Add($"{result.ParkedCount:N0} needing attention");
+        if (result.RetryingCount > 0)
+            parts.Add($"{result.RetryingCount:N0} to retry");
+        // Named on the Activity rather than left to the log. These accounts were provisioned and will never now
+        // get an initial password from JIM, which an administrator has to be told rather than left to discover.
+        if (result.ExpiredCount > 0)
+            parts.Add($"{result.ExpiredCount:N0} expired without one");
+
+        return $"Initial passwords: {string.Join(", ", parts)}";
     }
 
     /// <summary>
@@ -261,10 +407,11 @@ public class SyncExportTaskProcessor
                 executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
 
-            // Fallback display name from attribute value changes
-            executionItem.DisplayNameSnapshot ??= exportItem.AttributeValueChanges
-                .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
-                ?.StringValue;
+            // Fallback name from the attribute value changes, using the shared naming policy so a
+            // provisioning export that only carries cn still names the object.
+            executionItem.DisplayNameSnapshot ??= ObjectNaming.BestRanked(
+                exportItem.AttributeValueChanges.Select(avc => (avc.Attribute?.Name, avc.StringValue)),
+                ObjectNaming.ConnectedSystemNameRank);
 
             // Set error information if the export failed
             if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
@@ -347,7 +494,11 @@ public class SyncExportTaskProcessor
     /// Finalises the export activity with completion message and stats.
     /// RPEIs are already persisted per-batch via PersistBatchRpeisAsync callback.
     /// </summary>
-    private async Task ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
+    /// <summary>
+    /// Resolves what the export left outstanding and returns the run's completion message for the
+    /// caller to write once every step has finished narrating.
+    /// </summary>
+    private async Task<string> ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
     {
         // Resolve reference FKs on the change records this export wrote, plus any left over from the
         // preceding sync stage for this system (both persist reference DNs with ReferenceValueId
@@ -357,7 +508,7 @@ public class SyncExportTaskProcessor
         // batches, so its statements stay inside the timeout regardless of volume.
         if (_csoChangeTrackingEnabled && _runMode != SyncRunMode.PreviewOnly)
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving change history references");
+            await _phases.EnterAsync(RunPhaseKeys.ExportResolveReferences);
             var changeRecordsResolved = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
             if (changeRecordsResolved > 0)
                 Log.Information("ProcessExportResultAsync: Resolved {Count} cross-batch change record reference FKs after export completion.", changeRecordsResolved);
@@ -370,16 +521,15 @@ public class SyncExportTaskProcessor
         string completionMessage;
         if (_runMode == SyncRunMode.PreviewOnly)
         {
-            completionMessage = $"Preview complete: {result.TotalPendingExports} export(s) would be processed";
+            completionMessage = ExportOutcomeMessage.ForPreview(result.TotalPendingExports);
         }
         else
         {
             var processed = result.SuccessCount + result.FailedCount + result.DeferredCount;
-            completionMessage = $"Export complete: {result.SuccessCount} succeeded, {result.FailedCount} failed, {result.DeferredCount} deferred" +
-                throughput.FormatCompletion(processed);
+            completionMessage = ExportOutcomeMessage.ForExport(
+                result.SuccessCount, result.FailedCount, result.DeferredCount, throughput.FormatCompletion(processed));
         }
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity, completionMessage);
         await _syncRepo.UpdateActivityAsync(_activity);
 
         // Log summary
@@ -393,6 +543,8 @@ public class SyncExportTaskProcessor
             Log.Information("ProcessExportResultAsync: Export completed successfully. {Success} succeeded, {Deferred} deferred",
                 result.SuccessCount, result.DeferredCount);
         }
+
+        return completionMessage;
     }
 
     /// <summary>

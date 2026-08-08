@@ -176,6 +176,61 @@ public class SynchronisationControllerRunProfileTests
         Assert.That(dto.FilePath, Is.EqualTo("/data/export.csv"));
     }
 
+    /// <summary>
+    /// A Run Profile aimed at a partition the administrator has deselected cannot run. Automation has to be able to
+    /// see that without executing it and reading the failure, which is the whole point of surfacing it here rather
+    /// than only in the portal.
+    /// </summary>
+    [Test]
+    public async Task GetRunProfilesAsync_RunProfileTargetsDeselectedPartition_FlagsItAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 10,
+            Name = "Retired Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            Partition = new ConnectedSystemPartition { Id = 7, Name = "DC=retired,DC=local", Selected = false }
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.First();
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.TargetsDeselectedPartition, Is.True);
+    }
+
+    [Test]
+    public async Task GetRunProfilesAsync_RunProfileTargetsSelectedPartition_IsNotFlaggedAsync()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = 10,
+            Name = "Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            Partition = new ConnectedSystemPartition { Id = 7, Name = "DC=resurgam,DC=local", Selected = true }
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.GetRunProfilesAsync(connectedSystemId) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.First();
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.TargetsDeselectedPartition, Is.False);
+    }
+
     [Test]
     public async Task GetRunProfilesAsync_WithEmptyRunProfiles_ReturnsEmptyList()
     {
@@ -191,6 +246,62 @@ public class SynchronisationControllerRunProfileTests
 
         Assert.That(dtos, Is.Not.Null);
         Assert.That(dtos!.Count(), Is.EqualTo(0));
+    }
+
+    #endregion
+
+    #region CreateRunProfileAsync tests (SPEC-1082 D10)
+
+    [Test]
+    public async Task CreateRunProfileAsync_VerifyImportContentHashesTrueOnNonFullImport_ReturnsBadRequest()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Delta Import",
+            RunType = ConnectedSystemRunType.DeltaImport,
+            VerifyImportContentHashes = true
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateRunProfileAsync_VerifyImportContentHashesTrueOnFullImport_PersistsAndRoundTrips()
+    {
+        var connectedSystemId = 1;
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = connectedSystemId,
+            Name = "Test System",
+            ConnectorDefinition = new ConnectorDefinition { Name = "Test Connector", SupportsFullImport = true }
+        };
+        var request = new CreateRunProfileRequest
+        {
+            Name = "Full Import With Verification",
+            RunType = ConnectedSystemRunType.FullImport,
+            VerifyImportContentHashes = true
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.CreateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()))
+            .Callback<ConnectedSystemRunProfile>(rp => rp.Id = 42)
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.CreateRunProfileAsync(connectedSystemId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = ((CreatedAtRouteResult)result).Value as RunProfileDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.VerifyImportContentHashes, Is.True, "the DTO must round-trip VerifyImportContentHashes.");
     }
 
     #endregion
@@ -355,6 +466,62 @@ public class SynchronisationControllerRunProfileTests
         var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_VerifyImportContentHashesTrueOnNonFullImportRunProfile_ReturnsBadRequestAsync()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Delta Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.DeltaImport,
+            PageSize = 100
+        };
+        var request = new UpdateRunProfileRequest { VerifyImportContentHashes = true };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_VerifyImportContentHashesOmitted_LeavesExistingValueUnchangedAsync()
+    {
+        var connectedSystemId = 1;
+        var runProfileId = 10;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Full Import",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            PageSize = 100,
+            VerifyImportContentHashes = true
+        };
+        var request = new UpdateRunProfileRequest { Name = "Renamed" }; // VerifyImportContentHashes not set
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(new List<ConnectedSystemRunProfile> { runProfile });
+
+        var result = await _controller.UpdateRunProfileAsync(connectedSystemId, runProfileId, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = ((OkObjectResult)result).Value as RunProfileDto;
+        Assert.That(dto!.VerifyImportContentHashes, Is.True, "an omitted field must leave the existing value unchanged.");
     }
 
     #endregion

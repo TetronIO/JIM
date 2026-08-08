@@ -65,6 +65,7 @@ public class MetaverseRepository : IMetaverseRepository
             Icon = t.Icon,
             HasPredefinedSearches = t.PredefinedSearches.Count > 0,
             DeletionRule = t.DeletionRule,
+            DeletionTriggerMode = t.DeletionTriggerMode,
             DeletionGracePeriod = t.DeletionGracePeriod
         }).ToListAsync();
 
@@ -111,9 +112,42 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Updates a Metaverse Object Type's own columns: its identity (name, plural name, icon), its deletion-rule
+    /// configuration and its audit fields. Attribute bindings are deliberately NOT written here; they are the business
+    /// of <see cref="AddAttributeObjectTypeBindingAsync"/> and <see cref="RemoveAttributeObjectTypeBindingAsync"/>,
+    /// and no caller of this method changes them.
+    /// </summary>
+    /// <remarks>
+    /// Written as load-then-SetValues rather than <c>DbSet.Update()</c> because callers routinely pass an object type
+    /// that was loaded on a *different* DbContext: the portal's detail page loads it (with its attributes) inside a
+    /// <c>using</c> block and saves minutes later on a fresh context. <c>Update()</c> traverses the whole graph, and
+    /// attribute bindings are a many-to-many skip navigation whose join rows are not entities the tracker can
+    /// recognise as already existing, so it inserted a join row per bound attribute and PostgreSQL rejected the batch
+    /// on the join table's primary key. Nothing saved, and the Deletion Rules panel was unusable on any object type
+    /// with attributes bound, which is every real one. <c>SetValues</c> copies scalar properties only and never looks
+    /// at navigations, and the entity it copies onto is loaded without its attributes, so there is no graph to
+    /// traverse. Guarded by <c>MetaverseObjectTypeUpdateDatabaseTests</c>; the in-memory provider enforces no unique
+    /// constraint on the join table, so only a real database reproduces the fault.
+    /// </remarks>
     public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
     {
-        Repository.Database.MetaverseObjectTypes.Update(metaverseObjectType);
+        // AsTracking is not optional: JIM.Web configures the context NoTracking, so without it this read returns a
+        // detached entity, SetValues writes to an entry SaveChanges never looks at, and the update silently does
+        // nothing while reporting success.
+        var tracked = await Repository.Database.MetaverseObjectTypes
+            .AsTracking()
+            .SingleOrDefaultAsync(t => t.Id == metaverseObjectType.Id)
+            ?? throw new InvalidOperationException($"Metaverse Object Type {metaverseObjectType.Id} no longer exists.");
+
+        // Asserts the AsTracking above rather than trusting it: dropping it would make this method write nothing while
+        // reporting success, which is exactly how the defect above shipped in the first place.
+        Repository.Database.RequireTracked(tracked, nameof(UpdateMetaverseObjectTypeAsync),
+            "The read above must call AsTracking(); JIM.Web configures the DbContext NoTracking.");
+
+        // A caller working on this same context gets its own tracked instance back, so this is a self-copy and the
+        // edits it already made are what get saved.
+        Repository.Database.Entry(tracked).CurrentValues.SetValues(metaverseObjectType);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -340,6 +374,20 @@ public class MetaverseRepository : IMetaverseRepository
         return await query.SingleOrDefaultAsync(x => x.Name.ToLower() == lowered);
     }
 
+    public async Task<List<MetaverseAttributeStandardMapping>> GetStandardMappingsForObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        // Deliberately not loaded as part of the Synchronisation Rule's graph: that graph is tracked and is the
+        // editor's write path, whereas these are read-only hints. Queried from the mapping side so only the
+        // mapping rows materialise (no attributes, no join rows), and left untracked (the DbContext default) so
+        // nothing here can be mistaken for an edit at save time.
+        return await Repository.Database.MetaverseAttributeStandardMappings
+            .Where(m => m.MetaverseAttribute!.MetaverseObjectTypes.Any(t => t.Id == metaverseObjectTypeId))
+            .OrderBy(m => m.MetaverseAttributeId)
+            .ThenBy(m => m.Standard)
+            .ThenBy(m => m.CounterpartName)
+            .ToListAsync();
+    }
+
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         // Attach existing MetaverseObjectTypes so EF recognises them as existing entities
@@ -357,6 +405,20 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Updates a Metaverse Attribute and the Standard Mappings it owns.
+    /// </summary>
+    /// <remarks>
+    /// Do NOT convert this to the load-then-SetValues shape used by
+    /// <see cref="UpdateMetaverseObjectTypeAsync"/>. The two look alike but differ in what they own: an object type
+    /// owns no child rows through this path (its attribute bindings are written by
+    /// <see cref="AddAttributeObjectTypeBindingAsync"/> and <see cref="RemoveAttributeObjectTypeBindingAsync"/>),
+    /// whereas an attribute's Standard Mappings are its own child rows, reconciled in place by the caller and
+    /// persisted by this graph traversal. <c>SetValues</c> copies scalars only, so it would silently stop saving
+    /// mapping edits. The graph traversal is safe here because every caller loads the attribute tracked on the same
+    /// context it saves on; a caller that passed a detached attribute with its Object Types included would hit the
+    /// same join-table duplicate-key fault the object type path did.
+    /// </remarks>
     public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         Repository.Database.Update(attribute);
@@ -1444,6 +1506,16 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    /// <summary>
+    /// Updates a Metaverse Object and the attribute values it owns.
+    /// </summary>
+    /// <remarks>
+    /// <c>Update</c> attaches explicitly, so unlike a load-mutate-save path this is unaffected by the context's query
+    /// tracking behaviour. It does traverse the graph, though, and a Metaverse Object reaches Roles through a
+    /// many-to-many skip navigation whose join rows EF cannot tell from new ones; passing a detached object with Roles
+    /// loaded would try to re-insert them and fail on the join table's primary key. No caller does: the sign-in path
+    /// loads the object tracked and without Roles. Keep it that way, or narrow this to the object's own columns.
+    /// </remarks>
     public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         Repository.Database.Update(metaverseObject);
@@ -2491,32 +2563,70 @@ public class MetaverseRepository : IMetaverseRepository
         return eligibleObjects;
     }
 
-    public async Task<List<MetaverseObject>> GetMvosOrphanedByConnectedSystemDeletionAsync(int connectedSystemId)
+    /// <summary>
+    /// Builds the single query deciding which MVOs the specified Connected System's deletion orphans.
+    /// Shared by <see cref="GetMvosOrphanedByConnectedSystemDeletionAsync"/> (execution) and
+    /// <see cref="GetMvosOrphanedByConnectedSystemDeletionCountAsync"/> (the deletion preview) so the two
+    /// can never disagree (#119). An MVO qualifies when it is Projected, not already pending deletion,
+    /// and its type's deletion rule is triggered by the system's removal:
+    /// - WhenLastConnectorDisconnected: every joined CSO belongs to the system being deleted.
+    /// - WhenAuthoritativeSourceDisconnected with the deleted system listed as a source: Specific mode
+    ///   triggers on any listed source's removal; All mode triggers only when no OTHER listed source
+    ///   still holds a joined CSO. An empty source list falls back to WhenLastConnectorDisconnected
+    ///   semantics, matching SyncEngine.EvaluateMvoDeletionRule.
+    /// </summary>
+    private IQueryable<MetaverseObject> QueryMvosOrphanedByConnectedSystemDeletion(int connectedSystemId)
     {
-        // Find MVOs that:
-        // 1. Are projected (not internal admin accounts)
-        // 2. Have deletion rule WhenLastConnectorDisconnected
-        // 3. Have ALL their CSOs in the specified Connected System (will become orphaned)
-        var orphanedMvos = await Repository.Database.MetaverseObjects
-            .AsSplitQuery()
-            .Include(mvo => mvo.Type)
-            .Include(mvo => mvo.ConnectedSystemObjects)
+        return Repository.Database.MetaverseObjects
             .Where(mvo =>
                 // Must be a projected object (not internal like admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have a type with WhenLastConnectorDisconnected deletion rule
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                // Must not already be pending deletion: an earlier decision's trigger fields and policy
+                // snapshot stand, and the marking UPDATE skips such rows, so counts stay in agreement
+                mvo.LastConnectorDisconnectedDate == null &&
                 // Must have at least one CSO in the system being deleted
                 mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId == connectedSystemId) &&
-                // Must NOT have any CSOs in OTHER Connected Systems (would become orphaned)
-                !mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId))
+                (
+                    // WhenLastConnectorDisconnected: must NOT have any CSOs in OTHER Connected Systems
+                    (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                     !mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId)) ||
+                    // WhenAuthoritativeSourceDisconnected (#119): mode-aware trigger semantics
+                    (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
+                     (
+                         // No sources configured: fall back to WhenLastConnectorDisconnected semantics,
+                         // matching the sync engine's empty-list fallback
+                         (mvo.Type.DeletionTriggerConnectedSystemIds.Count == 0 &&
+                          !mvo.ConnectedSystemObjects.Any(cso => cso.ConnectedSystemId != connectedSystemId)) ||
+                         // The deleted system must be a listed source; Specific mode then triggers
+                         // outright, All mode only when no other listed source retains a joined CSO
+                         (mvo.Type.DeletionTriggerConnectedSystemIds.Contains(connectedSystemId) &&
+                          (mvo.Type.DeletionTriggerMode == AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect ||
+                           !mvo.ConnectedSystemObjects.Any(cso =>
+                               cso.ConnectedSystemId != connectedSystemId &&
+                               mvo.Type.DeletionTriggerConnectedSystemIds.Contains(cso.ConnectedSystemId))))
+                     ))
+                ));
+    }
+
+    public async Task<List<MetaverseObject>> GetMvosOrphanedByConnectedSystemDeletionAsync(int connectedSystemId)
+    {
+        // The Type and CSO navigations feed decision-time policy snapshot building in the caller.
+        var orphanedMvos = await QueryMvosOrphanedByConnectedSystemDeletion(connectedSystemId)
+            .AsSplitQuery()
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.ConnectedSystemObjects)
             .ToListAsync();
 
         return orphanedMvos;
     }
 
-    public async Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds)
+    public async Task<int> GetMvosOrphanedByConnectedSystemDeletionCountAsync(int connectedSystemId)
+    {
+        return await QueryMvosOrphanedByConnectedSystemDeletion(connectedSystemId).CountAsync();
+    }
+
+    public async Task<int> MarkMvosAsDisconnectedAsync(IEnumerable<Guid> mvoIds, int deletionTriggeredBySystemId, string deletionTriggeredBySystemName, string? deletionPolicySnapshotJson)
     {
         var mvoIdList = mvoIds.ToList();
         if (mvoIdList.Count == 0)
@@ -2524,16 +2634,83 @@ public class MetaverseRepository : IMetaverseRepository
 
         var now = DateTime.UtcNow;
 
-        // Use raw SQL for efficiency with large numbers of MVOs
+        // Use raw SQL for efficiency with large numbers of MVOs. This is a deliberately narrow
+        // status-mark update (see the raw SQL column list rules), recording the deletion markers the
+        // worker path sets via MarkMvoForDeletionAsync: the disconnection date, the triggering system
+        // (id plus name snapshot) and the decision-time policy snapshot (#119).
         var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjects""
-              SET ""LastConnectorDisconnectedDate"" = {0}
-              WHERE ""Id"" = ANY({1})
+              SET ""LastConnectorDisconnectedDate"" = {0},
+                  ""DeletionTriggeredBySystemId"" = {1},
+                  ""DeletionTriggeredBySystemName"" = {2},
+                  ""DeletionPolicySnapshotJson"" = {3}
+              WHERE ""Id"" = ANY({4})
                 AND ""LastConnectorDisconnectedDate"" IS NULL",
-            now, mvoIdList.ToArray());
+            now,
+            deletionTriggeredBySystemId,
+            deletionTriggeredBySystemName,
+            BulkSqlHelpers.NullableParam(deletionPolicySnapshotJson, NpgsqlTypes.NpgsqlDbType.Text),
+            mvoIdList.ToArray());
 
         return rowsAffected;
     }
+
+    public async Task<int> GetMetaverseObjectDeletionCandidateCountAsync(int metaverseObjectTypeId) =>
+        await DeletionCandidateQuery(metaverseObjectTypeId).CountAsync();
+
+    public IAsyncEnumerable<MetaverseObjectDeletionCandidate> StreamMetaverseObjectDeletionCandidates(int metaverseObjectTypeId) =>
+        DeletionCandidateQuery(metaverseObjectTypeId)
+            // Ordered so a preview re-run over unchanged data produces its groups in the same order, and so the
+            // objects whose deletion is nearest lead the drill-down.
+            .OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
+            .ThenBy(mvo => mvo.Id)
+            .Select(mvo => new MetaverseObjectDeletionCandidate(
+                mvo.Id,
+                mvo.CachedDisplayName,
+                mvo.LastConnectorDisconnectedDate!.Value,
+                mvo.ConnectedSystemObjects.Any()))
+            .AsAsyncEnumerable();
+
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectDisconnectionCandidate>> GetMetaverseObjectDisconnectionCandidatesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectIds);
+
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        var ids = metaverseObjectIds as IList<Guid> ?? [.. metaverseObjectIds];
+        return await Repository.Database.MetaverseObjects
+            .Where(mvo => ids.Contains(mvo.Id))
+            .Select(mvo => new MetaverseObjectDisconnectionCandidate(
+                mvo.Id,
+                mvo.CachedDisplayName,
+                mvo.Type.Id,
+                mvo.Type.Name,
+                mvo.Origin,
+                mvo.Type.DeletionRule,
+                mvo.Type.DeletionTriggerMode,
+                mvo.Type.DeletionGracePeriod,
+                mvo.Type.DeletionTriggerConnectedSystemIds,
+                // One entry per joined object, not per system: the engine counts remaining connectors at object
+                // level, so collapsing a system holding two joined objects to one entry would make the first
+                // disconnection look like the last.
+                mvo.ConnectedSystemObjects.Select(cso => cso.ConnectedSystemId).ToList()))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// The objects a change to one Metaverse Object Type's deletion settings could affect: its projected objects
+    /// carrying a disconnection mark. The type's current rule is deliberately not part of the filter, because a
+    /// proposal that switches the rule has to be evaluated against the objects the current rule ignores.
+    /// </summary>
+    private IQueryable<MetaverseObject> DeletionCandidateQuery(int metaverseObjectTypeId) =>
+        Repository.Database.MetaverseObjects
+            .Where(mvo =>
+                mvo.Type.Id == metaverseObjectTypeId &&
+                mvo.Origin == MetaverseObjectOrigin.Projected &&
+                mvo.LastConnectorDisconnectedDate != null);
 
     public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
         int page,
@@ -2562,9 +2739,13 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.LastConnectorDisconnectedDate != null &&
                 // Must be projected (not internal admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have deletion rule WhenLastConnectorDisconnected
+                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
+                // (GetMetaverseObjectsEligibleForDeletionAsync): the page must show every MVO
+                // housekeeping will delete, including authoritative-source-scheduled MVOs that may
+                // retain target connectors during their grace period (#119)
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
 
         // Apply object type filter if specified
         if (objectTypeId.HasValue)
@@ -2639,9 +2820,11 @@ public class MetaverseRepository : IMetaverseRepository
                 mvo.LastConnectorDisconnectedDate != null &&
                 // Must be projected (not internal admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have deletion rule WhenLastConnectorDisconnected
+                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
+                // and the listing query above (#119)
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
+                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
 
         // Apply object type filter if specified
         if (objectTypeId.HasValue)
@@ -2777,6 +2960,20 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
 
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
+    {
+        // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
+        // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
+        // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        return await Repository.Database.MetaverseObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedMetaverseObjectId == deletedMetaverseObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.DeletedObjectType)
+            .FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />

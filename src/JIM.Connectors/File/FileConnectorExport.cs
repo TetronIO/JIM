@@ -5,6 +5,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -23,18 +24,21 @@ internal class FileConnectorExport
     private readonly IList<ConnectedSystemSettingValue> _settings;
     private readonly IList<PendingExport> _pendingExports;
     private readonly ILogger _logger;
+    private readonly IConnectorProgress _progress;
 
     internal FileConnectorExport(
         IList<ConnectedSystemSettingValue> settings,
         IList<PendingExport> pendingExports,
-        ILogger logger)
+        ILogger logger,
+        IConnectorProgress progress)
     {
         _settings = settings;
         _pendingExports = pendingExports;
         _logger = logger;
+        _progress = progress;
     }
 
-    internal List<ConnectedSystemExportResult> Execute()
+    internal async Task<List<ConnectedSystemExportResult>> ExecuteAsync()
     {
         _logger.Debug("FileConnectorExport.Execute: Starting export of {Count} Pending Exports", _pendingExports.Count);
 
@@ -66,7 +70,10 @@ internal class FileConnectorExport
 
         _logger.Debug("FileConnectorExport.Execute: Using External ID attribute '{ExternalIdAttribute}'", externalIdAttributeName);
 
-        // Load existing file content first so we can merge its headers with the Pending Exports' attributes
+        // Load existing file content first so we can merge its headers with the Pending Exports' attributes.
+        // At scale this is the first of three phases that take real wall-clock time, so narrate each one:
+        // without it the Activity message sits on "0 of N" for the whole connector call.
+        await _progress.EnterPhaseAsync(FileConnectorPhases.LoadExistingFile);
         var existingFileHeaders = new List<string>();
         var existingRows = LoadExistingFileContent(exportFilePath, delimiter, externalIdAttributeName, existingFileHeaders);
 
@@ -79,6 +86,7 @@ internal class FileConnectorExport
         }
 
         // Process each Pending Export and build results
+        await _progress.EnterPhaseAsync(FileConnectorPhases.Merge, $"Merging {_pendingExports.Count:N0} changes into file...");
         var results = new List<ConnectedSystemExportResult>();
         var createdCount = 0;
         var updatedCount = 0;
@@ -115,6 +123,7 @@ internal class FileConnectorExport
         }
 
         // Write the full-state file
+        await _progress.EnterPhaseAsync(FileConnectorPhases.Write, $"Writing {existingRows.Count:N0} rows to output file...");
         WriteFullStateFile(exportFilePath, delimiter, attributeColumns, existingRows);
 
         _logger.Information(

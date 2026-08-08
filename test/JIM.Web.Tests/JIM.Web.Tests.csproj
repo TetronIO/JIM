@@ -1,0 +1,58 @@
+<!--
+  JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component
+  tests (bUnit + NUnit). Scope rules live in test/CLAUDE.md.
+
+  Also home to convention sweeps over JIM.Web's Razor sources (SearchFieldConventionTests),
+  which catch a shared component being bypassed on a page a per-component test cannot see.
+
+  This project uses Microsoft.NET.Sdk.Razor (not the plain SDK) because bUnit renders
+  Razor components and requires the Razor SDK's compilation support.
+-->
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="bunit" Version="2.8.6" />
+    <!--
+      No direct AngleSharp reference here. One used to sit at this line, pinning forward past
+      CVE-2026-54570 (mXSS via MathML annotation-xml integration points) because bUnit 2.7.2
+      resolved AngleSharp 1.4.0. bUnit 2.8.6 resolves 1.5.2, above the 1.5.0 fix, so the pin's
+      own stated exit condition is met and it has been dropped. Reinstate it only if a future
+      advisory outruns bUnit's floor again.
+    -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <!--
+      Components that read through the application layer (the Configuration Change Preview panel) need their
+      repositories stood in for. Same version as every other test project in the solution.
+    -->
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.2.0" />
+    <PackageReference Include="coverlet.collector" Version="8.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      JIM.Application/JIM.Data/JIM.Connectors and Moq are needed only by DirectoryServerDiscoveryDialogTests,
+      which drives the Discover Domain Controllers dialog through a real (mocked-repository) JimApplication to
+      exercise its error/Retry/Close lifecycle without a live directory (issue #1167). Moq is already used
+      elsewhere in the solution (JIM.Worker.Tests, JIM.Web.Api.Tests); this is the same dependency reused in a
+      third test project, not a new one.
+    -->
+    <ProjectReference Include="..\..\src\JIM.Web\JIM.Web.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Application\JIM.Application.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Data\JIM.Data.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Connectors\JIM.Connectors.csproj" />
+    <ProjectReference Include="..\JIM.TestSupport\JIM.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

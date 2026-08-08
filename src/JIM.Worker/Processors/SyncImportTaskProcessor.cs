@@ -5,6 +5,7 @@ using System.Diagnostics;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -37,6 +38,12 @@ public class SyncImportTaskProcessor
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly IDbContextFactory<JIM.PostgresData.JimDbContext>? _dbContextFactory;
+
+    /// <summary>
+    /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
+    /// not track phases get a reporter that records nothing.
+    /// </summary>
+    private readonly ActivityPhaseReporter _phases;
     // Lightweight RPEI lookup for reconciliation. Populated during the update-phase flush
     // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
     // Only contains RPEIs for updated CSOs (not created CSOs, which can't have Pending Exports).
@@ -61,13 +68,35 @@ public class SyncImportTaskProcessor
     private bool _csIsEmpty;
 
     /// <summary>
-    /// Pre-fetched external ID → CSO GUID lookup dictionary. Loaded once at import start (when the CS
-    /// is not empty) to replace N per-object DB queries with O(1) dictionary lookups.
+    /// Pre-fetched external ID → CSO import state lookup dictionary. Loaded once at import start
+    /// (when the CS is not empty) to replace N per-object DB queries with O(1) dictionary lookups.
     /// Key format: "cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"
-    /// Updated when new CSOs are created mid-import to maintain consistency within the batch.
-    /// This is the "lookup" phase of the Lookup/Hydrate seam (#440).
+    /// This is the "lookup" phase of the Lookup/Hydrate seam (#440); SPEC-1082 D8 widened its
+    /// projection to also carry each CSO's stored import content hash/fingerprint/status/partition,
+    /// so the Full Import skip predicate can be evaluated with zero extra database round trips.
+    /// Never mutated mid-import (read-only for the lifetime of the run).
     /// </summary>
-    private Dictionary<string, Guid>? _csoExternalIdLookup;
+    private Dictionary<string, CsoImportStateLookupEntry>? _csoExternalIdLookup;
+
+    /// <summary>
+    /// SPEC-1082 D5: object type schema fingerprints, computed once per object type per run and
+    /// cached here since <see cref="ImportContentHashCalculator.CalculateTypeFingerprint"/> is
+    /// deterministic for a given <see cref="ConnectedSystemObjectType"/> shape.
+    /// </summary>
+    private readonly Dictionary<int, Guid> _typeFingerprintCache = new();
+
+    /// <summary>
+    /// SPEC-1082 D12: count of objects skipped (hydration and diff) via the content-hash admission
+    /// ticket during this Full Import. Logged in the end-of-import summary.
+    /// </summary>
+    private int _hashSkippedCount;
+
+    /// <summary>
+    /// SPEC-1082 D10: Verification Mode counters. Populated only when
+    /// <see cref="ConnectedSystemRunProfile.VerifyImportContentHashes"/> is true.
+    /// </summary>
+    private int _verificationDangerousDisagreementCount;
+    private int _verificationBenignMismatchCount;
 
     /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
@@ -87,7 +116,8 @@ public class SyncImportTaskProcessor
         ConnectedSystemRunProfile connectedSystemRunProfile,
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
-        IDbContextFactory<JIM.PostgresData.JimDbContext>? dbContextFactory = null)
+        IDbContextFactory<JIM.PostgresData.JimDbContext>? dbContextFactory = null,
+        ActivityPhaseReporter? phaseReporter = null)
     {
         _jim = jimApplication;
         _syncRepo = syncRepository;
@@ -102,6 +132,7 @@ public class SyncImportTaskProcessor
         _initiatedByName = workerTask.InitiatedByName;
         _activity = workerTask.Activity;
         _dbContextFactory = dbContextFactory;
+        _phases = phaseReporter ?? ActivityPhaseReporter.None;
 
         // RPEIs are maintained separately during processing and flushed incrementally via raw SQL bulk insert
         // at natural boundaries (after CSO creates, updates, and reconciliation). This avoids accumulating
@@ -151,7 +182,7 @@ public class SyncImportTaskProcessor
             // See #440 for scaling analysis.
             using (Diagnostics.Sync.StartSpan("PreFetchCsoExternalIdLookup").SetTag("csoCount", csoCountAtStart))
             {
-                _csoExternalIdLookup = await _syncRepo.GetAllCsoExternalIdMappingsAsync(_connectedSystem.Id);
+                _csoExternalIdLookup = await _syncRepo.GetAllCsoImportStateLookupAsync(_connectedSystem.Id);
             }
             Log.Information("PerformImportAsync: Pre-fetched {Count} CSO external ID mappings for Connected System {ConnectedSystemId}.",
                 _csoExternalIdLookup.Count, _connectedSystem.Id);
@@ -191,10 +222,43 @@ public class SyncImportTaskProcessor
         // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
         // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
         var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var throughput = new ThroughputTracker();
+
+        // A Connector is the only thing that can know how many objects a Connected System holds
+        // before it has finished handing them over, so the fetching step has a total only where the
+        // Connector states one. Nothing is invented in its place: without a statement the window
+        // stays open and the Activity counts up without a percentage, which is all JIM can honestly
+        // show. See IConnectorProgress.
+        int? expectedObjectCount = null;
+        var objectsReadInCurrentCall = 0;
+
+        void ApplyFetchCountingWindow()
+        {
+            var processed = totalObjectsImported + objectsReadInCurrentCall;
+            _activity.ObjectsProcessed = processed;
+
+            // A stated total is the Connector's best answer, not a guarantee; more objects arriving
+            // than it expected raises the total rather than pushing the bar past complete.
+            _activity.ObjectsToProcess = expectedObjectCount is { } expected ? Math.Max(expected, processed) : 0;
+        }
+
+        async Task ReportExpectedObjectCountAsync(int count)
+        {
+            expectedObjectCount = count;
+            ApplyFetchCountingWindow();
+            await _syncRepo.UpdateActivityAsync(_activity);
+        }
+
+        async Task ReportObjectsReadAsync(int count)
+        {
+            objectsReadInCurrentCall = count;
+            ApplyFetchCountingWindow();
+            await _syncRepo.UpdateActivityAsync(_activity);
+        }
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Performing import");
+        // The fetching step is entered by each branch below, once the work it names is about to
+        // start: a call-based import connects first, and entering the later step here would close
+        // connecting out before it began.
         switch (_connector)
         {
             case IConnectorImportUsingCalls callBasedImportConnector:
@@ -216,124 +280,190 @@ public class SyncImportTaskProcessor
                     credentialAwareConnector.SetCredentialProtection(credentialProtection);
                 }
 
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Connecting to Connected System");
+                await _phases.EnterAsync(RunPhaseKeys.ImportConnect);
                 using (Diagnostics.Connector.StartSpan("OpenImportConnection"))
                 {
-                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
+                    callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, _connectedSystem.PersistedConnectorData, Log.Logger);
                 }
 
-                var initialPage = true;
-                var paginationTokens = new List<ConnectedSystemPaginationToken>();
-                var pageNumber = 0;
+                // Tracks whether the import phase below completed without throwing. Read from the
+                // finally block to decide whether a failure while persisting CloseImportConnection's
+                // return value may safely propagate on its own, or must be logged and swallowed so it
+                // does not replace/mask an import failure that is already unwinding through the same
+                // finally block (see the finally block below for the full rationale).
+                var importPhaseSucceeded = false;
 
-                // Keep track of the original persisted data at the START of the import.
-                // This is critical for delta imports where subsequent pages must use the SAME
-                // watermark (USN) as the first page to query for changes.
-                // The connector will return a NEW watermark on the first page that we'll save
-                // AFTER all pages are processed.
-                var originalPersistedData = _connectedSystem.PersistedConnectorData;
-                string? newPersistedData = null;
-                string? connectorWarningMessage = null;
+                // Every page is read under this step, however many the Connected System returns, so
+                // it stays the step running for as long as objects are arriving.
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch);
 
-                while (initialPage || paginationTokens.Count > 0)
+                try
                 {
-                    if (_cancellationTokenSource.IsCancellationRequested)
+                    var initialPage = true;
+                    var paginationTokens = new List<ConnectedSystemPaginationToken>();
+                    var pageNumber = 0;
+
+                    // A page can spend minutes inside a single connector call (root DSE query, container
+                    // enumeration, paged fetch), during which our own page message cannot move. Give the
+                    // connector a way to narrate what it is doing, straight onto the Activity message
+                    // (issue #637). Emits are serialised because a connector may fan out internally, and
+                    // a failure to narrate must never fail the import.
+                    var connectorProgress = _phases.CreateConnectorProgress(
+                        async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
+                        ReportExpectedObjectCountAsync,
+                        ReportObjectsReadAsync);
+
+                    // Keep track of the original persisted data at the START of the import.
+                    // This is critical for delta imports where subsequent pages must use the SAME
+                    // watermark (USN) as the first page to query for changes.
+                    // The connector will return a NEW watermark on the first page that we'll save
+                    // AFTER all pages are processed.
+                    var originalPersistedData = _connectedSystem.PersistedConnectorData;
+                    string? newPersistedData = null;
+                    string? connectorWarningMessage = null;
+
+                    while (initialPage || paginationTokens.Count > 0)
                     {
-                        Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
-                        break;
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
+                            break;
+                        }
+
+                        // perform the import for this page
+                        // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
+                        // watermark queries across all pages of a delta import.
+                        ConnectedSystemImportResult result;
+                        var fetchMessage = pageNumber > 0
+                            ? $"Importing objects from Connected System (page {pageNumber + 1})"
+                            : "Importing objects from Connected System";
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
+                        using (Diagnostics.Connector.StartSpan("ImportPage")
+                            .SetTag("connectedSystemId", _connectedSystem.Id)
+                            .SetTag("pageNumber", pageNumber)
+                            .SetTag("cumulativeObjectCount", totalObjectsImported)
+                            .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
+                        {
+                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
+                        }
+
+                        // The Connector has finished with this page, so its steps stop being shown
+                        // as running; what happens next is JIM's.
+                        await _phases.ExitConnectorPhasesAsync();
+                        pageNumber++;
+                        totalObjectsImported += result.ImportObjects.Count;
+
+                        Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
+                            totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
+
+                        // The page is delivered, so whatever the Connector reported while producing
+                        // it is now part of the running total rather than something to add to it.
+                        objectsReadInCurrentCall = 0;
+                        ApplyFetchCountingWindow();
+                        // How many have arrived is rendered from the Activity's counters, so the
+                        // message says only what those cannot: which page is being read. A single
+                        // page adds nothing over the running step's own name.
+                        var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
+                            ? $"Reading page {pageNumber:N0}"
+                            : string.Empty;
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
+
+                        // add the external ids from this page worth of results to our external-id collection for later deletion calculation
+                        AddExternalIdsToCollection(result, externalIdsImported);
+
+                        // make sure we pass the pagination tokens back in on the next page (if there is one)
+                        paginationTokens = result.PaginationTokens;
+
+                        // Capture the new persisted connector data from the first page only.
+                        // Subsequent pages return null (indicating "no change"), so we only capture once.
+                        // We'll save this AFTER all pages are processed to avoid affecting watermark
+                        // queries on subsequent pages.
+                        if (result.PersistedConnectorData != null && newPersistedData == null)
+                        {
+                            Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
+                            newPersistedData = result.PersistedConnectorData;
+                        }
+
+                        // Capture connector warning from the first page that reports one
+                        if (result.WarningMessage != null && connectorWarningMessage == null)
+                        {
+                            connectorWarningMessage = result.WarningMessage;
+                        }
+
+                        // process the results from this page
+                        using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
+                        {
+                            await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
+                        }
+
+                        if (initialPage)
+                            initialPage = false;
+
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
+                            break;
+                        }
                     }
 
-                    // perform the import for this page
-                    // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
-                    // watermark queries across all pages of a delta import.
-                    ConnectedSystemImportResult result;
-                    var fetchMessage = pageNumber > 0
-                        ? $"Importing objects from Connected System (page {pageNumber + 1})"
-                        : "Importing objects from Connected System";
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
-                    using (Diagnostics.Connector.StartSpan("ImportPage")
-                        .SetTag("connectedSystemId", _connectedSystem.Id)
-                        .SetTag("pageNumber", pageNumber)
-                        .SetTag("cumulativeObjectCount", totalObjectsImported)
-                        .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
+                    // Now that all pages are processed, update the persisted connector data
+                    // with the new watermark captured from the first page.
+                    if (newPersistedData != null && newPersistedData != originalPersistedData)
                     {
-                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
-                    }
-                    pageNumber++;
-                    totalObjectsImported += result.ImportObjects.Count;
-
-                    Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
-                        totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
-
-                    // Update progress - for paginated imports we don't know the total, but we track objects imported so far
-                    _activity.ObjectsProcessed = totalObjectsImported;
-                    var pageInfo = pageNumber > 1 || result.PaginationTokens.Count > 0
-                        ? $" (page {pageNumber})"
-                        : "";
-                    var progressMessage = $"Imported {totalObjectsImported:N0} objects{pageInfo}" +
-                        throughput.FormatThroughput(totalObjectsImported);
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
-
-                    // add the external ids from this page worth of results to our external-id collection for later deletion calculation
-                    AddExternalIdsToCollection(result, externalIdsImported);
-
-                    // make sure we pass the pagination tokens back in on the next page (if there is one)
-                    paginationTokens = result.PaginationTokens;
-
-                    // Capture the new persisted connector data from the first page only.
-                    // Subsequent pages return null (indicating "no change"), so we only capture once.
-                    // We'll save this AFTER all pages are processed to avoid affecting watermark
-                    // queries on subsequent pages.
-                    if (result.PersistedConnectorData != null && newPersistedData == null)
-                    {
-                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
-                        newPersistedData = result.PersistedConnectorData;
+                        Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
+                        await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
                     }
 
-                    // Capture connector warning from the first page that reports one
-                    if (result.WarningMessage != null && connectorWarningMessage == null)
+                    // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
+                    // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
+                    // HOW the import was performed, not errors with specific objects. Creating a phantom RPEI
+                    // with no CSO association inflates error counts and pollutes the RPEI list.
+                    if (connectorWarningMessage != null)
                     {
-                        connectorWarningMessage = result.WarningMessage;
+                        _activity.WarningMessage = connectorWarningMessage;
+                        Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                     }
 
-                    // process the results from this page
-                    using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
-                    {
-                        await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
-                    }
-
-                    if (initialPage)
-                        initialPage = false;
-
-                    if (_cancellationTokenSource.IsCancellationRequested)
-                    {
-                        Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
-                        break;
-                    }
+                    // Reached only if nothing above threw; used by the finally block below to tell a
+                    // genuine import failure apart from a clean run.
+                    importPhaseSucceeded = true;
                 }
-
-                // Now that all pages are processed, update the persisted connector data
-                // with the new watermark captured from the first page.
-                if (newPersistedData != null && newPersistedData != originalPersistedData)
+                finally
                 {
-                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
-                    await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
+                    string? closeReturn;
+                    using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
+                    {
+                        // In a finally so an import that fails part-way still releases the connection and the
+                        // temporary trust directory prepared for it, rather than leaving both to the connector
+                        // instance being garbage collected.
+                        closeReturn = callBasedImportConnector.CloseImportConnection();
+                    }
+
+                    // Persist connector state the connector chose to override at close, e.g. because
+                    // opening/using the connection invalidated a previously persisted pin (issue #230).
+                    // This runs AFTER the newPersistedData persistence above, so a Close-returned value
+                    // always wins over whatever the import pages themselves reported. Null (the
+                    // overwhelmingly common case) means "nothing to override" and must not persist.
+                    if (closeReturn != null)
+                    {
+                        try
+                        {
+                            await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, closeReturn);
+                        }
+                        catch (Exception persistEx) when (!importPhaseSucceeded)
+                        {
+                            // The import itself already failed and that exception is propagating out of
+                            // this finally block. A .NET finally block that itself throws replaces the
+                            // in-flight exception rather than chaining it, which would silently hide the
+                            // import's own failure behind an unrelated persistence error. Log and let the
+                            // original import failure continue to unwind instead.
+                            Log.Error(persistEx,
+                                "PerformImportAsync: Failed to persist connector data returned by CloseImportConnection while the import itself is failing for Connected System {ConnectedSystemId}. The import's own failure takes precedence and will propagate.",
+                                _connectedSystem.Id);
+                        }
+                    }
                 }
 
-                // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
-                // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
-                // HOW the import was performed, not errors with specific objects. Creating a phantom RPEI
-                // with no CSO association inflates error counts and pollutes the RPEI list.
-                if (connectorWarningMessage != null)
-                {
-                    _activity.WarningMessage = connectorWarningMessage;
-                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
-                }
-
-                using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
-                {
-                    callBasedImportConnector.CloseImportConnection();
-                }
                 break;
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
@@ -341,12 +471,23 @@ public class SyncImportTaskProcessor
                 using var connectorSpan = Diagnostics.Connector.StartSpan("FileBasedImport");
 
                 // file based connectors return all the results from the Connected System in one go. no paging.
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Importing objects from file");
+                await _phases.EnterAsync(RunPhaseKeys.ImportFetch, "Importing objects from file");
                 ConnectedSystemImportResult result;
+
+                // The whole file is read inside this one call, so what the Connector reports about
+                // it is the only progress an operator sees until it returns (issue #637).
+                var connectorProgress = _phases.CreateConnectorProgress(
+                    async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
+                    ReportExpectedObjectCountAsync,
+                    ReportObjectsReadAsync);
+
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
-                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
                 }
+
+                await _phases.ExitConnectorPhasesAsync();
+                objectsReadInCurrentCall = 0;
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 
@@ -394,7 +535,7 @@ public class SyncImportTaskProcessor
             var existingCsoCount = await _syncRepo.GetConnectedSystemObjectCountAsync(_connectedSystem.Id, deletionPartitionId);
             _activity.ObjectsToProcess = existingCsoCount;
             _activity.ObjectsProcessed = 0;
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing deletions");
+            await _phases.EnterAsync(RunPhaseKeys.ImportDeletions);
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
@@ -426,7 +567,7 @@ public class SyncImportTaskProcessor
                                     connectedSystemObjectsToBeUpdated.Count(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)));
         _activity.ObjectsToProcess = objectsWithReferences;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving references");
+        await _phases.EnterAsync(RunPhaseKeys.ImportResolveReferences);
         var resolveRefsSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
@@ -450,9 +591,8 @@ public class SyncImportTaskProcessor
             createdCount, connectedSystemObjectsToBeUpdated.Count, _activityRunProfileExecutionItems.Count,
             GC.GetTotalMemory(true) / 1024 / 1024,
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+        await _phases.EnterAsync(RunPhaseKeys.ImportSave);
         var savePhaseSw = System.Diagnostics.Stopwatch.StartNew();
-        var saveThroughput = new ThroughputTracker();
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", createdCount);
@@ -534,6 +674,10 @@ public class SyncImportTaskProcessor
                         rpei.ConnectedSystemObjectId = rpei.ConnectedSystemObject.Id;
                 }
 
+                // SPEC-1082 D7: stamp this create batch's requested hashes now that its attribute
+                // value writes (inside CreateConnectedSystemObjectsAsync) have committed.
+                await StampBatchImportStateAsync(csoBatch, batchRpeis);
+
                 // Add newly created CSOs to the lookup cache
                 foreach (var newCso in csoBatch)
                 {
@@ -566,9 +710,7 @@ public class SyncImportTaskProcessor
 
                 totalCreatedSoFar += batchSize;
                 _activity.ObjectsProcessed = totalCreatedSoFar;
-                await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Saving changes — creating ({totalCreatedSoFar:N0} / {totalToCreate:N0})" +
-                    saveThroughput.FormatThroughput(totalCreatedSoFar, totalChanges));
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
                 Log.Information("PerformImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -636,6 +778,10 @@ public class SyncImportTaskProcessor
                     .ToList();
 
                 await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+
+                // SPEC-1082 D7: stamp this update batch's requested hashes now that its attribute
+                // value writes have committed, and BEFORE ReleaseHydratedAttributeValues below.
+                await StampBatchImportStateAsync(csoBatch, batchRpeis);
 
                 // Populate the reconciliation RPEI lookup before flushing.
                 // Only update-phase RPEIs are needed — created CSOs can't have Pending Exports.
@@ -706,9 +852,7 @@ public class SyncImportTaskProcessor
                 _syncRepo.ClearChangeTracker();
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
-                await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Saving changes — updating ({batchStart + batchSize:N0} / {totalToUpdate:N0})" +
-                    saveThroughput.FormatThroughput(createdCount + batchStart + batchSize, totalChanges));
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
                 Log.Information("PerformImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
                     batchStart + batchSize, totalToUpdate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
@@ -745,7 +889,7 @@ public class SyncImportTaskProcessor
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports");
+        await _phases.EnterAsync(RunPhaseKeys.ImportReconcile);
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
@@ -780,7 +924,7 @@ public class SyncImportTaskProcessor
         var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating activity Run Profile execution items");
+        await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
         await FlushImportRpeisAsync();
         _activity.ObjectsProcessed = remainingRpeiCount;
 
@@ -792,9 +936,24 @@ public class SyncImportTaskProcessor
 
         await _syncRepo.UpdateActivityAsync(_activity);
 
+        // SPEC-1082 D12: end-of-import summary, alongside the phase timings above.
+        Log.Information("PerformImportAsync: Content hash summary: Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Created: {Created}, Updated (hydrated and diffed): {Updated}",
+            totalObjectsImported, _hashSkippedCount, createdCount, connectedSystemObjectsToBeUpdated.Count);
+        if (_connectedSystemRunProfile.VerifyImportContentHashes)
+        {
+            Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
+                _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
+        }
+
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
         importSpan.SetTag("objectsCreated", createdCount);
         importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
+        importSpan.SetTag("objectsSkippedByHash", _hashSkippedCount);
+        if (_connectedSystemRunProfile.VerifyImportContentHashes)
+        {
+            importSpan.SetTag("verificationDangerousDisagreements", _verificationDangerousDisagreementCount);
+            importSpan.SetTag("verificationBenignMismatches", _verificationBenignMismatchCount);
+        }
         importSpan.SetSuccess();
     }
 
@@ -1079,17 +1238,57 @@ public class SyncImportTaskProcessor
             if (importedObject.ChangeType == ObjectChangeType.Deleted || string.IsNullOrEmpty(importedObject.ObjectType))
                 continue;
 
-            // find the object type for the imported object in our schema
-            var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+            // Find the object type for the imported object in our schema. An object naming a type that is
+            // not in the schema, or arriving without its external ID attribute, cannot be matched to a CSO
+            // and so cannot protect one from deletion; skip it here and let ProcessImportObjectsAsync
+            // report it against its own Run Profile Execution Item. These were Single() calls, which threw
+            // and took the entire import down before a single object could be reported.
+            var connectedSystemObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+            if (connectedSystemObjectType == null)
+            {
+                Log.Debug("AddExternalIdsToCollection: Imported object names object type '{ObjectType}', which is not in the schema. Excluding it from deletion detection",
+                    LogSanitiser.Sanitise(importedObject.ObjectType));
+                continue;
+            }
 
             // what is the external id attribute for this object type in our schema?
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
+            var externalIdAttribute = importedObject.Attributes.SingleOrDefault(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase));
+            if (externalIdAttribute == null)
+            {
+                Log.Debug("AddExternalIdsToCollection: Imported object of type '{ObjectType}' has no '{ExternalIdAttribute}' attribute. Excluding it from deletion detection",
+                    LogSanitiser.Sanitise(importedObject.ObjectType), LogSanitiser.Sanitise(externalIdAttributeName));
+                continue;
+            }
+
+            // Objects the Connector flagged with an error stay in this collection when they do have a
+            // usable external ID: they exist in the Connected System, and deleting their CSO because one
+            // attribute failed to parse would be data loss.
             externalIdsImported.Add(new ExternalIdPair
             {
                 ConnectedSystemObjectTypeId = connectedSystemObjectType.Id,
-                ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
+                ConnectedSystemImportObjectAttribute = externalIdAttribute
             });
         }
+    }
+
+    /// <summary>
+    /// Translates a Connector's classification of an import problem into JIM's Run Profile Execution Item
+    /// vocabulary, so administrators filter Connector-reported problems the same way as JIM's own.
+    /// </summary>
+    private static ActivityRunProfileExecutionItemErrorType MapConnectorImportError(ConnectedSystemImportObjectError connectorError)
+    {
+        return connectorError switch
+        {
+            ConnectedSystemImportObjectError.CouldNotDetermineObjectType => ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType,
+            ConnectedSystemImportObjectError.ExternalIdAttributes => ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue,
+            ConnectedSystemImportObjectError.ConfigurationError => ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError,
+            ConnectedSystemImportObjectError.AttributeValueError => ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+
+            // A Connector built against a newer JIM could report a classification this build does not know.
+            // Surface it as an error rather than dropping it; the Connector's message still explains it.
+            _ => ActivityRunProfileExecutionItemErrorType.UnhandledError
+        };
     }
 
     /// <summary>
@@ -1099,22 +1298,63 @@ public class SyncImportTaskProcessor
     private const int CsoHydrationChunkSize = 1000;
 
     /// <summary>
+    /// SPEC-1082 D8: page-scoped, transient carrier for the hydration pre-fetch's results. Released
+    /// with the page (D13); never retained beyond <see cref="ProcessImportObjectsAsync"/>. Keyed by
+    /// import object reference (default reference equality; <see cref="ConnectedSystemImportObject"/>
+    /// does not override Equals/GetHashCode) since import objects have no stable identity of their own
+    /// until matched to a CSO.
+    /// </summary>
+    private sealed class CsoHydrationPageResult
+    {
+        public Dictionary<Guid, ConnectedSystemObject> HydratedCsos { get; } = new();
+        public Dictionary<ConnectedSystemImportObject, Guid> IncomingHashes { get; } = new();
+        public Dictionary<ConnectedSystemImportObject, CsoImportStateLookupEntry> MatchedImportState { get; } = new();
+        public HashSet<ConnectedSystemImportObject> SkipEligible { get; } = new();
+    }
+
+    /// <summary>
+    /// SPEC-1082 D5: returns the schema fingerprint for an object type, computing and caching it on
+    /// first use per run. Deterministic for a given schema shape, so caching across the whole run
+    /// (not just a page) is safe and avoids recomputing it per object.
+    /// </summary>
+    private Guid GetTypeFingerprint(ConnectedSystemObjectType objectType)
+    {
+        if (_typeFingerprintCache.TryGetValue(objectType.Id, out var fingerprint))
+            return fingerprint;
+
+        fingerprint = ImportContentHashCalculator.CalculateTypeFingerprint(objectType);
+        _typeFingerprintCache[objectType.Id] = fingerprint;
+        return fingerprint;
+    }
+
+    /// <summary>
     /// Pre-fetch phase (#988): resolves every import object in this page to a candidate CSO ID via the
     /// existing <see cref="LookupCsoByExternalId"/> dictionary lookup, then hydrates all distinct matched
     /// IDs with a small, bounded number of batch queries (chunked at <see cref="CsoHydrationChunkSize"/>)
     /// instead of one query per object. This eliminates the N+1 that remained after #440's lookup-only fix.
+    /// <para>
+    /// SPEC-1082 D8: for Full Import only, and never in Verification Mode, also computes each
+    /// candidate's incoming content hash (D3) and evaluates the skip predicate BEFORE deciding to
+    /// hydrate. Skip-eligible objects are excluded from the batch hydration query entirely - the
+    /// hydration this method exists to batch is exactly the cost a skip avoids.
+    /// </para>
     /// </summary>
-    /// <returns>A dictionary of hydrated CSOs, keyed by ID, for use by the per-object processing loop.</returns>
-    private async Task<Dictionary<Guid, ConnectedSystemObject>> HydrateCsoPageAsync(ConnectedSystemImportResult connectedSystemImportResult)
+    /// <returns>The page's hydrated CSOs plus the SPEC-1082 skip-predicate results, for use by the per-object processing loop.</returns>
+    private async Task<CsoHydrationPageResult> HydrateCsoPageAsync(ConnectedSystemImportResult connectedSystemImportResult)
     {
-        var hydratedCsoPage = new Dictionary<Guid, ConnectedSystemObject>();
+        var result = new CsoHydrationPageResult();
 
         // Nothing to pre-fetch on a first-ever import (_csIsEmpty) - every object is new by definition.
         if (_csIsEmpty || _connectedSystem.ObjectTypes == null)
-            return hydratedCsoPage;
+            return result;
 
         var pageObjectCount = connectedSystemImportResult.ImportObjects.Count;
         using var span = Diagnostics.Sync.StartSpan("HydrateCsoPage").SetTag("pageObjectCount", pageObjectCount);
+
+        // The skip predicate is only ever evaluated for a Full Import that is not running in
+        // Verification Mode (D10: verification hydrates and diffs everything on purpose).
+        var skipEligibleForRun = _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport
+            && !_connectedSystemRunProfile.VerifyImportContentHashes;
 
         // Only import objects with a resolvable object type that carries an External Id attribute
         // are candidates for hydration; project the resolved type alongside so the loop below does
@@ -1131,10 +1371,10 @@ public class SyncImportTaskProcessor
             // Malformed import objects (missing/multi-valued/empty External Id attribute) are swallowed
             // here and left for the per-object loop to raise properly via its own RPEI error handling;
             // this pre-fetch pass only cares about collecting candidate IDs to hydrate in bulk.
-            Guid? csoId;
+            CsoImportStateLookupEntry? entry;
             try
             {
-                csoId = LookupCsoByExternalId(importObject, csObjectType!);
+                entry = LookupCsoImportStateByExternalId(importObject, csObjectType!);
             }
             catch (MissingExternalIdAttributeException)
             {
@@ -1153,8 +1393,36 @@ public class SyncImportTaskProcessor
                 continue;
             }
 
-            if (csoId.HasValue)
-                csoIdsToHydrate.Add(csoId.Value);
+            if (!entry.HasValue)
+                continue;
+
+            var matchedEntry = entry.Value;
+            result.MatchedImportState[importObject] = matchedEntry;
+
+            // Compute the incoming hash for every matched candidate on a Full Import (needed both
+            // for the skip decision here and, in Verification Mode, for the post-diff comparison in
+            // ProcessImportObjectsAsync). Cache-miss or Delta Import candidates never need it: D7
+            // never trusts a Delta Import payload's hash (conservative v1), so computing it here
+            // would be wasted work.
+            if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                result.IncomingHashes[importObject] = ImportContentHashCalculator.CalculateContentHash(importObject, csObjectType!);
+
+            var skipEligible = skipEligibleForRun
+                && result.IncomingHashes.TryGetValue(importObject, out var incomingHash)
+                && matchedEntry.ImportStateHash.HasValue && matchedEntry.ImportStateHash.Value == incomingHash
+                && matchedEntry.ImportStateFingerprint.HasValue && matchedEntry.ImportStateFingerprint.Value == GetTypeFingerprint(csObjectType!)
+                && matchedEntry.Status == ConnectedSystemObjectStatus.Normal
+                && importObject.ChangeType != ObjectChangeType.Deleted
+                && (matchedEntry.PartitionId != null || _connectedSystemRunProfile.Partition == null);
+
+            if (skipEligible)
+            {
+                result.SkipEligible.Add(importObject);
+                // Deliberately NOT added to csoIdsToHydrate: this is exactly the hydration cost D8 exists to avoid.
+                continue;
+            }
+
+            csoIdsToHydrate.Add(matchedEntry.CsoId);
         }
 
         if (csoIdsToHydrate.Count > 0)
@@ -1163,12 +1431,13 @@ public class SyncImportTaskProcessor
             {
                 var csos = await _syncRepo.GetConnectedSystemObjectsByIdsAsync(_connectedSystem.Id, chunk);
                 foreach (var cso in csos)
-                    hydratedCsoPage[cso.Id] = cso;
+                    result.HydratedCsos[cso.Id] = cso;
             }
         }
 
-        span.SetTag("hydratedCsoCount", hydratedCsoPage.Count);
-        return hydratedCsoPage;
+        span.SetTag("hydratedCsoCount", result.HydratedCsos.Count);
+        span.SetTag("skippedCount", result.SkipEligible.Count);
+        return result;
     }
 
     private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<string>? crossPageSeenExternalIds = null)
@@ -1177,8 +1446,10 @@ public class SyncImportTaskProcessor
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
-        // per-object hydration inside the loop below.
-        var hydratedCsoPage = await HydrateCsoPageAsync(connectedSystemImportResult);
+        // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
+        // and skip-eligibility for this page's candidates.
+        var hydrationResult = await HydrateCsoPageAsync(connectedSystemImportResult);
+        var hydratedCsoPage = hydrationResult.HydratedCsos;
 
         // Batch-fetch the reference external ID lookups for the whole hydrated page in one query.
         // The per-object loop below previously issued GetReferenceExternalIdsAsync once per
@@ -1201,9 +1472,11 @@ public class SyncImportTaskProcessor
         var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
         _activity.ObjectsToProcess = totalObjectsInBatch;
         _activity.ObjectsProcessed = 0;
-        var throughput = new ThroughputTracker();
-        await _syncRepo.UpdateActivityMessageAsync(_activity,
-            $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
+
+        // A step of its own rather than a message, because this is different work from fetching and
+        // it is what the figures below measure for most of an import. Nested inside the fetching
+        // step: a Connector that returns a page at a time alternates between the two.
+        await _phases.EnterAsync(RunPhaseKeys.ImportProcess);
         const int progressUpdateInterval = 100;
 
         // CSO matching uses a pre-fetched external ID dictionary (O(1) lookup) + per-object hydration by ID.
@@ -1223,6 +1496,32 @@ public class SyncImportTaskProcessor
             {
             try
             {
+                // The Connector may have flagged a problem with this object while reading it. Record that
+                // first, before JIM's own validation: a flagged object would otherwise trip a later check
+                // and report a misleading cause (i.e. "missing external ID" when the truth is that the row
+                // would not parse). The Connector chose the severity and JIM honours it, rather than
+                // re-deciding: an object-level problem means there is nothing importable, whereas an
+                // attribute-level one means the object is sound apart from a single value.
+                if (importObject.ErrorType is not null and not ConnectedSystemImportObjectError.NotSet)
+                {
+                    activityRunProfileExecutionItem.ErrorType = MapConnectorImportError(importObject.ErrorType.Value);
+                    activityRunProfileExecutionItem.ErrorMessage = importObject.ErrorMessage;
+
+                    if (importObject.ErrorType != ConnectedSystemImportObjectError.AttributeValueError)
+                    {
+                        Log.Warning("ProcessImportObjectsAsync: Connector reported {ErrorType} for the imported object at index {Index}. Skipping it: {ErrorMessage}",
+                            importObject.ErrorType, importIndex, LogSanitiser.Sanitise(importObject.ErrorMessage));
+                        continue;
+                    }
+
+                    // An attribute value that would not parse is not a reason to withhold the whole object:
+                    // its identity and every other attribute are intact, the Connector deliberately returned
+                    // it rather than stopping, and skipping it would freeze the identity (name, department,
+                    // leaver status) over one malformed value. The error above records what did not flow.
+                    Log.Warning("ProcessImportObjectsAsync: Connector reported an attribute value error for the imported object at index {Index}. Importing the values that did parse: {ErrorMessage}",
+                        importIndex, LogSanitiser.Sanitise(importObject.ErrorMessage));
+                }
+
                 // validate the results.
                 // are any of the attribute values duplicated? stop processing if so
                 var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
@@ -1366,6 +1665,23 @@ public class SyncImportTaskProcessor
                     }
                 }
 
+                // SPEC-1082 D8: skip check, INSTEAD of TryAndFindMatchingConnectedSystemObjectAsync,
+                // for objects the pre-fetch already proved unchanged (hash+fingerprint match, Normal
+                // status, not a delete, no pending partition backfill). Mirrors the existing no-op
+                // path immediately below (RPEI removal, including its known same-batch-duplicate
+                // quirk of marking an already-removed RPEI - mirrored deliberately, not fixed here);
+                // skipped objects are NOT added to the update list. Their external ID was already
+                // collected for deletion detection at page level before processing (AddExternalIdsToCollection),
+                // so a genuinely missing object still obsoletes; see ImportContentHashSkipTests.
+                if (hydrationResult.SkipEligible.Contains(importObject))
+                {
+                    _hashSkippedCount++;
+                    _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
+                    Log.Debug("ProcessImportObjectsAsync: Skipping hydration and diff for import object with external ID '{ExternalId}' - content hash unchanged since last stamp.",
+                        LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot));
+                    continue;
+                }
+
                 // see if we already have a matching Connected System Object for this imported object within JIM
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
@@ -1438,6 +1754,18 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        // SPEC-1082 D7: Full Import created objects request a stamp with the incoming
+                        // hash + current type fingerprint, written after this create batch commits
+                        // (D6 stamp-ordering invariant). Delta Import creates are not stamped (D7):
+                        // a delta payload is not trusted to be full-state, so the object is left
+                        // unstamped for the next Full Import to honestly diff and stamp.
+                        if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                        {
+                            connectedSystemObject.PendingImportStateHash = ImportContentHashCalculator.CalculateContentHash(importObject, csObjectType);
+                            connectedSystemObject.PendingImportStateFingerprint = GetTypeFingerprint(csObjectType);
+                            connectedSystemObject.PendingImportStateStampRequested = true;
+                        }
 
                         // Build sync outcome for new CSO
                         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -1530,6 +1858,64 @@ public class SyncImportTaskProcessor
                     var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
                                               connectedSystemObject.PendingAttributeValueRemovals.Count > 0;
 
+                    // SPEC-1082 D7: request a stamp for this matched object, written by the save
+                    // phase after this batch's attribute-value writes commit (D6 stamp-ordering
+                    // invariant). Full Import stamps changed and unchanged objects alike with the
+                    // real incoming hash, since the honest diff just ran and made the stored values
+                    // match it exactly. Delta Import only nulls the hash for objects it actually
+                    // changed (conservative v1: a delta payload is not trusted to be full-state);
+                    // Delta no-ops leave the stored hash untouched, since it still accurately
+                    // describes the object's unchanged content.
+                    if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                    {
+                        if (hydrationResult.IncomingHashes.TryGetValue(importObject, out var incomingHashForStamp))
+                        {
+                            connectedSystemObject.PendingImportStateHash = incomingHashForStamp;
+                            connectedSystemObject.PendingImportStateFingerprint = GetTypeFingerprint(csObjectType);
+                            connectedSystemObject.PendingImportStateStampRequested = true;
+                        }
+                        // else: matched via a fallback path outside the pre-fetch (e.g. secondary
+                        // external ID for a PendingProvisioning CSO); no incoming hash was computed
+                        // for it here, so it is left unstamped - the next Full Import re-diffs it
+                        // honestly (via the primary external ID, now that it exists) and stamps it then.
+                    }
+                    else if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport && hasAttributeChanges)
+                    {
+                        connectedSystemObject.PendingImportStateHash = null;
+                        connectedSystemObject.PendingImportStateFingerprint = null;
+                        connectedSystemObject.PendingImportStateStampRequested = true;
+                    }
+
+                    // SPEC-1082 D10: Verification Mode never skips (enforced in HydrateCsoPageAsync),
+                    // so every matched object reaches this honest diff. Compare the stored hash and
+                    // fingerprint against the freshly computed incoming hash and the diff's own findings.
+                    if (_connectedSystemRunProfile.VerifyImportContentHashes
+                        && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport
+                        && hydrationResult.MatchedImportState.TryGetValue(importObject, out var storedImportState)
+                        && hydrationResult.IncomingHashes.TryGetValue(importObject, out var incomingHashForVerification)
+                        && storedImportState.ImportStateHash.HasValue
+                        && storedImportState.ImportStateFingerprint.HasValue
+                        && storedImportState.ImportStateFingerprint.Value == GetTypeFingerprint(csObjectType))
+                    {
+                        if (storedImportState.ImportStateHash.Value == incomingHashForVerification && hasAttributeChanges)
+                        {
+                            // Dangerous disagreement: a content-hash skip would have silently missed this change.
+                            _verificationDangerousDisagreementCount++;
+                            var changedAttrCount = connectedSystemObject.PendingAttributeValueAdditions.Count + connectedSystemObject.PendingAttributeValueRemovals.Count;
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Verification Mode: the stored import content hash for CSO {connectedSystemObject.Id} matched the incoming hash, but the honest diff found {changedAttrCount} changed attribute value(s). A content-hash skip would have missed this change.";
+                            Log.Error("ProcessImportObjectsAsync: Verification Mode DANGEROUS DISAGREEMENT for CSO {CsoId}: stored hash matched incoming hash but the diff found {ChangedAttrCount} changed attribute value(s).",
+                                connectedSystemObject.Id, changedAttrCount);
+                        }
+                        else if (storedImportState.ImportStateHash.Value != incomingHashForVerification && !hasAttributeChanges)
+                        {
+                            // Benign false-positive (D4): safe by construction, one wasted diff.
+                            _verificationBenignMismatchCount++;
+                            Log.Debug("ProcessImportObjectsAsync: Verification Mode benign mismatch for CSO {CsoId}: hash differed but the honest diff found no changes.",
+                                connectedSystemObject.Id);
+                        }
+                    }
+
                     // Always add to update list - needed for reference resolution even if no attribute changes
                     // The update list is used by ResolveReferencesAsync to resolve references between objects
                     if (_csoIdsQueuedForUpdate.Add(connectedSystemObject.Id))
@@ -1593,9 +1979,7 @@ public class SyncImportTaskProcessor
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await _syncRepo.UpdateActivityMessageAsync(_activity,
-                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})" +
-                        throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
 
                     // Periodic memory diagnostics (#917): the import processing phase accumulates
                     // hydrated CSOs until the save phase, so at scale this is where peak memory
@@ -1614,12 +1998,12 @@ public class SyncImportTaskProcessor
             }
         }
 
-        // Final progress update to ensure the UI reflects completion for this batch
+        // Final progress update so the counters land on the batch total rather than stopping at
+        // the last interval boundary. The run is still in flight, so this reports no timings; the
+        // Activity's counters carry what is left to say.
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})" +
-                throughput.FormatCompletion(totalObjectsInBatch));
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
         }
 
         // DEBUG: Summary statistics for duplicate detection
@@ -1652,6 +2036,37 @@ public class SyncImportTaskProcessor
     {
         foreach (var cso in csoBatch)
             cso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+    }
+
+    /// <summary>
+    /// SPEC-1082 D7/D6: collects this batch's requested stamps (<see cref="ConnectedSystemObject.PendingImportStateStampRequested"/>,
+    /// set during <see cref="ProcessImportObjectsAsync"/>) and writes them via
+    /// <see cref="ISyncRepository.StampImportStateAsync"/>. MUST be called only after this batch's
+    /// attribute-value writes have committed (D6 stamp-ordering invariant); the create- and
+    /// update-batch call sites in <see cref="PerformImportAsync"/> both satisfy this by construction.
+    /// Excludes any CSO whose RPEI carries an error, EXCEPT the Verification Mode diagnostic-only
+    /// <see cref="ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed"/> (D10:
+    /// verification still stamps truthfully, since the honest diff ran and the object was persisted
+    /// normally; only genuine processing failures - duplicate external IDs, unhandled exceptions -
+    /// leave an object unstamped).
+    /// </summary>
+    private async Task StampBatchImportStateAsync(IEnumerable<ConnectedSystemObject> csoBatch, List<ActivityRunProfileExecutionItem> batchRpeis)
+    {
+        var erroredCsoIds = batchRpeis
+            .Where(r => r.ConnectedSystemObjectId.HasValue
+                && r.ErrorType != null
+                && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet
+                && r.ErrorType != ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed)
+            .Select(r => r.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+
+        var stamps = csoBatch
+            .Where(cso => cso.PendingImportStateStampRequested && !erroredCsoIds.Contains(cso.Id))
+            .Select(cso => (CsoId: cso.Id, Hash: cso.PendingImportStateHash, Fingerprint: cso.PendingImportStateFingerprint))
+            .ToList();
+
+        if (stamps.Count > 0)
+            await _syncRepo.StampImportStateAsync(stamps);
     }
 
     /// <summary>
@@ -1696,6 +2111,14 @@ public class SyncImportTaskProcessor
     /// Returns null if no match found (new object) or if this is a first-ever import (_csIsEmpty).
     /// </summary>
     private Guid? LookupCsoByExternalId(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+        => LookupCsoImportStateByExternalId(connectedSystemImportObject, connectedSystemObjectType)?.CsoId;
+
+    /// <summary>
+    /// SPEC-1082 D8: same lookup as <see cref="LookupCsoByExternalId"/> but returns the full
+    /// <see cref="CsoImportStateLookupEntry"/> (stored hash, fingerprint, status, partition) so
+    /// callers can evaluate the skip predicate without a second dictionary lookup.
+    /// </summary>
+    private CsoImportStateLookupEntry? LookupCsoImportStateByExternalId(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
     {
         if (_csIsEmpty || _csoExternalIdLookup == null)
             return null;
@@ -1729,7 +2152,7 @@ public class SyncImportTaskProcessor
         };
 
         var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
-        return _csoExternalIdLookup.TryGetValue(cacheKey, out var csoId) ? csoId : null;
+        return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
     }
 
     /// <summary>
@@ -3248,9 +3671,9 @@ public class SyncImportTaskProcessor
             if (isFirstPage)
                 Log.Information("ReconcilePendingExportsAsync: Page 1 flush total: {ElapsedMs:F0}ms", flushSw!.ElapsedMilliseconds);
 
-            // Update activity progress after each page
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Reconciling Pending Exports ({processedCount:N0}/{csoList.Count:N0})");
+            // Update activity progress after each page. The counters set above are what the portal
+            // renders the count from; the step's own name says the rest.
+            await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
             await _syncRepo.UpdateActivityAsync(_activity);
         }
 

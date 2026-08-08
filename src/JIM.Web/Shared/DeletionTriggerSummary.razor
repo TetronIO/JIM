@@ -1,0 +1,113 @@
+@using JIM.Models.Core
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    The live plain-language summary for the WhenAuthoritativeSourceDisconnected deletion rule (#119).
+    Deletion configuration is the most dangerous setting on the Metaverse Object Type page; this alert
+    restates the full consequence (trigger mode, sources by name, grace period) in one sentence so a
+    misconfiguration is visible before Save. Blazor re-rendering keeps it current as the administrator
+    changes the trigger mode, source selection or grace period.
+*@
+
+<MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+    <MudText Typo="Typo.body1">
+        @if (SourceNames.Count == 0)
+        {
+            <text>Select at least one authoritative source. No source is selected, so this configuration cannot be saved.</text>
+        }
+        else if (TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect)
+        {
+            if (SourceNames.Count == 1)
+            {
+                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> when </text>@JoinedNames("and")<text> disconnects.</text>
+            }
+            else
+            {
+                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> only when </text>@JoinedNames("and")<text> have <strong>all</strong> disconnected. While any of them remains connected the object is retained.</text>
+            }
+        }
+        else
+        {
+            if (SourceNames.Count == 1)
+            {
+                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> when </text>@JoinedNames("or")<text> disconnects, regardless of other connectors.</text>
+            }
+            else
+            {
+                <text>A <strong>@ObjectTypeName</strong> will be </text>@FatePhrase<text> when <strong>any</strong> of </text>@JoinedNames("or")<text> disconnects, even if the others remain connected.</text>
+            }
+        }
+    </MudText>
+</MudAlert>
+
+@code {
+    /// <summary>
+    /// The Metaverse Object Type's singular name, e.g. "Person".
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string ObjectTypeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The trigger mode currently selected in the editor.
+    /// </summary>
+    [Parameter]
+    public AuthoritativeSourceTriggerMode TriggerMode { get; set; }
+
+    /// <summary>
+    /// The display names of the currently selected authoritative sources.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<string> SourceNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The grace period currently configured in the editor. Null or zero means immediate deletion.
+    /// </summary>
+    [Parameter]
+    public TimeSpan? GracePeriod { get; set; }
+
+    /// <summary>
+    /// "scheduled for deletion, with a 30 day grace period," or "deleted immediately, with no grace period,".
+    /// </summary>
+    private RenderFragment FatePhrase => __builder =>
+    {
+        if (GracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero)
+        {
+            <text>scheduled for deletion, with a <strong>@FormatGracePeriodAdjective(gracePeriod)</strong> grace period,</text>
+        }
+        else
+        {
+            <text>deleted immediately, with no grace period,</text>
+        }
+    };
+
+    /// <summary>
+    /// The selected source names in bold, joined with commas and the given final conjunction,
+    /// e.g. "HR, Payroll and Active Directory".
+    /// </summary>
+    private RenderFragment JoinedNames(string conjunction) => __builder =>
+    {
+        for (var i = 0; i < SourceNames.Count; i++)
+        {
+            if (i > 0)
+            {
+                @(i == SourceNames.Count - 1 ? $" {conjunction} " : ", ")
+            }
+            <strong>@SourceNames[i]</strong>
+        }
+    };
+
+    /// <summary>
+    /// Formats a grace period as a compound adjective ("30 day", "1 day, 6 hour"), for use in
+    /// "a 30 day grace period"; compound adjectives take no plural.
+    /// </summary>
+    private static string FormatGracePeriodAdjective(TimeSpan period)
+    {
+        var parts = new List<string>();
+        if (period.Days > 0) parts.Add($"{period.Days} day");
+        if (period.Hours > 0) parts.Add($"{period.Hours} hour");
+        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute");
+        return parts.Count > 0 ? string.Join(", ", parts) : "0 minute";
+    }
+}

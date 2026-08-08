@@ -4,6 +4,8 @@
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
+using JIM.Utilities;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
@@ -64,7 +66,7 @@ public class FileConnectorExportCancellationTests
         cts.Cancel();
 
         // Act — does NOT throw despite cancellation (file connector ignores token)
-        var results = await _connector.ExportAsync(settingValues, pendingExports, cts.Token);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, cts.Token, ConnectorProgress.None);
 
         // Assert: Export completes successfully
         Assert.That(results, Has.Count.EqualTo(1));

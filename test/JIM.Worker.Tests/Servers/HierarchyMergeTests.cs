@@ -38,13 +38,13 @@ public class HierarchyMergeTests
         var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, new List<ConnectorPartition>());
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connectedSystem.Partitions, Has.Count.EqualTo(2), "existing partitions must survive an empty discovery");
             Assert.That(result.RemovedPartitions, Is.Empty, "nothing should be reported as removed");
             Assert.That(result.HasChanges, Is.False);
             Assert.That(result.HasSelectedItemsRemoved, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -67,12 +67,12 @@ public class HierarchyMergeTests
             new List<ConnectorPartition> { new() { Id = "DC=keep,DC=local", Name = "Keep" } });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connectedSystem.Partitions.Select(p => p.ExternalId), Is.EquivalentTo(new[] { "DC=keep,DC=local" }));
             Assert.That(result.RemovedPartitions, Has.Count.EqualTo(1));
             Assert.That(result.RemovedPartitions[0].ExternalId, Is.EqualTo("DC=gone,DC=local"));
-        });
+        }
     }
 
     #endregion
@@ -92,13 +92,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("DC=test,DC=local"));
             Assert.That(item.Name, Is.EqualTo("test.local"));
             Assert.That(item.WasSelected, Is.True);
             Assert.That(item.ItemType, Is.EqualTo(HierarchyItemType.Partition));
-        });
+        }
     }
 
     [Test]
@@ -114,13 +114,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("OU=Users,DC=test,DC=local"));
             Assert.That(item.Name, Is.EqualTo("Users"));
             Assert.That(item.WasSelected, Is.False);
             Assert.That(item.ItemType, Is.EqualTo(HierarchyItemType.Container));
-        });
+        }
     }
 
     #endregion
@@ -140,13 +140,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("OU=HR,DC=test,DC=local"));
             Assert.That(item.OldName, Is.EqualTo("Human Resources"));
             Assert.That(item.NewName, Is.EqualTo("People Operations"));
             Assert.That(item.ItemType, Is.EqualTo(HierarchyItemType.Container));
-        });
+        }
     }
 
     #endregion
@@ -166,13 +166,13 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.ExternalId, Is.EqualTo("OU=Contractors,DC=test,DC=local"));
             Assert.That(item.Name, Is.EqualTo("Contractors"));
             Assert.That(item.OldParentExternalId, Is.EqualTo("OU=Vendors,DC=test,DC=local"));
             Assert.That(item.NewParentExternalId, Is.EqualTo("OU=Users,DC=test,DC=local"));
-        });
+        }
     }
 
     [Test]
@@ -188,11 +188,11 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.OldParentExternalId, Is.Null);
             Assert.That(item.NewParentExternalId, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -208,11 +208,11 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(item.OldParentExternalId, Is.Not.Null);
             Assert.That(item.NewParentExternalId, Is.Null);
-        });
+        }
     }
 
     #endregion
@@ -247,7 +247,7 @@ public class HierarchyMergeTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.HasChanges, Is.True);
             Assert.That(result.HasSelectedItemsRemoved, Is.True);
@@ -255,7 +255,7 @@ public class HierarchyMergeTests
             Assert.That(result.RemovedContainers, Has.Count.EqualTo(1));
             Assert.That(result.RenamedContainers, Has.Count.EqualTo(1));
             Assert.That(result.MovedContainers, Has.Count.EqualTo(1));
-        });
+        }
 
         // Verify summary includes all change types
         var summary = result.GetSummary();
@@ -343,11 +343,11 @@ public class HierarchyMergeTests
         parent.AddChildContainer(child);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parent.ChildContainers, Contains.Item(child));
             Assert.That(child.ParentContainer, Is.SameAs(parent));
-        });
+        }
     }
 
     [Test]
@@ -475,14 +475,225 @@ public class HierarchyMergeTests
         var found3 = lookup.TryGetValue("OU=USERS,DC=TEST,DC=LOCAL", out var container3);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(found1, Is.True);
             Assert.That(found2, Is.True);
             Assert.That(found3, Is.True);
             Assert.That(container1, Is.SameAs(container2));
             Assert.That(container2, Is.SameAs(container3));
-        });
+        }
+    }
+
+    #endregion
+
+    #region Container identity survives rename and move (#827)
+
+    /// <summary>
+    /// A container's External Id is its Distinguished Name, which every rename and every move changes. Matching on
+    /// it alone meant a directory tidying an OU name presented to JIM as "the container you selected is gone, here
+    /// is an unfamiliar one", silently narrowing import scope; the next whole-scope Full Import then obsoleted
+    /// everything beneath it. Where the Connector can supply the directory's own immutable identifier, that is what
+    /// identity is now keyed on.
+    /// </summary>
+    [Test]
+    public void MergeHierarchy_ContainerRenamedInTheDirectory_KeepsItsSelectionAndIsReportedAsARename()
+    {
+        var connectedSystem = SystemWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+            selected: true);
+
+        var discovered = PartitionWithOneContainer(
+            containerExternalId: "OU=Colleagues,DC=test,DC=local",
+            containerName: "Colleagues",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff");
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        var container = connectedSystem.Partitions![0].Containers!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(container.Selected, Is.True, "a rename in the directory must not deselect a managed container");
+            Assert.That(container.ExternalId, Is.EqualTo("OU=Colleagues,DC=test,DC=local"), "the new Distinguished Name must be adopted");
+            Assert.That(container.Name, Is.EqualTo("Colleagues"));
+            Assert.That(result.RenamedContainers, Has.Count.EqualTo(1));
+            Assert.That(result.RemovedContainers, Is.Empty, "nothing left the directory");
+            Assert.That(result.AddedContainers, Is.Empty, "nothing arrived in the directory");
+            Assert.That(result.HasSelectedItemsRemoved, Is.False);
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_ContainerDistinguishedNameChangedByAnAncestorRename_KeepsItsSelection()
+    {
+        // Renaming an ancestor rewrites every descendant's Distinguished Name, so one tidy-up at the top of a
+        // tree used to present as the wholesale removal of everything beneath it.
+        var connectedSystem = SystemWithOneContainer(
+            containerExternalId: "OU=Users,OU=Corp,DC=test,DC=local",
+            containerName: "Users",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+            selected: true);
+
+        var discovered = PartitionWithOneContainer(
+            containerExternalId: "OU=Users,OU=Retired,DC=test,DC=local",
+            containerName: "Users",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff");
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        var container = connectedSystem.Partitions![0].Containers!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(container.Selected, Is.True);
+            Assert.That(container.ExternalId, Is.EqualTo("OU=Users,OU=Retired,DC=test,DC=local"));
+            Assert.That(result.RemovedContainers, Is.Empty);
+            Assert.That(result.HasSelectedItemsRemoved, Is.False);
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_ContainerGenuinelyRemoved_IsStillReportedAsRemoved()
+    {
+        // Stable identity must not turn every disappearance into a rename: an identifier that no longer comes back
+        // is a container that has gone, and a selected one going is exactly what the Partitions tab warns about.
+        var connectedSystem = SystemWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+            selected: true);
+
+        var discovered = PartitionWithOneContainer(
+            containerExternalId: "OU=Other,DC=test,DC=local",
+            containerName: "Other",
+            stableId: "11111111-2222-3333-4444-555555555555");
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RemovedContainers, Has.Count.EqualTo(1));
+            Assert.That(result.RemovedContainers[0].ExternalId, Is.EqualTo("OU=Users,DC=test,DC=local"));
+            Assert.That(result.HasSelectedItemsRemoved, Is.True);
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_ConnectorSuppliesNoStableId_StillMatchesOnDistinguishedName()
+    {
+        // Existing deployments carry no stable identifiers until their next hierarchy refresh, and a Connector may
+        // have none to give. Distinguished Name matching remains the fallback so nothing regresses in the meantime.
+        var connectedSystem = SystemWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: null,
+            selected: true);
+
+        var discovered = PartitionWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: null);
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        var container = connectedSystem.Partitions![0].Containers!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(container.Selected, Is.True);
+            Assert.That(result.RemovedContainers, Is.Empty);
+            Assert.That(result.AddedContainers, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_ContainerHasNoStoredStableIdButTheDirectorySuppliesOne_AdoptsIt()
+    {
+        // The upgrade path: containers selected before stable identifiers existed match on Distinguished Name once
+        // more, and record the identifier as they do, so the very next rename is handled properly.
+        var connectedSystem = SystemWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: null,
+            selected: true);
+
+        var discovered = PartitionWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff");
+
+        ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        var container = connectedSystem.Partitions![0].Containers!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(container.StableId, Is.EqualTo("6f9619ff-8b86-d011-b42d-00c04fc964ff"));
+            Assert.That(container.Selected, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// A container created in the directory since the last refresh was added to the hierarchy and then deleted again
+    /// by the same pass, because only matched containers were recorded as still present and a newly added one was
+    /// recorded nowhere. The refresh reported it as added, and the Partitions tab never showed it, so a new OU could
+    /// not be selected for management at all without re-creating the whole partition.
+    /// </summary>
+    [Test]
+    public void MergeHierarchy_ContainerNewInTheDirectory_IsAddedAndKept()
+    {
+        var connectedSystem = SystemWithOneContainer(
+            containerExternalId: "OU=Users,DC=test,DC=local",
+            containerName: "Users",
+            stableId: "6f9619ff-8b86-d011-b42d-00c04fc964ff",
+            selected: true);
+
+        var discovered = new ConnectorPartition { Id = "DC=test,DC=local", Name = "test.local" };
+        discovered.Containers.Add(new ConnectorContainer("OU=Users,DC=test,DC=local", "Users") { StableId = "6f9619ff-8b86-d011-b42d-00c04fc964ff" });
+        discovered.Containers.Add(new ConnectorContainer("OU=Contractors,DC=test,DC=local", "Contractors") { StableId = "22222222-3333-4444-5555-666666666666" });
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectedSystem.Partitions![0].Containers!.Select(c => c.ExternalId),
+                Is.EquivalentTo(new[] { "OU=Users,DC=test,DC=local", "OU=Contractors,DC=test,DC=local" }));
+            Assert.That(result.AddedContainers, Has.Count.EqualTo(1));
+            Assert.That(result.RemovedContainers, Is.Empty, "a container that was just discovered has not been removed from the directory");
+        }
+    }
+
+    private static ConnectedSystem SystemWithOneContainer(string containerExternalId, string containerName, string? stableId, bool selected)
+    {
+        var container = new ConnectedSystemContainer
+        {
+            ExternalId = containerExternalId,
+            Name = containerName,
+            StableId = stableId,
+            Selected = selected
+        };
+
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Partitions =
+            [
+                new ConnectedSystemPartition
+                {
+                    ExternalId = "DC=test,DC=local",
+                    Name = "test.local",
+                    Selected = true,
+                    Containers = [container]
+                }
+            ]
+        };
+    }
+
+    private static ConnectorPartition PartitionWithOneContainer(string containerExternalId, string containerName, string? stableId)
+    {
+        var partition = new ConnectorPartition { Id = "DC=test,DC=local", Name = "test.local" };
+        partition.Containers.Add(new ConnectorContainer(containerExternalId, containerName) { StableId = stableId });
+        return partition;
     }
 
     #endregion

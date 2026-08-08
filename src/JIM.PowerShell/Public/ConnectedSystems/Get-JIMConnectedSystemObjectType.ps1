@@ -11,16 +11,56 @@ function Get-JIMConnectedSystemObjectType {
         represent categories of objects in the external identity store (e.g. user, group).
         Each object type contains attributes that can be selected for synchronisation.
 
+        Object types the Connected System classified as internal (a directory's own
+        configuration and operational classes, which an administrator would never manage)
+        are omitted by default, matching what the portal's schema screen shows. Use
+        -IncludeInternal to return them as well. An object type that is already Selected is
+        always returned, whatever its classification.
+
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System.
+
+    .PARAMETER IncludeInternal
+        Also return object types the Connected System classified as internal.
 
     .OUTPUTS
         PSCustomObject representing the object types and their attributes.
 
+        Each object carries a Tags collection of Key/Value classification pairs reported by
+        the Connected System (for example class-kind = structural, visibility = internal),
+        and an IsInternal boolean derived from them.
+
+        Each attribute carries a writability value of Writable, ReadOnly or WritableOnCreate.
+        ReadOnly attributes can be imported but cannot be targeted by an export Attribute Flow.
+        WritableOnCreate attributes can be targeted, but JIM sends the value only when it creates
+        the object and never again, because changing it would break the link to the object (a
+        table's primary key, a directory's relative distinguished name).
+
     .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1
 
-        Gets all object types for Connected System 1.
+        Gets the object types for Connected System 1 that an administrator would manage.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
+            ForEach-Object { $_.attributes } |
+            Where-Object { $_.writability -eq 'WritableOnCreate' } |
+            Select-Object name, type
+
+        Lists the attributes JIM may only set when it creates the object.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 -IncludeInternal
+
+        Gets every object type for Connected System 1, including the directory's own
+        configuration and operational classes.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 -IncludeInternal |
+            Where-Object { $_.IsInternal } |
+            Select-Object name
+
+        Lists only the object types the Connected System uses internally.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Name "Corporate*" | ForEach-Object {
@@ -39,7 +79,10 @@ function Get-JIMConnectedSystemObjectType {
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
-        [int]$ConnectedSystemId
+        [int]$ConnectedSystemId,
+
+        [Parameter()]
+        [switch]$IncludeInternal
     )
 
     process {
@@ -54,9 +97,13 @@ function Get-JIMConnectedSystemObjectType {
         try {
             $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/object-types"
 
-            # Output each object type individually for pipeline support
+            # The API returns everything it discovered; the default view is applied here so that the REST surface
+            # stays complete and only the cmdlet's own convenience default hides anything. A Selected object type is
+            # never withheld, whatever its classification.
             foreach ($objectType in $result) {
-                $objectType
+                if ($IncludeInternal -or -not $objectType.isInternal -or $objectType.selected) {
+                    $objectType
+                }
             }
         }
         catch {

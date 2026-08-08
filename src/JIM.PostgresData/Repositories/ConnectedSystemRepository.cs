@@ -65,6 +65,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.SingleOrDefaultAsync(cd => cd.Id == id);
     }
 
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        // A scalar projection: the caller wants one enum for a display hint, not a Connected System graph.
+        return await Repository.Database.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => cs.ConnectorDefinition.SchemaStandard)
+            .SingleOrDefaultAsync();
+    }
+
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
         IQueryable<ConnectorDefinition> query = Repository.Database.ConnectorDefinitions
@@ -92,6 +101,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
     {
         Repository.Database.ConnectorDefinitions.Remove(connectorDefinition);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task DeleteConnectorDefinitionSettingsAsync(IList<ConnectorDefinitionSetting> connectorDefinitionSettings)
+    {
+        Repository.Database.ConnectorDefinitionSettings.RemoveRange(connectorDefinitionSettings);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -135,6 +150,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }).ToListAsync();
         return headers;
     }
+
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        // EF projection is fine here: a tiny table read once per operation that needs name snapshots,
+        // not a per-object hot-path query.
+        => Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Select(cs => new { cs.Id, cs.Name })
+            .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
 
     public async Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id)
     {
@@ -199,6 +222,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.PasswordPolicy)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -228,6 +252,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // callers that care about presentation order sort in the UI/API layer where it matters.
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)
@@ -407,6 +432,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Targeted single-column write of the persisted connector data (see the interface doc for why this must
+    /// not go through the graph-marking update path). On relational providers this is a single SQL UPDATE via
+    /// ExecuteUpdateAsync that touches no tracked state; the in-memory test provider does not support
+    /// ExecuteUpdateAsync (same pattern as the failed-authentication counter in ActivitiesRepository), so it
+    /// falls back to a narrow tracked load of the root entity only.
+    /// </summary>
+    public async Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData)
+    {
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.ConnectedSystems
+                .Where(cs => cs.Id == connectedSystemId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.PersistedConnectorData, persistedConnectorData));
+            return;
+        }
+
+        var connectedSystem = await Repository.Database.ConnectedSystems
+            .AsTracking()
+            .SingleAsync(cs => cs.Id == connectedSystemId);
+        connectedSystem.PersistedConnectorData = persistedConnectorData;
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
     {
         // Reconcile the object types/attributes against tracked current state first (adds + updates),
@@ -425,6 +474,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private void MarkConnectedSystemGraphForUpdate(ConnectedSystem connectedSystem)
     {
+        // Track the Connected System FIRST, and keep it first. Adding a new partition or container below uses
+        // DbSet.Add, which walks the graph and marks every entity it can reach for insertion; a new partition's
+        // navigation leads straight back here, and on to the Connector Definition and its settings. When those are
+        // detached (the portal loads the Connected System in one scope and saves it in another), the save then fails
+        // on a duplicate Connector Definition key and no hierarchy can be retrieved at all. EF Core stops walking at
+        // an entity that is already tracked, so tracking this one first confines each Add to what is genuinely new.
+        //
+        // UpdateDetachedSafe is used rather than Update() because Update() does the same graph walk from here:
+        // after ClearChangeTracker() it would traverse Objects → MVO → Type → Attributes, causing PK violations on
+        // the MetaverseObjectType ↔ MetaverseAttribute join table.
+        Repository.UpdateDetachedSafe(connectedSystem);
+
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
         // in collections that were loaded from a separate query and then modified.
         // Also handle existing partitions/containers that are detached (e.g. when the entity was loaded
@@ -436,12 +497,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (partition.Id == 0)
                 {
-                    // New partition - add it to the context
+                    // New partition - add it, along with any containers discovered under it.
                     Repository.Database.ConnectedSystemPartitions.Add(partition);
                 }
                 else
                 {
-                    // Existing partition - ensure it's tracked and marked as modified
+                    // Existing partition - ensure it's tracked and marked as modified. Tracked before its
+                    // containers for the same reason the Connected System is tracked before its partitions.
                     Repository.UpdateDetachedSafe(partition);
 
                     if (partition.Containers != null)
@@ -464,10 +526,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
-        // Use detach-safe update to avoid graph traversal on detached ConnectedSystem entities.
-        // After ClearChangeTracker(), Update() would traverse Objects → MVO → Type → Attributes
-        // causing PK violations on the MetaverseObjectType ↔ MetaverseAttribute join table.
-        Repository.UpdateDetachedSafe(connectedSystem);
+        // Same again for a discovered password policy. UpdateDetachedSafe does not traverse the graph, so without
+        // this a policy read during schema import is silently discarded on save. Placed after the Connected System
+        // itself is tracked, above: Add walks the graph, and a new policy's navigation leads straight back here.
+        if (connectedSystem.PasswordPolicy != null)
+        {
+            if (connectedSystem.PasswordPolicy.Id == 0)
+                Repository.Database.ConnectedSystemPasswordPolicies.Add(connectedSystem.PasswordPolicy);
+            else
+                Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
+        }
     }
 
     /// <summary>
@@ -487,6 +555,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var current = await Repository.Database.ConnectedSystemObjectTypes
             .AsTracking()
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Where(ot => ot.ConnectedSystemId == connectedSystem.Id)
             .ToListAsync();
         var currentById = current.ToDictionary(ot => ot.Id);
@@ -495,9 +564,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             if (incomingType.Id != 0 && currentById.TryGetValue(incomingType.Id, out var trackedType))
             {
-                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes.
+                // Existing object type: copy scalar values onto the tracked instance, then reconcile attributes and tags.
                 Repository.Database.Entry(trackedType).CurrentValues.SetValues(incomingType);
                 ReconcileAttributes(trackedType, incomingType);
+                ReconcileObjectTypeTags(trackedType, incomingType);
             }
             else
             {
@@ -513,17 +583,35 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Reconciles the attributes of a tracked object type against the supplied (detached) object type:
-    /// existing attributes (matched by Id) have their scalar values updated; new attributes (Id == 0) are
-    /// inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
+    /// existing attributes (matched by Name) have their scalar values updated; new attributes (no matching Name)
+    /// are inserted. Removals are not performed (see <see cref="ReconcileObjectTypesAsync"/>).
     /// </summary>
+    /// <remarks>
+    /// Matches by Name rather than Id, mirroring <c>ConnectedSystemServer.MergeSchemaIntoConnectedSystem</c>, which
+    /// already treats Name as an attribute's stable identity during a schema refresh; new attributes only ever
+    /// carry Id == 0 until <see cref="Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(System.Threading.CancellationToken)"/>
+    /// assigns one. Matching on Id let two new attributes on the same tracked object type collide: EF Core's
+    /// navigation fixup adds each newly <c>Add()</c>-ed attribute into <c>trackedType.Attributes</c> immediately
+    /// (before the object type's own reconciliation loop has advanced), so if the same tracked object type is
+    /// reconciled more than once in a pass (see #1171: <c>ConnectedSystem.ObjectTypes</c> containing two entries
+    /// that resolve to the same existing object type), a later call's <c>ToDictionary(a => a.Id)</c> found two
+    /// attributes still sitting at Id == 0 and threw "An item with the same key has already been added. Key: 0".
+    /// Name has no such collision: it is unique per object type by construction of the incoming schema, and
+    /// re-reconciling an already-pending new attribute now updates it in place instead of colliding or duplicating.
+    /// </remarks>
     private void ReconcileAttributes(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
     {
-        var trackedById = trackedType.Attributes.ToDictionary(a => a.Id);
+        var trackedByName = trackedType.Attributes.ToDictionary(a => a.Name);
 
         foreach (var incomingAttribute in incomingType.Attributes)
         {
-            if (incomingAttribute.Id != 0 && trackedById.TryGetValue(incomingAttribute.Id, out var trackedAttribute))
+            if (trackedByName.TryGetValue(incomingAttribute.Name, out var trackedAttribute))
             {
+                // SetValues copies every scalar including the key, and EF throws if a tracked entity's key
+                // would change. A name-matched incoming attribute is not guaranteed to carry the tracked
+                // attribute's Id (a caller may legitimately supply a freshly built incoming graph with
+                // Id == 0), so align the key first; when they already match this is a no-op.
+                incomingAttribute.Id = trackedAttribute.Id;
                 Repository.Database.Entry(trackedAttribute).CurrentValues.SetValues(incomingAttribute);
             }
             else
@@ -534,7 +622,45 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 incomingAttribute.Id = 0;
                 incomingAttribute.ConnectedSystemObjectType = trackedType;
                 Repository.Database.ConnectedSystemAttributes.Add(incomingAttribute);
+
+                // Keep the lookup consistent with trackedType.Attributes for the rest of THIS call: EF's
+                // navigation fixup already added incomingAttribute into that collection (see remarks above), so
+                // mirroring it here means a later duplicate Name within the same incoming list updates the
+                // pending attribute instead of being added twice.
+                trackedByName[incomingAttribute.Name] = incomingAttribute;
             }
+        }
+    }
+
+    /// <summary>
+    /// Reconciles the classification tags of a tracked object type against the supplied (detached) object type:
+    /// tags the Connector no longer reports are deleted, and newly reported ones inserted.
+    /// </summary>
+    /// <remarks>
+    /// Unlike attributes (see <see cref="ReconcileAttributes"/>), removals ARE performed here. Tags are
+    /// connector-owned classification carrying no configuration an administrator can invest in and nothing else
+    /// references, so a stale tag is simply wrong rather than something to preserve; leaving one behind would let a
+    /// type keep claiming a classification the Connected System no longer gives it. Matched on key and value
+    /// together, which is the unique index's shape: an unchanged classification is left alone rather than being
+    /// deleted and re-inserted with a new Id on every refresh.
+    /// </remarks>
+    private void ReconcileObjectTypeTags(ConnectedSystemObjectType trackedType, ConnectedSystemObjectType incomingType)
+    {
+        var incomingClassifications = incomingType.Tags.Select(t => (t.Key, t.Value)).ToHashSet();
+        var trackedClassifications = trackedType.Tags.Select(t => (t.Key, t.Value)).ToHashSet();
+
+        // ToList first: removing from the DbSet triggers navigation fixup on trackedType.Tags, which would
+        // otherwise be modified while being enumerated.
+        var staleTags = trackedType.Tags.Where(t => !incomingClassifications.Contains((t.Key, t.Value))).ToList();
+        Repository.Database.ConnectedSystemObjectTypeTags.RemoveRange(staleTags);
+
+        foreach (var newTag in incomingType.Tags.Where(t => !trackedClassifications.Contains((t.Key, t.Value))))
+        {
+            // Link to the tracked object type rather than setting the FK scalar, so EF inserts against that type.
+            // trackedType is already tracked, so Add does not drag a detached graph in.
+            newTag.Id = 0;
+            newTag.ConnectedSystemObjectType = trackedType;
+            Repository.Database.ConnectedSystemObjectTypeTags.Add(newTag);
         }
     }
 
@@ -570,6 +696,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(ot => ot.Attributes)
+            .Include(ot => ot.Tags)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
     }
@@ -752,6 +879,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Resolves a Connected System's name-candidate attribute ids, one list per tier of
+    /// <see cref="ObjectNaming.ConnectedSystemNameAttributes"/> and in the same order. Each object type
+    /// in the system may define its own copy of a candidate attribute (its own "cn", say), so each tier
+    /// holds every attribute id whose name matches that candidate. Matching is case-insensitive because
+    /// connector schemas belong to the customer's system, not to JIM.
+    /// <para>
+    /// Resolving ids once per query lets the sort and projection clauses filter on integer ids rather
+    /// than repeating ILike comparisons against attribute names for every row.
+    /// </para>
+    /// </summary>
+    private async Task<List<List<int>>> GetNameAttributeIdTiersAsync(int connectedSystemId)
+    {
+        var candidateNames = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLower()).ToList();
+        var candidates = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
+                        candidateNames.Contains(a.Name.ToLower()))
+            .Select(a => new { a.Id, a.Name })
+            .ToListAsync();
+
+        return ObjectNaming.ConnectedSystemNameAttributes
+            .Select(candidate => candidates
+                .Where(a => string.Equals(a.Name, candidate, StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.Id)
+                .ToList())
+            .ToList();
+    }
+
+    /// <summary>
     /// Retrieves a page's worth of Connected System Object Headers for a specific system, with sort and range properties.
     /// This has a max page size of 100 objects.
     /// </summary>
@@ -782,18 +937,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // Pre-resolve displayName attribute IDs for this Connected System to avoid repeated
-        // ILike string comparisons in the search, sort, and projection clauses.
-        // Each object type in the Connected System may have its own "displayname" attribute.
-        List<int> displayNameAttributeIds;
-        using (ActivitySource.StartActivity("Cso.Headers.LoadDisplayNameAttrIds"))
+        // Pre-resolve the name-candidate attribute IDs for this Connected System, one list per tier of
+        // ObjectNaming.ConnectedSystemNameAttributes, to avoid repeated ILike string comparisons in the
+        // sort and projection clauses. Each object type in the Connected System may define its own copy
+        // of a candidate attribute, so a tier holds every matching attribute id.
+        List<List<int>> nameAttributeIdTiers;
+        using (ActivitySource.StartActivity("Cso.Headers.LoadNameAttrIds"))
         {
-            displayNameAttributeIds = await Repository.Database.ConnectedSystemAttributes
-                .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
-                            EF.Functions.ILike(a.Name, "displayname"))
-                .Select(a => a.Id)
-                .ToListAsync();
+            nameAttributeIdTiers = await GetNameAttributeIdTiersAsync(connectedSystemId);
         }
+
+        // The sort and projection clauses below coalesce the tiers explicitly, so they must be extended
+        // if the naming policy gains a tier. ConnectedSystemNameAttributeTierCountTests fails loudly if
+        // they fall out of step.
+        var nameTier1 = nameAttributeIdTiers[0];
+        var nameTier2 = nameAttributeIdTiers[1];
+        var nameTier3 = nameAttributeIdTiers[2];
+
+        // Search matches any tier: a user typing a name should find the object whichever candidate
+        // attribute happens to carry it.
+        var allNameAttributeIds = nameAttributeIdTiers.SelectMany(tier => tier).ToList();
+
 
         var query = Repository.Database.ConnectedSystemObjects
             .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
@@ -834,9 +998,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(cso =>
-                // Search display name (using pre-resolved attribute IDs instead of ILike on name)
+                // Search the name candidates (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
-                    displayNameAttributeIds.Contains(av.AttributeId) &&
+                    allNameAttributeIds.Contains(av.AttributeId) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern)) ||
                 // Search external ID (primary)
@@ -873,15 +1037,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
                     .Select(av => av.StringValue)
                     .FirstOrDefault()),
+            // Sorts on the resolved name, coalescing the naming tiers in preference order so the sort
+            // key matches what the Display Name column actually renders.
             "displayname" => sortDescending
-                ? query.OrderByDescending(cso => cso.AttributeValues
-                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault())
-                : query.OrderBy(cso => cso.AttributeValues
-                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault()),
+                ? query.OrderByDescending(cso =>
+                    cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault())
+                : query.OrderBy(cso =>
+                    cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()),
             "type" => sortDescending
                 ? query.OrderByDescending(cso => cso.Type.Name)
                 : query.OrderBy(cso => cso.Type.Name),
@@ -928,10 +1094,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Status = cso.Status,
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
-                DisplayName = cso.AttributeValues
-                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault(),
+                DisplayName =
+                    cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
                 ExternalIdValue = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
                     .Select(av => av.StringValue)
@@ -958,12 +1124,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .Select(pe => (Guid?)pe.Id)
                     .FirstOrDefault(),
-                PendingDisplayName = cso.AttributeValues.Any(av => displayNameAttributeIds.Contains(av.AttributeId))
+                // Only surfaced when the object has no name yet; the naming tiers already cover cn, so
+                // no ad-hoc attribute-name match is needed here.
+                PendingDisplayName = cso.AttributeValues.Any(av => allNameAttributeIds.Contains(av.AttributeId))
                     ? null
                     : Repository.Database.PendingExports
                         .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                         .SelectMany(pe => pe.AttributeValueChanges)
-                        .Where(avc => displayNameAttributeIds.Contains(avc.AttributeId) || EF.Functions.ILike(avc.Attribute.Name, "cn"))
+                        .Where(avc => allNameAttributeIds.Contains(avc.AttributeId))
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault(),
                 PendingExternalId = Repository.Database.PendingExports
@@ -1914,9 +2082,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
     /// Handles all external ID data types (string, int, long, Guid).
-    /// Uses AsNoTracking for efficiency — results are read-only index data.
+    /// Delegates to <see cref="GetAllCsoImportStateLookupAsync"/> (SPEC-1082 D8) so there is a
+    /// single query implementation; ConnectedSystemServer.cs:3208 still consumes this Guid-only shape.
     /// </summary>
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
+    {
+        var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
+        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as the external-id-only mapping above.
+    /// Widens that query's projection with the stored content hash, schema fingerprint, status,
+    /// and partition, so a Full Import can evaluate the skip predicate for every matched object
+    /// without any additional database round trip. Uses AsNoTracking; results are read-only index data.
+    /// </summary>
+    public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
         // Load all CSOs for this Connected System with their external ID attribute values.
         // Each CSO gets ONE cache entry, keyed by whichever external ID is available:
@@ -1931,6 +2113,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.Id,
                 cso.ExternalIdAttributeId,
                 cso.SecondaryExternalIdAttributeId,
+                cso.ImportStateHash,
+                cso.ImportStateFingerprint,
+                cso.Status,
+                cso.PartitionId,
                 // Load attribute values for both primary and secondary external ID attributes
                 AttributeValues = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId ||
@@ -1947,9 +2133,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             })
             .ToListAsync();
 
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in csos)
         {
+            var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
+
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
             var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue);
@@ -1957,7 +2145,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (primaryValue != null)
             {
                 var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
-                result.TryAdd(cacheKey, cso.Id);
+                result.TryAdd(cacheKey, entry);
                 continue; // Primary found — no need for secondary
             }
 
@@ -1970,12 +2158,55 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 if (secondaryValue != null)
                 {
                     var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
-                    result.TryAdd(cacheKey, cso.Id);
+                    result.TryAdd(cacheKey, entry);
                 }
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// SPEC-1082 D6: the only code path permitted to write <see cref="ConnectedSystemObject.ImportStateHash"/>
+    /// and <see cref="ConnectedSystemObject.ImportStateFingerprint"/>. Callers MUST invoke this
+    /// strictly after the batch's attribute-value writes for the given CSOs have committed.
+    /// Single set-based UPDATE ... FROM (VALUES ...) statement per batch (chunked to stay within
+    /// the parameter limit), mirroring <c>BulkUpdateConnectedSystemObjectsRawAsync</c>'s pattern.
+    /// Deliberately does NOT touch LastUpdated (the #891 Full Synchronisation watermark) - stamping
+    /// must be invisible to that watermark.
+    /// </summary>
+    public async Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+    {
+        if (stamps.Count == 0)
+            return;
+
+        const int columnsPerRow = 3; // Id, Hash, Fingerprint
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+
+        var sql = new System.Text.StringBuilder();
+        var parameters = new List<object>();
+        foreach (var chunk in BulkSqlHelpers.ChunkList(stamps.ToList(), chunkSize))
+        {
+            sql.Clear();
+            parameters.Clear();
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""ImportStateHash"" = v.""ImportStateHash"", ""ImportStateFingerprint"" = v.""ImportStateFingerprint"" FROM (VALUES ");
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::uuid)");
+
+                var (csoId, hash, fingerprint) = chunk[i];
+                parameters.Add(csoId);
+                parameters.Add(BulkSqlHelpers.NullableParam(hash, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(fingerprint, NpgsqlTypes.NpgsqlDbType.Uuid));
+            }
+
+            sql.Append(@") AS v(""Id"", ""ImportStateHash"", ""ImportStateFingerprint"") WHERE t.""Id"" = v.""Id""");
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
     }
 
     /// <summary>
@@ -2205,6 +2436,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             query = query.Where(cso => cso.PartitionId == partitionId);
         return await query.CountAsync();
     }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<ConnectedSystemObjectScopeCandidate> StreamConnectedSystemObjectScopeCandidates(int connectedSystemId) =>
+        Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId)
+            .OrderBy(cso => cso.Id)
+            .Select(cso => new ConnectedSystemObjectScopeCandidate(
+                cso.Id,
+                cso.Type.Name,
+                cso.PartitionId,
+                // The secondary external ID is what a directory Connector derives containment from (the
+                // Distinguished Name); systems without one identify the object by its primary external ID, so fall
+                // back to that rather than reporting the object as unlocatable.
+                cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault()
+                ?? cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
+                cso.MetaverseObjectId))
+            .AsAsyncEnumerable();
 
     /// <inheritdoc />
     public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
@@ -2467,6 +2721,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 avEntry.State = EntityState.Added;
         }
 
+        // SPEC-1082 D9: this writes attribute values outside the Full Import stamp path (D6/D7),
+        // e.g. backfilling a secondary external ID during PendingProvisioning confirmation. Null the
+        // stored hash/fingerprint in the SAME SaveChanges so a subsequent Full Import never trusts a
+        // hash describing content that has since changed.
+        connectedSystemObject.ImportStateHash = null;
+        connectedSystemObject.ImportStateFingerprint = null;
+
         // Use Entry().State instead of DbSet.Update() to avoid graph traversal.
         Repository.UpdateDetachedSafe(connectedSystemObject);  // Already has NullReferenceException fallback
         await Repository.Database.SaveChangesAsync();
@@ -2507,6 +2768,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allNewValues.Count > 0)
         {
             await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
+
+            // SPEC-1082 D9: same rationale as the singular overload above - this writes attribute
+            // values outside the Full Import stamp path, so null the stored hash/fingerprint for
+            // every affected CSO, set-based, in the same operation.
+            var affectedCsoIds = updates.Where(u => u.newAttributeValues.Count > 0).Select(u => u.cso.Id).Distinct().ToArray();
+            if (affectedCsoIds.Length > 0)
+            {
+                await Repository.Database.Database.ExecuteSqlRawAsync(
+                    @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+                    affectedCsoIds);
+            }
         }
 
         Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
@@ -2577,7 +2849,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Object Types
     /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
-    /// Includes Attributes.
+    /// Includes Attributes and classification Tags.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to return the types for.</param>
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
@@ -2585,6 +2857,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjectTypes
             .AsSplitQuery()
             .Include(q => q.Attributes)
+            .Include(q => q.Tags)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
@@ -2842,6 +3115,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.PageSize = runProfile.PageSize;
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
+        tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;
@@ -2897,6 +3171,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        // AttributeValueChanges and their Attribute definitions are needed by
+        // TryResolveReferencesFromLookup (UnresolvedReferenceValue, StringValue,
+        // ResolvedReferenceCsoId stamping) and its logging (Attribute.Name).
+        // The CSO graph is deliberately NOT included: the deferred pass reads only the
+        // ConnectedSystemObjectId scalar, and the referenced CSOs are bulk-fetched
+        // separately via GetConnectedSystemObjectsByMetaverseObjectIdsAsync.
+        // AsNoTracking: mutations are persisted via UpdatePendingExportsAsync (raw bulk
+        // SQL + tracker detach), not EF change tracking.
+        return await Repository.Database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.HasUnresolvedReferences
+                      && pe.Status == PendingExportStatus.Pending)
+            .ToListAsync();
     }
 
     /// <summary>
@@ -3121,6 +3423,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Returns which of the supplied Pending Export ids still exist. Summary-tier: an id projection,
+    /// with no entity materialised, because the caller only needs to know whether a row is still there.
+    /// </summary>
+    public async Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return [];
+
+        return await Repository.Database.PendingExports
+            .Where(pe => pendingExportIds.Contains(pe.Id))
+            .Select(pe => pe.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
     /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
     /// CSO attributes, attribute value changes, and attribute definitions.
@@ -3337,8 +3654,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (statusList != null && statusList.Count > 0)
             query = query.Where(pe => statusList.Contains(pe.Status));
 
-        // Apply search filter - search on target identifier, source MVO display name, or error message
-        // Search is case-insensitive for user convenience
+        // Apply search filter - search on target identifier, source Metaverse Object name, or error
+        // message. Search is case-insensitive for user convenience.
+        // The Metaverse side reads the denormalised CachedDisplayName column (the object's resolved
+        // name, per ObjectNaming). It previously matched an attribute named "displayname", but the
+        // Metaverse attribute is "Display Name", so that predicate matched no rows at all and searching
+        // by a source object's name silently returned nothing.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
@@ -3347,9 +3668,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
                     .Any(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId &&
                          av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern))) ||
-                (pe.SourceMetaverseObject != null && pe.SourceMetaverseObject.AttributeValues
-                    .Any(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname") &&
-                         av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern))));
+                (pe.SourceMetaverseObject != null && pe.SourceMetaverseObject.CachedDisplayName != null &&
+                    EF.Functions.ILike(pe.SourceMetaverseObject.CachedDisplayName, searchPattern)));
         }
 
         // Apply sorting
@@ -3374,18 +3694,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Select(av => av.StringValue)
                         .FirstOrDefault()
                     : null),
+            // Sorts on the denormalised resolved-name column (covered by
+            // IX_MetaverseObjects_TypeId_CachedDisplayName), replacing an attribute-name match on
+            // "displayname" that never matched the actual "Display Name" attribute, so this sort did
+            // nothing at all.
             "sourcemvo" => sortDescending
                 ? query.OrderByDescending(pe => pe.SourceMetaverseObject != null
-                    ? pe.SourceMetaverseObject.AttributeValues
-                        .Where(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault()
+                    ? pe.SourceMetaverseObject.CachedDisplayName
                     : null)
                 : query.OrderBy(pe => pe.SourceMetaverseObject != null
-                    ? pe.SourceMetaverseObject.AttributeValues
-                        .Where(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault()
+                    ? pe.SourceMetaverseObject.CachedDisplayName
                     : null),
             "changes" => sortDescending
                 ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count)
@@ -3409,10 +3727,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var headers = pagedItems.Select(pe =>
         {
             // Get target object display name from CSO if available (priority: display name > external ID > secondary external ID)
-            var targetIdentifier = pe.ConnectedSystemObject?.DisplayNameOrId;
+            var targetIdentifier = pe.ConnectedSystemObject?.NameOrId;
 
             // Get source MVO display name if available
-            var sourceMvoDisplayName = pe.SourceMetaverseObject?.DisplayName;
+            var sourceMvoDisplayName = pe.SourceMetaverseObject?.NameOrId;
 
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
         }).ToList();
@@ -3883,12 +4201,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
-    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-    {
-        return await Repository.Database.ConnectedSystemObjects
-            .CountAsync(cso => cso.MetaverseObjectId == metaverseObjectId);
-    }
-
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects
@@ -4299,6 +4611,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         span?.SetTag("page", page);
         span?.SetTag("pageSize", pageSize);
 
+        // Reference values can belong to any Connected System, so their name candidates are matched by
+        // attribute name rather than by pre-resolved ids. Lowered here so the comparison translates to
+        // a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
+        // ObjectNaming.ConnectedSystemNameAttributes (guarded by ConnectedSystemNameAttributeTierCountTests).
+        var nameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
+        var nameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
+        var nameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
+
         var baseQuery = Repository.Database.ConnectedSystemObjectChanges
             .AsNoTracking()
             .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId);
@@ -4353,10 +4673,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                         Id = vc.ReferenceValue.Id,
                                         ConnectedSystemId = vc.ReferenceValue.ConnectedSystemId,
                                         TypeName = vc.ReferenceValue.Type.Name,
-                                        // Best-effort label: prefer a "displayName" attribute, fall back to external id, then secondary external id.
+                                        // Best-effort label, mirroring ConnectedSystemObject.NameOrId: the
+                                        // ordered name candidates, then external id, then secondary external id.
                                         DisplayName =
                                             vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.Attribute.Name.ToLower() == "displayname" && av.StringValue != null)
+                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate1 && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            ?? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate2 && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            ?? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate3 && av.StringValue != null)
                                                 .Select(av => av.StringValue)
                                                 .FirstOrDefault()
                                             ?? vc.ReferenceValue.AttributeValues
@@ -4463,6 +4792,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId)
+    {
+        // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
+        // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
+        // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted
+                        && c.DeletedConnectedSystemObjectId == deletedConnectedSystemObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.DeletedObjectType)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
         // First, get the deletion change to find the ConnectedSystemId and External ID
@@ -4496,6 +4839,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<SyncRuleInitialPassword?> GetSyncRuleInitialPasswordAsync(int syncRuleId)
+    {
+        // Read-only comparison input, so no tracking: attaching it would put a second instance of this row in
+        // the identity map alongside the one hanging off the rule the caller is about to save.
+        return await Repository.Database.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .SingleOrDefaultAsync(ip => ip.SyncRuleId == syncRuleId);
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         // AsTracking() is essential here even though the DbContext default is NoTracking:
@@ -4521,6 +4880,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(afr => afr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ConnectedSystem)
+            // Required, not optional: the configuration snapshot reads this navigation, and an unloaded
+            // navigation is indistinguishable from an unconfigured one. Without the Include, every change
+            // history entry would record the initial password as switched off, however it was really set.
+            .Include(sr => sr.InitialPassword)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectScopingCriteriaGroups)
@@ -4565,11 +4928,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // by creating a fresh context per handler), SaveChanges would silently persist nothing and report
         // success. Toggling Enabled on an existing rule was lost exactly this way. Synchronisation integrity
         // demands a fast, loud failure over silent data loss, so reject a detached entity outright.
-        if (Repository.Database.Entry(syncRule).State == EntityState.Detached)
-            throw new InvalidOperationException(
-                $"UpdateSyncRuleAsync requires a change-tracked SyncRule (Id {syncRule.Id}), but the supplied " +
-                "instance is detached from this DbContext, so no changes would be persisted. Load the rule via " +
-                "GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
+        Repository.Database.RequireTracked(syncRule, nameof(UpdateSyncRuleAsync),
+            "Load the rule via GetSyncRuleAsync and mutate it on the same JimApplication instance used to save it.");
 
         // Database.Update(syncRule) is deliberately NOT used: it traverses the full navigation graph and
         // re-attaches every reachable entity as Modified. The SyncRule graph reaches the same
@@ -5002,7 +5362,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 15. Finally, delete the Connected System itself
+        // 15. Delete the discovered Password Policy. The EF model cascades this, but deletion here is raw SQL
+        // against the parent row, which bypasses the cascade and would hit a foreign key violation instead.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPasswordPolicies"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 16. Finally, delete the Connected System itself
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",
             connectedSystemId);
@@ -5115,6 +5481,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(cso.ScopeReviewPending);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+                // Two-phase create commits parent CSO rows before attribute values; a non-null hash
+                // here could survive a subsequent value-write failure as a permanently believable lie.
+                // The only legitimate stamp is StampImportStateAsync, run after values commit.
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -5424,6 +5796,59 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.Database
             .SqlQueryRaw<Guid>(sql, parameters.ToArray())
             .ToListAsync();
+    }
+
+    public async Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        // Projected in one pass over the rules rather than four separate queries, then grouped in memory. The result
+        // set is bounded by configuration size (rules and their mappings), not by object counts, so it stays small.
+        var references = await Repository.Database.SyncRules
+            .Where(sr => connectedSystemIds.Contains(sr.ConnectedSystemId))
+            .Select(sr => new
+            {
+                sr.ConnectedSystemId,
+                SyncRuleId = sr.Id,
+                sr.MetaverseObjectTypeId,
+                FlowTargetAttributeIds = sr.AttributeFlowRules
+                    .Where(m => m.TargetMetaverseAttributeId != null)
+                    .Select(m => m.TargetMetaverseAttributeId!.Value),
+                FlowSourceAttributeIds = sr.AttributeFlowRules
+                    .SelectMany(m => m.Sources)
+                    .Where(s => s.MetaverseAttributeId != null)
+                    .Select(s => s.MetaverseAttributeId!.Value),
+                ScopingAttributeIds = sr.ObjectScopingCriteriaGroups
+                    .SelectMany(g => g.Criteria)
+                    .Where(c => c.MetaverseAttributeId != null)
+                    .Select(c => c.MetaverseAttributeId!.Value),
+                MatchingAttributeIds = sr.ObjectMatchingRules
+                    .Where(o => o.TargetMetaverseAttributeId != null)
+                    .Select(o => o.TargetMetaverseAttributeId!.Value)
+            })
+            .ToListAsync();
+
+        var bySystem = references.GroupBy(r => r.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => new ConnectedSystemConfigurationScope
+            {
+                ConnectedSystemId = g.Key,
+                SyncRuleIds = g.Select(r => r.SyncRuleId).ToHashSet(),
+                MetaverseObjectTypeIds = g.Select(r => r.MetaverseObjectTypeId).ToHashSet(),
+                MetaverseAttributeIds = g.SelectMany(r => r.FlowTargetAttributeIds
+                        .Concat(r.FlowSourceAttributeIds)
+                        .Concat(r.ScopingAttributeIds)
+                        .Concat(r.MatchingAttributeIds))
+                    .ToHashSet()
+            });
+
+        // Every requested system gets an entry, so a system with no Synchronisation Rules reports an empty scope
+        // rather than being silently absent (which a caller could mistake for "not evaluated").
+        return connectedSystemIds
+            .Select(id => bySystem.TryGetValue(id, out var scope)
+                ? scope
+                : new ConnectedSystemConfigurationScope { ConnectedSystemId = id })
+            .ToList();
     }
 
     #endregion

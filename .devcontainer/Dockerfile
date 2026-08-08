@@ -3,7 +3,7 @@
 # The 2.x image line is the maintained GA .NET 10 family: the previous 1-10.0-noble
 # tag was frozen upstream on an October 2025, RC-era image and never rebuilt after
 # .NET 10 went GA, so it received no SDK, runtime, or OS updates.
-FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:be5bd898d964c0d081cb22285c2318e488882103702c8831418fdd59218fd5dd
+FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:0ad11caaa728e35cbc46b0592dd11ca0df8111e565a96471024a795f4d412c7c
 
 # Install pinned .NET SDK version to match global.json's rollForward target.
 # Reasons this is an explicit install rather than relying on the base image:
@@ -69,6 +69,13 @@ RUN printf 'Package: moby-containerd\nPin: version 2.2.*\nPin-Priority: 1001\n' 
 # during setup silently fails without this. (Regression from the bookworm->noble
 # base image bump; bookworm shipped pip by default.)
 #
+# Install bat (a syntax-highlighting cat, used via the `bat` alias in
+# jim-aliases.sh). The base image happens to ship it today, but base image
+# contents are not a contract and can change under a digest bump; naming it here
+# keeps the alias from breaking silently. Debian/Ubuntu install the binary as
+# `batcat`, not `bat`, to avoid clashing with bacula-console's `bat` - hence the
+# alias.
+#
 # Install ripgrep so Claude Code can use the distro binary instead of its
 # bundled vendor/ripgrep/arm64-linux/rg. The bundled binary assumes a 4K
 # memory page size and SIGABRTs on hosts running a 16K page-size kernel
@@ -81,6 +88,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     socat \
     python3-pip \
+    bat \
     ripgrep \
     libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
     libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 \

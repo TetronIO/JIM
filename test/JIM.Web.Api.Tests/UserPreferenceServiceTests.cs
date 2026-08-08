@@ -976,6 +976,273 @@ public class UserPreferenceServiceTests
 
     #endregion
 
+    #region GetCausalityViewAsync tests
+
+    [Test]
+    [TestCase("flow")]
+    [TestCase("timeline")]
+    [TestCase("graph")]
+    public async Task GetCausalityViewAsync_WhenValidValueStored_ReturnsStoredValueAsync(string storedValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(storedValue);
+
+        // Act
+        var result = await _service.GetCausalityViewAsync();
+
+        // Assert
+        Assert.That(result, Is.EqualTo(storedValue));
+    }
+
+    [Test]
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("tree")]
+    [TestCase("Timeline")]
+    public async Task GetCausalityViewAsync_WhenInvalidOrMissingValueStored_ReturnsNullAsync(string? storedValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(storedValue);
+
+        // Act
+        var result = await _service.GetCausalityViewAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCausalityViewAsync_WhenJsDisconnected_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act
+        var result = await _service.GetCausalityViewAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCausalityViewAsync_WhenJsNotAvailable_ReturnsNullAsync()
+    {
+        // Arrange - simulates prerendering scenario
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act
+        var result = await _service.GetCausalityViewAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
+    #region SetCausalityViewAsync tests
+
+    [Test]
+    [TestCase("flow")]
+    [TestCase("timeline")]
+    [TestCase("graph")]
+    public async Task SetCausalityViewAsync_WithValidValue_StoresValueAsync(string view)
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+
+        // Act
+        await _service.SetCausalityViewAsync(view);
+
+        // Assert
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("causalityView"));
+        Assert.That(capturedArgs[1], Is.EqualTo(view));
+    }
+
+    [Test]
+    [TestCase("")]
+    [TestCase("tree")]
+    [TestCase("Timeline")]
+    public async Task SetCausalityViewAsync_WithInvalidValue_DoesNotStoreAsync(string invalidValue)
+    {
+        // Act
+        await _service.SetCausalityViewAsync(invalidValue);
+
+        // Assert - verify no JS call was made
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            It.IsAny<string>(),
+            It.IsAny<object[]>()),
+            Times.Never);
+    }
+
+    [Test]
+    public void SetCausalityViewAsync_WhenJsDisconnected_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityViewAsync("timeline"));
+    }
+
+    [Test]
+    public void SetCausalityViewAsync_WhenJsNotAvailable_DoesNotThrow()
+    {
+        // Arrange - simulates prerendering scenario
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityViewAsync("flow"));
+    }
+
+    #endregion
+
+    #region GetCausalityTechNamesAsync tests
+
+    [Test]
+    [TestCase("true", true)]
+    [TestCase("false", false)]
+    public async Task GetCausalityTechNamesAsync_WhenValueStored_ReturnsStoredValueAsync(string storedValue, bool expected)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(storedValue);
+
+        // Act
+        var result = await _service.GetCausalityTechNamesAsync();
+
+        // Assert
+        Assert.That(result, Is.EqualTo(expected));
+    }
+
+    [Test]
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("yes")]
+    public async Task GetCausalityTechNamesAsync_WhenInvalidOrMissingValueStored_ReturnsNullAsync(string? storedValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(storedValue);
+
+        // Act
+        var result = await _service.GetCausalityTechNamesAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCausalityTechNamesAsync_WhenJsDisconnected_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act
+        var result = await _service.GetCausalityTechNamesAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCausalityTechNamesAsync_WhenJsNotAvailable_ReturnsNullAsync()
+    {
+        // Arrange - simulates prerendering scenario
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act
+        var result = await _service.GetCausalityTechNamesAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
+    #region SetCausalityTechNamesAsync tests
+
+    [Test]
+    [TestCase(true, "true")]
+    [TestCase(false, "false")]
+    public async Task SetCausalityTechNamesAsync_StoresCorrectValueAsync(bool enabled, string expectedValue)
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+
+        // Act
+        await _service.SetCausalityTechNamesAsync(enabled);
+
+        // Assert
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("causalityTechNames"));
+        Assert.That(capturedArgs[1], Is.EqualTo(expectedValue));
+    }
+
+    [Test]
+    public void SetCausalityTechNamesAsync_WhenJsDisconnected_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityTechNamesAsync(true));
+    }
+
+    [Test]
+    public void SetCausalityTechNamesAsync_WhenJsNotAvailable_DoesNotThrow()
+    {
+        // Arrange - simulates prerendering scenario
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityTechNamesAsync(false));
+    }
+
+    #endregion
+
     #region Constructor tests
 
     [Test]

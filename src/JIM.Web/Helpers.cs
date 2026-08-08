@@ -8,10 +8,12 @@ using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Logic;
 using JIM.Utilities;
+using JIM.Web.Causality;
 using JIM.Web.Models;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
@@ -185,6 +187,64 @@ public static class Helpers
         return $"{Math.Round(timeSpan.TotalMilliseconds)} ms";
     }
 
+    /// <summary>
+    /// The heading shown above a Run Profile Execution Item's error, naming the phase the error belongs to.
+    /// Every <see cref="ActivityRunProfileExecutionItemErrorType"/> must appear here; a missing entry reads
+    /// as a confident statement about the wrong phase rather than as an obvious omission, so
+    /// ErrorPhaseTitleTests asserts the coverage.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<ActivityRunProfileExecutionItemErrorType, string> ErrorPhaseTitles =
+        new Dictionary<ActivityRunProfileExecutionItemErrorType, string>
+        {
+            // No error at all.
+            [ActivityRunProfileExecutionItemErrorType.NotSet] = "No Error",
+
+            // Import-phase errors: the object was rejected before its Connected System Object was created.
+            [ActivityRunProfileExecutionItemErrorType.DuplicateObject] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+
+            // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
+            // true here, and saying either sends an administrator hunting for a problem that does not exist.
+            [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = "Attribute Not Imported",
+
+            // Import-phase diagnostics: the object imported and its changes were applied.
+            [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = "Import Verification",
+            [ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport] = "Import Fell Back",
+
+            // Synchronisation-phase errors: the Connected System Object exists but synchronisation failed.
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousMatch] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
+
+            // Export-phase errors.
+            [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
+            [ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed] = "Export Failed",
+            [ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId] = "Export Failed",
+
+            // Generic.
+            [ActivityRunProfileExecutionItemErrorType.UnhandledError] = "Operation Failed"
+        };
+
+    /// <summary>
+    /// Returns the heading for a Run Profile Execution Item's error, naming the phase it belongs to.
+    /// </summary>
+    public static string GetErrorPhaseTitle(ActivityRunProfileExecutionItemErrorType? errorType)
+    {
+        if (errorType.HasValue && ErrorPhaseTitles.TryGetValue(errorType.Value, out var title))
+            return title;
+
+        // Unreachable while ErrorPhaseTitleTests passes; a neutral fallback beats an empty heading.
+        return "Operation Failed";
+    }
+
     #region mudblazor related
     public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
     {
@@ -195,6 +255,45 @@ public static class Helpers
             ActivityStatus.CompleteWithWarning => Color.Warning,
             ActivityStatus.CompleteWithError => Color.Tertiary,
             ActivityStatus.FailedWithError => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Returns the chip colour for a Schedule Execution's overall status.
+    /// </summary>
+    /// <param name="status">The Schedule Execution status to colour.</param>
+    public static Color GetScheduleExecutionMudBlazorColorForStatus(ScheduleExecutionStatus status)
+    {
+        return status switch
+        {
+            ScheduleExecutionStatus.Complete => Color.Success,
+            ScheduleExecutionStatus.InProgress => Color.Primary,
+            ScheduleExecutionStatus.Failed => Color.Error,
+            ScheduleExecutionStatus.Cancelled => Color.Warning,
+            ScheduleExecutionStatus.Paused => Color.Warning,
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Returns the chip colour for an individual step's status within a Schedule Execution. Mirrors
+    /// <see cref="GetActivityMudBlazorColorForStatus"/> for the statuses the two have in common, so a step and the
+    /// Activity behind it are never coloured differently.
+    /// </summary>
+    /// <param name="status">The step status to colour.</param>
+    public static Color GetScheduleExecutionStepMudBlazorColorForStatus(ScheduleExecutionStepStatus status)
+    {
+        return status switch
+        {
+            ScheduleExecutionStepStatus.Completed => Color.Success,
+            ScheduleExecutionStepStatus.CompletedWithWarning => Color.Warning,
+            ScheduleExecutionStepStatus.CompletedWithError => Color.Tertiary,
+            ScheduleExecutionStepStatus.Processing => Color.Primary,
+            ScheduleExecutionStepStatus.Queued => Color.Info,
+            ScheduleExecutionStepStatus.Cancelling => Color.Warning,
+            ScheduleExecutionStepStatus.Failed => Color.Error,
+            ScheduleExecutionStepStatus.Cancelled => Color.Warning,
             _ => Color.Default,
         };
     }
@@ -263,7 +362,7 @@ public static class Helpers
             ExternalIdStatus.Rejected =>
                 "This object was not created due to an import error. The external ID shown is from the source data.",
             ExternalIdStatus.PendingRemoval =>
-                "This object has been detected as deleted from the source system and is pending removal during the next synchronisation.",
+                "This object has been detected as deleted from the source system. It is pending removal during the next synchronisation.",
             ExternalIdStatus.Deleted =>
                 "This object has been deleted. The external ID shown is preserved from when this operation was recorded.",
             _ => "The external ID shown is preserved from when this operation was recorded."
@@ -450,6 +549,54 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Returns administrator-facing wording for an attribute's writability. The enum names are not shown:
+    /// an administrator needs to know what they can do with the attribute, not what JIM calls the state.
+    /// </summary>
+    public static string GetAttributeWritabilityLabel(AttributeWritability writability)
+    {
+        return writability switch
+        {
+            AttributeWritability.Writable => "Writable",
+            AttributeWritability.ReadOnly => "Read-Only",
+            AttributeWritability.WritableOnCreate => "Set on creation only",
+            _ => writability.ToString().SplitOnCapitalLetters()
+        };
+    }
+
+    /// <summary>
+    /// Returns a one-sentence explanation of what an attribute's writability means for Attribute Flow,
+    /// for use as tooltip text alongside the label.
+    /// </summary>
+    public static string GetAttributeWritabilityDescription(AttributeWritability writability)
+    {
+        return writability switch
+        {
+            AttributeWritability.Writable =>
+                "The Connected System accepts writes to this attribute, so an export Attribute Flow can keep it up to date.",
+            AttributeWritability.ReadOnly =>
+                "The Connected System will not accept writes to this attribute. It can be imported, but no export Attribute Flow may target it.",
+            AttributeWritability.WritableOnCreate =>
+                "The Connected System accepts a value for this attribute only when the object is created. An export Attribute Flow may target it: the value is sent with the Create Pending Export, and JIM never sends it again, because changing it would break the link to the object.",
+            _ => string.Empty
+        };
+    }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for an attribute's writability chip. Each state gets its own colour so
+    /// the constraint is visible at a glance in a long schema table.
+    /// </summary>
+    public static Color GetAttributeWritabilityChipColour(AttributeWritability writability)
+    {
+        return writability switch
+        {
+            AttributeWritability.Writable => Color.Success,
+            AttributeWritability.ReadOnly => Color.Warning,
+            AttributeWritability.WritableOnCreate => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
     /// Returns a MudBlazor colour for Attribute Flow mapping type chips.
     /// </summary>
     public static Color GetMappingTypeChipColour(SyncRuleMappingSourcesType sourceType)
@@ -523,6 +670,18 @@ public static class Helpers
         return targetName?.StartsWith(Activity.SyncRuleMappingTargetNamePrefix, StringComparison.Ordinal) == true
             ? $"/admin/sync-rules/{syncRuleId}?t=attribute-flow"
             : $"/admin/sync-rules/{syncRuleId}";
+    }
+
+    /// <summary>
+    /// Gets the in-app link for a Connected System Object activity target (a password set, for example), or null
+    /// when either identifier is unknown. Both are needed: the object's page is nested under its Connected System.
+    /// </summary>
+    public static string? GetConnectedSystemObjectActivityHref(int? connectedSystemId, Guid? connectedSystemObjectId)
+    {
+        if (!connectedSystemId.HasValue || !connectedSystemObjectId.HasValue)
+            return null;
+
+        return $"/admin/connected-systems/{connectedSystemId}/connector-space/{connectedSystemObjectId}";
     }
 
     /// <summary>
@@ -967,126 +1126,30 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets a MudBlazor colour for the sync outcome type chip.
+    /// Gets a MudBlazor colour for the sync outcome type chip. Delegates to
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static Color GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return outcomeType switch
-        {
-            // Import outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Color.Success,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Color.Info,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Color.Error,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Color.Success,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Color.Error,
-
-            // Sync outcomes — inbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Color.Primary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Color.Secondary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Color.Secondary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Color.Warning,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Color.Warning,
-
-            // Sync outcomes — outbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Color.Primary,
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Color.Info,
-
-            // Export outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Color.Info,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Color.Error,
-
-            // Attribute priority (#91): a deliberate clear worth drawing the eye to.
-            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Color.Warning,
-
-            // Attribute priority (#91): a value cleared with no contributor remaining; also worth attention.
-            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Color.Warning,
-
-            _ => Color.Default,
-        };
+        return OutcomeDisplayMap.ToMudBlazorColor(OutcomeDisplayMap.Get(outcomeType).Tone);
     }
 
     /// <summary>
-    /// Gets a human-readable display name for a sync outcome type.
+    /// Gets the technical display name for a sync outcome type (e.g. "MVO Projected"). Delegates to
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return outcomeType switch
-        {
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => "CSO Added",
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => "CSO Updated",
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => "CSO Deleted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => "CSO Deletion Detected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => "CSO Export Confirmed",
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "CSO Export Failed",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => "MVO Projected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "MVO Attribute Flow",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "CSO Joined",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => "CSO Disconnected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "MVO Deletion Scheduled",
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => "CSO Drift Corrected",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => "CSO Provisioned",
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "CSO Pending Export",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => "CSO Exported",
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "CSO Deprovisioned",
-            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => "MVO Null Asserted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => "MVO No Contributor",
-            _ => outcomeType.ToString()
-        };
+        return OutcomeDisplayMap.Get(outcomeType).TechnicalLabel;
     }
 
     /// <summary>
     /// Gets a Material icon string for a sync outcome type. Delegates to
-    /// <see cref="GetOperationIcon"/> where an outcome maps directly to an
-    /// ObjectChangeType so the two stay in sync automatically.
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>
     public static string GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return outcomeType switch
-        {
-            // Import outcomes — delegate to GetOperationIcon for consistency
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => GetOperationIcon(ObjectChangeType.Added),
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => GetOperationIcon(ObjectChangeType.Updated),
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => GetOperationIcon(ObjectChangeType.Deleted),
-
-            // Import outcomes — outcome-only (no ObjectChangeType equivalent)
-            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Icons.Material.Filled.RemoveCircle,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => GetOperationIcon(ObjectChangeType.PendingExportConfirmed),
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
-
-            // Sync outcomes — delegate to GetOperationIcon for consistency
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => GetOperationIcon(ObjectChangeType.Projected),
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => GetOperationIcon(ObjectChangeType.Joined),
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => GetOperationIcon(ObjectChangeType.AttributeFlow),
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => GetOperationIcon(ObjectChangeType.Disconnected),
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope),
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => GetOperationIcon(ObjectChangeType.DriftCorrection),
-
-            // Sync outcomes — outcome-only (no ObjectChangeType equivalent)
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Icons.Material.Filled.HourglassBottom,
-
-            // Outbound sync outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.SwitchAccessShortcut,
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => GetOperationIcon(ObjectChangeType.PendingExport),
-
-            // Export outcomes — delegate to GetOperationIcon for consistency
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => GetOperationIcon(ObjectChangeType.Exported),
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => GetOperationIcon(ObjectChangeType.Deprovisioned),
-
-            // Attribute priority (#91): an explicit "no value" assertion.
-            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Icons.Material.Filled.DoNotDisturbOn,
-
-            // Attribute priority (#91): a value cleared because no contributor supplied a replacement.
-            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Icons.Material.Filled.HighlightOff,
-
-            _ => Icons.Material.Filled.Circle,
-        };
+        return OutcomeDisplayMap.Get(outcomeType).Icon;
     }
 
     /// <summary>

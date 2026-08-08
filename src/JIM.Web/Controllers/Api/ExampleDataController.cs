@@ -9,6 +9,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
+using JIM.Models.Tasking;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -227,26 +228,75 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
     /// <summary>
     /// Execute a Data Generation Template
     /// </summary>
+    /// <remarks>
+    /// Execution is queued as a worker task and tracked by an Activity, exactly like Run Profile execution
+    /// via the portal. Follow progress via GET /activities/{id} or the lightweight
+    /// GET /activities/{id}/progress endpoint using the returned Activity ID; any generation failure is
+    /// recorded on the Activity.
+    /// </remarks>
     /// <param name="id">The unique identifier of the template to execute.</param>
-    /// <param name="cancellationToken">Cancellation token for the operation.</param>
-    /// <returns>202 Accepted if the template execution has started.</returns>
-    /// <response code="202">Template execution has been started.</response>
+    /// <returns>202 Accepted with the tracking Activity and worker task IDs.</returns>
+    /// <response code="202">Template execution has been queued.</response>
     /// <response code="404">Template not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("templates/{id:int}/execute", Name = "ExecuteExampleDataTemplate")]
-    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ExampleDataTemplateExecutionResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ExecuteTemplateAsync(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> ExecuteTemplateAsync(int id)
     {
-        _logger.LogInformation("Executing data generation template: {Id}", id);
+        _logger.LogInformation("Data generation template execution requested: {Id}", id);
 
-        // Check template exists before executing
+        // Check template exists before queueing
         var template = await _application.ExampleData.GetTemplateAsync(id);
         if (template == null)
             return NotFound(ApiErrorResponse.NotFound($"Data generation template with ID {id} not found."));
 
-        await _application.ExampleData.ExecuteTemplateAsync(id, cancellationToken);
-        return Accepted();
+        // Get the current user from the JWT claims (may be null for API key auth)
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for template execution");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        // Queue the execution as a worker task; the Tasking layer records the tracking Activity.
+        // Use API key for attribution when authenticated via API key.
+        ExampleDataTemplateWorkerTask workerTask;
+        if (initiatedBy != null)
+        {
+            workerTask = ExampleDataTemplateWorkerTask.ForUser(id, initiatedBy.Id, initiatedBy.NameOrId);
+        }
+        else
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey == null)
+            {
+                _logger.LogError("Failed to resolve API key for template execution");
+                return BadRequest(ApiErrorResponse.BadRequest("Failed to identify initiating API key."));
+            }
+            workerTask = ExampleDataTemplateWorkerTask.ForApiKey(id, apiKey.Id, apiKey.Name);
+        }
+
+        var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            _logger.LogWarning("Template execution blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
+        }
+
+        _logger.LogInformation("Data generation template execution queued: TemplateId={TemplateId}, TaskId={TaskId}, ActivityId={ActivityId}",
+            id, workerTask.Id, workerTask.Activity?.Id);
+
+        var response = new ExampleDataTemplateExecutionResponse
+        {
+            ActivityId = workerTask.Activity?.Id ?? Guid.Empty,
+            TaskId = workerTask.Id,
+            Message = $"Data Generation Template '{template.Name}' has been queued for execution."
+        };
+
+        return Accepted(response);
     }
 
     #region Configuration Change History

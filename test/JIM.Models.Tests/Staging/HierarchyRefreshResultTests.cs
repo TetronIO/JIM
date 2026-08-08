@@ -227,14 +227,14 @@ public class HierarchyRefreshResultTests
         var result = HierarchyRefreshResult.NoChanges(3, 15);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.TotalPartitions, Is.EqualTo(3));
             Assert.That(result.TotalContainers, Is.EqualTo(15));
             Assert.That(result.HasChanges, Is.False);
             Assert.That(result.ErrorMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -244,11 +244,11 @@ public class HierarchyRefreshResultTests
         var result = HierarchyRefreshResult.Failed("Connection failed");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Connection failed"));
-        });
+        }
     }
 
     #endregion

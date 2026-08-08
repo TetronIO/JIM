@@ -5,7 +5,9 @@ using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -176,7 +178,12 @@ public class ActivityRepository : IActivityRepository
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null)
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -230,6 +237,40 @@ public class ActivityRepository : IActivityRepository
             if (initiatorTypes.Count > 0)
                 query = query.Where(a => initiatorTypes.Contains(a.InitiatedByType));
         }
+
+        // Apply the Connected System filter, which matches the Activity's Target Context (the system the
+        // operation was performed against).
+        var connectedSystems = connectedSystemFilter?.ToList();
+        if (connectedSystems is { Count: > 0 })
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
+
+        // Apply the Run Profile filter, which matches the Activity's Target Name.
+        var runProfiles = runProfileFilter?.ToList();
+        if (runProfiles is { Count: > 0 })
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
+
+        // Apply the initiator-name filter. Distinct from initiatedById above: this is a case-insensitive
+        // partial match on the recorded name, for callers who know who they are looking for but not their id.
+        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
+        {
+            var filterLower = initiatedByFilter.ToLower();
+            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
+        }
+
+        // Apply the Schedule attribution filters. The attribution is denormalised onto the Activity, so both of
+        // these are plain indexed predicates rather than a join through Schedule Executions.
+        if (initiatedBySchedule == true)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId != null);
+        }
+        else if (initiatedBySchedule == false)
+        {
+            query = query.Where(a => a.ScheduledByScheduleId == null);
+        }
+
+        var scheduleIds = scheduleFilter?.ToList();
+        if (scheduleIds is { Count: > 0 })
+            query = query.Where(a => a.ScheduledByScheduleId != null && scheduleIds.Contains(a.ScheduledByScheduleId!.Value));
 
         // Apply date-range filter (either bound may be open). Captured into non-nullable locals so the query
         // expressions carry plain DateTime values.
@@ -404,116 +445,6 @@ public class ActivityRepository : IActivityRepository
             .ToDictionaryAsync(x => x.ParentId, x => x.Count);
     }
 
-    /// <summary>
-    /// Retrieves a page's worth of worker task activities - operations executed by the worker service
-    /// such as Run Profile executions, data generation, and Connected System operations.
-    /// </summary>
-    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page,
-        int pageSize,
-        IEnumerable<string>? connectedSystemFilter = null,
-        IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
-        string? initiatedByFilter = null,
-        string? sortBy = null,
-        bool sortDescending = true,
-        bool? hasChildActivities = null)
-    {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
-
-        if (page < 1)
-            page = 1;
-
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
-
-        var query = BuildWorkerTaskQuery();
-
-        // Apply filters
-        var connectedSystems = connectedSystemFilter?.ToList();
-        if (connectedSystems is { Count: > 0 })
-            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
-
-        var runProfiles = runProfileFilter?.ToList();
-        if (runProfiles is { Count: > 0 })
-            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
-
-        var statuses = statusFilter?.ToList();
-        if (statuses is { Count: > 0 })
-            query = query.Where(a => statuses.Contains(a.Status));
-
-        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
-        {
-            var filterLower = initiatedByFilter.ToLower();
-            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
-        }
-
-        // Apply child activities filter
-        if (hasChildActivities == true)
-        {
-            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
-        }
-        else if (hasChildActivities == false)
-        {
-            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
-        }
-
-        // Apply sorting
-        query = sortBy?.ToLower() switch
-        {
-            "targetcontext" or "connectedsystem" => sortDescending
-                ? query.OrderByDescending(a => a.TargetContext)
-                : query.OrderBy(a => a.TargetContext),
-            "targettype" or "type" => sortDescending
-                ? query.OrderByDescending(a => a.TargetType)
-                : query.OrderBy(a => a.TargetType),
-            "targetname" or "target" => sortDescending
-                ? query.OrderByDescending(a => a.TargetName)
-                : query.OrderBy(a => a.TargetName),
-            "targetoperationtype" or "operation" => sortDescending
-                ? query.OrderByDescending(a => a.TargetOperationType)
-                : query.OrderBy(a => a.TargetOperationType),
-            "initiatedbyname" or "initiatedby" => sortDescending
-                ? query.OrderByDescending(a => a.InitiatedByName)
-                : query.OrderBy(a => a.InitiatedByName),
-            "status" => sortDescending
-                ? query.OrderByDescending(a => a.Status)
-                : query.OrderBy(a => a.Status),
-            "executiontime" => sortDescending
-                ? query.OrderByDescending(a => a.ExecutionTime)
-                : query.OrderBy(a => a.ExecutionTime),
-            _ => sortDescending
-                ? query.OrderByDescending(a => a.Created)
-                : query.OrderBy(a => a.Created)
-        };
-
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
-
-        var pagedResultSet = new PagedResultSet<Activity>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
-    }
-
     public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
     {
         var query = BuildWorkerTaskQuery();
@@ -532,16 +463,35 @@ public class ActivityRepository : IActivityRepository
             .OrderBy(name => name)
             .ToListAsync();
 
+        // One option per Schedule id, carrying the most recently recorded name: a Schedule renamed part-way through
+        // its history would otherwise yield two options sharing an id, which a MudSelect cannot represent.
+        var schedules = await query
+            .Where(a => a.ScheduledByScheduleId != null && a.ScheduledByScheduleName != null)
+            .GroupBy(a => a.ScheduledByScheduleId!.Value)
+            .Select(g => new ScheduleFilterOption
+            {
+                Id = g.Key,
+                Name = g.OrderByDescending(a => a.Created).Select(a => a.ScheduledByScheduleName!).First()
+            })
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
         return new ActivityFilterOptions
         {
             ConnectedSystems = connectedSystems,
-            RunProfiles = runProfiles
+            RunProfiles = runProfiles,
+            Schedules = schedules
         };
     }
 
     /// <summary>
     /// Builds the base query for worker task activities, filtering to parent activities
     /// with worker task target types and operation types.
+    ///
+    /// Only <see cref="GetWorkerTaskActivityFilterOptionsAsync"/> uses this now: the Worker Task Activity
+    /// *listing* is served by <see cref="GetActivitiesAsync"/>, to which Operations &gt; History passes the
+    /// same target types and operations as its typeFilter and operationFilter. Keep the two in step; the
+    /// drop-downs must offer exactly the values the list can return.
     /// </summary>
     private IQueryable<Activity> BuildWorkerTaskQuery()
     {
@@ -580,6 +530,40 @@ public class ActivityRepository : IActivityRepository
             .OrderBy(a => a.ScheduleStepIndex)
             .ThenBy(a => a.Created)
             .ToListAsync();
+    }
+
+    public async Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds)
+    {
+        if (scheduleExecutionIds.Count == 0)
+            return [];
+
+        var rows = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId.HasValue &&
+                        scheduleExecutionIds.Contains(a.ScheduleExecutionId.Value) &&
+                        a.ScheduleStepIndex.HasValue)
+            .OrderBy(a => a.ScheduleStepIndex)
+            .ThenBy(a => a.Created)
+            .Select(a => new
+            {
+                ScheduleExecutionId = a.ScheduleExecutionId!.Value,
+                StepIndex = a.ScheduleStepIndex!.Value,
+                ActivityId = a.Id,
+                a.TargetContext,
+                a.TargetName,
+                a.Status
+            })
+            .ToListAsync();
+
+        return rows
+            .GroupBy(r => r.ScheduleExecutionId)
+            .ToDictionary(g => g.Key, g => g.Select(r => new ScheduleStepObservation
+            {
+                StepIndex = r.StepIndex,
+                Name = ScheduleStepReading.NameOf(r.TargetContext, r.TargetName, r.StepIndex),
+                ActivityId = r.ActivityId,
+                ActivityStatus = r.Status
+            }).ToList());
     }
 
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
@@ -837,6 +821,14 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        // Execution items can reference Connected System Objects in any system, so name candidates are
+        // matched by attribute name rather than by pre-resolved ids. Lowered here so the comparison
+        // translates to a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
+        // ObjectNaming.ConnectedSystemNameAttributes (guarded by ConnectedSystemNameAttributeTierCountTests).
+        var nameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
+        var nameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
+        var nameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
+
         // Header-tier read: do NOT eager-load the ConnectedSystemObject graph. The previous
         // implementation Include()d each RPEI's CSO plus its entire (multi-valued) AttributeValues
         // collection and then projected in memory, so a page that landed on a few large group CSOs
@@ -898,10 +890,12 @@ public class ActivityRepository : IActivityRepository
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(item =>
-                // Search display name (live CSO attribute)
+                // Search the name candidates (live CSO attributes)
                 (item.ConnectedSystemObject != null &&
                  item.ConnectedSystemObject.AttributeValues.Any(av =>
-                    EF.Functions.ILike(av.Attribute.Name, "displayname") &&
+                    (av.Attribute.Name.ToLower() == nameCandidate1 ||
+                     av.Attribute.Name.ToLower() == nameCandidate2 ||
+                     av.Attribute.Name.ToLower() == nameCandidate3) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern))) ||
                 // Search display name (snapshot fallback)
@@ -934,18 +928,20 @@ public class ActivityRepository : IActivityRepository
                         .Select(av => av.StringValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot),
+            // Sorts on the resolved live name, coalescing the naming tiers in preference order so the
+            // sort key matches what the Display Name column renders, then the snapshot for deleted CSOs.
             "displayname" or "name" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues
-                        .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault() ?? item.DisplayNameSnapshot
+                    ? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.DisplayNameSnapshot
                     : item.DisplayNameSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues
-                        .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault() ?? item.DisplayNameSnapshot
+                    ? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.DisplayNameSnapshot
                     : item.DisplayNameSnapshot),
             "type" or "objecttype" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
@@ -983,10 +979,10 @@ public class ActivityRepository : IActivityRepository
                 i.DisplayNameSnapshot,
                 i.ExternalIdSnapshot,
                 i.ObjectTypeSnapshot,
-                DisplayNameLive = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.Attribute.Name.ToLower() == "displayname")
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault(),
+                DisplayNameLive =
+                    i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
+                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
+                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault(),
                 TypeLive = i.ConnectedSystemObject!.Type!.Name,
                 // External id resolved as per-column scalar subqueries. A single multi-column
                 // projection here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
@@ -1139,12 +1135,70 @@ public class ActivityRepository : IActivityRepository
         activity.RunProfileExecutionStatsFinalised = true;
     }
 
-    private static bool IsTerminalActivityStatus(ActivityStatus status) => status is
-        ActivityStatus.Complete
-        or ActivityStatus.CompleteWithWarning
-        or ActivityStatus.CompleteWithError
-        or ActivityStatus.FailedWithError
-        or ActivityStatus.Cancelled;
+    /// <inheritdoc />
+    public async Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId)
+    {
+        // Scalar projection only: the progress read is served at a high frequency while a run is
+        // executing, so it must never materialise the Activity's execution item graph.
+        var progress = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.Id == activityId)
+            .Select(a => new ActivityProgress
+            {
+                ActivityId = a.Id,
+                Status = a.Status,
+                Message = a.Message,
+                ObjectsProcessed = a.ObjectsProcessed,
+                ObjectsToProcess = a.ObjectsToProcess,
+                Created = a.Created,
+                Executed = a.Executed == default ? null : a.Executed,
+                TargetType = a.TargetType,
+                RunType = a.ConnectedSystemRunType
+            })
+            .SingleOrDefaultAsync();
+
+        if (progress == null)
+            return null;
+
+        // The run's steps (#454). A handful of rows per Activity, and the progress read is the one
+        // call the portal, the API and PowerShell all make while a run is executing, so the steps
+        // travel with the progress rather than needing a second round trip.
+        progress.Phases = await GetActivityPhasesAsync(activityId);
+
+        // Operation breakdown from the stat counter rows (#1078): advisory incremental values
+        // while the run is in flight, exact values once finalised. O(counter rows) either way.
+        var counters = await Repository.Database.ActivityStatCounters
+            .AsNoTracking()
+            .Where(c => c.ActivityId == activityId &&
+                        (c.Dimension == ActivityStatDimension.ObjectChangeType || c.Dimension == ActivityStatDimension.ErrorType))
+            .ToListAsync();
+
+        foreach (var counter in counters)
+        {
+            switch (counter.Dimension)
+            {
+                case ActivityStatDimension.ObjectChangeType when int.TryParse(counter.Key, out var changeType):
+                    progress.OperationCounts[((ObjectChangeType)changeType).ToString()] = counter.Count;
+                    break;
+                case ActivityStatDimension.ErrorType:
+                    progress.TotalErrors += counter.Count;
+                    break;
+            }
+        }
+
+        return progress;
+    }
+
+    public async Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId)
+    {
+        return await Repository.Database.ActivityPhases
+            .AsNoTracking()
+            .Where(p => p.ActivityId == activityId)
+            .OrderBy(p => p.Order)
+            .ToListAsync();
+    }
+
+    private static bool IsTerminalActivityStatus(ActivityStatus status) => status.IsTerminal();
 
     /// <summary>
     /// Builds the stat aggregation from the persisted <see cref="ActivityStatCounter"/> rows.
@@ -1336,7 +1390,9 @@ public class ActivityRepository : IActivityRepository
 
             // Pending Export, drift correction, provisioning and Metaverse Object deletion
             // stats from outcomes (housekeeping batches, #1020)
-            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            // Both staging outcome types: a queued deprovision is a Pending Export, and only its intent differs
+            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+                                              + OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued);
             totalDriftCorrections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
             totalProvisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
             totalMvoDeleted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
@@ -1545,6 +1601,49 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(c => c!.AttributeChanges)
             .ThenInclude(ac => ac.ValueChanges)
             .SingleOrDefaultAsync(q => q.Id == id);
+    }
+    #endregion
+
+    #region configuration drift
+    public async Task<Dictionary<int, DateTime>> GetLastFullSynchronisationStartsAsync(IList<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return new Dictionary<int, DateTime>();
+
+        // TargetOperationType must be Execute: Run Profile CRUD activities carry ConnectedSystemRunType too (so the
+        // run type survives the profile's deletion), and without this filter deleting a Full Synchronisation Run
+        // Profile would be mistaken for having run one.
+        //
+        // CompleteWithWarning counts: a warning is a non-fatal operational note (e.g. a delta falling back to a full
+        // import), not a reason to distrust that the run applied the configuration. Errors, failures and cancellations
+        // do not count, so a system whose Full Synchronisation failed keeps reporting its changes as pending.
+        return await Repository.Database.Activities
+            .Where(a => a.ConnectedSystemId != null
+                        && connectedSystemIds.Contains(a.ConnectedSystemId!.Value)
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.TargetOperationType == ActivityTargetOperationType.Execute
+                        && a.ConnectedSystemRunType == ConnectedSystemRunType.FullSynchronisation
+                        && (a.Status == ActivityStatus.Complete || a.Status == ActivityStatus.CompleteWithWarning))
+            .GroupBy(a => a.ConnectedSystemId!.Value)
+            .Select(g => new { ConnectedSystemId = g.Key, LastStart = g.Max(a => a.Executed) })
+            .ToDictionaryAsync(x => x.ConnectedSystemId, x => x.LastStart);
+    }
+
+    public async Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass)
+    {
+        return await Repository.Database.Activities
+            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass)
+            .Select(a => new ConfigurationChangeImpactData
+            {
+                When = a.Created,
+                Class = a.ConfigurationChangeClass,
+                ConnectedSystemId = a.ConnectedSystemId,
+                SyncRuleId = a.SyncRuleId,
+                MetaverseObjectTypeId = a.MetaverseObjectTypeId,
+                MetaverseAttributeId = a.MetaverseAttributeId,
+                ServiceSettingKey = a.ServiceSettingKey
+            })
+            .ToListAsync();
     }
     #endregion
 

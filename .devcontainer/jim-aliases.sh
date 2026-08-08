@@ -71,6 +71,9 @@ Developer Setup:
   jim-setup-signing   - (Re)configure git commit signing for this environment
   jim-signing-status  - Show current commit signing state and readiness
 
+Tooling:
+  bat                - Syntax-highlighting cat (Ubuntu ships it as batcat)
+
 Help:
   jim                - Show this help message
 "'
@@ -548,6 +551,11 @@ jim-reset() {
 # Documentation preview (MkDocs Material)
 alias jim-docs='mkdocs serve --dev-addr 0.0.0.0:8000'
 alias jim-docs-build='mkdocs build'
+
+# bat (syntax-highlighting cat). Debian and Ubuntu package the binary as `batcat`
+# because bacula-console already owns the `bat` name, so restore the upstream
+# name everyone actually types.
+alias bat='batcat'
 
 # Create a new PRD from template
 jim-prd() {

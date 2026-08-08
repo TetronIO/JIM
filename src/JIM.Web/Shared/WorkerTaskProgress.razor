@@ -1,0 +1,118 @@
+@using JIM.Models.Activities
+@using JIM.Models.Tasking
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders the live progress affordance for a Worker Task: the run's steps, the running step's own bar, and a
+   caption naming the step the figures measure. Shared by the Operations queue and any page that initiates a
+   task and wants to show progress in place.
+
+   The rail and the bar carry different denominators on purpose (#1162): the rail is the whole run, the bar is
+   the step running inside it. That is only safe because the caption names the step, so the two cannot be read
+   as one measurement. A task that is not a Run Profile execution records no steps and renders as it always
+   has: a bar and whatever the worker had to say. *@
+
+@if (Status == WorkerTaskStatus.Processing)
+{
+    var stepName = Steps?.CurrentStepName;
+
+    <div class="jim-queue-progress">
+        @if (Steps != null)
+        {
+            <div class="jim-queue-progress-first">
+                <RunPhaseMicroRail Steps="@Steps.Steps" />
+            </div>
+        }
+
+        @if (ObjectsToProcess is > 0 && ObjectsProcessed.HasValue)
+        {
+            var processed = ObjectsProcessed.Value;
+            var total = ObjectsToProcess.Value;
+            var percentage = (double)processed / total * 100;
+
+            <div class="@BarClass(hasRail: Steps != null)">
+                <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" />
+            </div>
+            <MudText Typo="Typo.caption" Class="jim-queue-progress-caption">@Caption(stepName, processed, total)</MudText>
+        }
+        else
+        {
+            <div class="@BarClass(hasRail: Steps != null)">
+                <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" />
+            </div>
+            @if (stepName != null)
+            {
+                <MudText Typo="Typo.caption" Class="jim-queue-progress-caption">@StepPosition(Steps!, stepName)</MudText>
+            }
+            else if (!string.IsNullOrEmpty(ProgressMessage))
+            {
+                <MudText Typo="Typo.caption" Class="jim-queue-progress-caption mud-text-secondary">@ProgressMessage</MudText>
+            }
+        }
+    </div>
+}
+else if (Status == WorkerTaskStatus.Queued)
+{
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
+}
+else if (Status == WorkerTaskStatus.WaitingForPreviousStep)
+{
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting for previous step...</MudText>
+}
+
+@code {
+    [Parameter]
+    public WorkerTaskStatus Status { get; set; }
+
+    [Parameter]
+    public int? ObjectsToProcess { get; set; }
+
+    [Parameter]
+    public int? ObjectsProcessed { get; set; }
+
+    [Parameter]
+    public string? ProgressMessage { get; set; }
+
+    /// <summary>
+    /// The run's steps and the one running now, or null where the task is not a Run Profile
+    /// execution and so has none (#1162).
+    /// </summary>
+    [Parameter]
+    public RunPhaseSummary? Steps { get; set; }
+
+    /// <summary>
+    /// "Step 4 of 5: Saving changes". The same sentence the Activity page's readout and PowerShell
+    /// both print, so a run reads the same wherever it is being watched from.
+    /// </summary>
+    private static string StepPosition(RunPhaseSummary steps, string stepName) =>
+        $"Step {steps.CurrentStepNumber} of {steps.TotalSteps}: {stepName}";
+
+    /// <summary>
+    /// The one line beneath the bar: which step the figures measure, and the figures.
+    /// </summary>
+    /// <remarks>
+    /// Where the run has steps, the worker's own progress message is deliberately not shown. It
+    /// narrates what is happening inside the step, which is detail this cell has no room for: a row
+    /// reading "Step 5 of 7: Saving changes - 8,320 / 12,500 - Importing users" is both too long for
+    /// the column and self-contradictory to skim. That detail belongs on the Activity, which the
+    /// row's own name links to. A task with no steps keeps its message, because there it is the
+    /// only thing the cell can say.
+    /// </remarks>
+    private string Caption(string? stepName, int processed, int total)
+    {
+        var figures = $"{processed:N0} / {total:N0}";
+
+        if (stepName != null)
+            return $"{StepPosition(Steps!, stepName)} - {figures}";
+
+        return string.IsNullOrEmpty(ProgressMessage) ? figures : $"{figures} - {ProgressMessage}";
+    }
+
+    /// <summary>
+    /// The bar takes the alignment offset only when there is no rail above it to take it instead:
+    /// whatever comes first in the cell is what has to line up with the text beside it.
+    /// </summary>
+    private static string BarClass(bool hasRail) =>
+        hasRail ? "jim-queue-progress-bar" : "jim-queue-progress-bar jim-queue-progress-first";
+}

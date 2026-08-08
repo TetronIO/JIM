@@ -628,6 +628,32 @@ public class ReferenceRecallExportTests
     }
 
     /// <summary>
+    /// Reference recall stages Update exports, so it must not touch a Writable On Create attribute:
+    /// clearing it would rewrite the Connected System's identifier for the object, which is exactly what
+    /// that writability state exists to prevent. The reference is simply left as the target holds it.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_WritableOnCreateTargetAttribute_StagesNothingAsync()
+    {
+        // Arrange
+        AddOwnerMapping();
+        CsOwnerAttribute.Writability = AttributeWritability.WritableOnCreate;
+        var (ownerMvo, ownerDn) = SeedMemberWithTargetCso("uid=oscar.owner,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoOwning(ownerMvo.Id);
+        SeedGroupTargetCsoWithOwner(groupMvo, ownerMvo.Id, ownerDn);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([ownerMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(ownerMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [ownerMvo.Id]);
+
+        // Assert
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(0),
+            "A Writable On Create attribute must never reach an Update Pending Export, recall included");
+        Assert.That(SyncRepo.PendingExports, Is.Empty);
+    }
+
+    /// <summary>
     /// A single-valued reference the target has already re-pointed at someone else must NOT be
     /// cleared: the deleted object is not the value being held, so recall has nothing to remove.
     /// (The pre-#1003 behaviour cleared the attribute whenever it had any value; this pins the

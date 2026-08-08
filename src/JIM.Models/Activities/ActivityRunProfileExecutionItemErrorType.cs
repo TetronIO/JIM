@@ -112,5 +112,33 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// succeeded, but was slower than expected. If this recurs, verify that the directory's
     /// change tracking mechanism (e.g., accesslog overlay) is accessible to the bind account.
     /// </summary>
-    DeltaImportFallbackToFullImport
+    DeltaImportFallbackToFullImport,
+
+    /// <summary>
+    /// SPEC-1082 D10, Run Profile Verification Mode only: the stored import content hash matched
+    /// the freshly computed incoming hash, but the honest diff (run in full because Verification
+    /// Mode never skips) still found attribute changes. This is the dangerous disagreement a
+    /// content-hash skip would have silently missed; it indicates either a bug in the content hash
+    /// calculator or an unexpected divergence between the hash's canonical form and the diff. The
+    /// object's changes were still applied normally; this error is purely diagnostic.
+    /// </summary>
+    ImportHashVerificationFailed,
+
+    /// <summary>
+    /// The Connector could not parse one of the imported object's attribute values into the type the
+    /// Connected System schema declares for it (for example a date column holding "not applicable", or a
+    /// number column holding text). The object itself was sound and was imported with the values that did
+    /// parse; only the failing attribute was omitted, so its Connected System Object retains whatever
+    /// value it previously held for that attribute. The administrator should correct the source data, or
+    /// change the attribute's type in the schema if the source is right and the schema is wrong.
+    /// </summary>
+    ImportAttributeValueError,
+
+    /// <summary>
+    /// The Connector reported that an imported object cannot be processed because of how the Connected
+    /// System is configured in JIM (for example no attributes are selected for the object type). The
+    /// object was not imported. Unlike most import errors this is not a source-data problem: the fix is
+    /// in the Connected System's configuration, not in the Connected System itself.
+    /// </summary>
+    ConnectorConfigurationError
 }

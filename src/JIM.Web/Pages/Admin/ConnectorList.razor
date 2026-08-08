@@ -21,19 +21,19 @@
     <MudButton Variant="Variant.Filled" Color="Color.Primary">Connectors</MudButton>
 </MudButtonGroup>
 
-<MudTable Items="@_headers" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
+<MudTable Items="@_headers" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudText Typo="Typo.h6">Connectors</MudText>
         <MudSpacer />
-        <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        <SearchField @bind-Value="_searchString" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Description ?? string.Empty)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)"><MudText Typo="Typo.button">In-use?</MudText></MudTableSortLabel></MudTh>
+        <MudTh Class="jim-nowrap"><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+        <MudTh Class="jim-nowrap"><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)"><MudText Typo="Typo.button">In-use?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions ?? string.Empty)"><MudText Typo="Typo.button">Version(s)</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>

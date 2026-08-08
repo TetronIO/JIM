@@ -18,13 +18,13 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
+<PageTitle>Connector Space: @_connectedSystemHeader?.Name</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector Space:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @if (_showIntro)
 {
     <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-3 mb-3" ShowCloseIcon="true" CloseIconClicked="() => _showIntro = false">
-        This is the connector space for this Connected System. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
+        The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
     </MudAlert>
 }
 
@@ -118,16 +118,10 @@
               LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudSpacer />
-            <MudTextField T="string"
-                          ValueChanged="@(s => OnSearch(s))"
-                          Variant="Variant.Outlined"
-                          Placeholder="Search external ID, secondary ID, or display name"
-                          Margin="Margin.Dense"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          IconSize="Size.Medium"
-                          Class="mt-0"
-                          Style="min-width: 350px;" />
+            <SearchField ValueChanged="@(s => OnSearch(s))"
+                         Placeholder="Search external ID, secondary ID, or display name"
+                         Class="mt-0"
+                         Style="min-width: 350px;" />
         </ToolBarContent>
         <HeaderContent>
             <MudTh Style="width: 1px;"></MudTh>
@@ -490,7 +484,7 @@ else
         using var jim = JimFactory.Create();
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.DisplayName ?? "Unknown User", _clearDeleteChangeHistory);
+        var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.NameOrId, _clearDeleteChangeHistory);
         var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

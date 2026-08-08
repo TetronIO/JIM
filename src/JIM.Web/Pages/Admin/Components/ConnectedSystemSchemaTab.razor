@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
+@inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -81,6 +82,28 @@
                 Found <strong>@result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@result.TotalAttributes.ToString("N0")</strong> attribute(s).
             </MudText>
 
+            @if (result.BlockedCredentialAttributeCount > 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                    <strong>@result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                    @(string.Join(", ", result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
+                    These hold credential material and are never managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.
+                </MudAlert>
+            }
+
+            @if (result.DiscoveryWarnings.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                    <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. Review them so a missing attribute can be traced to the Connected System rather than JIM.
+                    <ul class="mt-1 mb-0">
+                        @foreach (var warning in result.DiscoveryWarnings)
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </MudAlert>
+            }
+
             @if (!result.HasChanges)
             {
                 <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
@@ -147,6 +170,13 @@
             <MudText Color="Color.Error">@result.ErrorMessage</MudText>
         }
     </MudAlert>
+}
+
+@* Only meaningful where the Connector can set passwords at all; on one that cannot, there is no policy to read and
+   no channel to check. *@
+@if (ConnectedSystem.ConnectorDefinition.SupportsPasswordSet)
+{
+    <ConnectedSystemPasswordPolicyPanel ConnectedSystem="ConnectedSystem" />
 }
 
 <MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
@@ -219,6 +249,10 @@
 
             @* ─── Object type discovery & selection ─── *@
             <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="Object Types">
+                @{
+                    var visibleObjectTypeCount = GetVisibleObjectTypes().Count();
+                    var hiddenInternalCount = GetHiddenInternalObjectTypeCount();
+                }
                 <MudText Typo="Typo.subtitle1" Class="mb-1">Choose which object types JIM should manage</MudText>
                 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
                     Each type you select gets its own tab above, where you choose the attributes to import or export. To maximise system performance, select only the types you actually need.
@@ -226,16 +260,11 @@
 
                 <MudGrid>
                     <MudItem xs="12" md="8">
-                        <MudTextField T="string"
-                                      @bind-Value="_objectTypeSearchString"
-                                      Immediate="true"
-                                      Clearable="true"
-                                      Label="Search object types"
-                                      Adornment="Adornment.Start"
-                                      AdornmentIcon="@Icons.Material.Filled.Search"
-                                      IconSize="Size.Small"
-                                      Variant="Variant.Outlined"
-                                      HelperText="Show only types whose name contains a specific value" />
+                        <SearchField @bind-Value="_objectTypeSearchString"
+                                     Label="Search object types"
+                                     HelperText="Show only types whose name contains a specific value"
+                                     IconSize="Size.Small"
+                                     Margin="Margin.None" />
                     </MudItem>
                     <MudItem xs="12" md="4" Class="d-flex align-center justify-md-end">
                         <MudChipSet T="bool"
@@ -245,7 +274,7 @@
                             <MudChip Value="false"
                                      Color="Color.Default"
                                      Variant="@(!_objectTypeSelectedFilter ? Variant.Outlined : Variant.Text)">
-                                All (@ConnectedSystem.ObjectTypes.Count)
+                                All (@visibleObjectTypeCount)
                             </MudChip>
                             <MudChip Value="true"
                                      Color="Color.Primary"
@@ -291,8 +320,42 @@
                         }
                     </MudGrid>
                     <MudText Typo="Typo.body1" Class="mt-4 mud-text-secondary d-block" Align="Align.Center">
-                        Showing @discoveryObjectTypes.Count of @ConnectedSystem.ObjectTypes.Count object types
+                        Showing @discoveryObjectTypes.Count of @visibleObjectTypeCount object types
                     </MudText>
+                }
+
+                @* Internal object types are hidden rather than discarded, so the count and the way back are stated
+                   plainly. Nothing here changes what was discovered or what is stored. *@
+                @if (hiddenInternalCount > 0)
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+                        <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                            <span class="flex-grow-1">
+                                @hiddenInternalCount internal object @(hiddenInternalCount == 1 ? "type is" : "types are") hidden.
+                                These are classes the Connected System uses for its own configuration or operation.
+                            </span>
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Inherit"
+                                       StartIcon="@Icons.Material.Filled.Visibility"
+                                       OnClick="@(() => _showInternalObjectTypes = true)">
+                                Show internal object types
+                            </MudButton>
+                        </div>
+                    </MudAlert>
+                }
+                else if (_showInternalObjectTypes && AnyInternalObjectTypes())
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+                        <div class="d-flex align-center flex-wrap" style="gap: 8px;">
+                            <span class="flex-grow-1">Internal object types are shown.</span>
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Inherit"
+                                       StartIcon="@Icons.Material.Filled.VisibilityOff"
+                                       OnClick="@(() => _showInternalObjectTypes = false)">
+                                Hide internal object types
+                            </MudButton>
+                        </div>
+                    </MudAlert>
                 }
             </MudTabPanel>
 
@@ -346,16 +409,12 @@
 
             <MudGrid Class="mt-3">
                 <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
-                    <MudTextField
-                        T="string"
-                        @bind-Value="_schemaSearchString"
-                        Label="Filter by name"
-                        Adornment="Adornment.Start"
-                        AdornmentIcon="@Icons.Material.Filled.Search"
-                        IconSize="Size.Small"
-                        Variant="Variant.Outlined"
-                        HelperText="Show only attributes where the name contains a specific value"
-                        autocomplete="schema_search_string" />
+                    <SearchField @bind-Value="_schemaSearchString"
+                                 Label="Filter by name"
+                                 HelperText="Show only attributes where the name contains a specific value"
+                                 IconSize="Size.Small"
+                                 Margin="Margin.None"
+                                 Autocomplete="schema_search_string" />
                 </MudItem>
 
                 @if (_selectedObjectTypeHasClasses)
@@ -429,7 +488,7 @@
                     </MudChipSet>
                 </div>
 
-                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <div>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Writability:</MudText>
@@ -440,9 +499,9 @@
                             @foreach (var writability in GetAvailableSchemaWritabilities())
                             {
                                 <MudChip Value="@writability.Key"
-                                         Color="@(writability.Key == AttributeWritability.ReadOnly ? Color.Warning : Color.Success)"
+                                         Color="@Helpers.GetAttributeWritabilityChipColour(writability.Key)"
                                          Variant="@(_selectedSchemaWritabilities.Contains(writability.Key) ? Variant.Outlined : Variant.Text)">
-                                    @(writability.Key == AttributeWritability.ReadOnly ? "Read-Only" : "Writable") (@writability.Value)
+                                    @Helpers.GetAttributeWritabilityLabel(writability.Key) (@writability.Value)
                                 </MudChip>
                             }
                         </MudChipSet>
@@ -495,7 +554,7 @@
                 }
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
-                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Writability)"><MudText Typo="Typo.button">Writability</MudText></MudTableSortLabel></MudTh>
                 }
@@ -510,7 +569,13 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Selected">
-                    @if (context.IsExternalId || context.IsSecondaryExternalId)
+                    @if (CredentialAttributes.IsCredentialAttribute(context.Name))
+                    {
+                        <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
+                            <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
+                        </MudTooltip>
+                    }
+                    else if (context.IsExternalId || context.IsSecondaryExternalId)
                     {
                         <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
                             <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
@@ -552,14 +617,16 @@
                         @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                     </MudChip>
                 </MudTd>
-                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <MudTd DataLabel="Writability">
-                        <MudChip T="string"
-                                 Color="@(context.Writability == AttributeWritability.ReadOnly ? Color.Warning : Color.Success)"
-                                 Variant="Variant.Outlined">
-                            @(context.Writability == AttributeWritability.ReadOnly ? "Read-Only" : "Writable")
-                        </MudChip>
+                        <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Writability)" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string"
+                                     Color="@Helpers.GetAttributeWritabilityChipColour(context.Writability)"
+                                     Variant="Variant.Outlined">
+                                @Helpers.GetAttributeWritabilityLabel(context.Writability)
+                            </MudChip>
+                        </MudTooltip>
                     </MudTd>
                 }
                 @if (_selectedObjectTypeHasDescriptions)
@@ -632,9 +699,13 @@
     private int _activeSchemaTabIndex;
     private string _objectTypeSearchString = "";
     private bool _objectTypeSelectedFilter;
+
+    // Object types the Connected System classified as internal are held back until asked for. Not persisted as a
+    // user preference: it is a per-visit "let me look at the plumbing", not a standing choice about every system.
+    private bool _showInternalObjectTypes;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
-    private bool _selectedObjectTypeHasReadOnlyAttributes;
+    private bool _selectedObjectTypeHasConstrainedAttributes;
     private IReadOnlyCollection<AttributeWritability> _selectedSchemaWritabilities = new List<AttributeWritability>();
     private string _schemaSearchString = "";
     private IReadOnlyCollection<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
@@ -651,6 +722,9 @@
     private string? _objectTypeAttributeBeingEditedText;
     private bool _objectTypeAttributeBeingEditedIsEditable;
 
+    private const string ObjectTypeQueryParameterName = "ot";
+    private bool _objectTypeDeepLinkApplied;
+
     protected override void OnParametersSet()
     {
         // The ConnectedSystem parameter is replaced wholesale on reload (e.g. after a schema refresh or save),
@@ -661,12 +735,64 @@
             _selectedObjectType = ConnectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == _selectedObjectType.Id);
         _selectedObjectType ??= ConnectedSystem.ObjectTypes?.FirstOrDefault(q => q.Selected);
 
+        // Deep-link support: "?t=schema&ot=jimPerson" selects that object type's sub-tab on first load. Applied
+        // once only, so it never overrides the admin's own subsequent tab clicks after a schema refresh or save
+        // reloads ConnectedSystem.
+        if (!_objectTypeDeepLinkApplied && ConnectedSystem.ObjectTypes != null)
+        {
+            ApplyObjectTypeDeepLink();
+            _objectTypeDeepLinkApplied = true;
+        }
+
         if (_selectedObjectType != null)
         {
             _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
             _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
-            _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
+            _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
         }
+    }
+
+    /// <summary>
+    /// Selects the sub-tab for the object type named by the "ot" query string parameter (e.g.
+    /// "?t=schema&amp;ot=jimPerson"), matched case-insensitively against Connected System Object Type names. No-op
+    /// when the parameter is absent, or names a type that is not (yet) selected for JIM to manage.
+    /// </summary>
+    private void ApplyObjectTypeDeepLink()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var objectTypeName = query[ObjectTypeQueryParameterName];
+        if (string.IsNullOrEmpty(objectTypeName))
+            return;
+
+        var selected = GetSelectedObjectTypes();
+        var index = selected.FindIndex(ot => ot.Name.Equals(objectTypeName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            return;
+
+        _selectedObjectType = selected[index];
+        _activeSchemaTabIndex = index + 1;
+    }
+
+    /// <summary>
+    /// Keeps the "ot" query string parameter in sync with the active object type sub-tab, so the URL is always a
+    /// shareable deep link back to the currently viewed type. Mirrors NavigableMudTabs' own "t" parameter handling,
+    /// preserving every other query parameter (notably "t=schema", set by the parent tab strip).
+    /// </summary>
+    private void UpdateObjectTypeQueryString()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var baseUri = uri.GetLeftPart(UriPartial.Path);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+
+        if (_selectedObjectType == null)
+            query.Remove(ObjectTypeQueryParameterName);
+        else
+            query[ObjectTypeQueryParameterName] = _selectedObjectType.Name;
+
+        var qs = query.ToString();
+        var newUrl = string.IsNullOrEmpty(qs) ? baseUri : $"{baseUri}?{qs}";
+        NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = false });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -766,12 +892,52 @@
         ConnectedSystem.ObjectTypes?.Where(ot => ot.Selected).OrderBy(ot => ot.Name).ToList() ?? new List<ConnectedSystemObjectType>();
 
     /// <summary>
+    /// The object types the discovery grid will consider before the administrator's own search and All / Selected
+    /// filter narrow it further: everything the Connected System reported, less the ones it classified as internal.
+    /// </summary>
+    /// <remarks>
+    /// A directory publishes its own configuration and operational classes in the same schema as the classes an
+    /// administrator manages; on a stock OpenLDAP those account for well over a third of what is discovered. Hiding
+    /// them is presentation only: they are still imported, still stored, and one click away.
+    /// <para>
+    /// A Selected object type is never hidden, whatever its classification. An administrator who has deliberately
+    /// chosen to manage a class must always be able to see that they have.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ConnectedSystemObjectType> GetVisibleObjectTypes()
+    {
+        var objectTypes = ConnectedSystem.ObjectTypes?.AsEnumerable() ?? Enumerable.Empty<ConnectedSystemObjectType>();
+        return _showInternalObjectTypes ? objectTypes : objectTypes.Where(ot => ot.Selected || !ot.IsInternal());
+    }
+
+    /// <summary>
+    /// How many internal object types the current view is holding back, which is what the disclosure below the grid
+    /// reports. Zero while internal types are being shown.
+    /// </summary>
+    private int GetHiddenInternalObjectTypeCount()
+    {
+        return _showInternalObjectTypes
+            ? 0
+            : ConnectedSystem.ObjectTypes?.Count(ot => !ot.Selected && ot.IsInternal()) ?? 0;
+    }
+
+    /// <summary>
+    /// Whether the Connected System reported any internal object types at all. Distinguishes "none are hidden
+    /// because they are being shown" from "none are hidden because there are none", so the way back is only offered
+    /// where there is something to go back to.
+    /// </summary>
+    private bool AnyInternalObjectTypes()
+    {
+        return ConnectedSystem.ObjectTypes?.Any(ot => ot.IsInternal()) ?? false;
+    }
+
+    /// <summary>
     /// The object types shown in the discovery grid, after applying the name search and the All / Selected filter.
     /// Selected types are ordered first so the current selection stays visible as the list is filtered.
     /// </summary>
     private IEnumerable<ConnectedSystemObjectType> GetFilteredDiscoveryObjectTypes()
     {
-        var objectTypes = ConnectedSystem.ObjectTypes?.AsEnumerable() ?? Enumerable.Empty<ConnectedSystemObjectType>();
+        var objectTypes = GetVisibleObjectTypes();
 
         if (_objectTypeSelectedFilter)
             objectTypes = objectTypes.Where(ot => ot.Selected);
@@ -793,6 +959,7 @@
         var selected = GetSelectedObjectTypes();
         _selectedObjectType = index >= 1 && index - 1 < selected.Count ? selected[index - 1] : null;
         RecomputeSelectedObjectTypeFlags();
+        UpdateObjectTypeQueryString();
     }
 
     /// <summary>
@@ -806,7 +973,7 @@
 
         _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
         _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
-        _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
+        _selectedObjectTypeHasConstrainedAttributes = _selectedObjectType.Attributes.Any(q => q.Writability != AttributeWritability.Writable);
     }
 
     /// <summary>
@@ -871,6 +1038,14 @@
     {
         // attribute the update to the user
         using var jim = JimFactory.Create();
+
+        // deselecting an Object Type obsoletes every Connected System Object imported from it, and deprovisions
+        // whatever they are joined to. Until now that saved silently; ask the administrator to acknowledge it first.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+            return;
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
@@ -1015,16 +1190,21 @@
         _schemaSearchString = string.Empty;
         ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
 
-        // convert the csv to a list and trim the entries
-        // go through each attribute on the object type and select it
-        foreach (var attributeName in _attributeSelectionCsv.Split(','))
-        {
-            var attribute = _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (attribute == null)
-                continue;
+        // convert the csv to a list, trim the entries, and resolve each to an attribute on the object type
+        var matchedAttributes = _attributeSelectionCsv.Split(',')
+            .Select(name => _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .Where(a => a != null)
+            .Select(a => a!)
+            .ToList();
 
+        // credential attributes are skipped: this path bypasses the table's disabled switch, so it needs its own guard
+        var skippedCredentialAttributes = matchedAttributes
+            .Where(a => CredentialAttributes.IsCredentialAttribute(a.Name))
+            .Select(a => a.Name)
+            .ToList();
+
+        foreach (var attribute in matchedAttributes.Where(a => !CredentialAttributes.IsCredentialAttribute(a.Name)))
             attribute.Selected = true;
-        }
 
         // filter by selected
         _attributeSelectedFilter = true;
@@ -1034,6 +1214,9 @@
 
         // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
+
+        if (skippedCredentialAttributes.Count > 0)
+            Snackbar.Add($"Skipped {string.Join(", ", skippedCredentialAttributes)}: credential attributes cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.", Severity.Warning);
     }
 
     private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)

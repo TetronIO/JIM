@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Scheduling;
 using JIM.Models.Utility;
 
 namespace JIM.Data.Repositories;
@@ -42,6 +43,12 @@ public interface IActivityRepository
     /// </summary>
     public Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds);
 
+    /// <summary>
+    /// Retrieves a page's worth of top-level Activities, i.e. those that do not have a parent Activity.
+    /// Every filter is optional and they combine with AND; the multi-valued ones are additive/OR within
+    /// themselves. Callers that want a subset of Activity kinds (Operations > History wants Worker Task
+    /// Activities) express it through <paramref name="typeFilter"/> and <paramref name="operationFilter"/>.
+    /// </summary>
     public Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page,
         int pageSize,
@@ -56,19 +63,17 @@ public interface IActivityRepository
         bool? hasChildActivities = null,
         IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
         DateTime? createdFrom = null,
-        DateTime? createdTo = null);
-
-    public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
-        int page,
-        int pageSize,
+        DateTime? createdTo = null,
         IEnumerable<string>? connectedSystemFilter = null,
         IEnumerable<string>? runProfileFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
-        string? sortBy = null,
-        bool sortDescending = true,
-        bool? hasChildActivities = null);
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null);
 
+    /// <summary>
+    /// The distinct Connected Systems, Run Profiles and Schedules present in the Worker Task Activity
+    /// history, for the Operations > History filter drop-downs.
+    /// </summary>
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
@@ -83,6 +88,20 @@ public interface IActivityRepository
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
+
+    /// <summary>
+    /// Gets a lightweight progress snapshot for an Activity (#202): a scalar projection of the
+    /// progress fields plus an operation-type breakdown from the Activity's stat counter rows.
+    /// Cheap enough to serve at a high read frequency while a run is executing; never
+    /// materialises Run Profile Execution Items. Returns null when the Activity does not exist.
+    /// </summary>
+    public Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId);
+
+    /// <summary>
+    /// The recorded phases of a Run Profile execution (#454), in run order. Empty for Activities
+    /// that are not Run Profile executions, and for runs that predate phase recording.
+    /// </summary>
+    public Task<List<ActivityPhase>> GetActivityPhasesAsync(Guid activityId);
 
     /// <summary>
     /// Finalises the Activity's Run Profile execution stat counters: recomputes the stats exactly
@@ -108,6 +127,19 @@ public interface IActivityRepository
     /// A step may have multiple activities if it runs multiple Run Profiles in parallel.
     /// </summary>
     public Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
+
+    /// <summary>
+    /// What each Schedule Execution's tasks have left behind, keyed by execution (#1162): one
+    /// observation per Activity, carrying the step it belongs to, its name and its status.
+    /// </summary>
+    /// <remarks>
+    /// A projection rather than the Activities themselves, and batched across executions rather than
+    /// queried per execution, because the Operations queue re-reads this on every progress
+    /// notification. Callers that also hold the queue's Worker Tasks must discard the observations
+    /// whose <see cref="ScheduleStepObservation.ActivityId"/> they already have, since a task that has
+    /// started is described by both records at once.
+    /// </remarks>
+    public Task<Dictionary<Guid, List<ScheduleStepObservation>>> GetScheduleStepOutcomesAsync(IReadOnlyCollection<Guid> scheduleExecutionIds);
 
     /// <summary>
     /// Gets the creation time of the most recent HistoryRetentionCleanup activity.
@@ -249,4 +281,25 @@ public interface IActivityRepository
     /// <returns>True if a matching row was found and incremented; false if no row exists yet for this window bucket
     /// (the caller must then create one).</returns>
     public Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems that has one, the <see cref="Activity.Executed"/> time of its
+    /// most recent successfully completed Full Synchronisation. Systems that have never completed one are absent from
+    /// the dictionary rather than carrying a sentinel date, so callers must distinguish "never" from "long ago".
+    ///
+    /// Runs that failed, errored or were cancelled do not count: a Full Synchronisation that did not finish cleanly
+    /// cannot be relied on to have applied the configuration, so treating it as a reference point would hide real
+    /// pending changes.
+    /// </summary>
+    public Task<Dictionary<int, DateTime>> GetLastFullSynchronisationStartsAsync(IList<int> connectedSystemIds);
+
+    /// <summary>
+    /// Returns the target columns and classification of every configuration change recorded at or after
+    /// <paramref name="since"/> whose class is at least <paramref name="minimumClass"/>, for the caller to attribute
+    /// to the Connected Systems it affects.
+    ///
+    /// Unlike the per-object configuration history queries, this deliberately does not require a captured version:
+    /// deletions are recorded without one and are precisely the changes that most need surfacing.
+    /// </summary>
+    public Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass);
 }

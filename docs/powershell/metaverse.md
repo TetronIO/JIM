@@ -65,17 +65,20 @@ Modifies an existing Metaverse Object Type: its identity (name, plural name, ico
 # ById (default)
 Set-JIMMetaverseObjectType -Id <int> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # ByName
 Set-JIMMetaverseObjectType -Name <string> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>] [-PreviewActivityId <guid>] [-PassThru]
 ```
 
 #### Parameters
@@ -90,8 +93,10 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
 | `Icon` | `string` | No | | The MudBlazor icon name shown in the UI. Pass `$null` or `''` to clear it. Rejected for built-in types. |
 | `DeletionRule` | `string` | No | | The deletion rule to apply. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before a pending deletion is executed |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected. How they trigger deletion is governed by `DeletionTriggerMode`. |
+| `DeletionTriggerMode` | `string` | No | | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to leave the stored mode unchanged. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
+| `PreviewActivityId` | `guid` | No | | The [Configuration Change Preview](previews.md) read before making this change. The change's Activity records the link, so the audit answers not only what changed but what the caller was told it would do. |
 | `PassThru` | `switch` | No | `false` | Return the updated object type |
 
 !!! info "ShouldProcess"
@@ -102,7 +107,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralNam
 
     - **Manual**<br /> Objects are never automatically deleted; an administrator must delete them explicitly
     - **WhenLastConnectorDisconnected**<br /> The object is marked for deletion when all connectors are removed
-    - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when the authoritative source connector is removed
+    - **WhenAuthoritativeSourceDisconnected**<br /> The object is marked for deletion when its authoritative sources disconnect. `DeletionTriggerMode` controls whether every selected source must disconnect first (`AllSourcesDisconnect`) or any one selected source disconnecting is enough (`SpecificSourcesDisconnect`)
 
 #### Output
 
@@ -122,12 +127,21 @@ Get-JIMMetaverseObjectType -Name "Group" | Set-JIMMetaverseObjectType -DeletionR
 Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7)
 ```
 
+```powershell title="Require both HR systems to disconnect before deletion"
+Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7) -DeletionTriggerMode AllSourcesDisconnect
+```
+
 ```powershell title="Rename a custom type and set its icon"
 Set-JIMMetaverseObjectType -Id 5 -NewName "Gadget" -PluralName "Gadgets" -Icon "Devices"
 ```
 
 ```powershell title="Clear a custom type's icon"
 Set-JIMMetaverseObjectType -Id 5 -Icon $null
+```
+
+```powershell title="Apply a previewed change, recording which preview informed it"
+$preview = New-JIMConfigurationChangePreview -MetaverseObjectTypeId 1 -DeletionRule WhenLastConnectorDisconnected -Wait
+Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -PreviewActivityId $preview.ActivityId
 ```
 
 ---
@@ -142,7 +156,8 @@ Creates a new Metaverse Object Type. Use this when the built-in `User`, `Group`,
 New-JIMMetaverseObjectType -Name <string> -PluralName <string>
     [-Icon <string>] [-AttributeIds <int[]>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-DeletionTriggerMode <string>]
+    [-ChangeReason <string>]
 ```
 
 #### Parameters
@@ -155,7 +170,8 @@ New-JIMMetaverseObjectType -Name <string> -PluralName <string>
 | `AttributeIds` | `int[]` | No | | Optional array of existing Metaverse attribute IDs to associate with this type at creation time. Attributes can also be associated later. |
 | `DeletionRule` | `string` | No | `Manual` | Controls when objects of this type are automatically deleted. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before deletion is executed. Use `[TimeSpan]::Zero` for immediate deletion. Ignored when `DeletionRule` is `Manual`. |
-| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. |
+| `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. How they trigger deletion is governed by `DeletionTriggerMode`. |
+| `DeletionTriggerMode` | `string` | No | `AllSourcesDisconnect` | For `WhenAuthoritativeSourceDisconnected`: how the selected sources trigger deletion. `AllSourcesDisconnect` deletes only once no selected source retains a joined Connected System Object; `SpecificSourcesDisconnect` deletes when any one selected source disconnects. Omit to accept the server default. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 
 !!! info "ShouldProcess"
@@ -179,6 +195,14 @@ New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" -Attribu
 New-JIMMetaverseObjectType -Name "ServiceAccount" -PluralName "ServiceAccounts" `
     -DeletionRule WhenAuthoritativeSourceDisconnected `
     -DeletionTriggerConnectedSystemIds 5 `
+    -DeletionGracePeriod ([TimeSpan]::FromDays(7))
+```
+
+```powershell title="Create a type deleted as soon as either HR system disconnects"
+New-JIMMetaverseObjectType -Name "Contractor" -PluralName "Contractors" `
+    -DeletionRule WhenAuthoritativeSourceDisconnected `
+    -DeletionTriggerConnectedSystemIds 3, 7 `
+    -DeletionTriggerMode SpecificSourcesDisconnect `
     -DeletionGracePeriod ([TimeSpan]::FromDays(7))
 ```
 
@@ -736,7 +760,8 @@ Search-JIMMetaverseObject -PredefinedSearchUri "users" -All
 ```
 
 ```powershell title="Get all users, overriding the -All safety cap for a very large result set"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# API's maximum retrieval depth of 1,000,000 rows.
 Search-JIMMetaverseObject -PredefinedSearchUri "users" -All -Force
 ```
 
@@ -813,7 +838,8 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -All -Attributes @("Display Name"
 ```
 
 ```powershell title="Fetch a very large metaverse, overriding the -All safety cap"
-# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything up to the
+# API's maximum retrieval depth of 1,000,000 rows.
 Get-JIMMetaverseObject -ObjectTypeName "Person" -All -Force
 ```
 
@@ -842,7 +868,7 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-Force] [-PageSize <int>]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
@@ -865,6 +891,97 @@ Get-JIMMetaverseObjectChangeHistory -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -
 Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
     Get-JIMMetaverseObjectChangeHistory -All
 ```
+
+---
+
+## Set-JIMMetaverseObjectPassword
+
+Sets the same password on several of a person's accounts across Connected Systems.
+
+Resolves the accounts a Metaverse Object is joined to and writes to each named Connected System in turn. There is no transaction across them: a run routinely ends with some accounts changed and others not, so every account's outcome is reported separately.
+
+Supply the password with `-Password`, or have JIM generate one that satisfies every selected system's discovered policy at once with `-Generate`. A generated password is returned to you, once, because you asked for it; JIM stores it nowhere.
+
+### Syntax
+
+```powershell
+Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Password <securestring>
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+
+Set-JIMMetaverseObjectPassword -Id <guid> -AllAccounts -Password <securestring>
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+
+Set-JIMMetaverseObjectPassword -Id <guid> -ConnectedSystemId <int[]> -Generate
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+
+Set-JIMMetaverseObjectPassword -Id <guid> -AllAccounts -Generate
+    [-ExpiryBehaviour <string>] [-EnableAccount] [-Force]
+```
+
+!!! tip "Use `-Generate` rather than choosing a password yourself"
+    One password has to satisfy the strictest of several systems at once, and their password policies are not
+    something you can see in order to reason about them. JIM can: `-Generate` has it reconcile the discovered
+    policies of every selected Connected System (the longest minimum length any of them demands, and only the
+    character categories all of them count) and produce a password that satisfies all of them.
+
+    Where no single password can satisfy them all, JIM refuses outright rather than handing back one that would
+    be accepted on the first account and refused on the second, after the first has already changed. A system
+    JIM could read no policy from is reported as a warning, because the password is about to be set there and
+    JIM cannot promise it will be accepted.
+
+    The generated password is returned on every outcome's `GeneratedPassword` property as a SecureString.
+    **That is the only chance to capture it**; JIM stores nothing and cannot give it to you again.
+
+```powershell title="Set one compliant password across every account"
+$results = Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -AllAccounts -Generate -Force
+ConvertFrom-SecureString -SecureString $results[0].GeneratedPassword -AsPlainText
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `guid` | Yes | | Metaverse Object identifier. |
+| `ConnectedSystemId` | `int[]` | Yes (BySystem) | | The Connected Systems to set the password in. Accounts elsewhere are left alone. |
+| `AllAccounts` | `switch` | Yes (AllAccounts) | | Sets the password on every account this person has. |
+| `Password` | `securestring` | Yes | | The password to set. Sent to each Connected System and nowhere else. |
+| `ExpiryBehaviour` | `string` | No | `RequireChangeAtNextSignIn` | `RequireChangeAtNextSignIn`, `ExpiresAccordingToTargetPolicy` or `NeverExpires`, applied to every account. |
+| `EnableAccount` | `switch` | No | `$false` | Enables the accounts as part of setting the password. Omitting it leaves their enabled state untouched. |
+| `Force` | `switch` | No | `$false` | Skips the confirmation prompt. |
+
+### Output
+
+One object per account attempted. No property carries the password.
+
+| Property | Description |
+|----------|-------------|
+| `ConnectedSystemId` | The Connected System the account is in |
+| `ConnectedSystemName` | Its name |
+| `ConnectedSystemObjectId` | The account |
+| `Success` | Whether the password was set |
+| `AppliedExpiryBehaviour` | The expiry behaviour really applied, where it was set |
+| `ExpiryBehaviourWarning` | Why the requested behaviour could not be honoured, or null |
+| `Message` | The Connected System's own reason, where it refused |
+
+### Examples
+
+```powershell title="Set one password in two named Connected Systems"
+$password = Read-Host -AsSecureString "New password"
+Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -ConnectedSystemId 1,2 -Password $password
+```
+
+```powershell title="Set it everywhere, then list only the accounts that refused it"
+$password = Read-Host -AsSecureString "New password"
+Set-JIMMetaverseObjectPassword -Id 8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f -AllAccounts -Password $password -Force |
+    Where-Object { -not $_.Success }
+```
+
+### Notes
+
+- **You must name the Connected Systems, or pass `-AllAccounts`.** There is no default: setting a password everywhere by default would turn a reset in one system into a reset in all of them.
+- **This resets the passwords on whichever accounts you point it at.** Anyone who can call it can reset any account in these connector spaces, subject only to what each Connected System's service account is permitted to do.
+- One Connected System refusing does not stop the others. Where that happens the person is left with a different password there from the accounts that accepted it, so check every returned outcome rather than the first.
+- A refused password will be refused again if you resend it. Generate a different one, and set it on every account rather than only the one that failed, or the person ends up with two.
 
 ---
 

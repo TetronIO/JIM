@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -32,6 +34,26 @@ public class ConnectedSystemDetailDto
     public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; }
 
     /// <summary>
+    /// Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Null on the
+    /// create and update responses, which describe the write that just happened rather than the system's readiness.
+    /// </summary>
+    public ConfigurationDriftDto? ConfigurationDrift { get; set; }
+
+    /// <summary>
+    /// How many accounts in this Connected System are waiting on a person over their initial password: refused by
+    /// the target and parked, or never given one before its time to live passed. Null on the create and update
+    /// responses, which describe the write that just happened rather than the system's readiness.
+    /// <para>
+    /// The two counts are never summed. Parked work is fixed on the Synchronisation Rules that provisioned those
+    /// accounts, by correcting their initial password settings; expired work cannot be fixed there at all.
+    /// </para>
+    /// </summary>
+    public int? ParkedInitialPasswordCount { get; set; }
+
+    /// <inheritdoc cref="ParkedInitialPasswordCount"/>
+    public int? ExpiredInitialPasswordCount { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -43,10 +65,20 @@ public class ConnectedSystemDetailDto
     /// Pre-computed Connected System Object count. Required because GetConnectedSystemAsync
     /// does not load the Objects navigation property (it can be very large).
     /// </param>
-    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0)
+    /// <param name="configurationDrift">
+    /// Pre-computed configuration drift status, or null to omit it (create and update responses do not carry it).
+    /// </param>
+    /// <param name="initialPasswordAttention">
+    /// Pre-computed initial-password counts, or null to omit them (create and update responses do not carry them).
+    /// </param>
+    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0,
+        ConfigurationDriftStatus? configurationDrift = null, InitialPasswordAttention? initialPasswordAttention = null)
     {
         return new ConnectedSystemDetailDto
         {
+            ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
+            ParkedInitialPasswordCount = initialPasswordAttention?.ParkedCount,
+            ExpiredInitialPasswordCount = initialPasswordAttention?.ExpiredCount,
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,
@@ -90,6 +122,22 @@ public class ConnectedSystemObjectTypeDto
     public bool Selected { get; set; }
     public bool RemoveContributedAttributesOnObsoletion { get; set; }
     public int AttributeCount { get; set; }
+
+    /// <summary>
+    /// How the Connected System classified this object type, as open key/value tags. A directory connector reports
+    /// the class kind (structural, auxiliary, abstract) and, for classes the directory keeps for its own
+    /// configuration or operation, a visibility of "internal". An object type carrying no tags is unclassified,
+    /// which means "show it".
+    /// </summary>
+    public List<ConnectedSystemObjectTypeTagDto> Tags { get; set; } = [];
+
+    /// <summary>
+    /// Whether the Connected System reported this object type as one it uses internally. Derived from
+    /// <see cref="Tags"/>, and offered here so callers can filter on it without matching tag strings themselves.
+    /// The portal hides these object types by default.
+    /// </summary>
+    public bool IsInternal { get; set; }
+
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
     public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity)
@@ -102,11 +150,24 @@ public class ConnectedSystemObjectTypeDto
             Selected = entity.Selected,
             RemoveContributedAttributesOnObsoletion = entity.RemoveContributedAttributesOnObsoletion,
             AttributeCount = entity.Attributes?.Count ?? 0,
+            Tags = entity.Tags
+                .Select(tag => new ConnectedSystemObjectTypeTagDto { Key = tag.Key, Value = tag.Value })
+                .ToList(),
+            IsInternal = entity.IsInternal(),
             Attributes = entity.Attributes?
                 .Select(ConnectedSystemAttributeDto.FromEntity)
                 .ToList()
         };
     }
+}
+
+/// <summary>
+/// API representation of a classification tag on a ConnectedSystemObjectType.
+/// </summary>
+public class ConnectedSystemObjectTypeTagDto
+{
+    public string Key { get; set; } = null!;
+    public string Value { get; set; } = null!;
 }
 
 /// <summary>
@@ -132,9 +193,15 @@ public class ConnectedSystemAttributeDto
     public bool SelectionLocked { get; set; }
 
     /// <summary>
-    /// Indicates whether this attribute can be written to in the Connected System.
-    /// Read-only attributes can be imported but cannot be targeted by export Attribute Flows.
+    /// Indicates whether this attribute can be written to in the Connected System. One of
+    /// <c>Writable</c>, <c>ReadOnly</c> or <c>WritableOnCreate</c>.
+    /// <c>ReadOnly</c> attributes can be imported but cannot be targeted by export Attribute Flows.
+    /// <c>WritableOnCreate</c> attributes can be targeted, but only ever flow on a Create Pending Export.
     /// </summary>
+    /// <remarks>
+    /// Read-only: discovered from the Connected System's schema, never set through this API. The value is
+    /// the enum name so that a client can switch on it; the portal renders its own wording.
+    /// </remarks>
     public string Writability { get; set; } = null!;
 
     public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
@@ -193,13 +260,13 @@ public class ConnectedSystemObjectDetailDto
             Status = entity.Status,
             JoinType = entity.JoinType,
             DateJoined = entity.DateJoined,
-            DisplayName = entity.DisplayNameOrId,
+            DisplayName = entity.NameOrId,
             ConnectedSystemId = entity.ConnectedSystemId,
             ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
             TypeId = entity.TypeId,
             TypeName = entity.Type?.Name ?? string.Empty,
             MetaverseObjectId = entity.MetaverseObjectId,
-            MetaverseObjectDisplayName = entity.MetaverseObject?.DisplayName,
+            MetaverseObjectDisplayName = entity.MetaverseObject?.Name,
             AttributeValues = entity.AttributeValues
                 .Select(ConnectedSystemObjectAttributeValueDto.FromEntity)
                 .ToList()
@@ -326,6 +393,12 @@ public class ConnectedSystemContainerDto
     public string? Description { get; set; }
     public bool Hidden { get; set; }
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// How far beneath this Container objects are imported from, when it is selected.
+    /// </summary>
+    public ConnectedSystemContainerScope Scope { get; set; }
+
     public int? PartitionId { get; set; }
     public int? ConnectedSystemId { get; set; }
     public List<ConnectedSystemContainerDto> ChildContainers { get; set; } = new();
@@ -340,11 +413,32 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Scope = entity.Scope,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,
             ChildContainers = entity.ChildContainers
                 .Select(FromEntity)
                 .ToList()
+        };
+    }
+}
+
+/// <summary>
+/// API representation of a ConnectorCapability: a human-readable fact the Connector detected about the
+/// target system (e.g. an LDAP directory's type, vendor, or paging support), for the "Directory Capabilities"
+/// card on the Connected System details page.
+/// </summary>
+public class ConnectorCapabilityDto
+{
+    public string Name { get; set; } = null!;
+    public string Value { get; set; } = null!;
+
+    public static ConnectorCapabilityDto FromEntity(ConnectorCapability entity)
+    {
+        return new ConnectorCapabilityDto
+        {
+            Name = entity.Name,
+            Value = entity.Value
         };
     }
 }

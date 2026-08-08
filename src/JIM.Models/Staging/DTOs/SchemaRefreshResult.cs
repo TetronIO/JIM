@@ -61,6 +61,34 @@ public class SchemaRefreshResult
     public Dictionary<string, List<string>> AttributesInUse { get; set; } = new();
 
     /// <summary>
+    /// Credential attributes found in the Connected System's schema and blocked, grouped by object type name.
+    /// Blocked attributes are never imported as managed attributes and can never be used in an Attribute Flow;
+    /// passwords are handled by JIM's dedicated write-only password channel instead. They are reported here so
+    /// the outcome is visible to the administrator rather than silent, and they are deliberately absent from
+    /// <see cref="AddedAttributes"/> and <see cref="RemovedAttributes"/> because they are neither.
+    /// </summary>
+    public Dictionary<string, List<string>> BlockedCredentialAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Discovery shortfalls the Connector worked around rather than failed on, copied from
+    /// <see cref="ConnectorSchema.Warnings"/> so the portal can show them alongside what changed. The schema
+    /// import's Activity carries the same warnings, which is how they reach the REST API and PowerShell.
+    /// </summary>
+    public List<string> DiscoveryWarnings { get; set; } = new();
+
+    /// <summary>
+    /// The total number of credential attributes blocked across all object types.
+    /// </summary>
+    /// <summary>
+    /// Whether a password policy was read from the Connected System during this refresh. False when the Connector
+    /// cannot discover policies, when the system exposes none, or when the read failed; a failed read never fails
+    /// the schema import, so this is how the outcome stays visible rather than silent.
+    /// </summary>
+    public bool PasswordPolicyDiscovered { get; set; }
+
+    public int BlockedCredentialAttributeCount => BlockedCredentialAttributes.Values.Sum(v => v.Count);
+
+    /// <summary>
     /// Whether any action is required from the user (e.g., attributes in use that need attention).
     /// </summary>
     public bool ActionRequired => AttributesInUse.Count > 0;

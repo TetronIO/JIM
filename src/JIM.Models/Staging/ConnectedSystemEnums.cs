@@ -215,10 +215,54 @@ public enum ConnectedSystemExportErrorType
     InvalidGeneratedExternalId,
 
     /// <summary>
+    /// The export would have written the object outside the scope the administrator has selected for the Connected
+    /// System, so it was refused.
+    /// </summary>
+    /// <remarks>
+    /// Writing there succeeds at the directory and then breaks synchronisation: JIM cannot import the object back,
+    /// so the export is never confirmed, the next Full Import treats the object as deleted, and the following
+    /// synchronisation disconnects it. Refusing the write leaves the object where JIM can still see it and puts the
+    /// configuration error in front of an administrator instead.
+    /// </remarks>
+    OutsideManagedScope,
+
+    /// <summary>
     /// A constraint violation occurred when managing a placeholder member on a group.
     /// This typically means the directory has referential integrity enabled and the placeholder DN
     /// does not reference an existing entry. The administrator should update the 'Group Placeholder
     /// Member DN' connector setting to point to a valid entry in the directory.
     /// </summary>
-    PlaceholderMemberConstraintViolation
+    PlaceholderMemberConstraintViolation,
+
+    /// <summary>
+    /// The Connected System rejected the change because something it references does not exist there
+    /// yet. The referenced object needs exporting first; this is an ordering problem, not bad data, so
+    /// the change is worth retrying once its dependency has landed.
+    /// </summary>
+    MissingDependency,
+
+    /// <summary>
+    /// The Connected System refused the change because the object had been altered there since JIM
+    /// last read it. Applying it anyway would silently overwrite whoever got there first, so the change
+    /// is reported and left for the next import to reconcile.
+    /// </summary>
+    ConcurrencyConflict
+}
+
+/// <summary>
+/// How far beneath a selected Connected System Container objects are imported from.
+/// </summary>
+public enum ConnectedSystemContainerScope
+{
+    /// <summary>
+    /// Objects in this Container and in every Container beneath it. The default, and the behaviour
+    /// of every Container selected before this option existed.
+    /// </summary>
+    Subtree = 0,
+
+    /// <summary>
+    /// Objects directly within this Container only. Containers beneath it are not imported from unless
+    /// they are selected in their own right.
+    /// </summary>
+    OneLevel = 1
 }

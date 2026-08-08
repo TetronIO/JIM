@@ -115,6 +115,50 @@ public class RpeiPendingExportIdPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// The decision-time deletion policy snapshot (#119) is written by the same raw bulk insert paths;
+    /// a dropped column here would silently strip the causality record from every deletion-evaluation RPEI.
+    /// </summary>
+    [Test]
+    public async Task BulkInsertRpeisAsync_RpeiWithDeletionPolicySnapshot_PersistsTheColumnAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var snapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected","triggerMode":"AllSourcesDisconnect"}""";
+
+        var withSnapshot = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Deleted,
+            DisplayNameSnapshot = "Jo Bloggs",
+            DeletionPolicySnapshotJson = snapshotJson
+        };
+        var withoutSnapshot = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Updated,
+            DisplayNameSnapshot = "Sam Smith"
+        };
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.Sync.BulkInsertRpeisAsync([withSnapshot, withoutSnapshot]);
+        }
+
+        await using var verifyCtx = NewContext();
+        var persistedWith = await verifyCtx.ActivityRunProfileExecutionItems
+            .AsNoTracking().SingleAsync(r => r.Id == withSnapshot.Id);
+        var persistedWithout = await verifyCtx.ActivityRunProfileExecutionItems
+            .AsNoTracking().SingleAsync(r => r.Id == withoutSnapshot.Id);
+
+        Assert.That(persistedWith.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson),
+            "The deletion policy snapshot must survive the raw bulk insert so historic decisions stay explainable");
+        Assert.That(persistedWithout.DeletionPolicySnapshotJson, Is.Null,
+            "An RPEI without a deletion evaluation must persist a NULL snapshot, not a spurious value");
+    }
+
+    /// <summary>
     /// Verifies the end-of-run recall snapshot lookup (<c>GetConnectedSystemObjectDisplaySnapshotsAsync</c>)
     /// translates on real PostgreSQL and returns the external ID and object type without materialising the
     /// attribute-value collection. The correlated single-column scalar subqueries must not degrade into a

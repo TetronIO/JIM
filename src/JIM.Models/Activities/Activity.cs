@@ -30,6 +30,18 @@ public class Activity
     /// </summary>
     public Guid? ParentActivityId { get; set; }
 
+    /// <summary>
+    /// When this Activity applied a configuration change that was previewed first, the preview's Activity. Null
+    /// means the change was applied without a preview, which is a legitimate choice and is recorded as such: an
+    /// auditor asking "did anyone look at what this would do before doing it?" gets an answer either way, and a
+    /// null that meant "unknown" would answer nothing.
+    ///
+    /// A plain column rather than a foreign key, matching <see cref="ParentActivityId"/>. A preview ages out under
+    /// retention long before the change it informed does, and a foreign key would either block that cleanup or null
+    /// this link; keeping the raw id preserves "this was previewed" even once the preview's own rows have gone.
+    /// </summary>
+    public Guid? PreviewActivityId { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>
@@ -66,6 +78,17 @@ public class Activity
     public string? ErrorMessage { get; set; }
 
     public string? ErrorStackTrace { get; set; }
+
+    /// <summary>
+    /// Structured detail about the failure, as JSON, for failures where there is something specific worth showing an
+    /// administrator beyond the message. Populated today by LDAPS certificate rejections, which record the certificate
+    /// the directory server presented so the portal can show it and name what to do about it.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately open-ended: the shape is owned by whatever produced the failure, and the portal renders what it
+    /// recognises. Never holds secrets; a certificate is public by definition.
+    /// </remarks>
+    public string? ErrorDetail { get; set; }
 
     /// <summary>
     /// Connector-level warning message describing a non-fatal operational note about the activity.
@@ -292,6 +315,18 @@ public class Activity
 
     public int? ConnectedSystemId { get; set; }
 
+    /// <summary>
+    /// If this activity records an operation against a single Connected System Object (a password set, for
+    /// example), that object's id is recorded here alongside <see cref="ConnectedSystemId"/>, which together are
+    /// what a deep-link to the object needs. Null for every other activity.
+    /// <para>
+    /// A plain scalar column with no foreign key or navigation, following the same precedent as the
+    /// configuration target columns below: the activity is the audit record and must outlive the object it
+    /// describes, including through a connector space clear.
+    /// </para>
+    /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
+
     public int? SyncRuleId { get; set; }
 
     /// <summary>
@@ -388,6 +423,22 @@ public class Activity
     /// </summary>
     public int? ScheduleStepIndex { get; set; }
 
+    /// <summary>
+    /// If a Schedule produced this activity, the Schedule's id is recorded here. This is a denormalised copy taken
+    /// when the activity is created, deliberately carrying no foreign key or navigation: Schedule -> ScheduleExecution
+    /// cascades on delete, so resolving the Schedule through the execution at query time would silently blank the
+    /// attribution out for every historical activity the moment the Schedule was deleted, on a permanent audit record.
+    /// This is NOT <see cref="ScheduleId"/>, which is the configuration-change target column for Schedules.
+    /// </summary>
+    public Guid? ScheduledByScheduleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the producing Schedule's name at the time this activity was created, taken for the same
+    /// durability reason as <see cref="ScheduledByScheduleId"/> (and mirroring ScheduleExecution.ScheduleName),
+    /// so history still reads correctly after the Schedule is renamed or deleted.
+    /// </summary>
+    public string? ScheduledByScheduleName { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // history retention cleanup stats (for HistoryRetentionCleanup activities)
     // -----------------------------------------------------------------------------------------------------------------
@@ -471,6 +522,17 @@ public class Activity
     /// Null for non-configuration activities.
     /// </summary>
     public int? ConfigurationChangeVersion { get; set; }
+
+    /// <summary>
+    /// How consequential this configuration change was: destructive, sync-affecting, or cosmetic. Computed from the
+    /// properties that actually changed, so consumers (the changed-since-last-synchronisation indicator, apply-time
+    /// messaging, and the preview adapters) can filter to changes that matter without re-diffing history.
+    ///
+    /// <see cref="ConfigurationChangeClass.NotClassified"/> for creates (no prior snapshot to diff), for
+    /// non-configuration activities, and where classification could not be determined. See
+    /// engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md.
+    /// </summary>
+    public ConfigurationChangeClass ConfigurationChangeClass { get; set; } = ConfigurationChangeClass.NotClassified;
 
     /// <summary>
     /// Records which integer-keyed configuration object this activity's configuration change belongs to, by setting

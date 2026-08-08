@@ -36,6 +36,10 @@ The category is mostly a UI grouping; it does not change semantics.
 
 Removing the override (resetting the value back to null so the effective value reverts to the default) is a separate operation from updating. It conveys intent (return to default) more clearly than an update with a null body would, and is also useful for backing out a configuration change without needing to remember the original default.
 
+## Confirming a change
+
+Nearly every Service Setting is operational and saves in silence. The few that steer synchronisation are confirmed first, listing what is changing and reminding you that a Full Synchronisation is what puts it into effect. See [Configuration changes](configuration-changes.md).
+
 ## Change history
 
 Every update and revert records a versioned entry in the setting's [configuration change history](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.

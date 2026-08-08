@@ -98,6 +98,12 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetAllCsoExternalIdMappingsAsync(connectedSystemId);
 
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetAllCsoImportStateLookupAsync(connectedSystemId);
+
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+        => _repo.ConnectedSystems.StampImportStateAsync(stamps);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
@@ -133,8 +139,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
         => _repo.ConnectedSystems.GetReferenceExternalIdsForCsosAsync(csoIds);
 
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
+    // GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync is an owned raw SQL implementation in
+    // SyncRepository.CsOperations.cs (worker hot path, #119).
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
@@ -235,6 +241,16 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
 
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
 
@@ -282,6 +298,45 @@ public partial class SyncRepository : ISyncRepository
             message, objectsProcessedParam, objectsToProcessParam, activity.Id);
     }
 
+    public async Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
+    {
+        if (phases.Count == 0)
+            return;
+
+        // Raw SQL for the same reason as UpdateActivityMessageAsync above: the worker's DbContext
+        // carries the run's tracked entities, and a SaveChangesAsync here would run DetectChanges
+        // across all of them just to record a step transition.
+        // The values written below MUST match the order of ActivityPhaseBulkColumns.ActivityPhases.
+        var parameters = new List<object>(phases.Count * ActivityPhaseBulkColumns.ActivityPhases.Length);
+        var rows = new List<string>(phases.Count);
+
+        foreach (var phase in phases)
+        {
+            var offset = parameters.Count;
+            parameters.Add(phase.Id);
+            parameters.Add(phase.ActivityId);
+            parameters.Add(phase.Order);
+            parameters.Add(phase.Key);
+            parameters.Add(phase.Name);
+            parameters.Add(BulkSqlHelpers.NullableParam(phase.ParentKey, NpgsqlTypes.NpgsqlDbType.Text));
+            parameters.Add((int)phase.Status);
+            parameters.Add(BulkSqlHelpers.NullableParam(phase.Started, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+            parameters.Add(BulkSqlHelpers.NullableParam(phase.Ended, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+            rows.Add($"({string.Join(", ", Enumerable.Range(offset, ActivityPhaseBulkColumns.ActivityPhases.Length).Select(i => $"{{{i}}}"))})");
+        }
+
+        var updateAssignments = string.Join(", ",
+            ActivityPhaseBulkColumns.ActivityPhasesUpdate.Select(c => $"\"{c}\" = EXCLUDED.\"{c}\""));
+
+        var sql = $"""
+            INSERT INTO "ActivityPhases" ({BulkSqlHelpers.ToQuotedList(ActivityPhaseBulkColumns.ActivityPhases)})
+            VALUES {string.Join(", ", rows)}
+            ON CONFLICT ("Id") DO UPDATE SET {updateAssignments}
+            """;
+
+        await _context.Database.ExecuteSqlRawAsync(sql, parameters);
+    }
+
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _repo.Activity.GetActivityRpeiErrorCountsAsync(activityId);
 
@@ -314,11 +369,33 @@ public partial class SyncRepository : ISyncRepository
         return latestRuleChange > latestMappingChange ? latestRuleChange : latestMappingChange;
     }
 
+    public async Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        var enabled = await _context.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .Where(ip => ip.Enabled && syncRuleIds.Contains(ip.SyncRuleId))
+            .Select(ip => ip.SyncRuleId)
+            .ToListAsync();
+
+        return [.. enabled];
+    }
+
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
         => _repo.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        // EF projection is fine here: a tiny table read at most once per run profile execution (the
+        // worker caches the map), not a per-object hot-path query.
+        => _context.ConnectedSystems
+            .AsNoTracking()
+            .Select(cs => new { cs.Id, cs.Name })
+            .ToDictionaryAsync(cs => cs.Id, cs => cs.Name);
 
     #endregion
 

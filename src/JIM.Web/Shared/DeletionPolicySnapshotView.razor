@@ -1,0 +1,140 @@
+@using JIM.Models.Core
+@using JIM.Models.Sync
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Renders the deletion policy facts recorded when a deletion rule evaluation was made (#119): rule,
+    trigger mode, selected sources by name, grace period, triggering system and the sources still
+    connected at decision time. Because the facts come from the decision-time snapshot rather than the
+    object type's current configuration, the explanation stays accurate after an administrator edits
+    the deletion rule.
+*@
+
+<MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.body2">
+            @if (!string.IsNullOrEmpty(ObjectTypeName))
+            {
+                <text><strong>@ObjectTypeName</strong> objects were configured with the following deletion rule when this Activity ran:</text>
+            }
+            else
+            {
+                <text>The following deletion rule was configured when this Activity ran:</text>
+            }
+        </MudText>
+
+        @switch (Snapshot.DeletionRule)
+        {
+            case MetaverseObjectDeletionRule.Manual:
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" />
+                    <MudText Typo="Typo.body1">
+                        <strong>Manual deletion only.</strong> The Metaverse Object would not be automatically
+                        deleted even when all connectors were removed; an administrator must delete it manually.
+                    </MudText>
+                </MudStack>
+                break;
+
+            case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Info" />
+                    <MudText Typo="Typo.body1">
+                        <strong>Delete when last connector disconnects.</strong> The Metaverse Object would be
+                        @FatePhrase when all Connected System Objects are removed.
+                    </MudText>
+                </MudStack>
+                break;
+
+            case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Info" />
+                    <MudText Typo="Typo.body1">
+                        <strong>Delete when authoritative source disconnects.</strong>
+                        Trigger mode: <strong>@ModeLabel</strong>; @ModeDescription
+                        The Metaverse Object would be @FatePhrase.
+                    </MudText>
+                </MudStack>
+                @if (Snapshot.SelectedSourceSystemNames.Count > 0)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-6">
+                        @foreach (var sourceName in Snapshot.SelectedSourceSystemNames)
+                        {
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
+                                @sourceName
+                            </MudChip>
+                        }
+                    </MudStack>
+                }
+                @if (!string.IsNullOrEmpty(Snapshot.TriggeringSystemName))
+                {
+                    <MudText Typo="Typo.body1" Class="ml-6">
+                        Evaluation triggered by the disconnection of <strong>@Snapshot.TriggeringSystemName</strong>.
+                    </MudText>
+                }
+                <MudText Typo="Typo.body1" Class="ml-6 mud-text-secondary">
+                    @if (Snapshot.RemainingConnectedSourceSystemNames.Count > 0)
+                    {
+                        <text>Selected sources still connected at decision time: <strong>@string.Join(", ", Snapshot.RemainingConnectedSourceSystemNames)</strong>.</text>
+                    }
+                    else
+                    {
+                        <text>No selected sources remained connected at decision time.</text>
+                    }
+                </MudText>
+                break;
+        }
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Recorded when this Activity ran.
+        </MudText>
+    </MudStack>
+</MudAlert>
+
+@code {
+    /// <summary>
+    /// The decision-time deletion policy snapshot to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public MvoDeletionPolicySnapshot Snapshot { get; set; } = null!;
+
+    /// <summary>
+    /// The Metaverse Object Type's singular name for the lead sentence, when known.
+    /// </summary>
+    [Parameter]
+    public string? ObjectTypeName { get; set; }
+
+    private string ModeLabel => Snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+        ? "All sources disconnect"
+        : "Specific source(s) disconnect";
+
+    private string ModeDescription => Snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+        ? "deletion occurs only once every selected source has disconnected."
+        : "deletion occurs when any one of the selected sources disconnects.";
+
+    /// <summary>
+    /// "marked for deletion with a 30 days grace period" or "deleted immediately", matching the
+    /// established phrasing of the current-configuration panel this view replaces.
+    /// </summary>
+    private RenderFragment FatePhrase => __builder =>
+    {
+        if (Snapshot.GracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero)
+        {
+            <text>marked for deletion with a <strong>@FormatGracePeriod(gracePeriod)</strong> grace period</text>
+        }
+        else
+        {
+            <text>deleted immediately</text>
+        }
+    };
+
+    private static string FormatGracePeriod(TimeSpan period)
+    {
+        var parts = new List<string>();
+        if (period.Days > 0) parts.Add($"{period.Days} day{(period.Days != 1 ? "s" : "")}");
+        if (period.Hours > 0) parts.Add($"{period.Hours} hour{(period.Hours != 1 ? "s" : "")}");
+        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute{(period.Minutes != 1 ? "s" : "")}");
+        return parts.Count > 0 ? string.Join(", ", parts) : "0";
+    }
+}

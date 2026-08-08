@@ -38,6 +38,19 @@ Get-JIMSchedule -Id <Guid> [-IncludeSteps]
 
 One or more schedule objects. The list parameter set returns results in pages of 100.
 
+Alongside the schedule's configuration (`Id`, `Name`, `Description`, `TriggerType`, `PatternType`, `CronExpression`, `IsEnabled`, `LastRunTime`, `NextRunTime`, `StepCount`), each object carries the outcome of the schedule's most recent run:
+
+| Property | Type | Description |
+|---|---|---|
+| `LastExecutionId` | `Guid` | The most recent Schedule Execution. Pass it to `Get-JIMScheduleExecution -Id` for the per-step detail. |
+| `LastExecutionStatus` | `String` | How that run ended: `Queued`, `InProgress`, `Complete`, `Failed` or `Cancelled`. |
+| `LastExecutionCurrentStepIndex` | `Int32` | The step the run reached, 0-based. Read with `LastExecutionTotalSteps` to see how far a failed run got. |
+| `LastExecutionTotalSteps` | `Int32` | How many steps the run set out to execute. |
+| `LastExecutionCompletedAt` | `DateTime` | When the run finished (UTC). Empty while it is still running. |
+| `LastExecutionErrorMessage` | `String` | The error that stopped the run, where one did. |
+
+All six are empty for a schedule that has never run. `-IncludeSteps` returns the same fields alongside the steps.
+
 #### Examples
 
 ```powershell title="List all schedules"
@@ -55,6 +68,12 @@ Get-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -IncludeSteps
 ```powershell title="Pipeline from a variable"
 $scheduleId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 $scheduleId | Get-JIMSchedule -IncludeSteps
+```
+
+```powershell title="Report the schedules whose last run failed"
+Get-JIMSchedule |
+    Where-Object { $_.LastExecutionStatus -eq 'Failed' } |
+    Select-Object Name, LastRunTime, LastExecutionCurrentStepIndex, LastExecutionTotalSteps, LastExecutionErrorMessage
 ```
 
 ---
@@ -538,17 +557,36 @@ Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] -A
 | `Id` | `Guid` | Yes | ByPropertyName | ById | The unique identifier of the execution. Alias: `ExecutionId`. |
 | `ScheduleId` | `Guid` | No | ByPropertyName | List, Active | Filters executions to a specific schedule. |
 | `InputObject` | `PSCustomObject` | No | ByValue | List, Active | A Schedule object from the pipeline (e.g. from `Get-JIMSchedule`); its `Id` is used to filter executions, equivalent to specifying `-ScheduleId` directly. |
-| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Completed`, `Failed`, `Cancelled`. |
+| `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Complete`, `Failed`, `Cancelled`. |
 | `Active` | `Switch` | Yes | No | Active | Returns only currently active executions (queued or in progress). |
 
 #### Output
 
-One or more schedule execution objects.
+One or more schedule execution objects. Every shape carries `StepDisplay`, the step group the execution has reached as one sentence, matching what the portal shows above the Schedule's tasks in **Admin > Operations > Queue**.
+
+`-Id` returns the detail shape, which adds a `Progress` block:
+
+| Property | Description |
+|----------|-------------|
+| `StepDisplay` | `Step 2 of 5: 2 in parallel` from the detail shape, which knows what the step is called; `Step 2 of 5` from the list and active shapes, which carry only the position. |
+| `Progress.CurrentStepNumber` | The step group being run, 1-based. |
+| `Progress.TotalSteps` | How many step groups the Schedule has. Steps that run concurrently are one group, so a Schedule of six steps where two run together is five steps long. |
+| `Progress.Steps` | One entry per step group, each with its `StepIndex`, `Name`, `Status` (`Pending`, `Running`, `Completed`, `Failed` or `Cancelled`), `IsParallel`, and `TaskStatuses`, every concurrent task's own outcome. |
+| `Steps` | Unchanged: one entry per Schedule Step *row*, naming it and carrying its type, timings, errors and Activity id. A step group that runs three Run Profiles concurrently appears here three times and in `Progress.Steps` once. |
 
 #### Examples
 
 ```powershell title="List all executions"
 Get-JIMScheduleExecution
+```
+
+```powershell title="See how far each running Schedule has got"
+Get-JIMScheduleExecution -Active | Select-Object ScheduleName, StepDisplay
+```
+
+```powershell title="Find a parallel step where one task failed and another did not"
+$execution = Get-JIMScheduleExecution -Id "f1e2d3c4-b5a6-7890-abcd-ef1234567890"
+$execution.Progress.Steps | Where-Object { $_.IsParallel -and $_.TaskStatuses -contains 'Failed' }
 ```
 
 ```powershell title="Get a specific execution"

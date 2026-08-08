@@ -374,27 +374,60 @@ public class ExampleDataServer
         // with closures and allow thread-safe access via Interlocked/Volatile
         var objectsGeneratedHolder = new int[1];
 
-        // Report initial progress (total objects to create, none processed yet)
-        if (progressCallback != null)
-            await progressCallback(totalObjectsToCreate, 0, "Generating objects...");
+        // The job runs in equally-weighted phases, each processing every object once: generation, an optional
+        // change-history build (only when MVO change tracking is on), then persistence. Reporting each phase's own
+        // 0->total count would sweep the progress bar to 100% two or three times; instead every phase's local count
+        // is mapped onto a single continuous 0->total overall count, so the Activity progress bar advances once from
+        // 0% to 100% across the whole job rather than racing to 100% during generation and then freezing there while
+        // persistence (frequently the longest phase) runs. Fetched once here so the phase weighting is known up front.
+        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        const int generationPhase = 0;
+        var changeHistoryPhase = changeTrackingEnabled ? 1 : -1;
+        var persistencePhase = changeTrackingEnabled ? 2 : 1;
+        var phaseCount = changeTrackingEnabled ? 3 : 2;
+        var reportInterval = progressUpdateInterval ?? TimeSpan.FromSeconds(2);
 
-        // Progress is reported from a dedicated background task, NOT from inside the parallel generation loop below.
-        // Reporting inline meant a generation thread ran the asynchronous Activity database write synchronously (via
-        // GetAwaiter().GetResult()) while holding _metaverseObjectLock, the same lock every other generation thread
-        // needs to add its object. That serialised the whole loop behind a blocking I/O call and starved the thread
-        // pool, so generating the built-in 10,000-object template crawled at roughly one object per second at ~0% CPU.
-        // The loop now only increments the atomic counter; this task samples it on an interval and reports
-        // asynchronously, holding no lock. It is cancelled once generation completes (before any further database work).
+        // Maps a phase-local processed count onto the overall 0->total progress value (see CalculateOverallProgress)
+        // and reports it. Guards the no-callback case; the empty-template divide-by-zero is handled in the calculation.
+        async Task ReportOverallProgressAsync(int phase, int phaseProcessed, string? message)
+        {
+            if (progressCallback == null)
+                return;
+
+            var overallProcessed = CalculateOverallProgress(phase, phaseProcessed, totalObjectsToCreate, phaseCount);
+            await progressCallback(totalObjectsToCreate, overallProcessed, message);
+        }
+
+        // Report initial progress (nothing processed yet)
+        await ReportOverallProgressAsync(generationPhase, 0, "Generating objects...");
+
+        // Generation progress is reported from a dedicated background task, NOT from inside the parallel generation
+        // loop below. Reporting inline meant a generation thread ran the asynchronous Activity database write
+        // synchronously (via GetAwaiter().GetResult()) while holding _metaverseObjectLock, the same lock every other
+        // generation thread needs to add its object. That serialised the whole loop behind a blocking I/O call and
+        // starved the thread pool, so generating the built-in 10,000-object template crawled at roughly one object per
+        // second at ~0% CPU. The loop now only increments the atomic counter; this task samples it on an interval and
+        // reports asynchronously, holding no lock. It is cancelled once generation completes (before any further
+        // database work).
         using var progressReporterCts = new CancellationTokenSource();
         var progressReporterTask = progressCallback == null
             ? Task.CompletedTask
-            : ReportGenerationProgressAsync(progressCallback, totalObjectsToCreate, objectsGeneratedHolder, progressUpdateInterval ?? TimeSpan.FromSeconds(2), progressReporterCts.Token);
+            : ReportGenerationProgressAsync(
+                generated => ReportOverallProgressAsync(generationPhase, generated, "Generating objects..."),
+                objectsGeneratedHolder,
+                reportInterval,
+                progressReporterCts.Token);
 
         // object type dependency graph needs considering
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
         // note: entity framework might handle dependency sequencing for us at time of persistence
 
-        var random = new Random();
+        // Random.Shared, not new Random(): this instance is used concurrently from the Parallel.For generation
+        // loop below, and System.Random is not thread-safe. Concurrent access corrupts its internal state and can
+        // return values outside the requested range, which then index a data set collection out of bounds and crash
+        // generation (or silently skew values). Random.Shared is thread-safe with per-thread state, so it is both
+        // safe and contention-free here. Not security-sensitive (example data), so a PRNG is appropriate.
+        var random = Random.Shared;
         var metaverseObjectsToCreate = new List<MetaverseObject>();
         var trackerStore = new ExampleDataValueTrackerStore();
             
@@ -417,6 +450,24 @@ public class ExampleDataServer
                 exampleDataSets.Add(exampleDataSet);
         }
 
+        // Re-point every template attribute's data set instances at the fully-loaded sets (#1112). The
+        // template retrieval does not include set values, and under a NoTracking context (JIM.Web) EF
+        // identity-map fix-up never fills them in, so without this substitution pattern-based generation
+        // indexes into empty value collections and crashes. Substituting once here makes generation
+        // independent of the caller's tracking behaviour; a set that genuinely has no values fails fast
+        // with an actionable error instead of an ArgumentOutOfRangeException from a generation thread.
+        SubstituteFullyLoadedExampleDataSets(template, exampleDataSets);
+
+        // Cap generation parallelism to leave one core (and thus a thread-pool thread) free for the background
+        // progress reporter and the worker's heartbeat. An unbounded Parallel.For here is CPU-bound and greedily
+        // consumes every thread the pool injects, so the ~1-second reporter's continuations were starved for many
+        // seconds and the Activity progress bar sat frozen during generation (measured: a ~13s stall at 0 objects on
+        // a 16-core host). Leaving one core costs a few percent of generation throughput and restores ~1s updates.
+        var generationParallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)
+        };
+
         foreach (var objectType in template.ObjectTypes)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -433,7 +484,7 @@ public class ExampleDataServer
             // first. Computed once per object type (the dependency graph is static across generated objects), and any
             // circular dependency throws here, before generation begins. See ExampleDataObjectType.
             var orderedTemplateAttributes = objectType.GetTemplateAttributesInDependencyOrder();
-            Parallel.For(0, objectType.ObjectsToCreate,
+            Parallel.For(0, objectType.ObjectsToCreate, generationParallelOptions,
                 index =>
                 {
                     var metaverseObject = new MetaverseObject
@@ -482,7 +533,7 @@ public class ExampleDataServer
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.Text:
-                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, exampleDataSets, random, trackers);
+                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, trackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -536,6 +587,10 @@ public class ExampleDataServer
         progressReporterCts.Cancel();
         await progressReporterTask;
 
+        // Snap the bar to the end of the generation segment before the next phase begins, in case the last interval
+        // sample landed below the final count.
+        await ReportOverallProgressAsync(generationPhase, totalObjectsToCreate, "Generating objects...");
+
         // ensure that attribute population percentage values are respected
         // do this by assigning all attributes with values (done), then go and randomly delete the required amount
         RemoveUnnecessaryAttributeValues(template, metaverseObjectsToCreate, random);
@@ -543,9 +598,7 @@ public class ExampleDataServer
         // Populate CachedDisplayName from the generated attribute values
         foreach (var mvo in metaverseObjectsToCreate)
         {
-            var displayNameAv = mvo.AttributeValues
-                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-            mvo.CachedDisplayName = displayNameAv?.StringValue;
+            mvo.CachedDisplayName = ObjectNaming.MetaverseNameFrom(mvo.AttributeValues);
         }
 
         Log.Information($"ExecuteTemplateAsync: Generated {metaverseObjectsToCreate.Count:N0} objects");
@@ -557,13 +610,17 @@ public class ExampleDataServer
             return 0;
         }
 
-        // Create change history records for each generated object (if change tracking is enabled)
-        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        // Create change history records for each generated object (if change tracking is enabled). This is the second
+        // progress phase: in-memory work, but O(objects), so it reports its own progress (throttled by the report
+        // interval) rather than leaving the bar frozen between the generation and persistence phases. The loop is
+        // sequential and holds no lock, so an awaited progress write here is safe (unlike the parallel generation loop).
         if (changeTrackingEnabled)
         {
             var changeTrackingStopwatch = Stopwatch.StartNew();
             Log.Information("ExecuteTemplateAsync: Creating change history records for {Count:N0} objects...", metaverseObjectsToCreate.Count);
             var emptyRemovals = new List<MetaverseObjectAttributeValue>();
+            var changeHistoryReportStopwatch = Stopwatch.StartNew();
+            var changeHistoryIndex = 0;
             foreach (var mvo in metaverseObjectsToCreate)
             {
                 await Application.Metaverse.CreateMetaverseObjectChangeAsync(
@@ -575,14 +632,20 @@ public class ExampleDataServer
                     initiatedByName,
                     ObjectChangeType.Created,
                     MetaverseObjectChangeInitiatorType.ExampleData);
+
+                changeHistoryIndex++;
+                if (changeHistoryReportStopwatch.Elapsed >= reportInterval)
+                {
+                    changeHistoryReportStopwatch.Restart();
+                    await ReportOverallProgressAsync(changeHistoryPhase, changeHistoryIndex, "Recording change history...");
+                }
             }
             changeTrackingStopwatch.Stop();
             Log.Information("ExecuteTemplateAsync: Change history records created in {Elapsed}", changeTrackingStopwatch.Elapsed);
         }
 
-        // Report that generation is complete, now starting persistence
-        if (progressCallback != null)
-            await progressCallback(totalObjectsToCreate, totalObjectsToCreate, "Persisting to database...");
+        // Entering the persistence phase (the final progress phase), nothing persisted yet.
+        await ReportOverallProgressAsync(persistencePhase, 0, "Persisting to database...");
 
         // FK scalar fixup before persistence.
         //
@@ -604,17 +667,16 @@ public class ExampleDataServer
         var persistenceStopwatch = new Stopwatch();
         persistenceStopwatch.Start();
 
-        // Create a persistence progress callback that reports during the persistence phase.
-        // Generation is already at 100%; here we surface batch-level progress and a rolling ETA so
-        // the Activity UI shows a moving "Persisting to database... batch X/Y (P/T, ETA mm:ss)"
-        // message instead of a static string while large templates flush.
+        // Persistence is the final progress phase; map each batch's real persisted count onto the overall progress
+        // value so the bar advances through this phase (previously it was pinned at 100% here and only the message
+        // moved). A rolling ETA is surfaced in the message.
         Func<PersistenceProgress, Task>? persistenceProgressCallback = null;
         if (progressCallback != null)
         {
             persistenceProgressCallback = async progress =>
             {
                 var message = FormatPersistenceProgressMessage(progress);
-                await progressCallback(totalObjectsToCreate, totalObjectsToCreate, message);
+                await ReportOverallProgressAsync(persistencePhase, progress.ObjectsPersisted, message);
             };
         }
 
@@ -648,8 +710,7 @@ public class ExampleDataServer
     /// faults the returned task and is surfaced when the caller awaits it.
     /// </summary>
     private static async Task ReportGenerationProgressAsync(
-        Func<int, int, string?, Task> progressCallback,
-        int totalObjectsToCreate,
+        Func<int, Task> reportGenerated,
         int[] objectsGeneratedHolder,
         TimeSpan interval,
         CancellationToken cancellationToken)
@@ -660,7 +721,7 @@ public class ExampleDataServer
             {
                 await Task.Delay(interval, cancellationToken);
                 var generated = Volatile.Read(ref objectsGeneratedHolder[0]);
-                await progressCallback(totalObjectsToCreate, generated, "Generating objects...");
+                await reportGenerated(generated);
             }
         }
         catch (OperationCanceledException)
@@ -670,14 +731,37 @@ public class ExampleDataServer
     }
 
     /// <summary>
+    /// Maps a phase-local processed count onto the single continuous overall progress count that spans all
+    /// equally-weighted phases of a template execution (generation, an optional change-history build, and
+    /// persistence). Each phase processes every object once, so the overall count is
+    /// (phase * total + phaseProcessed) / phaseCount, with phaseProcessed clamped to [0, total] and the result
+    /// rounded to the nearest object. This is what lets the Activity progress bar advance once from 0% to 100%
+    /// across the whole job instead of sweeping to 100% per phase. Returns 0 for an empty template (or a
+    /// non-positive phase count), avoiding a divide-by-zero.
+    /// </summary>
+    /// <param name="phase">Zero-based index of the current phase.</param>
+    /// <param name="phaseProcessed">Objects processed so far within the current phase.</param>
+    /// <param name="totalObjects">Total objects the template creates (the per-phase object count).</param>
+    /// <param name="phaseCount">Number of active phases (2 without change tracking, 3 with).</param>
+    internal static int CalculateOverallProgress(int phase, int phaseProcessed, int totalObjects, int phaseCount)
+    {
+        if (totalObjects <= 0 || phaseCount <= 0)
+            return 0;
+
+        var clamped = Math.Clamp(phaseProcessed, 0, totalObjects);
+        return (int)Math.Round(((double)phase * totalObjects + clamped) / phaseCount);
+    }
+
+    /// <summary>
     /// Formats the per-batch persistence-progress payload into a single human-readable message
-    /// suitable for the Activity UI. Includes batch counter, object counter, and a rolling ETA
-    /// derived from the elapsed persistence time, omitting the ETA on the first batch (when we
-    /// have no useful rate measurement) and on the final batch (when there is nothing left to do).
+    /// suitable for the Activity UI. Includes the batch counter and a rolling ETA derived from the
+    /// elapsed persistence time, omitting the ETA on the first batch (when we have no useful rate
+    /// measurement) and on the final batch (when there is nothing left to do). The object counter is
+    /// deliberately not repeated here: the progress bar's overall count already conveys quantity.
     /// </summary>
     internal static string FormatPersistenceProgressMessage(PersistenceProgress progress)
     {
-        var baseMessage = $"Persisting to database... batch {progress.BatchIndex:N0}/{progress.BatchCount:N0} ({progress.ObjectsPersisted:N0}/{progress.TotalObjects:N0})";
+        var baseMessage = $"Persisting to database... batch {progress.BatchIndex:N0}/{progress.BatchCount:N0}";
 
         // No ETA on batch 1 (no rate yet) or once we're done
         if (progress.BatchIndex <= 1 || progress.ObjectsPersisted >= progress.TotalObjects || progress.Elapsed <= TimeSpan.Zero)
@@ -704,10 +788,34 @@ public class ExampleDataServer
     #endregion
 
     #region Attribute Generation
+    /// <summary>
+    /// Re-points every template attribute's <see cref="ExampleDataSetInstance.ExampleDataSet"/> at the
+    /// matching fully-loaded set (values included), so generation never depends on the template
+    /// retrieval's include chain or the context's tracking behaviour (#1112). Throws when a referenced
+    /// set has no values even in its fully-loaded form; generation cannot produce a value from an empty
+    /// set, and failing here names the set instead of surfacing an index error from a generation thread.
+    /// </summary>
+    private static void SubstituteFullyLoadedExampleDataSets(ExampleDataTemplate template, IReadOnlyCollection<ExampleDataSet> fullyLoadedSets)
+    {
+        var instances = template.ObjectTypes
+            .SelectMany(objectType => objectType.TemplateAttributes)
+            .SelectMany(templateAttribute => templateAttribute.ExampleDataSetInstances)
+            .Where(instance => instance.ExampleDataSet is not null);
+
+        foreach (var instance in instances)
+        {
+            var fullyLoadedSet = fullyLoadedSets.SingleOrDefault(s => s.Id == instance.ExampleDataSet.Id);
+            if (fullyLoadedSet != null)
+                instance.ExampleDataSet = fullyLoadedSet;
+
+            if (instance.ExampleDataSet.Values.Count == 0)
+                throw new InvalidDataException($"Example Data Set '{instance.ExampleDataSet.Name}' has no values, so no attribute value can be generated from it. Add values to the set or remove it from the template attribute.");
+        }
+    }
+
     private void GenerateMetaverseStringValue(
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
-        IEnumerable<ExampleDataSet> exampleDataSets,
         Random random,
         ExampleDataValueTrackerStore trackerStore)
     {
@@ -733,19 +841,12 @@ public class ExampleDataServer
             // - if no pattern: handle one or more data set value assignments
             // - if pattern: replace attribute vars, replace system vars and replace example data set vars
 
+            // Every instance's ExampleDataSet was substituted with its fully-loaded (values included)
+            // form before generation began (see SubstituteFullyLoadedExampleDataSets, #1112), so the
+            // value collections below are always populated.
             string output;
             if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count == 1)
             {
-                // for some reason, this sometimes loads with zero values and an exception is thrown
-                // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
-                if (dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count == 0)
-                {
-                    //Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count was zero!");
-                    //return;
-
-                    dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet = exampleDataSets.Single(q => q.Id == dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Id);
-                }
-
                 // single example-data set based
                 var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count);
                 output = dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values[valueIndex].StringValue;
@@ -754,19 +855,8 @@ public class ExampleDataServer
             {
                 // multiple example-data set based:
                 // just choose randomly a value from across the datasets. simplest for now
-                // would prefer to end up with an even distribution of values from across the datasets, but I ran out of time.                 
+                // would prefer to end up with an even distribution of values from across the datasets, but I ran out of time.
                 var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count);
-
-                // for some reason, Firstnames Female sometimes loads with zero values and an exception is thrown
-                // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
-                if (dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count == 0)
-                {
-                    //Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count was zero!");
-                    //return;
-
-                    dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet = exampleDataSets.Single(q => q.Id == dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Id);
-                }
-
                 var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
                 var valueIndex = random.Next(0, valueIndexMaxValue);
 

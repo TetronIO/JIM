@@ -192,7 +192,10 @@ public class ExampleDataRepository : IExampleDataRepository
 
     public async Task<ExampleDataTemplateHeader?> GetTemplateHeaderAsync(int id)
     {
-        await using var db = new JimDbContext();
+        // Reads through the repository's own context. This used to open a JimDbContext of its own,
+        // which takes a second pooled connection and configures it from environment variables
+        // rather than from whatever the caller was already working against.
+        var db = Repository.Database;
         return await db.ExampleDataTemplates.Select(dgt => new ExampleDataTemplateHeader
         {
             Name = dgt.Name,

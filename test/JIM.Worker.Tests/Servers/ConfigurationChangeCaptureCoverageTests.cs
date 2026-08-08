@@ -204,7 +204,10 @@ public class ConfigurationChangeCaptureCoverageTests
         await _jim.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, "watermark-cookie-v2");
 
         Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("watermark-cookie-v2"));
-        _csRepo.Verify(r => r.UpdateConnectedSystemAsync(connectedSystem), Times.Once);
+        _csRepo.Verify(r => r.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem.Id, "watermark-cookie-v2"), Times.Once);
+        _csRepo.Verify(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()), Times.Never,
+            "the watermark write must use the targeted single-column update, never the graph-marking update path, " +
+            "which wrote runtime-only setting-value instances back with a zero FK and failed export runs");
         Assert.That(_createdActivity, Is.Null, "the import watermark is machine-generated runtime state, not a configuration change, and must not create an Activity");
         Assert.That(_completedActivity, Is.Null);
     }

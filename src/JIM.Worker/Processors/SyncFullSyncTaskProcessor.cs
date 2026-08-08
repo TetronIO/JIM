@@ -31,8 +31,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
-        CancellationTokenSource cancellationTokenSource)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        CancellationTokenSource cancellationTokenSource,
+        ActivityPhaseReporter? phaseReporter = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter)
     {
     }
 
@@ -53,7 +54,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // - update the Metaverse Objects accordingly.
         // - work out if this requires other Connected System to be updated by way of creating new Pending Export Objects.
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing");
+        await _phases.EnterAsync(RunPhaseKeys.SyncPrepare);
 
         // how many CSOs are we processing? update the activity so a progress bar can be shown.
         // Pending Exports are processed as a side-effect of CSO evaluation, not as separate objects.
@@ -153,7 +154,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // Page size is configurable via service settings for performance tuning.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
+        await _phases.EnterAsync(RunPhaseKeys.SyncProcessObjects);
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
@@ -162,7 +163,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
         var throughput = new ThroughputTracker();
         var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
         // Keyset cursor for CSO page loads. Starting at Guid.Empty (below every generated uuid in
         // both PostgreSQL's bytewise and .NET's component-wise ordering) keeps every page on the
@@ -324,12 +324,13 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // held in CLR fields — detaching does not null their populated navigation properties.
                 _syncRepo.ClearChangeTracker();
 
-                // Update progress with page completion
+                // Update progress with page completion. The call persists the Activity's counters,
+                // which is what the portal renders the count, rate and time remaining from; the
+                // message carries no numbers of its own, and the running step's name already says
+                // what is happening, so there is nothing left for it to add here.
                 using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
                 {
-                    var message = $"Syncing — {_activity.ObjectsProcessed:N0} of {totalObjectsToProcess:N0}" +
-                        throughput.FormatThroughput(_activity.ObjectsProcessed, totalObjectsToProcess);
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, message);
+                    await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
                 }
 
                 LogPageMemoryDiagnostics(i, totalCsoPages);

@@ -1025,6 +1025,79 @@ public class ExportEvaluationTests
     #region Provisioning Flow End-to-End Tests
 
     /// <summary>
+    /// A provisioning Create records which Synchronisation Rule produced it (#1121).
+    /// <para>
+    /// The rule is knowable only here, when the provisioning decision is made, and is needed much later, when
+    /// the account exists and can be given its first password. Working it out again at export time would mean
+    /// re-evaluating scope against rules that may have been edited since, which can reach a different answer
+    /// than the one that created the account.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesAsync_WhenProvisioning_RecordsTheRuleThatProvisionedAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+
+        ConnectedSystemObjectsData.RemoveAll(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == targetSystem.Id);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesAsync(mvo, mvo.AttributeValues.ToList());
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+            Assert.That(result[0].ProvisioningSyncRuleId, Is.EqualTo(exportRule.Id));
+        }
+    }
+
+    /// <summary>
+    /// An export that is not a provisioning Create records no rule.
+    /// <para>
+    /// Only a Create brings an account into existence, and only a newly created account has a first password to
+    /// be given. A stamp on anything else would make delivery fire again later in the account's life, on a
+    /// change that has nothing to do with provisioning.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_DeleteExport_RecordsNoProvisioningRuleAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Empty, "This test is only meaningful if an export was actually produced.");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(result.Where(pe => pe.ProvisioningSyncRuleId != null), Is.Empty);
+        }
+    }
+
+    /// <summary>
     /// End-to-end test: When MVO changes and no CSO exists for the target system,
     /// a new CSO should be created with Status=PendingProvisioning and JoinType=Provisioned,
     /// and a Create PendingExport should be generated.

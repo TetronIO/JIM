@@ -115,7 +115,14 @@ Deletion rules control what happens to the **Metaverse Object** when Connected S
 |------|-----------|
 | **Manual** | The MVO is never automatically deleted; an administrator must manually remove it |
 | **When Last Connector Disconnected** | The MVO is deleted when no CSOs remain connected to it |
-| **When Authoritative Source Disconnected** | The MVO is deleted when the CSO from its authoritative source system is disconnected |
+| **When Authoritative Source Disconnected** | The MVO is deleted when its selected authoritative source system(s) disconnect, per the configured trigger mode |
+
+**When Authoritative Source Disconnected** additionally carries a **Deletion Trigger** mode governing how the selected sources trigger deletion:
+
+- **All sources disconnect**<br /> The MVO is deleted only once no selected source retains a connected CSO. Resilient to a single system failing or being rebuilt; the default for new configurations.
+- **Specific source(s) disconnect**<br /> The MVO is deleted when any one of the selected sources disconnects, even if others remain connected.
+
+Target systems that are not selected as sources never block or trigger deletion in either mode. See [Metaverse: Deletion behaviour](../configuration/metaverse.md#deletion-behaviour) for configuration details.
 
 ### Grace Periods
 
@@ -127,7 +134,7 @@ Grace periods are valuable for:
 - **Data corrections**<br /> If an employee is accidentally removed from the source system, there is time to correct the error before downstream accounts are affected.
 - **Compliance**<br /> Some organisations require identity data to be retained for a period after departure.
 
-During the grace period, the MVO remains in the metaverse but is marked for pending deletion. If the identity reappears in the source system before the grace period expires, the deletion is cancelled and the identity is restored.
+During the grace period, the MVO remains in the metaverse but is marked for pending deletion. If the identity reappears before the grace period expires, the deletion is cancelled and the identity is restored; but only when the reappearance actually undoes what triggered the deletion. Under **When Last Connector Disconnected**, any system reconnecting cancels. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion cancels it; an unrelated system reconnecting no longer rescues the object.
 
 ## End-to-End Example
 

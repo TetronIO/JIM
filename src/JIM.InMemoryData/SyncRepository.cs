@@ -11,6 +11,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
@@ -33,6 +34,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, ConnectedSystemObject> _csos = new();
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
+    private readonly Dictionary<Guid, PendingInitialPassword> _pendingInitialPasswords = new();
     private readonly Dictionary<Guid, Activity> _activities = new();
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _rpeis = new();
 
@@ -45,10 +47,25 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public bool SimulateRawSqlPersistence { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="UpdateActivityMessageAsync"/> throws for exactly this message. Lets tests
+    /// prove that a failure to narrate progress (a database blip on a cosmetic write) does not fail the
+    /// synchronisation operation itself.
+    /// </summary>
+    public string? FailActivityMessageUpdateFor { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="StageInitialPasswordsAsync"/> throws it. Lets tests prove that failing to record
+    /// that a newly provisioned account is owed a password leaves the export that created the account
+    /// successful, which is the whole reason the password is staged rather than delivered inline.
+    /// </summary>
+    public Exception? FailInitialPasswordStagingWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
     private readonly Dictionary<Guid, MetaverseObjectChange> _mvoChanges = new();
+    private readonly Dictionary<Guid, ActivityPhase> _activityPhases = new();
 
     // Secondary indexes
     private readonly Dictionary<int, HashSet<Guid>> _csosByConnectedSystem = new();
@@ -76,6 +93,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
+    public IReadOnlyDictionary<Guid, PendingInitialPassword> PendingInitialPasswords => _pendingInitialPasswords;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -334,6 +352,64 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres widened projection - reuses the
+    /// same external-id resolution as <see cref="GetAllCsoExternalIdMappingsAsync"/> but carries the
+    /// stored hash/fingerprint/status/partition alongside the CSO ID.
+    /// </summary>
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
+    {
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
+
+            // Try primary external ID first
+            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+            var primaryValue = GetExternalIdValueString(primaryAv);
+
+            if (primaryValue != null)
+            {
+                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                result.TryAdd(cacheKey, entry);
+                continue;
+            }
+
+            // Fall back to secondary external ID (PendingProvisioning CSOs)
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+            {
+                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                var secondaryValue = GetExternalIdValueString(secondaryAv);
+
+                if (secondaryValue != null)
+                {
+                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    result.TryAdd(cacheKey, entry);
+                }
+            }
+        }
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D6: honest in-memory equivalent of the Postgres stamp writer. Since <see cref="_csos"/>
+    /// IS the live graph, stamping is a direct property assignment; deliberately does not touch
+    /// <see cref="ConnectedSystemObject.LastUpdated"/>.
+    /// </summary>
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+    {
+        var matches = stamps
+            .Select(s => (Stamp: s, Cso: _csos.TryGetValue(s.CsoId, out var cso) ? cso : null))
+            .Where(m => m.Cso != null);
+
+        foreach (var (stamp, cso) in matches)
+        {
+            cso!.ImportStateHash = stamp.Hash;
+            cso.ImportStateFingerprint = stamp.Fingerprint;
+        }
+        return Task.CompletedTask;
+    }
+
     public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {
         var idSet = new HashSet<Guid>(csoIds);
@@ -515,10 +591,18 @@ public class SyncRepository : ISyncRepository
         return result;
     }
 
-    public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    public Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
-        var count = _csosByMvo.TryGetValue(metaverseObjectId, out var ids) ? ids.Count : 0;
-        return Task.FromResult(count);
+        if (!_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
+            return Task.FromResult(new List<int>());
+
+        // One entry per joined CSO, duplicates preserved: mirrors the production row-per-CSO SELECT.
+        var systemIds = csoIds
+            .Select(csoId => _csos.TryGetValue(csoId, out var cso) ? cso : null)
+            .Where(cso => cso != null)
+            .Select(cso => cso!.ConnectedSystemId)
+            .ToList();
+        return Task.FromResult(systemIds);
     }
 
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
@@ -687,20 +771,39 @@ public class SyncRepository : ISyncRepository
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);
                 }
+
+                // SPEC-1082 D9: null the stored hash/fingerprint for any CSO that actually received
+                // new attribute values, mirroring the Postgres raw-SQL writer's null-on-mutate behaviour.
+                if (newAvs.Count > 0)
+                {
+                    stored.ImportStateHash = null;
+                    stored.ImportStateFingerprint = null;
+                }
             }
         }
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Issue #1079 (optimistic export apply): a no-op here. Unlike the Postgres implementation,
-    /// there is no separate persisted store to reconcile - <see cref="_csos"/> IS the live graph,
-    /// so <c>ExportExecutionServer</c> mutating <see cref="ConnectedSystemObject.AttributeValues"/>
-    /// directly (D10) is sufficient. Virtual so tests can override it to simulate a persistence
+    /// Issue #1079 (optimistic export apply): the attribute-value delta itself is a no-op here.
+    /// Unlike the Postgres implementation, there is no separate persisted store to reconcile -
+    /// <see cref="_csos"/> IS the live graph, so <c>ExportExecutionServer</c> mutating
+    /// <see cref="ConnectedSystemObject.AttributeValues"/> directly (D10) is sufficient.
+    /// SPEC-1082 D9: still nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
+    /// <see cref="ConnectedSystemObject.ImportStateFingerprint"/> for the affected CSOs directly on
+    /// the live graph, so the in-memory fake honestly mirrors the Postgres implementation's
+    /// null-on-mutate behaviour. Virtual so tests can override it to simulate a persistence
     /// failure (D7's failure-containment guarantee).
     /// </summary>
-    public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
-        => Task.CompletedTask;
+    public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
+    {
+        foreach (var cso in affectedCsoIds.Where(_csos.ContainsKey).Select(id => _csos[id]))
+        {
+            cso.ImportStateHash = null;
+            cso.ImportStateFingerprint = null;
+        }
+        return Task.CompletedTask;
+    }
 
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
@@ -1214,9 +1317,21 @@ public class SyncRepository : ISyncRepository
 
     #region Pending Exports
 
-    public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+    public virtual Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
     {
         var result = GetPendingExportsForSystem(connectedSystemId).ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values (#1102).
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences && pe.Status == PendingExportStatus.Pending)
+            .ToList();
         return Task.FromResult(result);
     }
 
@@ -1224,6 +1339,163 @@ public class SyncRepository : ISyncRepository
     {
         var count = _pendingExportsByCs.TryGetValue(connectedSystemId, out var ids) ? ids.Count : 0;
         return Task.FromResult(count);
+    }
+
+    public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
+    {
+        if (FailInitialPasswordStagingWith != null)
+            throw FailInitialPasswordStagingWith;
+
+        // One outstanding record per account, matching the unique index in the real schema: two would mean two
+        // deliveries racing to set a password on the same object. The filter stays lazy on purpose, so that it
+        // is re-evaluated as the loop adds, and two records for the same account in one batch dedupe against
+        // each other exactly as ON CONFLICT does in the real one.
+        foreach (var pending in pendingInitialPasswords.Where(p =>
+                     !_pendingInitialPasswords.Values.Any(existing => existing.ConnectedSystemObjectId == p.ConnectedSystemObjectId)))
+        {
+            if (pending.Id == Guid.Empty)
+                pending.Id = Guid.NewGuid();
+
+            _pendingInitialPasswords[pending.Id] = pending;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<List<PendingInitialPassword>> GetOutstandingInitialPasswordsAsync(int connectedSystemId, int maximum)
+    {
+        var outstanding = _pendingInitialPasswords.Values
+            .Where(p => p.ConnectedSystemId == connectedSystemId && p.Status == PendingInitialPasswordStatus.Pending)
+            .OrderBy(p => p.CreatedAt)
+            .Take(maximum)
+            .ToList();
+
+        // The real query brings the account with it; the fake has to be asked to as well, or a delivery test
+        // would have nothing to set a password on.
+        foreach (var pending in outstanding.Where(p => p.ConnectedSystemObject == null! && _csos.ContainsKey(p.ConnectedSystemObjectId)))
+            pending.ConnectedSystemObject = _csos[pending.ConnectedSystemObjectId];
+
+        return Task.FromResult(outstanding);
+    }
+
+    public Task<Dictionary<int, SyncRuleInitialPassword>> GetInitialPasswordConfigurationsAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var configurations = _syncRules.Values
+            .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword != null)
+            .ToDictionary(r => r.Id, r => r.InitialPassword!);
+        return Task.FromResult(configurations);
+    }
+
+    public Task<ConnectedSystemPasswordPolicy?> GetDiscoveredPasswordPolicyAsync(int connectedSystemId)
+    {
+        var system = _connectedSystems.TryGetValue(connectedSystemId, out var connectedSystem) ? connectedSystem : null;
+        return Task.FromResult(system?.PasswordPolicy);
+    }
+
+    public Task RecordInitialPasswordAttemptsAsync(IEnumerable<PendingInitialPassword> attempts)
+    {
+        foreach (var attempt in attempts.Where(a => _pendingInitialPasswords.ContainsKey(a.Id)))
+        {
+            var stored = _pendingInitialPasswords[attempt.Id];
+            stored.Status = attempt.Status;
+            stored.FailureReason = attempt.FailureReason;
+            stored.TargetMessage = attempt.TargetMessage;
+            stored.AttemptCount = attempt.AttemptCount;
+            stored.LastAttemptedAt = attempt.LastAttemptedAt;
+            stored.ExpiresAt = attempt.ExpiresAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteInitialPasswordsAsync(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+            _pendingInitialPasswords.Remove(id);
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf)
+    {
+        var expiring = _pendingInitialPasswords.Values
+            .Where(p => p.ConnectedSystemId == connectedSystemId &&
+                        p.ExpiresAt.HasValue && p.ExpiresAt.Value < asOf &&
+                        p.Status != PendingInitialPasswordStatus.Expired)
+            .ToList();
+
+        foreach (var pending in expiring)
+            pending.Status = PendingInitialPasswordStatus.Expired;
+
+        return Task.FromResult(expiring.Count);
+    }
+
+    public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
+    {
+        var parked = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .ToList();
+
+        foreach (var pending in parked)
+        {
+            pending.Status = PendingInitialPasswordStatus.Pending;
+            pending.FailureReason = null;
+            pending.TargetMessage = null;
+        }
+
+        return Task.FromResult(parked.Count);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var attention = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId.HasValue && syncRuleIds.Contains(p.SyncRuleId.Value))
+            .GroupBy(p => p.SyncRuleId!.Value)
+            .Select(g => new { SyncRuleId = g.Key, Attention = SummariseAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.SyncRuleId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionByConnectedSystemAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        var attention = _pendingInitialPasswords.Values
+            .Where(p => connectedSystemIds.Contains(p.ConnectedSystemId))
+            .GroupBy(p => p.ConnectedSystemId)
+            .Select(g => new { ConnectedSystemId = g.Key, Attention = SummariseAttention(g) })
+            .Where(x => x.Attention.NeedsAttention)
+            .ToDictionary(x => x.ConnectedSystemId, x => x.Attention);
+
+        return Task.FromResult(attention);
+    }
+
+    public Task<List<InitialPasswordRejection>> GetParkedInitialPasswordReasonsAsync(int syncRuleId)
+    {
+        var reasons = _pendingInitialPasswords.Values
+            .Where(p => p.SyncRuleId == syncRuleId && p.Status == PendingInitialPasswordStatus.Parked)
+            .GroupBy(p => p.TargetMessage)
+            .Select(g => new InitialPasswordRejection
+            {
+                TargetMessage = g.Key,
+                FailureReason = g.Select(p => p.FailureReason).FirstOrDefault(r => r.HasValue),
+                AccountCount = g.Count(),
+                FirstSeenAt = g.Min(p => p.LastAttemptedAt)
+            })
+            .OrderByDescending(r => r.AccountCount)
+            .ToList();
+
+        return Task.FromResult(reasons);
+    }
+
+    private static InitialPasswordAttention SummariseAttention(IEnumerable<PendingInitialPassword> records)
+    {
+        var byStatus = records.ToLookup(p => p.Status);
+        return new InitialPasswordAttention
+        {
+            ParkedCount = byStatus[PendingInitialPasswordStatus.Parked].Count(),
+            ExpiredCount = byStatus[PendingInitialPasswordStatus.Expired].Count()
+        };
     }
 
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
@@ -1366,10 +1638,36 @@ public class SyncRepository : ISyncRepository
 
     public Task UpdateActivityMessageAsync(Activity activity, string message)
     {
+        if (FailActivityMessageUpdateFor != null && FailActivityMessageUpdateFor == message)
+            throw new InvalidOperationException($"Simulated failure updating the Activity message to '{message}'.");
+
         activity.Message = message;
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// When set, <see cref="SaveActivityPhasesAsync"/> throws. Lets tests prove that a failure to
+    /// record a step (a database blip on a cosmetic write) does not fail the run itself.
+    /// </summary>
+    public bool FailActivityPhaseSaves { get; set; }
+
+    public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
+    {
+        if (FailActivityPhaseSaves)
+            throw new InvalidOperationException("Simulated failure recording Activity phases.");
+
+        foreach (var phase in phases)
+            _activityPhases[phase.Id] = phase;
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The Activity phases recorded so far, keyed by phase id, for tests asserting how a run
+    /// narrated its steps.
+    /// </summary>
+    public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
@@ -1548,6 +1846,15 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
     }
 
+    public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var enabled = _syncRules.Values
+            .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword is { Enabled: true })
+            .Select(r => r.Id)
+            .ToHashSet();
+        return Task.FromResult(enabled);
+    }
+
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
         var types = _objectTypes.Values
@@ -1561,6 +1868,9 @@ public class SyncRepository : ISyncRepository
         _connectedSystems[connectedSystem.Id] = connectedSystem;
         return Task.CompletedTask;
     }
+
+    public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
+        => Task.FromResult(_connectedSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Name));
 
     #endregion
 

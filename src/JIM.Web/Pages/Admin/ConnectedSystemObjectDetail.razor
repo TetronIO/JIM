@@ -12,6 +12,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -100,6 +101,16 @@
                     </MudChip>
                 </MudStack>
             }
+
+            @* Offered only where the Connector can actually set a password, so the action is never presented *@
+            @* against a Connected System that could not carry it out (issue #1121).                          *@
+            @if (_supportedExpiryBehaviours.Count > 0)
+            {
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
+                           data-testid="jim-cso-set-password">Set Password</MudButton>
+            }
         </MudStack>
 
     </MudPaper>
@@ -119,13 +130,9 @@
                       Hover="true" Dense="true" Outlined="true" Elevation="0"
                       Loading="@_pendingExportLoading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
-                    <MudTextField T="string" Value="@_pendingExportSearchText"
-                                  ValueChanged="@OnPendingExportSearch"
-                                  Placeholder="Search Pending Exports..."
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  Immediate="true" DebounceInterval="300"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <SearchField Value="@_pendingExportSearchText"
+                                 ValueChanged="@OnPendingExportSearch"
+                                 Placeholder="Search Pending Exports..." />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>
@@ -176,102 +183,106 @@
     <NavigableMudTabs ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnActiveTabIndexChangedAsync"
                       Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
         <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
-            <MudPaper Class="pa-0" Outlined="true">
-                <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
-                    Class="@(_dense ? "jim-attribute-table dense-body-only" : "jim-attribute-table")"
-                    Breakpoint="Breakpoint.None">
-                    <ToolBarContent>
-                        <TableDensityToggle @bind-Dense="_dense" />
-                    </ToolBarContent>
-                    <HeaderContent>
-                        <MudTh Class="jim-attr-header-name">
-                            <MudTableSortLabel SortBy="@_sortByAttribute"
-                                InitialDirection="SortDirection.Ascending" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Attribute</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-value">
-                            <MudTableSortLabel SortBy="@_sortByValue" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Value</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-type">
-                            <MudTableSortLabel SortBy="@_sortByType" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Type</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-plurality">
-                            <MudTableSortLabel SortBy="@_sortByPlurality" T="AttributeGroup">
-                                <MudText Typo="Typo.button">Plurality</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                        <MudTh Class="jim-attr-header-extid">
-                            <MudTableSortLabel SortBy="@_sortByExternalId" T="AttributeGroup">
-                                <MudText Typo="Typo.button">External ID?</MudText>
-                            </MudTableSortLabel>
-                        </MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
-                            @if (IsUnmanagedAttribute(context))
-                            {
-                                <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
-                                </MudTooltip>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            @if (context.Values.Count == 1)
-                            {
-                                <CsoAttributeValue Value="@context.Values[0]" />
-                            }
-                            else if (context.TotalCount <= MvaInlineThreshold)
-                            {
-                                <div class="jim-attr-expanded">
-                                    @foreach (var val in context.Values)
-                                    {
-                                        <div class="jim-attr-expanded-item">
-                                            <CsoAttributeValue Value="@val" />
-                                        </div>
-                                    }
-                                </div>
-                            }
-                            else
-                            {
-                                <CsoMvaTable @key="context.AttributeName"
-                                             AttributeName="@context.AttributeName"
-                                             ConnectedSystemObjectId="@ConnectedSystemObject.Id"
-                                             IsReferenceAttribute="@context.IsReference"
-                                             Dense="@_dense" />
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="Plurality" Class="@($"jim-attr-plurality {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="External ID?" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")" Style="white-space: nowrap">
-                            @if (IsExternalId(context.Values[0]))
-                            {
-                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                            }
-                            else if (IsSecondaryExternalId(context.Values[0]))
-                            {
-                                <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                            }
-                            else
-                            {
-                                <span>-</span>
-                            }
-                        </MudTd>
-                    </RowTemplate>
-                    <NoRecordsContent>
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
-                    </NoRecordsContent>
-                </MudTable>
-            </MudPaper>
+            <MudTable Items="@GetGroupedAttributes()" Hover="true" Dense="@_dense" Elevation="0" Outlined="true"
+                Class="jim-attribute-table"
+                Breakpoint="Breakpoint.None">
+                <ToolBarContent>
+                    <TableDensityToggle @bind-Dense="_dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh Class="jim-attr-header-name">
+                        <MudTableSortLabel SortBy="@_sortByAttribute"
+                            InitialDirection="SortDirection.Ascending" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Attribute</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-value">
+                        <MudTableSortLabel SortBy="@_sortByValue" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Value</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-type">
+                        <MudTableSortLabel SortBy="@_sortByType" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Type</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-plurality">
+                        <MudTableSortLabel SortBy="@_sortByPlurality" T="AttributeGroup">
+                            <MudText Typo="Typo.button">Plurality</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh Class="jim-attr-header-extid">
+                        <MudTableSortLabel SortBy="@_sortByExternalId" T="AttributeGroup">
+                            <MudText Typo="Typo.button">External ID?</MudText>
+                        </MudTableSortLabel>
+                    </MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+                        @if (IsUnmanagedAttribute(context))
+                        {
+                            <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
+                            </MudTooltip>
+                        }
+                        @if (IsCreateOnlyAttribute(context))
+                        {
+                            <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Set on creation only</MudChip>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        @if (context.Values.Count == 1)
+                        {
+                            <CsoAttributeValue Value="@context.Values[0]" />
+                        }
+                        else if (context.TotalCount <= MvaInlineThreshold)
+                        {
+                            <div class="jim-attr-expanded">
+                                @foreach (var val in context.Values)
+                                {
+                                    <div class="jim-attr-expanded-item">
+                                        <CsoAttributeValue Value="@val" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <CsoMvaTable @key="context.AttributeName"
+                                         AttributeName="@context.AttributeName"
+                                         ConnectedSystemObjectId="@ConnectedSystemObject.Id"
+                                         IsReferenceAttribute="@context.IsReference"
+                                         Dense="@_dense" />
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Values[0].Attribute.Type</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Plurality" Class="@($"jim-attr-plurality {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@(context.IsMultiValued ? "Multi" : "Single")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="External ID?" Class="@(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")" Style="white-space: nowrap">
+                        @if (IsExternalId(context.Values[0]))
+                        {
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                        }
+                        else if (IsSecondaryExternalId(context.Values[0]))
+                        {
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                        }
+                        else
+                        {
+                            <span>-</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
+                </NoRecordsContent>
+            </MudTable>
         </MudTabPanel>
         <MudTabPanel Text="Change History" Icon="@Icons.Material.Filled.History" BadgeData="@_changeCount.ToString("N0")" BadgeColor="Color.Primary">
             @if (_changeHistoryLoading && _changeHistoryRows.Count == 0)
@@ -311,6 +322,9 @@
 </LoadingGate>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = null!;
+
     /// <summary>
     /// Connected System ID.
     /// </summary>
@@ -355,6 +369,81 @@
 
     private bool _dense;
     private bool _preferencesLoaded;
+
+    // What the Connector can do with a password, and the generator settings a Generate in the dialog should
+    // follow. Read once with the rest of the page rather than when the dialog opens, so the Set Password action
+    // is either offered or not rather than appearing and then turning out to be unavailable.
+    private IReadOnlyCollection<PasswordExpiryBehaviour> _supportedExpiryBehaviours = [];
+    private ConnectedSystemPasswordPolicy? _discoveredPasswordPolicy;
+
+    /// <summary>
+    /// Opens the set-password dialog for this account (issues #1121, #1172).
+    /// <para>
+    /// The same dialog the Metaverse Object uses, handed exactly one account. With no choice to make there is
+    /// no picker and no progress rail, so it renders as the single-account dialog it was originally built as,
+    /// while there remains one component to maintain rather than two that drift.
+    /// </para>
+    /// <para>
+    /// Generation and the set itself are passed in as delegates rather than letting the dialog reach the
+    /// application layer, so the dialog stays a piece of user interface with no knowledge of how JIM talks to a
+    /// Connected System, and so the password it holds never travels further than those calls.
+    /// </para>
+    /// </summary>
+    private async Task OpenSetPasswordDialogAsync()
+    {
+        if (ConnectedSystemObject == null || ConnectedSystemHeader == null)
+            return;
+
+        var account = new MetaverseObjectAccount
+        {
+            ConnectedSystemObjectId = ConnectedSystemObject.Id,
+            ConnectedSystemId = CsId,
+            ConnectedSystemName = ConnectedSystemHeader.Name,
+            AccountIdentifier = GetDisplayIdentifier(),
+            ConnectorCanSetPasswords = _supportedExpiryBehaviours.Count > 0,
+            SupportedExpiryBehaviours = _supportedExpiryBehaviours,
+            DiscoveredPolicy = _discoveredPasswordPolicy
+        };
+
+        var parameters = new DialogParameters<SetPasswordDialog>
+        {
+            { x => x.Accounts, new List<MetaverseObjectAccount> { account } },
+            { x => x.AllowSelection, false },
+            { x => x.Reconcile, ReconcilePasswordPolicies },
+            { x => x.GeneratePassword, GeneratePassword },
+            { x => x.SetPassword, SetPasswordOnAccountsAsync }
+        };
+
+        await DialogService.ShowAsync<SetPasswordDialog>("Set Password", parameters,
+            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
+    private PasswordPolicyReconciliation ReconcilePasswordPolicies(IReadOnlyList<MetaverseObjectAccount> accounts)
+    {
+        using var jim = JimFactory.Create();
+        return jim.PasswordGenerator.Reconcile(accounts
+            .Select(a => new PasswordPolicyForSystem { ConnectedSystemName = a.ConnectedSystemName, Policy = a.DiscoveredPolicy })
+            .ToList());
+    }
+
+    private string GeneratePassword(PasswordGenerationPolicy policy)
+    {
+        using var jim = JimFactory.Create();
+        return jim.PasswordGenerator.Generate(policy);
+    }
+
+    private async Task<MultiAccountPasswordSetResult> SetPasswordOnAccountsAsync(
+        IReadOnlyList<MetaverseObjectAccount> accounts,
+        string password,
+        PasswordSetOptions options,
+        IProgress<AccountPasswordSetOutcome> progress)
+    {
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+
+        return await jim.ConnectedSystems.SetPasswordOnAccountsAsync(
+            ConnectedSystemObject?.MetaverseObjectId ?? Guid.Empty, accounts, password, options, user, progress, CancellationToken.None);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -416,6 +505,12 @@
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
+
+        _supportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(CsId);
+        if (_supportedExpiryBehaviours.Count > 0)
+            // What JIM last discovered on the target, so a generated password satisfies the directory's own
+            // rules without an administrator retyping them. The dialog reconciles it into generator settings.
+            _discoveredPasswordPolicy = await jim.ConnectedSystems.GetPasswordPolicyAsync(CsId);
 
         // Fetch Pending Export header (without loading all attribute value changes) for this CSO
         var pendingExportResult = await jim.ConnectedSystems.GetPendingExportHeaderForObjectAsync(connectedSystemObjectId);
@@ -584,6 +679,16 @@
         var value = group.Values[0];
         var attributeId = value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
         return _unmanagedAttributeIds.Contains(attributeId);
+    }
+
+    /// <summary>
+    /// Whether the Connected System will only accept a value for this attribute when the object is created.
+    /// Unlike Initial Export Only, this is a property of the discovered schema rather than of the Attribute
+    /// Flow, so it holds whatever the Synchronisation Rules say and needs no rule lookup.
+    /// </summary>
+    private static bool IsCreateOnlyAttribute(AttributeGroup group)
+    {
+        return group.Values[0].Attribute?.Writability == AttributeWritability.WritableOnCreate;
     }
 
     private int GetExternalIdSortOrder(AttributeGroup group)

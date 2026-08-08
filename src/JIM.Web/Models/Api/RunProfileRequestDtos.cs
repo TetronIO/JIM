@@ -40,6 +40,15 @@ public class CreateRunProfileRequest
     /// </summary>
     [StringLength(500)]
     public string? FilePath { get; set; }
+
+    /// <summary>
+    /// SPEC-1082 D10: enables Verification Mode. Only valid when <see cref="RunType"/> is
+    /// <c>FullImport</c>; the API rejects true on any other Run Type with a 400 response. When
+    /// enabled, the Full Import performs no content-hash skips and instead compares each object's
+    /// stored import content hash against the freshly computed incoming hash, raising a diagnostic
+    /// error for any disagreement the skip optimisation would otherwise have missed. Defaults to false.
+    /// </summary>
+    public bool VerifyImportContentHashes { get; set; }
 }
 
 /// <summary>
@@ -69,4 +78,11 @@ public class UpdateRunProfileRequest
     /// </summary>
     [StringLength(500)]
     public string? FilePath { get; set; }
+
+    /// <summary>
+    /// SPEC-1082 D10: updates Verification Mode. Omitted (null) leaves the current value unchanged;
+    /// true is rejected with a 400 response unless the Run Profile's Run Type is <c>FullImport</c>.
+    /// See <see cref="CreateRunProfileRequest.VerifyImportContentHashes"/> for behaviour.
+    /// </summary>
+    public bool? VerifyImportContentHashes { get; set; }
 }

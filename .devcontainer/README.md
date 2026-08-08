@@ -52,7 +52,7 @@ If you open the devcontainer without doing this first, `setup.sh` detects the de
 - **.NET 10.0 SDK** - Latest .NET framework
 - **dotnet-ef** - Entity Framework Core CLI tools
 - **Docker-in-Docker** - Run docker-compose inside the container
-- **GitHub CLI (gh)** - GitHub operations from terminal
+- **GitHub CLI (gh)** - GitHub operations from terminal (plus the `gh-stack` extension for stacked PRs, installed by `setup.sh`)
 - **Zsh + Oh My Zsh** - Enhanced shell with useful features
 
 ### VS Code Extensions
@@ -79,7 +79,8 @@ When the container is created, `setup.sh` automatically:
 6. ✅ Applies Entity Framework migrations
 7. ✅ Builds the JIM solution
 8. ✅ Installs the Playwright MCP browser (Chromium) for in-IDE UI validation
-9. ✅ Creates helpful shell aliases
+9. ✅ Installs the `gh-stack` CLI extension for the stacked-PR workflow
+10. ✅ Creates helpful shell aliases
 
 ### UI Validation (Playwright MCP)
 
@@ -217,6 +218,11 @@ jim-build-scheduler # Rebuild jim.scheduler + start
 ```bash
 jim-reset          # Full reset (containers, images, volumes)
 jim-wipe           # Wipe JIM data (reset CSOs/MVOs/config, keep schema)
+```
+
+### Tooling
+```bash
+bat <file>         # Syntax-highlighting cat (Ubuntu packages it as batcat)
 ```
 
 ### Help

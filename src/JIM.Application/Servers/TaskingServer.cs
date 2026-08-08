@@ -26,6 +26,14 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetWorkerTaskAsync(id);
         }
 
+        /// <summary>
+        /// The worker task tracking a given Activity, or null when none is queued or processing for it.
+        /// </summary>
+        public async Task<WorkerTask?> GetWorkerTaskByActivityIdAsync(Guid activityId)
+        {
+            return await Application.Repository.Tasking.GetWorkerTaskByActivityIdAsync(activityId);
+        }
+
         public async Task<List<WorkerTask>> GetWorkerTasksAsync()
         {
             return await Application.Repository.Tasking.GetWorkerTasksAsync();
@@ -52,6 +60,17 @@ namespace JIM.Application.Servers
             {
                 activity.ScheduleExecutionId = workerTask.ScheduleExecutionId;
                 activity.ScheduleStepIndex = workerTask.ScheduleStepIndex;
+
+                // Denormalise the producing Schedule's identity for the same durability reason (issue #1196):
+                // Schedule -> ScheduleExecution cascades on delete, so an Activity that resolved its Schedule through
+                // the execution would lose its attribution the moment the Schedule was deleted. The execution already
+                // carries the Schedule's name denormalised, so one lookup supplies both values.
+                var scheduleExecution = await Application.Scheduler.GetScheduleExecutionAsync(workerTask.ScheduleExecutionId.Value);
+                if (scheduleExecution != null)
+                {
+                    activity.ScheduledByScheduleId = scheduleExecution.ScheduleId;
+                    activity.ScheduledByScheduleName = scheduleExecution.ScheduleName;
+                }
             }
 
             await Application.Activities.CreateActivityWithTriadAsync(
@@ -68,7 +87,7 @@ namespace JIM.Application.Servers
             if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
             {
                 // Validate partition selections for connectors that support partitions
-                var validationResult = await ValidatePartitionSelectionsAsync(synchronisationWorkerTask.ConnectedSystemId);
+                var validationResult = await ValidatePartitionSelectionsAsync(synchronisationWorkerTask);
                 if (validationResult.HasError)
                 {
                     return WorkerTaskCreationResult.Failed(validationResult.ErrorMessage!);
@@ -158,6 +177,15 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is ConfigurationChangePreviewWorkerTask)
+            {
+                // The only task type that does NOT create its Activity. A preview's Activity already exists,
+                // because stage 1 validation ran in the request path and recorded its findings against it; making
+                // a second one here would split one preview across two Activities, and leave the panel watching
+                // the wrong one.
+                if (workerTask.Activity == null)
+                    return WorkerTaskCreationResult.Failed("A configuration change preview task must carry the Activity its preview was started under.");
+            }
             else if (workerTask is TemporalScopeReconciliationWorkerTask)
             {
                 // The Temporal Scope Reconciler sweep (issue #892) is a system-wide maintenance operation not
@@ -185,14 +213,27 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Validates that a Connected System has the required partition/container selections.
+        /// Validates that a Connected System has the required partition/container selections, and that the Run Profile
+        /// being executed still points at scope the administrator manages.
         /// </summary>
-        private async Task<PartitionValidationResult> ValidatePartitionSelectionsAsync(int connectedSystemId)
+        private async Task<PartitionValidationResult> ValidatePartitionSelectionsAsync(SynchronisationWorkerTask synchronisationWorkerTask)
         {
-            var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(synchronisationWorkerTask.ConnectedSystemId);
             if (connectedSystem == null)
             {
                 return PartitionValidationResult.Error("Connected System not found.");
+            }
+
+            // A Run Profile that names a partition the administrator has deselected, or that the hierarchy no longer
+            // carries, cannot run. This is checked before the whole-system selection test below because that test only
+            // asks whether *anything* is selected, and so passes while any other partition remains selected; the
+            // targeted Run Profile then used to import the deselected partition regardless, making the deselection a
+            // silent no-op. Unlike incomplete configuration, this is not softened by Partition Validation Mode: the
+            // configuration is complete, and running would read scope that has been explicitly withdrawn.
+            var deselectedPartitionResult = await ValidateRunProfilePartitionIsSelectedAsync(connectedSystem, synchronisationWorkerTask);
+            if (deselectedPartitionResult != null)
+            {
+                return deselectedPartitionResult;
             }
 
             // If the connector doesn't support partitions, or partitions are properly selected, no validation needed
@@ -216,6 +257,36 @@ namespace JIM.Application.Servers
             // Warning mode - allow execution but return warning
             Log.Warning("CreateWorkerTaskAsync: Proceeding with warning - {Message}", message);
             return PartitionValidationResult.Warning(message);
+        }
+
+        /// <summary>
+        /// Returns an error result when the Run Profile being executed targets a partition that is no longer selected
+        /// or no longer present in the hierarchy; <c>null</c> when there is nothing to report.
+        /// </summary>
+        /// <remarks>
+        /// Skipped entirely when the hierarchy has not been enumerated, so that the incomplete-configuration
+        /// diagnostic below keeps ownership of that case and gives the more useful message.
+        /// </remarks>
+        private async Task<PartitionValidationResult?> ValidateRunProfilePartitionIsSelectedAsync(
+            ConnectedSystem connectedSystem,
+            SynchronisationWorkerTask synchronisationWorkerTask)
+        {
+            if (connectedSystem.Partitions is not { Count: > 0 })
+                return null;
+
+            var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
+            var runProfile = runProfiles?.SingleOrDefault(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
+            if (runProfile == null || !connectedSystem.TargetsADeselectedPartition(runProfile))
+                return null;
+
+            var partitionName = runProfile.Partition!.Name;
+            var message = $"Run Profile '{runProfile.Name}' targets partition '{partitionName}' on Connected System " +
+                          $"'{connectedSystem.Name}', which is no longer selected. A deselected partition is not managed by JIM, so " +
+                          "this Run Profile cannot run. Either select the partition again on the Partitions & Containers tab, or " +
+                          "point this Run Profile at a partition that is selected.";
+
+            Log.Warning("CreateWorkerTaskAsync: Blocking execution - {Message}", message);
+            return PartitionValidationResult.Error(message);
         }
 
         /// <summary>
@@ -440,7 +511,7 @@ namespace JIM.Application.Servers
                     {
                         Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} completed. All steps done.", scheduleExecutionId);
 
-                        execution.Status = ScheduleExecutionStatus.Completed;
+                        execution.Status = ScheduleExecutionStatus.Complete;
                         execution.CompletedAt = DateTime.UtcNow;
                         await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
                     }
@@ -478,9 +549,9 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetFirstExampleDataWorkerTaskAsync(templateId);
         }
 
-        public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
+        public async Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(templateId);
+            return await Application.Repository.Tasking.GetFirstExampleDataTemplateWorkerTaskHeaderAsync(templateId);
         }
         #endregion
 

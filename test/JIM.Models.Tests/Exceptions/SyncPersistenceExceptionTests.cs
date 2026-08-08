@@ -24,13 +24,13 @@ public class SyncPersistenceExceptionTests
 
         var message = SyncPersistenceException.BuildMessage(3, 101, "Scenario 14 Secondary", new List<Guid> { id1, id2 });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(message, Does.Contain("page 3 of 101"));
             Assert.That(message, Does.Contain("Scenario 14 Secondary"));
             Assert.That(message, Does.Contain(id1.ToString()));
             Assert.That(message, Does.Contain(id2.ToString()));
-        });
+        }
     }
 
     [Test]
@@ -38,12 +38,12 @@ public class SyncPersistenceExceptionTests
     {
         var message = SyncPersistenceException.BuildMessage(1, 1, "Primary", Array.Empty<Guid>());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(message, Does.Contain("page 1 of 1"));
             Assert.That(message, Does.Contain("Primary"));
             Assert.That(message, Does.Not.Contain("Affected Metaverse Object id"));
-        });
+        }
     }
 
     [Test]
@@ -53,12 +53,12 @@ public class SyncPersistenceExceptionTests
 
         var exception = new SyncPersistenceException("wrapped", inner, page: 7, totalPages: 12, connectedSystemName: "HR");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(exception.InnerException, Is.SameAs(inner));
             Assert.That(exception.Page, Is.EqualTo(7));
             Assert.That(exception.TotalPages, Is.EqualTo(12));
             Assert.That(exception.ConnectedSystemName, Is.EqualTo("HR"));
-        });
+        }
     }
 }

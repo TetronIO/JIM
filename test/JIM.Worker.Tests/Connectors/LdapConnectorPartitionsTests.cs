@@ -50,6 +50,45 @@ public class LdapConnectorPartitionsTests
         Assert.That(result[0].ChildContainers, Is.Empty);
     }
 
+    /// <summary>
+    /// The directory's own immutable identifier has to reach the hierarchy merge, which keys container identity on
+    /// it: a Distinguished Name changes on every rename and move, so matching on that alone read a renamed container
+    /// as one gone and another arrived, dropping the administrator's selection.
+    /// </summary>
+    [Test]
+    public void BuildContainerHierarchy_WithStableIdentifiers_CarriesThemThroughTheHierarchy()
+    {
+        var entries = new List<LdapConnectorPartitions.ContainerEntry>
+        {
+            new("OU=Corp,DC=contoso,DC=local", "Corp", "6f9619ff-8b86-d011-b42d-00c04fc964ff"),
+            new("OU=Users,OU=Corp,DC=contoso,DC=local", "Users", "11111111-2222-3333-4444-555555555555")
+        };
+
+        var result = LdapConnectorPartitions.BuildContainerHierarchy(entries, PartitionDn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].StableId, Is.EqualTo("6f9619ff-8b86-d011-b42d-00c04fc964ff"));
+            Assert.That(result[0].ChildContainers[0].StableId, Is.EqualTo("11111111-2222-3333-4444-555555555555"),
+                "nested containers need identity every bit as much as top-level ones");
+        }
+    }
+
+    [Test]
+    public void BuildContainerHierarchy_WithoutStableIdentifiers_LeavesThemUnset()
+    {
+        // A Connector, or a directory, that offers no immutable identifier must still produce a usable hierarchy;
+        // the merge falls back to Distinguished Name matching in that case.
+        var entries = new List<LdapConnectorPartitions.ContainerEntry>
+        {
+            new("OU=Users,DC=contoso,DC=local", "Users")
+        };
+
+        var result = LdapConnectorPartitions.BuildContainerHierarchy(entries, PartitionDn);
+
+        Assert.That(result[0].StableId, Is.Null);
+    }
+
     #endregion
 
     #region Multiple top-level containers tests

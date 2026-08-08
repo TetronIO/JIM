@@ -27,7 +27,7 @@ Always use Context7 MCP when you need library/API documentation, code generation
 **Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
 - Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
 - Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
-- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist).
+- **Partial:** UI-only Blazor/Razor changes need `dotnet build`. UI tests exist in `test/JIM.Web.Tests/` (NUnit + bUnit) for the causality visualisation; run `dotnet test test/JIM.Web.Tests/` when changing causality components or display logic, and skip `dotnet test` for UI areas with no test coverage.
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
 - Running containers hold **stale images**: after changing `.cs`, rebuild the affected service(s) before verifying (a browser refresh shows nothing new). The full-stack and integration-test how-to (rebuild commands, `psql` access, `Run-IntegrationTests.ps1`) lives in `.devcontainer/CLAUDE.md` and `test/CLAUDE.md`; those files auto-load only under their own subtrees, so read them when validating from `src/`.
@@ -53,19 +53,26 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Bulk edits:** Avoid `sed`-based bulk rewrites on files that may have been partially modified by hand or by earlier tool calls; prefer targeted `Edit` calls, or dry-run the diff first. After any bulk edit, grep the touched files for unintended duplicates (e.g. repeated `ValidateSet` entries, duplicated `using` lines).
 
+**User Interface changes:** Always create CLAUDE Artefacts to demonstrate UI changes. This will help the user comprehend the options. The user prefers visual explanation of UI changes to text.
+
 **Pushback & honesty:** Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
 
 No glazing. Do not call an idea "great", "brilliant", or "smart" without concrete reasons, and even then lead with what is wrong or missing. Compliments without substance are noise. Do not echo my framing back ("X is definitely the move", "that makes a lot of sense"); start with the most useful sentence you can write instead.
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
-**Response style:** Optimise for my reading time. I care about outputs, not your reasoning.
+**Response style:** Optimise for minimising my reading and comprehension time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning. I need you to reduce my cognitive load. When problems are found, always provide solutions via recommendations, weighted towards what's needed to deliver the most usable, most stable, most maintainable and sustainable product.
 
-- Lead with the result: is it done, does it work, what is the verdict. First sentence, every time.
-- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there; give me the outcome.
-- Be brief. If a point does not change what I think or do, drop it. Prefer a tight paragraph or a few bullets over a wall of text.
-- If you need anything from me, collect it into an **`Over to you:`** bullet list at the very end of the response; never bury an ask mid-text. If you need nothing, do not add the section.
-- For any non-trivial response, open with a one-line summary I can read in isolation: did it work, do I need to act.
+Structure every response as these three parts, in this order, and nothing else:
+
+1. **What I did:** if you have made changes, then provide one or two sentences, scaled to how much work it was. Never more. Omit if you made no changes.
+2. **Questions:** if you anything need from me, as a numbered list under a clear heading. Omit the section entirely when you need nothing.
+3. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it. These should be written so as to help drive the objective to conclusion. Be the most helpful problem solver by always offering solutions to problems via recommendations. Ask the user they want you to implement the recommendations, i.e. make it eassy for them to get you to implement a recommendation and drive to the objective.
+
+- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there.
+- No preamble, no recap of my request, no closing summary.
+- If a point does not change what I think or do, drop it.
+- Detail is available on request. When something genuinely needs flagging (a trade-off, a risk, a behaviour change I did not ask for), name it in one line and offer to expand, rather than expanding pre-emptively.
 
 ## Synchronisation Integrity
 
@@ -83,6 +90,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - **British English (en-GB) for ALL text** - "authorisation", "synchronisation", "behaviour", "colour"
 - **Never use em dashes (`—`)** - use semicolons, commas, colons, or parentheses instead
 - **Proper-case JIM domain entity names** - "Synchronisation Rule", "Connected System", "Metaverse Object", "Run Profile", "Attribute Flow", "Object Matching Rule", "Pending Export" etc. are proper nouns; Title Case them even mid-sentence in UI text and docs, never "synchronisation rule". Always write "Synchronisation Rule" in full; never the "Sync Rule" shorthand (the `SyncRule` code identifier is unaffected)
+- **Connector names may drop the `JIM ` prefix in diagrams and running prose** - the reserved names in `ConnectorConstants` ("JIM LDAP Connector", "JIM SQL Connector", "JIM SCIM 2.0 Client Connector") are what the product surfaces show, but a diagram chip or a sentence reads better as "LDAP Connector" or "SQL Connector", and the prefix earns nothing when every connector carries it. Keep the full name where connectors are listed as products (`docs/connectors/index.md`, `docs/reference/roadmap.md`) and wherever the string must match the connector's actual name. Still Title Case them either way
 - All new source files carry the Tetron copyright header (`.editorconfig` enforces it for `.cs`)
 
 > **Full conventions** (DateTime quirks, raw SQL parameters, exception handling, copyright header table per file type, retrieval-method taxonomy, Razor/MudBlazor UI rules)**:** `src/CLAUDE.md`
@@ -92,7 +100,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - NUnit `[Test]`, `Assert.That()`, Moq; test naming `MethodName_Scenario_ExpectedResult`
 - EF Core in-memory database auto-tracks navigation properties - this masks missing `.Include()` bugs. Run integration tests when modifying repository queries.
 
-Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`.
+Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Tests/` (UI: causality display logic and bUnit component tests; scope rules in `test/CLAUDE.md`).
 
 > **Full patterns, debugging, integration testing runner:** `test/CLAUDE.md`
 
@@ -107,6 +115,8 @@ Quick reference:
 > **Full commands, aliases, Docker workflows, dependency policy, troubleshooting:** `.devcontainer/CLAUDE.md`
 
 **Cloud sandbox (Claude Code on the web):** the SessionStart hook (`.claude/hooks/session-start.sh`) provisions the .NET SDK, PowerShell and Docker automatically. Run the stack with `pwsh ./scripts/Start-SandboxStack.ps1` and verify changes at runtime per `engineering/SANDBOX_RUNTIME_VERIFICATION.md`. Never use `jim-build` (Docker image builds) in sandboxes; the light stack is canonical there.
+
+**The sandbox clone is shallow, so git ancestry is not trustworthy there.** `git rev-parse --is-shallow-repository` returns `true` and `.git/shallow` grafts history at a few boundary commits, which means `git merge-base`, `A..B` commit counts and "your branch has diverged" warnings are all computed against truncated history. A `git pull --ff-only` on `main` can therefore refuse with a divergence that does not exist: the commit joining the two fragments was simply never fetched. **Never conclude that commits are missing, unpushed, or at risk from local git output alone** - check the SHA against GitHub first (the MCP `get_commit` tool answers this in one call). `git fetch --unshallow` downloads the full history if ancestry genuinely needs to be reasoned about; `git reset --hard origin/main` on a `main` carrying no local work is the ordinary fix for the refused fast-forward. (Rule added after a session spent investigating 50 "unpushed" commits on `main` that were all ordinary merged PRs, present on GitHub the whole time.)
 
 ## Scripting
 
@@ -180,8 +190,10 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
 
 - Always work on a feature branch; never commit directly to `main`
 - Branch naming: `feature/description`
-- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, or when you have just merged/finished the previous branch and are starting fresh from a clean `main`.
-- Never automatically create a PR or merge to `main` - the user must explicitly instruct
+- **Reuse the existing feature branch; never create a new one because the current branch's name "doesn't fit" the task.** If you start work and find yourself already checked out on a feature branch (i.e. not `main`), commit your changes there. Do not create `feature/<something-else>` for an unrelated task. The user runs multiple chat sessions in parallel and tracks work by branch; spawning new branches makes commits invisible across sessions. If the scope has genuinely broadened, surface it: "this commit is unrelated to the current branch name; want me to rename the branch or stay on it?" and let the user decide. Only branch off `main` when the user explicitly asks, when you have just merged/finished the previous branch and are starting fresh from a clean `main`, or when creating a new stack layer off the current feature branch (see "Stacked PRs for discovered work" below; that is the one sanctioned mid-task branch creation on a branch this session owns).
+- **Exception to the reuse rule: another session's live workspace.** The reuse rule assumes the checked-out branch is this session's to build on. Before your first commit of the session, check for signs the branch is actively in use elsewhere (typically the user's own IDE, or a parallel session): uncommitted changes this session did not make, or local commits with no upstream (`git status` shows changes you don't recognise, or the branch has never been pushed). If either sign is present, do not commit to it; ask whether to commit there or put the work on its own branch, and wait for the answer. Creating a new branch (with the user's approval) is the right outcome here, and it does not weaken the reuse rule above: reuse and stack layers govern branches this session owns, this exception governs branches it does not. (Rule added after a plan document was committed and pushed onto the user's in-progress Visual Studio branch.)
+- **Never `git push` a branch that has no upstream unless the user has explicitly asked for a push.** Committing is local and reversible; publishing a branch is not part of committing, and pushing someone's unpushed work-in-progress publishes it without their say-so. This sharpens the existing "push and PR only when the user asks" rule for the first-push case specifically. (Stack-layer branches are the standing exception: their first push is part of opening the layer's pre-authorised PR, per the stacked-PR flow below.)
+- Never automatically create a PR or merge to `main` - the user must explicitly instruct. One standing exception: stack-layer PRs in the stacked-PR flow below are pre-authorised; opening them (base = the branch below) is part of delivering the feature.
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
 - **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
@@ -189,6 +201,32 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
   - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
   - Pick blocked-by for ordering and parent/sub-issue for hierarchy; they are not interchangeable. Issue bodies may state the *rationale* for a relationship, but the relationship itself must exist as the native link (it shows in the sidebar, rolls up, and is queryable; prose goes stale).
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
+
+### Stacked PRs for discovered work
+
+When feature work surfaces something that must be solved to deliver the feature but is not semantically part of it (a bug in existing code, a missing capability, a prerequisite refactor), do NOT fold it into the feature branch and do NOT defer it to an issue. Isolate it in the next layer of a GitHub stacked PR (native support, public preview) and fix it now. `/stack-pr` encodes the full flow; the shape is:
+
+1. **Announce, don't ask.** State the discovery in one line and proceed with the stack. "Ask before significant changes" still applies to *how* an architecturally significant piece is solved, never to *whether* it gets its own stack layer.
+2. **Commit feature WIP** (a `wip:` commit is fine; squash-merge collapses it), then create the new layer **off the current feature branch**: `git checkout -b feature/<feature-suffix>-stack-<desc>`. A stack is a sequential chain; each layer branches from the one below it, never from `main`.
+3. **Implement the layer to full standard**: TDD, build/test gates, changelog and docs if user-facing. Being unplanned lowers no bars.
+4. **Open the layer's PR with its base set to the branch below** (`gh pr create --base feature/<feature>`), then link the chain into a stack: GitHub shows a banner on aligned chains offering to convert, or use the `gh stack` CLI (`gh extension install github/gh-stack`). Reviewers and history get one clean diff per concern.
+5. **Continue work in the right layer.** Code may only depend on its own layer or lower ones, so remaining feature work that needs the fix goes in a new layer on top (`gh stack add`); feature work independent of the fix continues on the feature branch below, followed by a restack of the layers above it (see "Restacking" below).
+6. **Land bottom-up.** Any PR can merge once everything below it is green; merging an upper PR merges all unmerged PRs below it **atomically, in order, each recorded individually** - so the normal move is to merge from the top when the objective is complete. Every PR in the stack is evaluated against `main`'s protections (every required check), regardless of its direct base.
+
+- **Auto-merge is not supported for stacked PRs.** Do not `gh pr merge --auto` a stack layer; wait for green, then merge (see `/pr-merge`).
+- **Linear history is required between layers, not between the bottom layer and `main`.** Never merge one layer into another; a layer is always rebased onto the layer below it. The bottom layer is an ordinary feature branch that happens to have a PR stacked on it, so it is brought up to date with `main` by merging, exactly as the next section prescribes. Verified on stack #1211: the bottom layer carried a merge commit from `origin/main`, and both PRs still reported `MERGEABLE`, rendered correctly in `gh stack view`, and merged bottom-up without complaint.
+- **Restacking (after the branch below moves): rebase the layer onto its own base, one layer at a time.**
+
+  ```bash
+  # <old-base> is the commit the layer was branched from; find it with `git merge-base`
+  # against the branch below BEFORE that branch moved, or read it off the layer's reflog.
+  git -c rebase.backend=apply rebase --onto feature/<branch-below> <old-base> feature/<layer>
+  git push --force-with-lease
+  ```
+
+  **Do NOT use `gh stack rebase` for this.** It rebases *every* branch in the chain, starting with the bottom layer onto `main`, which is precisely what the merge-don't-rebase rule exists to avoid: on a long-lived bottom layer it replays every commit over `main`'s drift and re-resolves the same conflicts per commit. On stack #1211 it hit conflicts in three files while replaying 53 commits and had to be aborted with `gh stack rebase --abort` (which restores cleanly). The `--onto` form above touches only the layer that actually needs moving. The `-c rebase.backend=apply` is for the same misleading "local changes would be overwritten by merge" on a clean tree noted in the next section; without it the rebase aborts on the first commit.
+- Layers stay shallow and single-concern; nest further layers the same way. Layer branches belong to the same session and objective as their parent feature branch; the `-stack-` naming keeps the lineage visible across parallel sessions.
+- GitHub issues remain only for genuine observations that are NOT needed to deliver the current objective (link them with native blocked-by/sub-issue relationships per the rules above).
 
 ### Bringing a feature branch up to date with `main`
 
@@ -201,10 +239,13 @@ git merge origin/main      # then git push (no force needed)
 
 - `CHANGELOG.md` carries a `merge=union` driver (`.gitattributes`), so concurrent `[Unreleased]` entries combine automatically rather than conflicting. After merging, eyeball that section for duplicated `###` headers or bullets and tidy if needed.
 - Only rebase when the user explicitly wants linear pre-squash history. If you do, and the merge backend reports a misleading "local changes would be overwritten" on a clean tree, `git -c rebase.backend=apply rebase origin/main` gets past it.
+- **Stacked PRs: this section applies unchanged to the bottom layer, and never to the layers above it.** The bottom layer targets `main` and is squash-merged like any other branch, so merging `origin/main` into it is right for exactly the reasons above; a merge commit there does not break the stack (see "Stacked PRs for discovered work"). Every layer above is instead rebased onto the layer below with `git rebase --onto`, never merged into. Do not reach for `gh stack rebase` to bring a stack up to date: it rebases the bottom layer onto `main` too, which is the very thing this section argues against.
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires nine status checks to pass before a merge is allowed: `build-and-test`, `database-tests`, `openapi-document`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+
+Read the list from the ruleset rather than from here if it matters; this line has gone stale before. `gh api repos/TetronIO/JIM/rulesets/12062449 --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'` answers it in one call.
 
 - Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
 - An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.

@@ -102,15 +102,7 @@
                 <ToolBarContent>
                     <MudText Typo="Typo.h6">Attributes</MudText>
                     <MudSpacer />
-                    <MudTextField T="string"
-                                  ValueChanged="@(s => OnSearch(s))"
-                                  Variant="Variant.Outlined"
-                                  Placeholder="Search"
-                                  Margin="Margin.Dense"
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  IconSize="Size.Medium"
-                                  Class="mt-0" />
+                    <SearchField ValueChanged="@(s => OnSearch(s))" Class="mt-0" />
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
                                DropShadow="false" Class="ml-3" OnClick="OpenCreateAttributeDialogAsync">New Attribute</MudButton>
                 </ToolBarContent>
@@ -413,7 +405,11 @@
         {
             MetaverseObjectDeletionRule.Manual => "Manual deletion only - objects are never automatically deleted",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => $"Delete when all connectors disconnect{gracePeriod}",
-            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => $"Delete when authoritative source disconnects{gracePeriod}",
+            // Include the trigger mode (#119) so the list reads the same as the detail page's radio options
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected =>
+                header.DeletionTriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+                    ? $"All sources disconnect: delete only once every selected authoritative source has disconnected{gracePeriod}"
+                    : $"Specific source(s) disconnect: delete when any one of the selected authoritative sources disconnects{gracePeriod}",
             _ => "Unknown deletion rule"
         };
     }

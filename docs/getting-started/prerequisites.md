@@ -41,7 +41,7 @@ As a general guideline, JIM's resource requirements are modest. A small deployme
 JIM uses PostgreSQL as its database. You have two options:
 
 - **Bundled PostgreSQL:** A PostgreSQL container is included in the Docker Compose stack for simple deployments. No additional setup is required.
-- **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable.
+- **External PostgreSQL:** Connect to your existing PostgreSQL server by configuring the `JIM_DB_HOSTNAME` environment variable. Port 5432 is assumed; where your server listens elsewhere, append the port to the hostname (`db.example.org:5433`).
 
 ## For Developers
 

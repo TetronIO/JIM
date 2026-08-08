@@ -1,0 +1,124 @@
+@using JIM.Models.Activities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* ─── Run phase stepper, horizontal (#454) ───
+   The journey read left to right, as a stepped progress bar: each step is drawn with an icon for
+   the work it does, and the line between two steps fills as the run works through the step it
+   leaves. Built on MudStepper's LabelTemplate, TitleTemplate and ConnectorTemplate; the stepper's
+   own navigation is suppressed, because this is a report on a run, not a wizard. *@
+
+@if (TopLevelPhases.Count > 0)
+{
+    <div class="jim-phase-stepper-h">
+        <MudStepper ActiveIndex="@ActiveIndex"
+                    NonLinear="true"
+                    CenterLabels="true"
+                    OnPreviewInteraction="CancelInteractionAsync"
+                    LabelTemplate="@LabelTemplate"
+                    TitleTemplate="@TitleTemplate"
+                    ConnectorTemplate="@ConnectorTemplate">
+            <ChildContent>
+                @foreach (var phase in TopLevelPhases)
+                {
+                    <MudStep Title="@phase.Name"
+                             Completed="@(phase.Status == ActivityPhaseStatus.Completed)"
+                             Skipped="@(phase.Status == ActivityPhaseStatus.Skipped)"
+                             HasError="@(phase.Status == ActivityPhaseStatus.Failed)" />
+                }
+            </ChildContent>
+            <ActionContent>
+                @* Deliberately empty: a run's steps are a report, so there is nothing to navigate. *@
+            </ActionContent>
+        </MudStepper>
+
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The run's steps, in run order. Renders nothing when empty, which covers Activities that are
+    /// not Run Profile executions and runs that predate phase recording.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
+
+    /// <summary>
+    /// How far through its own work the running step is, 0 to 1, or null when the step counts
+    /// nothing it can report. Fills the connector leaving the running step, so the rail reads as
+    /// one progress bar across the whole run rather than a bar that restarts per step.
+    /// </summary>
+    [Parameter]
+    public double? StepProgress { get; set; }
+
+    private List<ActivityPhase> TopLevelPhases => RunPhaseReading.TopLevel(Phases).ToList();
+
+    private ActivityPhase? CurrentTopLevelPhase => RunPhaseReading.ActiveTopLevel(Phases);
+
+    private int ActiveIndex
+    {
+        get
+        {
+            var index = TopLevelPhases.FindIndex(p => p.Status == ActivityPhaseStatus.Active);
+            if (index >= 0)
+                return index;
+
+            // Nothing running: sit on the last step that did, so a finished run does not snap back
+            // to the beginning.
+            var lastRan = TopLevelPhases.FindLastIndex(p => p.Started.HasValue);
+            return lastRan >= 0 ? lastRan : 0;
+        }
+    }
+
+    /// <summary>
+    /// The stepper is a report on a run, so clicking a step must not move anything.
+    /// </summary>
+    private Task CancelInteractionAsync(StepperInteractionEventArgs args)
+    {
+        args.Cancel = true;
+        return Task.CompletedTask;
+    }
+
+    private ActivityPhase? PhaseFor(IStepContext step) => TopLevelPhases.FirstOrDefault(p => p.Name == step.Title);
+
+    private RenderFragment<IStepContext> LabelTemplate => step => __builder =>
+    {
+        var phase = PhaseFor(step);
+        var outcome = RunPhaseVisuals.OutcomeTooltip(phase);
+        <MudTooltip Text="@outcome" Disabled="@(outcome.Length == 0)" Arrow="true" Placement="Placement.Top">
+            <div class="jim-phase-h-label jim-phase-h-label--@RunPhaseVisuals.StatusModifier(phase?.Status ?? ActivityPhaseStatus.Pending)">
+                <MudIcon Icon="@RunPhaseVisuals.StatusIcon(phase)" Size="Size.Small" />
+            </div>
+        </MudTooltip>
+    };
+
+    private RenderFragment<IStepContext> TitleTemplate => step => __builder =>
+    {
+        var phase = PhaseFor(step);
+        <div class="jim-phase-h-title jim-phase-h-title--@RunPhaseVisuals.StatusModifier(phase?.Status ?? ActivityPhaseStatus.Pending)">
+            <MudText Typo="Typo.body2" Class="jim-phase-step-name">@step.Title</MudText>
+            @* Only the duration earns a second line. What a skipped or failed step means is carried
+               by its marker's colour, its icon and a tooltip, rather than a caption under every
+               step that did not run normally. *@
+            @if (phase?.Duration is { } duration)
+            {
+                <MudText Typo="Typo.caption" Class="jim-phase-step-duration">@duration.ToAbbreviatedString()</MudText>
+            }
+        </div>
+    };
+
+    @* The connector belongs to the step it leaves, so its fill is that step's own progress: full
+       for a step already finished, the running step's count for the one in flight, empty ahead. *@
+    private RenderFragment<IStepContext> ConnectorTemplate => step => __builder =>
+    {
+        var phase = PhaseFor(step);
+        var fill = RunPhaseVisuals.FillPercent(phase, StepProgress);
+        <div class="jim-phase-h-connector">
+            <div class="jim-phase-h-connector-track">
+                <div class="jim-phase-h-connector-fill @(phase?.Status == ActivityPhaseStatus.Active ? "jim-phase-h-connector-fill--active" : "")"
+                     style="@($"width: {fill.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%;")"></div>
+            </div>
+        </div>
+    };
+}

@@ -3,6 +3,7 @@
 
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Connectors.SCIM;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -12,6 +13,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Application.Utilities;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 
@@ -549,15 +551,12 @@ internal class SeedingServer
         #endregion
 
         #region Connector Definitions
-        var ldapConnector = new LdapConnector();
-        var ldapConnectorDefinition = await PrepareConnectorDefinitionAsync(ldapConnector);
-        if (ldapConnectorDefinition != null)
-            connectorDefinitions.Add(ldapConnectorDefinition);
-
-        var fileConnector = new FileConnector();
-        var fileConnectorDefinition = await PrepareConnectorDefinitionAsync(fileConnector);
-        if (fileConnectorDefinition != null)
-            connectorDefinitions.Add(fileConnectorDefinition);
+        foreach (var connector in BuiltInConnectors())
+        {
+            var connectorDefinition = await PrepareConnectorDefinitionAsync(connector);
+            if (connectorDefinition != null)
+                connectorDefinitions.Add(connectorDefinition);
+        }
         #endregion
 
         // submit all the preparations to the repository for creation. Roles are not seeded here: built-in Roles
@@ -781,6 +780,16 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// The connectors JIM ships with, named once because seeding and the startup reconciliation must
+    /// agree. A connector in one list and not the other would either never appear to administrators or
+    /// never pick up settings added in a later release, and both failures are silent.
+    /// </summary>
+    internal static List<IConnector> BuiltInConnectors()
+    {
+        return [new LdapConnector(), new FileConnector(), new ScimConnector()];
+    }
+
+    /// <summary>
     /// Synchronises built-in connector definitions with the latest settings from the connector code.
     /// This should be called on every application startup to ensure connector settings are up-to-date.
     /// Unlike SeedAsync, this method updates existing connector definitions when their settings change.
@@ -791,13 +800,7 @@ internal class SeedingServer
         stopwatch.Start();
         Log.Information("SyncBuiltInConnectorDefinitionsAsync: Starting built-in connector definition synchronisation...");
 
-        var connectors = new List<IConnector>
-        {
-            new LdapConnector(),
-            new FileConnector()
-        };
-
-        foreach (var connector in connectors)
+        foreach (var connector in BuiltInConnectors())
         {
             await SyncConnectorDefinitionAsync(connector);
         }
@@ -1258,6 +1261,30 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Configuration change preview (#827) - where a preview runs
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ConfigurationChangePreviewWorkerThreshold,
+            DisplayName = "Preview worker threshold",
+            Description = "The estimated number of affected objects above which a configuration change preview is evaluated by JIM.Worker rather than in the portal's own process. Smaller previews run in-process so they return without waiting for the worker to pick them up. Both paths produce identical results.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "2500",
+            IsReadOnly = false
+        });
+
+        // Configuration change preview (#827) - when to ask before capping the drill-down rows
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ConfigurationChangePreviewFullDataSetPromptThreshold,
+            DisplayName = "Preview full data set prompt threshold",
+            Description = "The estimated number of object-level rows above which a configuration change preview asks whether to keep the full data set or only a sample of each summary group. Below this, previews keep a sample without asking. Summary counts are exact either way; the choice only affects how much can be drilled into, and how much storage the preview uses.",
+            Category = ServiceSettingCategory.Synchronisation,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "100000",
+            IsReadOnly = false
+        });
+
         // Security Settings
         await SeedSettingAsync(new ServiceSetting
         {
@@ -1413,6 +1440,29 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Copies everything a Connector declares about itself (capability flags and the advisory schema standard)
+    /// onto its Connector Definition, and reports whether anything actually changed so the caller can decide
+    /// whether to persist and audit an update.
+    /// Shared by the create and startup-reconcile paths: a declaration added to <see cref="IConnectorCapabilities"/>
+    /// is applied to fresh installs and existing deployments alike, from one place.
+    /// </summary>
+    internal static bool ApplyConnectorDeclarations(IConnectorCapabilities connectorCapabilities, ConnectorDefinition definition)
+    {
+        // Driven off the shape of IConnectorCapabilities rather than a written-out list of every declaration.
+        // A hand-written list is the failure this exists to avoid: declaring a capability and forgetting to add
+        // it here leaves the flag permanently false in the database with nothing failing, so the Connector
+        // advertises a feature the rest of JIM cannot see. Declaring it on the interface is the only step.
+        var changed = ConnectorCapabilityMirror.GetDifferences(connectorCapabilities, definition);
+        if (changed.Count == 0)
+            return false;
+
+        ConnectorCapabilityMirror.CopyTo(connectorCapabilities, definition);
+        Log.Debug("ApplyConnectorDeclarations: Updated declarations for '{ConnectorName}': {ChangedDeclarations}",
+            LogSanitiser.Sanitise(definition.Name), string.Join(", ", changed));
+        return true;
+    }
+
+    /// <summary>
     /// Synchronises a single connector definition with the latest settings from the connector code.
     /// Updates settings if they have changed (e.g., category, description, default values).
     /// </summary>
@@ -1446,34 +1496,11 @@ internal class SeedingServer
             Log.Information($"SyncConnectorDefinitionAsync: Removed duplicate setting '{duplicate.Name}' from '{connector.Name}'");
         }
 
-        // Update capability flags
-        if (existingDefinition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
-            existingDefinition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
-            existingDefinition.SupportsExport != connectorCapabilities.SupportsExport ||
-            existingDefinition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
-            existingDefinition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
-            existingDefinition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
-            existingDefinition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
-            existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
-            existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
-            existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
-            existingDefinition.SupportsPaging != connectorCapabilities.SupportsPaging ||
-            existingDefinition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths)
+        // Update the Connector's own declarations (capability flags and schema standard)
+        if (ApplyConnectorDeclarations(connectorCapabilities, existingDefinition))
         {
-            existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
-            existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
-            existingDefinition.SupportsExport = connectorCapabilities.SupportsExport;
-            existingDefinition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
-            existingDefinition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
-            existingDefinition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
-            existingDefinition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
-            existingDefinition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
-            existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
-            existingDefinition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
-            existingDefinition.SupportsPaging = connectorCapabilities.SupportsPaging;
-            existingDefinition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
             hasChanges = true;
-            Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
+            Log.Information($"SyncConnectorDefinitionAsync: Updated declarations for '{connector.Name}'");
         }
 
         // Sync settings - update existing and add new ones
@@ -1556,6 +1583,14 @@ internal class SeedingServer
                 ActivityInitiatorType.System, null, "System",
                 changeReason: "Connector Definition updated automatically by JIM to match the latest connector.",
                 parentActivityId: parentActivityId);
+
+            // Detaching an obsolete setting from the definition above only severs it: its foreign key is nullable, so
+            // the row survives holding no definition while every value an administrator saved against it still points
+            // at it, and the withdrawn setting keeps appearing on Connected Systems that hold one. Delete the rows so
+            // those values cascade away with them.
+            if (settingsToRemove.Count > 0)
+                await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionSettingsAsync(settingsToRemove);
+
             Log.Information($"SyncConnectorDefinitionAsync: Saved changes for '{connector.Name}'");
         }
         else
@@ -1697,20 +1732,12 @@ internal class SeedingServer
             Name = connector.Name,
             Description = connector.Description,
             Url = connector.Url,
-            BuiltIn = true,
-            SupportsFullImport = connectorCapabilities.SupportsFullImport,
-            SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
-            SupportsExport = connectorCapabilities.SupportsExport,
-            SupportsPartitions = connectorCapabilities.SupportsPartitions,
-            SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
-            SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
-            SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
-            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
-            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport,
-            SupportsParallelExport = connectorCapabilities.SupportsParallelExport,
-            SupportsPaging = connectorCapabilities.SupportsPaging,
-            SupportsFilePaths = connectorCapabilities.SupportsFilePaths
+            BuiltIn = true
         };
+
+        // Same method the startup reconcile uses, so a declaration added to a Connector cannot reach fresh
+        // installs while being forgotten on upgrades, or the other way round.
+        ApplyConnectorDeclarations(connectorCapabilities, connectorDefinition);
 
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
         return connectorDefinition;

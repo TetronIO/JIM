@@ -132,12 +132,12 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             .Include(o => o.AttributeValues)
             .SingleAsync(o => o.Id == mvo.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.AttributeValues, Has.Count.EqualTo(2), "both attribute values should be persisted");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId && av.StringValue == "Sales"), Is.True, "original Department value");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DisplayNameId && av.StringValue == "Alice Example"), Is.True, "added Display Name value");
-        });
+        }
     }
 
     /// <summary>
@@ -174,12 +174,69 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             .Include(o => o.AttributeValues)
             .SingleAsync(o => o.Id == mvo.Id);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.AttributeValues, Has.Count.EqualTo(2), "one value removed, one added, one unchanged");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DisplayNameId && av.StringValue == "Alice Example"), Is.True, "unchanged Display Name retained");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.JobTitleId && av.StringValue == "Engineer"), Is.True, "added Job Title persisted");
             Assert.That(persisted.AttributeValues.Any(av => av.AttributeId == ids.DepartmentId), Is.False, "removed Department deleted");
-        });
+        }
+    }
+
+    /// <summary>
+    /// The #119 deletion-trigger marker columns (DeletionTriggeredBySystemId/Name and the decision-time
+    /// DeletionPolicySnapshotJson) travel through the same raw bulk create and update paths as the existing
+    /// deletion markers (LastConnectorDisconnectedDate, DeletionInitiatedBy*). The in-memory provider stores
+    /// the object graph verbatim, so only a real-PostgreSQL round trip proves the hand-written column lists
+    /// and writers persist them.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_DeletionTriggerMarkerColumns_RoundTripThroughBulkPathsAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+
+        var snapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected","triggerMode":"SpecificSourcesDisconnect"}""";
+        var mvo = new MetaverseObject
+        {
+            Type = personType!,
+            AttributeValues = { TextValue(ids.DepartmentId, "Sales") },
+            DeletionTriggeredBySystemId = 7,
+            DeletionTriggeredBySystemName = "HR System",
+            DeletionPolicySnapshotJson = snapshotJson
+        };
+
+        // Raw COPY/INSERT create must persist the marker columns.
+        await repo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        await using (var verifyCreateCtx = NewContext())
+        {
+            var created = await verifyCreateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(created.DeletionTriggeredBySystemId, Is.EqualTo(7), "bulk create must persist DeletionTriggeredBySystemId");
+                Assert.That(created.DeletionTriggeredBySystemName, Is.EqualTo("HR System"), "bulk create must persist DeletionTriggeredBySystemName");
+                Assert.That(created.DeletionPolicySnapshotJson, Is.EqualTo(snapshotJson), "bulk create must persist DeletionPolicySnapshotJson");
+            }
+        }
+
+        // A rejoin cancels the scheduled deletion: the markers are cleared together, and the raw bulk update
+        // must persist the cleared state (a dropped column here would silently resurrect the stale trigger).
+        mvo.DeletionTriggeredBySystemId = null;
+        mvo.DeletionTriggeredBySystemName = null;
+        mvo.DeletionPolicySnapshotJson = null;
+        await repo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyUpdateCtx = NewContext();
+        var updated = await verifyUpdateCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated.DeletionTriggeredBySystemId, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemId");
+            Assert.That(updated.DeletionTriggeredBySystemName, Is.Null, "bulk update must persist a cleared DeletionTriggeredBySystemName");
+            Assert.That(updated.DeletionPolicySnapshotJson, Is.Null, "bulk update must persist a cleared DeletionPolicySnapshotJson");
+        }
     }
 }

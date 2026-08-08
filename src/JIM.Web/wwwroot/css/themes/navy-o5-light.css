@@ -119,8 +119,10 @@ html[lang] {
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
+    /* Matches --jim-inner-surface above, for the reason given in navy-o6-light: this was the page background
+       colour, so a panel nested in an elevated dialog was painted the same value as the surface beneath it. */
     --jim-dialog-surface: #ffffff;
-    --jim-dialog-inner-surface: #f3f3f3;
+    --jim-dialog-inner-surface: #f7f7f7;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #0076d3;

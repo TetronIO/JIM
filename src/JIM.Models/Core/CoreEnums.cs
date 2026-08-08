@@ -68,7 +68,22 @@ public enum AttributeWritability
     /// The attribute is read-only and cannot be written to.
     /// It may still be useful for import (e.g. whenCreated, objectSid).
     /// </summary>
-    ReadOnly = 1
+    ReadOnly = 1,
+
+    /// <summary>
+    /// The attribute may be written only as part of creating the object, and must never be written by a
+    /// subsequent update. An export Attribute Flow may target it: the value is included in a Create
+    /// Pending Export, and is excluded from every Update Pending Export even when the source value has
+    /// since changed.
+    /// <para>
+    /// This state exists for attributes that identify the object to the Connected System, where rewriting
+    /// the value would sever the link between the Connected System Object and the thing it represents. A
+    /// relational table's primary key is the canonical case: JIM must supply it when it inserts the row,
+    /// and must never update it afterwards. A directory's relative distinguished name is the same shape,
+    /// being changed by a rename operation rather than by an ordinary attribute write.
+    /// </para>
+    /// </summary>
+    WritableOnCreate = 2
 }
 
 public enum MetaverseObjectStatus
@@ -111,6 +126,28 @@ public enum MetaverseObjectDeletionRule
     /// If a grace period is configured on the MetaverseObjectType, deletion will be scheduled for after that period.
     /// </summary>
     WhenAuthoritativeSourceDisconnected = 2
+}
+
+/// <summary>
+/// For the WhenAuthoritativeSourceDisconnected deletion rule: determines whether any one selected
+/// authoritative source disconnecting triggers Metaverse Object deletion, or whether every selected
+/// source must disconnect first (#119).
+/// </summary>
+public enum AuthoritativeSourceTriggerMode
+{
+    /// <summary>
+    /// Delete when any one of the selected sources disconnects, even if others remain connected.
+    /// Value 0 matches pre-existing rows, which read the added column's default and so keep the
+    /// behaviour they were configured with before trigger modes existed (#115).
+    /// </summary>
+    SpecificSourcesDisconnect = 0,
+
+    /// <summary>
+    /// Delete only once no selected source retains a joined Connected System Object.
+    /// Non-source connectors (targets) do not block deletion. The default for newly configured
+    /// object types (via the MetaverseObjectType property initialiser).
+    /// </summary>
+    AllSourcesDisconnect = 1
 }
 
 /// <summary>

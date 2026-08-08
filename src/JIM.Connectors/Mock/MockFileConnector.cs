@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
@@ -26,8 +27,13 @@ public class MockFileConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;
     public bool SupportsFilePaths => true;
+    public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
 
-    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
+    public bool SupportsPasswordSet => false;
+
+    public bool SupportsPasswordPolicyDiscovery => false;
+
+    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         // if a test has configured an exception to be thrown, throw it to simulate connectivity errors
         if (TestExceptionToThrow != null)

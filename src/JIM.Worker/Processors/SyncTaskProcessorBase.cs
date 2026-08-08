@@ -205,6 +205,11 @@ public abstract class SyncTaskProcessorBase
     // Cleared per page alongside other batch collections.
     protected readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _mvoIdToRpei = [];
 
+    // Connected System id → display name map for decision-time deletion policy snapshots (#119).
+    // Lazily fetched at most ONCE per run profile execution (a tiny table); source system names must
+    // never cost per-object queries on the hot path. Null until first needed.
+    private Dictionary<int, string>? _connectedSystemNamesById;
+
     // Deferred MVO→RPEI mappings for newly projected MVOs whose ID is Guid.Empty at registration time.
     // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
     private readonly List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem Rpei)> _deferredMvoRpeiMappings = [];
@@ -226,6 +231,12 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     internal Action? OnCsoProcessedInPass2 { get; set; }
 
+    /// <summary>
+    /// Narrates the run as steps an administrator can follow (#454). Never null; callers that do
+    /// not track phases get a reporter that records nothing.
+    /// </summary>
+    protected readonly ActivityPhaseReporter _phases;
+
     protected SyncTaskProcessorBase(
         ISyncEngine syncEngine,
         ISyncServer syncServer,
@@ -233,7 +244,8 @@ public abstract class SyncTaskProcessorBase
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
-        CancellationTokenSource cancellationTokenSource)
+        CancellationTokenSource cancellationTokenSource,
+        ActivityPhaseReporter? phaseReporter = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -242,6 +254,7 @@ public abstract class SyncTaskProcessorBase
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
         _cancellationTokenSource = cancellationTokenSource;
+        _phases = phaseReporter ?? ActivityPhaseReporter.None;
     }
 
     /// <summary>
@@ -318,11 +331,16 @@ public abstract class SyncTaskProcessorBase
                             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
                             or ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
                     {
-                        // Fill in MVO display name if it was null at creation time
-                        if (string.IsNullOrEmpty(outcome.TargetEntityDescription)
-                            && !string.IsNullOrEmpty(mvo.DisplayName))
+                        // Fill in the MVO's description if it was blank at creation time. An all-zero
+                        // GUID counts as blank: it is what NameOrId yields before the MVO is persisted,
+                        // so treating it as a real description would leave it on display forever. The
+                        // creation sites write the name only and so no longer produce it, but this is
+                        // the last point at which a description can still be corrected, and it costs a
+                        // string comparison to make the whole class of mistake self-healing.
+                        if (IsBlankOrEmptyGuid(outcome.TargetEntityDescription)
+                            && !string.IsNullOrWhiteSpace(mvo.NameOrId))
                         {
-                            outcome.TargetEntityDescription = mvo.DisplayName;
+                            outcome.TargetEntityDescription = mvo.NameOrId;
                         }
 
                         // Fill in MVO ID if it was null at creation time (newly projected MVOs)
@@ -507,6 +525,14 @@ public abstract class SyncTaskProcessorBase
                         existingRpei.AttributeFlowCount = changeResult.AttributeFlowCount;
                     }
 
+                    // Attach the decision-time deletion policy snapshot (#119) when the out-of-scope
+                    // disconnection's deletion rule evaluation recorded an outcome, so the decision stays
+                    // explainable after the deletion configuration changes.
+                    if (changeResult.MvoDeletionPolicySnapshotJson != null)
+                    {
+                        existingRpei.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
+                    }
+
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
                     // so the change record shows a handover to the surviving contributor, not just a blank.
@@ -540,7 +566,8 @@ public abstract class SyncTaskProcessorBase
                                 targetEntityId: changeResult.DisconnectedMvoId,
                                 targetEntityDescription: changeResult.DisconnectedMvoDisplayName,
                                 detailMessage: BuildMvoDeletionDetailMessage(changeResult.MvoDeletionFate,
-                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod));
+                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod,
+                                    changeResult.MvoDeletionEligibleDate));
                         }
                     }
                 }
@@ -556,6 +583,14 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.AttributeFlowCount.HasValue)
                     {
                         runProfileExecutionItem.AttributeFlowCount = changeResult.AttributeFlowCount;
+                    }
+
+                    // Attach the decision-time deletion policy snapshot (#119) when the out-of-scope
+                    // disconnection's deletion rule evaluation recorded an outcome, so the decision stays
+                    // explainable after the deletion configuration changes.
+                    if (changeResult.MvoDeletionPolicySnapshotJson != null)
+                    {
+                        runProfileExecutionItem.DeletionPolicySnapshotJson = changeResult.MvoDeletionPolicySnapshotJson;
                     }
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
@@ -584,7 +619,11 @@ public abstract class SyncTaskProcessorBase
                         // disconnection (#1086).
                         var mvoRef = connectedSystemObject.MetaverseObject;
                         Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : changeResult.DisconnectedMvoId;
-                        string? mvoDescription = mvoRef?.DisplayName ?? changeResult.DisconnectedMvoDisplayName;
+                        // Name, not NameOrId, for the same reason as the projection path below: on a
+                        // projection the MVO is not persisted yet, so NameOrId's id fallback would write
+                        // an all-zero GUID that the retroactive pass then treats as a real description.
+                        string? mvoDescription = ObjectNaming.FirstPresent(mvoRef?.Name)
+                                                 ?? changeResult.DisconnectedMvoDisplayName;
 
                         // Only put detailCount on AttributeFlow/DisconnectedOutOfScope root outcomes, not on Joined/Projected
                         int? rootDetailCount = outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
@@ -630,7 +669,8 @@ public abstract class SyncTaskProcessorBase
                                 targetEntityId: mvoId,
                                 targetEntityDescription: mvoDescription,
                                 detailMessage: BuildMvoDeletionDetailMessage(changeResult.MvoDeletionFate,
-                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod));
+                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod,
+                                    changeResult.MvoDeletionEligibleDate));
                         }
                     }
 
@@ -717,7 +757,7 @@ public abstract class SyncTaskProcessorBase
         {
             SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
-                targetEntityDescription: changeResult.DisconnectedMvo.DisplayName,
+                targetEntityDescription: changeResult.DisconnectedMvo.NameOrId,
                 detailCount: clearedAttributeCount);
         }
     }
@@ -795,7 +835,8 @@ public abstract class SyncTaskProcessorBase
 
             // Not joined but has a different JoinType (e.g., Explicit) - this is a regular orphan deletion
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
@@ -814,7 +855,8 @@ public abstract class SyncTaskProcessorBase
             // Note: We still delete the CSO as it's obsolete in the source system,
             // but we don't disconnect from MVO or trigger deletion rules
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
@@ -824,7 +866,7 @@ public abstract class SyncTaskProcessorBase
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
         var mvoId = mvo.Id;
-        var mvoDisplayName = mvo.DisplayName;
+        var mvoDisplayName = mvo.NameOrId;
 
         // Single RPEI for both disconnection and deletion (one-RPEI-per-CSO rule).
         // The ObjectChangeType is Disconnected (the meaningful event); CsoDeleted is recorded
@@ -832,10 +874,12 @@ public abstract class SyncTaskProcessorBase
         // Reuse deletionExecutionItem (already created above) and change its type to Disconnected.
         deletionExecutionItem.ObjectChangeType = ObjectChangeType.Disconnected;
 
-        // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
-        // Then subtract 1 to exclude this CSO which is about to be disconnected.
-        var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-        var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
+        // Query the joined Connected System ids BEFORE breaking the join so the list includes all current
+        // connectors, then exclude ONE occurrence of this CSO's system id (the CSO about to be
+        // disconnected). A second CSO joined from the same system must remain in the list; this mirrors
+        // the previous count-minus-one logic exactly.
+        var remainingConnectedSystemIds = await _syncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
+        remainingConnectedSystemIds.Remove(connectedSystemId);
 
         // Snapshot the MVO's current attribute values before recall removes them.
         // This snapshot is used by MarkMvoForDeletionAsync to capture the final state
@@ -849,8 +893,15 @@ public abstract class SyncTaskProcessorBase
         // If the MVO will be deleted immediately, attribute recall is nugatory work —
         // the attributes, MVO update, and export evaluations would all be discarded
         // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
-        var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+        var (mvoDeletionDecision, mvoDeletionPolicySnapshotJson) = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingConnectedSystemIds);
         var mvoDeletionFate = mvoDeletionDecision.Fate;
+
+        // Attach the decision-time policy snapshot (#119) to the outcome-bearing execution item, so the
+        // decision stays explainable after the deletion configuration changes. Recorded for triggered
+        // decisions AND evaluated-but-not-triggered ones (a listed source disconnected but mode semantics
+        // held); independent of the sync outcome tracking level, like the other RPEI audit columns.
+        if (mvoDeletionPolicySnapshotJson != null)
+            deletionExecutionItem.DeletionPolicySnapshotJson = mvoDeletionPolicySnapshotJson;
 
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
         // surviving contributor where one exists. A configured deletion grace period no longer skips recall wholesale:
@@ -989,8 +1040,13 @@ public abstract class SyncTaskProcessorBase
                     detailCount: recallClearedAttributeCount);
             }
 
+            // The id is captured here, before the record is deleted: ActivityRunProfileExecutionItems'
+            // ConnectedSystemObjectId is a foreign key and is nulled with the object, so this outcome is
+            // the only durable statement of which record the run deleted, and the only way to reach its
+            // deletion record afterwards.
             SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
-                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                targetEntityId: connectedSystemObject.Id, targetEntityDescription: connectedSystemObject.NameOrId);
 
             // Add MVO deletion fate outcome when the deletion rule was triggered. The outcome carries
             // the deleted Metaverse Object's id and display name snapshot (captured before deletion)
@@ -1001,7 +1057,7 @@ public abstract class SyncTaskProcessorBase
                     ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                     targetEntityId: mvoId,
                     targetEntityDescription: mvoDisplayName,
-                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, null));
+                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, null, null));
             }
             else if (mvoDeletionFate == MvoDeletionFate.DeletionScheduled)
             {
@@ -1011,7 +1067,7 @@ public abstract class SyncTaskProcessorBase
                     ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
                     targetEntityId: mvoId,
                     targetEntityDescription: mvoDisplayName,
-                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, gracePeriod));
+                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, gracePeriod, mvo.DeletionEligibleDate));
             }
         }
 
@@ -1032,40 +1088,124 @@ public abstract class SyncTaskProcessorBase
     /// Handles three deletion rules:
     /// - Manual: No automatic deletion
     /// - WhenLastConnectorDisconnected: Delete when ALL CSOs are disconnected
-    /// - WhenAuthoritativeSourceDisconnected: Delete when ANY authoritative source disconnects
+    /// - WhenAuthoritativeSourceDisconnected: Delete per the configured trigger mode (when any selected
+    ///   source disconnects, or only once no selected source remains connected) (#119)
     /// Following industry-standard identity management practices, this method NEVER deletes the MVO directly.
     /// Instead, it sets LastConnectorDisconnectedDate and lets housekeeping handle actual deletion.
     /// </summary>
     /// <param name="mvo">The Metaverse Object to evaluate for deletion.</param>
     /// <param name="disconnectingSystemId">The ID of the Connected System whose CSO was disconnected.</param>
-    /// <param name="remainingCsoCount">The count of remaining CSOs still joined to the MVO.</param>
+    /// <param name="remainingConnectedSystemIds">The Connected System ID of each CSO still joined to the
+    /// MVO after disconnection: one entry per CSO, duplicates preserved when a system holds multiple
+    /// joined CSOs.</param>
     /// <returns>
     /// The applied deletion decision, including the fate, the human-readable reason and any grace
     /// period, so callers can surface the reason on MvoDeleted/MvoDeletionScheduled outcomes (#1086).
     /// </returns>
-    protected async Task<MvoDeletionDecision> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
+    protected async Task<(MvoDeletionDecision Decision, string? PolicySnapshotJson)> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, IReadOnlyCollection<int> remainingConnectedSystemIds)
     {
-        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingCsoCount);
-        var appliedFate = await ApplyMvoDeletionDecisionAsync(mvo, decision);
+        // Resolve the disconnecting system's name so the deletion reason names it rather than showing
+        // a bare id. The disconnecting CSO always belongs to the system this task is processing, so its
+        // name is to hand; leave null (id fallback) if that invariant ever fails to hold.
+        var disconnectingSystemName = disconnectingSystemId == _connectedSystem.Id ? _connectedSystem.Name : null;
+        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingConnectedSystemIds, disconnectingSystemName);
+
+        // Capture the decision-time policy snapshot (#119) BEFORE applying the decision, so it records
+        // the facts the engine evaluated (mode, sources, remaining sources) rather than post-apply state.
+        var policySnapshotJson = await BuildMvoDeletionPolicySnapshotJsonAsync(mvo, disconnectingSystemId, remainingConnectedSystemIds, decision);
+        var appliedFate = await ApplyMvoDeletionDecisionAsync(mvo, decision, disconnectingSystemId, policySnapshotJson);
 
         // The applied fate should always match the engine's decision (both derive from the same grace
         // period configuration); rebuild the decision defensively if they ever diverge so callers see
         // what actually happened.
         if (appliedFate == decision.Fate)
-            return decision;
+            return (decision, policySnapshotJson);
 
-        return new MvoDeletionDecision
+        return (new MvoDeletionDecision
         {
             Fate = appliedFate,
             GracePeriod = decision.GracePeriod,
             Reason = decision.Reason
+        }, policySnapshotJson);
+    }
+
+    /// <summary>
+    /// Resolves a Connected System's display name for decision-time snapshots (#119). The current run's
+    /// system resolves without I/O; other systems resolve from the run-scoped id-to-name map, fetched at
+    /// most once per run profile execution (the map is a tiny table; per-MVO queries are not acceptable
+    /// on the hot path).
+    /// </summary>
+    private async Task<string> ResolveConnectedSystemNameAsync(int connectedSystemId)
+    {
+        if (connectedSystemId == _connectedSystem.Id)
+            return _connectedSystem.Name;
+
+        _connectedSystemNamesById ??= await _syncRepo.GetConnectedSystemNamesAsync();
+        return _connectedSystemNamesById.TryGetValue(connectedSystemId, out var name)
+            ? name
+            : $"Connected System {connectedSystemId}";
+    }
+
+    /// <summary>
+    /// Builds the decision-time deletion policy snapshot (#119) for a deletion rule evaluation, serialised
+    /// for storage on the outcome-bearing execution item and, for scheduled deletions, on the MVO itself.
+    /// A snapshot is produced whenever the evaluation records an outcome: the deletion was triggered
+    /// (scheduled or immediate), or a WhenAuthoritativeSourceDisconnected rule evaluated a listed source
+    /// but mode semantics decided not to trigger (the evaluated-but-not-triggered case). A plain non-event
+    /// (rule not applicable, disconnecting system not a listed source) produces no snapshot.
+    /// </summary>
+    /// <returns>The serialised snapshot, or null when the evaluation was a non-event.</returns>
+    private async Task<string?> BuildMvoDeletionPolicySnapshotJsonAsync(
+        MetaverseObject mvo,
+        int disconnectingSystemId,
+        IReadOnlyCollection<int> remainingConnectedSystemIds,
+        MvoDeletionDecision decision)
+    {
+        var type = mvo.Type;
+        if (type == null)
+            return null;
+
+        var triggerIds = type.DeletionTriggerConnectedSystemIds ?? [];
+        var evaluatedAgainstSourceList = type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+            && triggerIds.Contains(disconnectingSystemId);
+        if (decision.Fate == MvoDeletionFate.NotDeleted && !evaluatedAgainstSourceList)
+            return null;
+
+        var snapshot = new MvoDeletionPolicySnapshot
+        {
+            DeletionRule = type.DeletionRule,
+            TriggerMode = type.DeletionTriggerMode,
+            GracePeriod = type.DeletionGracePeriod,
+            TriggeringSystemId = disconnectingSystemId,
+            TriggeringSystemName = await ResolveConnectedSystemNameAsync(disconnectingSystemId),
+            // Record when the deletion becomes due, so surfaces can answer "when?" without deriving it
+            // from the disconnection time and a grace period that may since have been reconfigured (#119).
+            DeletionEligibleDate = decision.Fate == MvoDeletionFate.DeletionScheduled && decision.GracePeriod.HasValue
+                ? DateTime.UtcNow.Add(decision.GracePeriod.Value)
+                : null
         };
+
+        foreach (var sourceSystemId in triggerIds)
+        {
+            snapshot.SelectedSourceSystemIds.Add(sourceSystemId);
+            snapshot.SelectedSourceSystemNames.Add(await ResolveConnectedSystemNameAsync(sourceSystemId));
+        }
+
+        // The listed sources still holding a joined CSO at decision time, distinct (a source with two
+        // joined CSOs is one remaining source).
+        foreach (var remainingSourceSystemId in remainingConnectedSystemIds.Where(triggerIds.Contains).Distinct())
+        {
+            snapshot.RemainingConnectedSourceSystemIds.Add(remainingSourceSystemId);
+            snapshot.RemainingConnectedSourceSystemNames.Add(await ResolveConnectedSystemNameAsync(remainingSourceSystemId));
+        }
+
+        return snapshot.ToJson();
     }
 
     /// <summary>
     /// Applies an MVO deletion decision from the engine — handles I/O (queuing immediate deletion or persisting grace period).
     /// </summary>
-    private async Task<MvoDeletionFate> ApplyMvoDeletionDecisionAsync(MetaverseObject mvo, MvoDeletionDecision decision)
+    private async Task<MvoDeletionFate> ApplyMvoDeletionDecisionAsync(MetaverseObject mvo, MvoDeletionDecision decision, int disconnectingSystemId, string? policySnapshotJson)
     {
         switch (decision.Fate)
         {
@@ -1073,10 +1213,10 @@ public abstract class SyncTaskProcessorBase
                 return MvoDeletionFate.NotDeleted;
 
             case MvoDeletionFate.DeletedImmediately:
-                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered");
+                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered", disconnectingSystemId, policySnapshotJson);
 
             case MvoDeletionFate.DeletionScheduled:
-                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered");
+                return await MarkMvoForDeletionAsync(mvo, decision.Reason ?? "deletion rule triggered", disconnectingSystemId, policySnapshotJson);
 
             default:
                 return MvoDeletionFate.NotDeleted;
@@ -1090,9 +1230,18 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="mvo">The Metaverse Object to process for deletion.</param>
     /// <param name="reason">A description of why the MVO is being deleted (for logging).</param>
-    private async Task<MvoDeletionFate> MarkMvoForDeletionAsync(MetaverseObject mvo, string reason)
+    /// <param name="triggeringSystemId">The Connected System whose disconnection triggered the deletion (#119).</param>
+    /// <param name="policySnapshotJson">The decision-time policy snapshot to persist at mark-time so housekeeping can carry it onto the final deletion record (#119).</param>
+    private async Task<MvoDeletionFate> MarkMvoForDeletionAsync(MetaverseObject mvo, string reason, int triggeringSystemId, string? policySnapshotJson)
     {
         var gracePeriod = mvo.Type!.DeletionGracePeriod;
+
+        // Record which system's disconnection triggered the deletion (#119), on both paths: the grace
+        // period path persists it for mode-aware cancellation and the Pending Deletions page; the
+        // immediate path sets it in memory so the same-page reconnect check in
+        // FlushPendingMvoDeletionsAsync can apply the same mode-aware predicate before the row goes.
+        mvo.DeletionTriggeredBySystemId = triggeringSystemId;
+        mvo.DeletionTriggeredBySystemName = await ResolveConnectedSystemNameAsync(triggeringSystemId);
 
         if (!gracePeriod.HasValue || gracePeriod.Value == TimeSpan.Zero)
         {
@@ -1121,31 +1270,79 @@ public abstract class SyncTaskProcessorBase
             mvo.DeletionInitiatedByType = _activity.InitiatedByType;
             mvo.DeletionInitiatedById = _activity.InitiatedById;
             mvo.DeletionInitiatedByName = _activity.InitiatedByName;
-            Log.Information(
-                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {GracePeriod}. Initiator: {Initiator}",
-                mvo.Id, reason, gracePeriod.Value, _activity.InitiatedByName ?? "Unknown");
 
-            // Persist the LastConnectorDisconnectedDate and initiator info
+            // Persist the decision-time policy snapshot at mark-time (#119) so housekeeping can copy it
+            // onto the final deletion record after the grace period, keeping the record reflecting the
+            // policy that scheduled the deletion rather than the configuration at execution time.
+            mvo.DeletionPolicySnapshotJson = policySnapshotJson;
+            Log.Information(
+                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {GracePeriod}. Initiator: {Initiator}. Triggered by system {TriggeringSystemId}.",
+                mvo.Id, reason, gracePeriod.Value, _activity.InitiatedByName ?? "Unknown", triggeringSystemId);
+
+            // Persist the LastConnectorDisconnectedDate, initiator info, triggering system and snapshot
             await _syncRepo.UpdateMetaverseObjectAsync(mvo);
             return MvoDeletionFate.DeletionScheduled;
         }
     }
 
     /// <summary>
-    /// Builds the detail message for an MvoDeleted or MvoDeletionScheduled outcome node: the
-    /// Metaverse Object Deletion Rule reason (when known) plus the grace period for scheduled
-    /// deletions, e.g. "Deletion Rule: last connector disconnected. Grace period: 7 days" (#1086).
-    /// Returns null when neither part is available.
+    /// Clears every deletion marker from an MVO whose scheduled or queued deletion has been cancelled by a
+    /// rejoin (#119): the disconnection date, the deletion initiator audit fields, the triggering system
+    /// fields and the decision-time policy snapshot. The markers travel together; clearing a subset would
+    /// leave a cancelled deletion half-described.
     /// </summary>
-    private static string? BuildMvoDeletionDetailMessage(MvoDeletionFate fate, string? reason, TimeSpan? gracePeriod)
+    private static void ClearMvoDeletionMarkers(MetaverseObject mvo)
+    {
+        mvo.LastConnectorDisconnectedDate = null;
+        mvo.DeletionInitiatedByType = ActivityInitiatorType.NotSet;
+        mvo.DeletionInitiatedById = null;
+        mvo.DeletionInitiatedByName = null;
+        mvo.DeletionTriggeredBySystemId = null;
+        mvo.DeletionTriggeredBySystemName = null;
+        mvo.DeletionPolicySnapshotJson = null;
+    }
+
+    /// <summary>
+    /// Builds the detail message for an MvoDeleted or MvoDeletionScheduled outcome node: the
+    /// Metaverse Object Deletion Rule reason (when known), plus the grace period and the resulting due
+    /// date for scheduled deletions, e.g. "Deletion Rule: last connector disconnected. Grace period:
+    /// 7 days. Eligible for deletion: 10 Aug 2026 08:00:57 UTC" (#1086, due date added under #119).
+    /// Returns null when no part is available.
+    /// </summary>
+    /// <remarks>
+    /// NOTE FOR THE CAUSALITY VIEW REDESIGN (#1087): the due date is a deliberate capability, added
+    /// because "scheduled for deletion" without a date makes the reader derive it from the disconnection
+    /// time and the grace period. Carry it into the new views; the structured value is also available on
+    /// the decision-time policy snapshot (<see cref="MvoDeletionPolicySnapshot.DeletionEligibleDate"/>),
+    /// which is the better source for a view that formats dates itself.
+    /// </remarks>
+    private static string? BuildMvoDeletionDetailMessage(MvoDeletionFate fate, string? reason, TimeSpan? gracePeriod, DateTime? deletionEligibleDate)
     {
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(reason))
             parts.Add($"Deletion Rule: {reason}");
         if (fate == MvoDeletionFate.DeletionScheduled && gracePeriod.HasValue)
             parts.Add($"Grace period: {FormatGracePeriod(gracePeriod.Value)}");
+        if (fate == MvoDeletionFate.DeletionScheduled && deletionEligibleDate.HasValue)
+        {
+            // Stored text cannot be localised when it is later rendered, so state the zone explicitly.
+            parts.Add($"Eligible for deletion: {deletionEligibleDate.Value:dd MMM yyyy HH:mm:ss} UTC");
+        }
         return parts.Count > 0 ? string.Join(". ", parts) : null;
     }
+
+    /// <summary>
+    /// Whether an outcome description carries no real information: blank, or the all-zero GUID that
+    /// <see cref="MetaverseObject.NameOrId"/> produces when asked for a label before the object has
+    /// been persisted and given an id. Both mean "not described yet" and are safe to overwrite.
+    /// </summary>
+    private static bool IsBlankOrEmptyGuid(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description)
+               || string.Equals(description.Trim(), EmptyGuidText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly string EmptyGuidText = Guid.Empty.ToString();
 
     /// <summary>
     /// Formats a grace period TimeSpan into a human-readable string for outcome detail messages.
@@ -1349,7 +1546,12 @@ public abstract class SyncTaskProcessorBase
                     // Only store the MVO ID if it's already persisted (non-empty).
                     // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
                     var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
-                    var mvoDescription = mvo.DisplayName;
+                    // Name, not NameOrId. NameOrId falls back to the id, and for a newly projected MVO
+                    // that id is still Guid.Empty here, so the fallback bakes an all-zero GUID into the
+                    // description. Leaving it null lets the retroactive pass above fill it once the name
+                    // has flowed and the real id exists; that pass only fills blanks, so a zero GUID
+                    // written here would survive it and reach the causality view as the Identity's name.
+                    var mvoDescription = ObjectNaming.FirstPresent(mvo.Name);
 
                     // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
                     // Joined/AttributeFlow roots have no single attributable rule here.
@@ -1630,7 +1832,7 @@ public abstract class SyncTaskProcessorBase
                     if (peCsId > 0 && provisionedByCs.TryGetValue(peCsId, out var provisionedParent))
                     {
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: provisionedParent.TargetEntityDescription,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1642,7 +1844,7 @@ public abstract class SyncTaskProcessorBase
                         csNameLookup.TryGetValue(peCsId, out var peCsName);
                         peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1653,7 +1855,7 @@ public abstract class SyncTaskProcessorBase
                         csNameLookup.TryGetValue(peCsId, out var peCsName);
                         peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            SyncOutcomeTypes.ForPendingExport(pendingExport),
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
@@ -1682,7 +1884,7 @@ public abstract class SyncTaskProcessorBase
                 foreach (var pe in result.PendingExports)
                 {
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
-                        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                        SyncOutcomeTypes.ForPendingExport(pe),
                         targetEntityId: pe.Id,
                         targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
                         detailCount: pe.AttributeValueChanges.Count,
@@ -2098,8 +2300,13 @@ public abstract class SyncTaskProcessorBase
             managedBytesAtStart / (1024.0 * 1024.0),
             workingSetBytesAtStart / (1024.0 * 1024.0));
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity,
-            $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
+        // The counting window moves to this step's own work. It follows the page loop, whose totals
+        // would otherwise still be showing: the step would report itself complete the moment it
+        // started, for however long it actually took.
+        _activity.ObjectsToProcess = totalCrossPagesToResolve;
+        _activity.ObjectsProcessed = 0;
+
+        await _phases.EnterAsync(RunPhaseKeys.SyncResolveCrossPageReferences);
 
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
         // These RPEIs were created during initial page processing (e.g., Projected, Joined) and
@@ -2167,8 +2374,9 @@ public abstract class SyncTaskProcessorBase
                 .Take(pageSize)
                 .ToList();
 
+            _activity.ObjectsProcessed = resolvedCount;
             await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - loading batch {batchIndex + 1} of {totalBatches}");
+                $"Loading batch {batchIndex + 1} of {totalBatches}");
 
             // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
             var csoIds = batch.Select(x => x.CsoId).ToList();
@@ -2267,7 +2475,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                                         ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                        targetEntityDescription: mvo.DisplayName,
+                                        targetEntityDescription: mvo.NameOrId,
                                         detailCount: rpei.AttributeFlowCount);
                                 }
                             }
@@ -2401,8 +2609,8 @@ public abstract class SyncTaskProcessorBase
             _syncRepo.SetAutoDetectChangesEnabled(false);
             try
             {
-                await _syncRepo.UpdateActivityMessageAsync(_activity,
-                    $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
+                _activity.ObjectsProcessed = resolvedCount;
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
 
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
                 // subsequent SaveChangesAsync calls (same pattern as per-page processing).
@@ -2716,6 +2924,17 @@ public abstract class SyncTaskProcessorBase
             if (flaggedIds.Count == 0)
                 break;
 
+            // Entered here rather than above the loop so a run with nothing flagged records the step
+            // skipped instead of entered-and-instantly-finished. The flagged set drains rather than
+            // being counted up front, so the counting window is left open-ended: the readout reports
+            // how many objects have been reviewed and runs its bar indeterminate.
+            if (totalProcessed == 0)
+            {
+                _activity.ObjectsToProcess = 0;
+                _activity.ObjectsProcessed = 0;
+                await _phases.EnterAsync(RunPhaseKeys.SyncReviewExportScope);
+            }
+
             var mvos = await _syncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(flaggedIds);
             foreach (var mvo in mvos)
             {
@@ -2746,6 +2965,7 @@ public abstract class SyncTaskProcessorBase
 
             _syncRepo.ClearChangeTracker();
             totalProcessed += mvos.Count;
+            _activity.ObjectsProcessed = totalProcessed;
 
             // Fewer than a full batch means the flagged set is drained.
             if (flaggedIds.Count < batchSize)
@@ -2933,10 +3153,14 @@ public abstract class SyncTaskProcessorBase
         var deletionsToProcess = new List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)>();
         foreach (var (mvo, finalAttributeValues) in _pendingMvoDeletions)
         {
-            if (mvo.ConnectedSystemObjects.Any(cso =>
+            // The reconnect only rescues the MVO when it would cancel the scheduled deletion under the
+            // configured trigger mode semantics (#119): a rejoin that does not undo the triggering
+            // disconnection must not stop the queued deletion.
+            var reconnectedCso = mvo.ConnectedSystemObjects.FirstOrDefault(cso =>
                 cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
                 cso.ConnectedSystemId == _connectedSystem.Id &&
-                cso.Status != ConnectedSystemObjectStatus.Obsolete))
+                cso.Status != ConnectedSystemObjectStatus.Obsolete);
+            if (reconnectedCso != null && _syncEngine.ShouldCancelScheduledDeletion(mvo, reconnectedCso.ConnectedSystemId))
             {
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Skipping deletion of MVO {MvoId} - it was reconnected during this page " +
@@ -2946,10 +3170,7 @@ public abstract class SyncTaskProcessorBase
                         cso.ConnectedSystemId == _connectedSystem.Id));
 
                 // Clear any deletion markers set during Pass 1
-                mvo.LastConnectorDisconnectedDate = null;
-                mvo.DeletionInitiatedByType = ActivityInitiatorType.NotSet;
-                mvo.DeletionInitiatedById = null;
-                mvo.DeletionInitiatedByName = null;
+                ClearMvoDeletionMarkers(mvo);
                 continue;
             }
 
@@ -2966,6 +3187,23 @@ public abstract class SyncTaskProcessorBase
         {
             referenceRecallContext = await _syncServer.CaptureReferenceRecallContextAsync(
                 deletionsToProcess.Select(d => d.Mvo.Id).ToList());
+        }
+
+        // Deletion cascade (#1044): the delete Pending Exports staged for the deleted objects' remaining
+        // Connected System Objects, captured so each can be reported on the Activity below. Keyed by Pending
+        // Export id because the bulk path and the per-object fallback can both contribute: the fallback
+        // re-evaluates objects the failed bulk attempt already evaluated, and reuses the very same Delete
+        // Pending Export rows, so keying by id reports each exactly once. The map from target CSO to its
+        // owning Metaverse Object is built BEFORE deletion, while the join is still intact, so each execution
+        // item can name the identity being deprovisioned.
+        var deletePendingExports = new Dictionary<Guid, PendingExport>();
+        var deletionCandidatesByCsoId = new Dictionary<Guid, MetaverseObject>();
+        var deletionCandidatesByMvoId = new Dictionary<Guid, MetaverseObject>();
+        foreach (var (mvo, _) in deletionsToProcess)
+        {
+            deletionCandidatesByMvoId[mvo.Id] = mvo;
+            foreach (var cso in mvo.ConnectedSystemObjects)
+                deletionCandidatesByCsoId[cso.Id] = mvo;
         }
 
         var deletedMvoIds = new List<Guid>();
@@ -2986,6 +3224,9 @@ public abstract class SyncTaskProcessorBase
                         deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache);
                     if (deleteExports.Count > 0)
                     {
+                        foreach (var deleteExport in deleteExports)
+                            deletePendingExports[deleteExport.Id] = deleteExport;
+
                         Log.Information(
                             "FlushPendingMvoDeletionsAsync: Ensured {Count} delete Pending Exports across {MvoCount} MVOs",
                             deleteExports.Count, deletionsToProcess.Count);
@@ -3018,8 +3259,20 @@ public abstract class SyncTaskProcessorBase
             Log.Warning(ex,
                 "FlushPendingMvoDeletionsAsync: Bulk deletion of {Count} MVO(s) failed; falling back to per-MVO deletion for error isolation",
                 deletionsToProcess.Count);
-            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess));
+
+            // The bulk attempt's staged Pending Exports are kept, not discarded: when the bulk evaluation
+            // succeeded and only the delete failed, its CSO disconnects are already persisted, so the
+            // fallback's re-evaluation finds no joined CSOs and returns nothing. Anything the fallback does
+            // stage is merged over the top, deduplicated by Pending Export id.
+            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess, deletePendingExports));
         }
+
+        // Deletion cascade (#1044): fold the staged delete Pending Exports into Activity reporting, so the
+        // accounts a run is about to deprovision are countable and filterable on the Activity rather than
+        // visible only in the service log. Emitted per flush (not deferred like the recall RPEIs): a target
+        // Connected System Object belongs to exactly one Metaverse Object, which is deleted exactly once, so
+        // the same Pending Export cannot be re-staged on a later page.
+        await ReportDeletionCascadeExportsAsync(deletePendingExports, deletionCandidatesByCsoId, deletionCandidatesByMvoId);
 
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
@@ -3065,6 +3318,135 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Reports the deletion-cascade delete Pending Exports staged by <see cref="FlushPendingMvoDeletionsAsync"/>
+    /// on the run's Activity (#1044), as consequences of the deletion that caused them: each staged (or reused)
+    /// delete Pending Export becomes a PendingExportCreated child of the MvoDeleted outcome on the Run Profile
+    /// Execution Item of the Connected System Object whose disconnection triggered the deletion. The Causality
+    /// Tree then reads as the whole story of a leaver: Disconnected, CSO Deleted, MVO Deleted, and one Pending
+    /// Export per downstream account being deprovisioned. Deprovisioning is the most consequential thing a run
+    /// stages, so it must never be visible only in the service log (Synchronisation Integrity: all outcomes
+    /// reported via RPEIs/Activities); an export with no MvoDeleted outcome to hang off (outcome tracking off,
+    /// or a deletion path that recorded none) falls back to a standalone Pending Export item rather than going
+    /// unreported.
+    /// </summary>
+    /// <param name="deletePendingExports">The delete Pending Exports ensured for the deleted objects' Connected
+    /// System Objects.</param>
+    /// <param name="deletionCandidatesByCsoId">Target Connected System Object id to the Metaverse Object it was
+    /// joined to, captured before deletion broke the join.</param>
+    /// <param name="deletionCandidatesByMvoId">Deleted Metaverse Objects by id, the fallback lookup for a Pending
+    /// Export whose target Connected System Object was not in the in-memory join collection.</param>
+    private async Task ReportDeletionCascadeExportsAsync(
+        Dictionary<Guid, PendingExport> deletePendingExports,
+        Dictionary<Guid, MetaverseObject> deletionCandidatesByCsoId,
+        Dictionary<Guid, MetaverseObject> deletionCandidatesByMvoId)
+    {
+        // Pair each reportable Pending Export with its target Connected System Object id up front, so the
+        // nullable id is dereferenced exactly once (null-state does not flow through Where).
+        var reportableExports = deletePendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+            .Select(pe => (PendingExport: pe, ConnectedSystemObjectId: pe.ConnectedSystemObjectId!.Value))
+            .ToList();
+        if (reportableExports.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("MvoDeletionReportCascadeExports");
+        span.SetTag("deleteExportCount", reportableExports.Count);
+
+        // The MvoDeleted outcome nodes recorded for this page's deletions, keyed by the Metaverse Object each
+        // one deleted. Both deletion-triggering paths (obsoletion and out-of-scope disconnection) record one,
+        // and this page's items have not been flushed yet, so the nodes are still in memory to parent onto.
+        var mvoDeletedNodes = new Dictionary<Guid, (ActivityRunProfileExecutionItem Rpei, ActivityRunProfileExecutionItemSyncOutcome Outcome)>();
+        foreach (var rpei in _activity.RunProfileExecutionItems)
+        {
+            foreach (var outcome in rpei.SyncOutcomes.Where(o =>
+                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted && o.TargetEntityId.HasValue))
+            {
+                mvoDeletedNodes[outcome.TargetEntityId!.Value] = (rpei, outcome);
+            }
+        }
+
+        // Connected System id to name, so each outcome names the system the account is being deleted from
+        // (the convention for every PendingExportCreated outcome; the identity is named by the parent node).
+        // Built from the recall cache, whose export rules span every target system.
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
+            ?? new Dictionary<int, string>();
+
+        // Only needed for the standalone fallback items, which must stay self-describing once the target
+        // Connected System Object is obsoleted and cleaned up. One Summary-tier lookup covers them all.
+        Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>? csoSnapshots = null;
+        var nestedCount = 0;
+        var standaloneCount = 0;
+
+        foreach (var (pendingExport, csoId) in reportableExports)
+        {
+            // The Pending Export's own SourceMetaverseObjectId is not a reliable attribution here: a reused
+            // Delete Pending Export from an earlier run carries the id it was created with, which the SET NULL
+            // delete cascade already cleared. Resolve through the target Connected System Object first.
+            if (!deletionCandidatesByCsoId.TryGetValue(csoId, out var deletedMvo)
+                && pendingExport.SourceMetaverseObjectId.HasValue)
+            {
+                deletionCandidatesByMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out deletedMvo);
+            }
+
+            csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
+
+            if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
+            {
+                var nestedOutcome = SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
+                    targetEntityId: pendingExport.Id,
+                    targetEntityDescription: targetCsName,
+                    detailCount: pendingExport.AttributeValueChanges.Count,
+                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
+                nestedCount++;
+                continue;
+            }
+
+            csoSnapshots ??= await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(
+                reportableExports.Select(e => e.ConnectedSystemObjectId).ToList());
+            csoSnapshots.TryGetValue(csoId, out var snapshot);
+
+            var cascadeRpei = new ActivityRunProfileExecutionItem
+            {
+                Id = Guid.NewGuid(),
+                ObjectChangeType = ObjectChangeType.PendingExport,
+                ConnectedSystemObjectId = csoId,
+                PendingExportId = pendingExport.Id,
+                DisplayNameSnapshot = deletedMvo?.Name,
+                ExternalIdSnapshot = snapshot?.ExternalId,
+                ObjectTypeSnapshot = snapshot?.TypeName
+            };
+
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                var cascadeOutcome = SyncOutcomeBuilder.AddRootOutcome(cascadeRpei,
+                    SyncOutcomeTypes.ForPendingExport(pendingExport),
+                    targetEntityId: pendingExport.Id,
+                    targetEntityDescription: targetCsName,
+                    detailCount: pendingExport.AttributeValueChanges.Count,
+                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
+            }
+
+            _activity.RunProfileExecutionItems.Add(cascadeRpei);
+            standaloneCount++;
+        }
+
+        Log.Information(
+            "FlushPendingMvoDeletionsAsync: Reported {Count} deletion-cascade delete Pending Export(s) on the Activity " +
+            "across {SystemCount} Connected System(s): {NestedCount} nested under their MVO deletion, " +
+            "{StandaloneCount} as standalone execution items",
+            reportableExports.Count, reportableExports.Select(e => e.PendingExport.ConnectedSystemId).Distinct().Count(),
+            nestedCount, standaloneCount);
+        span.SetSuccess();
+    }
+
+    /// <summary>
     /// Records the final staged reference-recall Pending Export for a referencing target Connected System
     /// Object, to be emitted as a single RPEI at end of run by <see cref="FlushDeferredRecallRpeisAsync"/>.
     /// Last write wins per CSO: the latest flush's Pending Export already carries every prior page's
@@ -3100,6 +3482,18 @@ public abstract class SyncTaskProcessorBase
         // collections materialised, so it is cheap even for large-membership group CSOs).
         var csoSnapshots = await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(_deferredRecallRpeisByCsoId.Keys.ToList());
 
+        // Build CS ID -> name lookup once for this flush (same in-memory pattern as the Detailed-mode
+        // Pending Export outcomes above): no database round trip, since _recallExportEvaluationCache's
+        // export rules are already loaded for the whole run and cover every target Connected System, not
+        // just the currently-syncing _connectedSystem (a recall Pending Export can target ANY system that
+        // has an export rule referencing the deleted object, not only the one this sync run is processing).
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
+            ?? new Dictionary<int, string>();
+
         foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
         {
             csoSnapshots.TryGetValue(csoId, out var snapshot);
@@ -3116,10 +3510,15 @@ public abstract class SyncTaskProcessorBase
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
+                // TargetEntityDescription on a PendingExportCreated outcome is contractually the TARGET
+                // Connected System's name (matching every other PendingExportCreated call site), not the
+                // referencing object's own display name (DisplayNameSnapshot is that; kept above for its
+                // own, unrelated purpose of identifying the referencing CSO after it is later deleted).
+                csNameLookup.TryGetValue(stagedPendingExport.ConnectedSystemId, out var targetSystemName);
                 var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
-                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    SyncOutcomeTypes.ForPendingExport(stagedPendingExport),
                     targetEntityId: stagedPendingExport.Id,
-                    targetEntityDescription: recallRpei.DisplayNameSnapshot,
+                    targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
                     detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
@@ -3139,8 +3538,14 @@ public abstract class SyncTaskProcessorBase
     /// pre-#993 behaviour. A failed object is marked with <c>LastConnectorDisconnectedDate</c> so
     /// housekeeping retries it. Returns the IDs of the MVOs that were actually deleted.
     /// </summary>
+    /// <param name="deletionsToProcess">The deletion candidates and their pre-recall attribute value snapshots.</param>
+    /// <param name="deletePendingExports">Collects the delete Pending Exports this path ensures, keyed by Pending
+    /// Export id, so the caller can report them on the Activity (#1044). A Pending Export ensured for an object
+    /// whose deletion then failed is still collected: the export is staged and pending, so an administrator must
+    /// see it.</param>
     private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
-        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess)
+        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess,
+        Dictionary<Guid, PendingExport> deletePendingExports)
     {
         var deletedMvoIds = new List<Guid>();
         foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
@@ -3153,6 +3558,9 @@ public abstract class SyncTaskProcessorBase
                 var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo, _recallExportEvaluationCache);
                 if (deleteExports.Count > 0)
                 {
+                    foreach (var deleteExport in deleteExports)
+                        deletePendingExports[deleteExport.Id] = deleteExport;
+
                     Log.Information(
                         "ProcessMvoDeletionsIndividuallyAsync: Created {Count} delete Pending Exports for MVO {MvoId}",
                         deleteExports.Count, mvo.Id);
@@ -3414,11 +3822,22 @@ public abstract class SyncTaskProcessorBase
         _pendingCsoJoinUpdates.Add(connectedSystemObject);
         mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
-        // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
+        // If the MVO was marked for deletion (reconnection scenario), cancel the scheduled deletion only
+        // when the rejoin falsifies the trigger condition under the configured mode semantics (#119): a
+        // system whose rejoin does not undo the triggering disconnection must not rescue the object.
         if (mvo.LastConnectorDisconnectedDate.HasValue)
         {
-            Log.Information($"EstablishJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
-            mvo.LastConnectorDisconnectedDate = null;
+            if (_syncEngine.ShouldCancelScheduledDeletion(mvo, connectedSystemObject.ConnectedSystemId))
+            {
+                Log.Information("EstablishJoinAsync: Clearing deletion markers for MVO {MvoId} as system {SystemId} has reconnected and the trigger condition no longer holds.",
+                    mvo.Id, connectedSystemObject.ConnectedSystemId);
+                ClearMvoDeletionMarkers(mvo);
+            }
+            else
+            {
+                Log.Information("EstablishJoinAsync: MVO {MvoId} remains scheduled for deletion; system {SystemId} reconnecting does not cancel it under the configured trigger mode (triggered by system {TriggeringSystemId}).",
+                    mvo.Id, connectedSystemObject.ConnectedSystemId, mvo.DeletionTriggeredBySystemId);
+            }
         }
 
         Log.Debug("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
@@ -3583,6 +4002,12 @@ public abstract class SyncTaskProcessorBase
             _activity.InitiatedById,
             _activity.InitiatedByName,
             resolvedReferences);
+
+        // Deletion-cascade and reference-recall Pending Exports are created with the Connected System
+        // Object FK only (never the navigation property), so the builder cannot infer the object the
+        // change belongs to. Carry the FK across, matching the housekeeping Activity's folding, or the
+        // Causality Tree's attribute detail would be orphaned from its object.
+        change.ConnectedSystemObjectId ??= pendingExport.ConnectedSystemObjectId;
 
         outcome.ConnectedSystemObjectChange = change;
     }
@@ -3938,18 +4363,20 @@ public abstract class SyncTaskProcessorBase
                 // Snapshot the MVO's display name BEFORE attribute recall and deletion, so the sync
                 // outcome nodes built later (after the join is broken and possibly after the MVO is
                 // deleted) can still describe the affected Metaverse Object (#1086).
-                var mvoDisplayName = mvo.DisplayName;
+                var mvoDisplayName = mvo.NameOrId;
 
-                // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
-                // Then subtract 1 to exclude this CSO which is about to be disconnected.
-                var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-                var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
+                // Query the joined Connected System ids BEFORE breaking the join so the list includes all
+                // current connectors, then exclude ONE occurrence of this CSO's system id (the CSO about
+                // to be disconnected). A second CSO joined from the same system must remain in the list;
+                // this mirrors the previous count-minus-one logic exactly.
+                var remainingConnectedSystemIds = await _syncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
+                remainingConnectedSystemIds.Remove(_connectedSystem.Id);
 
                 // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
                 // If the MVO will be deleted immediately, attribute recall is nugatory work —
                 // the attributes, MVO update, and export evaluations would all be discarded
                 // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
-                var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+                var (mvoDeletionDecision, mvoDeletionPolicySnapshotJson) = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingConnectedSystemIds);
                 var mvoDeletionFate = mvoDeletionDecision.Fate;
 
                 // Check if we should remove contributed attributes based on the object type setting.
@@ -4055,7 +4482,11 @@ public abstract class SyncTaskProcessorBase
                     disconnectedMvoId: mvoId,
                     disconnectedMvoDisplayName: mvoDisplayName,
                     mvoDeletionReason: mvoDeletionFate != MvoDeletionFate.NotDeleted ? mvoDeletionDecision.Reason : null,
-                    mvoDeletionGracePeriod: mvoDeletionDecision.GracePeriod);
+                    mvoDeletionGracePeriod: mvoDeletionDecision.GracePeriod,
+                    mvoDeletionPolicySnapshotJson: mvoDeletionPolicySnapshotJson,
+                    // The MVO has been marked by this point, so its computed due date is the
+                    // decision-time value the outcome node should state (#119).
+                    mvoDeletionEligibleDate: mvo.DeletionEligibleDate);
         }
     }
 
