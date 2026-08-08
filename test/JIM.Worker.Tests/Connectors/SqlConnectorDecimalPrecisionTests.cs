@@ -186,8 +186,9 @@ public class SqlConnectorDecimalPrecisionTests
 
     #region A number beyond what a decimal can hold
 
-    [TestCase(true, TestName = "ImportAsync_ANumberWiderThanADecimal_AsOracleReportsIt_FailsNamingTheObjectTypeTheColumnAndTheLimit")]
-    [TestCase(false, TestName = "ImportAsync_ANumberWiderThanADecimal_AsSqlServerReportsIt_FailsNamingTheObjectTypeTheColumnAndTheLimit")]
+    /// <param name="asOracleReportsIt">Which driver's refusal to stand in for. The two dialects report the same problem as different exception types, and both have to end up as the same error.</param>
+    [TestCase(true)]
+    [TestCase(false)]
     public void ImportAsync_ANumberWiderThanADecimalCanHold_FailsNamingTheObjectTypeTheColumnAndTheLimit(bool asOracleReportsIt)
     {
         // Oracle's NUMBER holds 38 significant digits and Microsoft SQL Server's decimal 38; a CLR
