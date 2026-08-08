@@ -245,14 +245,13 @@
 
     private void AddRows(IEnumerable<ConnectedSystemContainer> containers, int depth)
     {
-        // Ordered by name so the tree reads predictably; the hierarchy's own order is an artefact of discovery.
-        foreach (var container in containers.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        // A Container is shown when it matches the filter or when something beneath it does, so a match is never
+        // orphaned from the branch that explains where it sits. Ordered by name so the tree reads predictably; the
+        // hierarchy's own order is an artefact of discovery.
+        foreach (var container in containers
+                     .Where(c => ContainerSelectionEditor.MatchesFilter(c, _appliedFilter))
+                     .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
-            // A Container is shown when it matches the filter or when something beneath it does, so a match is
-            // never orphaned from the branch that explains where it sits.
-            if (!ContainerSelectionEditor.MatchesFilter(container, _appliedFilter))
-                continue;
-
             _visibleRows.Add(new Row(container, depth));
 
             if (container.ChildContainers.Count > 0 && IsExpanded(container))

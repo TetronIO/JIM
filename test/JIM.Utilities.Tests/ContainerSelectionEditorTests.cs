@@ -14,7 +14,7 @@ namespace JIM.Utilities.Tests;
 [TestFixture]
 public class ContainerSelectionEditorTests
 {
-    private static int _nextId;
+    private int _nextId;
 
     [SetUp]
     public void SetUp() => _nextId = 1;
@@ -312,7 +312,7 @@ public class ContainerSelectionEditorTests
 
     #region Helpers
 
-    private static ConnectedSystemContainer Container(
+    private ConnectedSystemContainer Container(
         string name,
         bool selected = false,
         ConnectedSystemContainerScope scope = ConnectedSystemContainerScope.Subtree,
@@ -333,7 +333,7 @@ public class ContainerSelectionEditorTests
         return container;
     }
 
-    private static ConnectedSystemPartition PartitionWith(params ConnectedSystemContainer[] rootContainers)
+    private ConnectedSystemPartition PartitionWith(params ConnectedSystemContainer[] rootContainers)
     {
         var partition = new ConnectedSystemPartition
         {

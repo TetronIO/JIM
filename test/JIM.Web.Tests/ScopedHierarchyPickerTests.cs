@@ -21,7 +21,7 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class ScopedHierarchyPickerTests : JimComponentTestContext
 {
-    private static int _nextId;
+    private int _nextId;
 
     [SetUp]
     public void SetUp() => _nextId = 1;
@@ -178,7 +178,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
             .Add(c => c.Partition, partition)
             .Add(c => c.OnChanged, () => onChanged?.Invoke()));
 
-    private static ConnectedSystemContainer Container(
+    private ConnectedSystemContainer Container(
         string name,
         string externalId,
         bool selected = false,
@@ -198,7 +198,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
         return container;
     }
 
-    private static ConnectedSystemPartition PartitionWith(params ConnectedSystemContainer[] rootContainers)
+    private ConnectedSystemPartition PartitionWith(params ConnectedSystemContainer[] rootContainers)
     {
         var partition = new ConnectedSystemPartition
         {
