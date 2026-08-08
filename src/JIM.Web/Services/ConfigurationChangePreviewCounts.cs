@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Preview;
+using System.Diagnostics.CodeAnalysis;
 using JIM.Web.Models;
 
 namespace JIM.Web.Services;
@@ -27,11 +28,8 @@ public static class ConfigurationChangePreviewCounts
     /// </param>
     public static IReadOnlyList<ImpactCount> ForConfirmation(ConfigurationChangePreview? preview, bool isStale)
     {
-        if (isStale ||
-            preview is not { HasFailed: false, ImpactCountsStatus: ConfigurationChangePreviewStageStatus.Complete })
-        {
+        if (!MayState(preview, isStale))
             return [];
-        }
 
         var counts = preview.ReadImpactCounts();
         if (counts.Count == 0)
@@ -56,4 +54,25 @@ public static class ConfigurationChangePreviewCounts
                 })
         ];
     }
+
+    /// <summary>
+    /// The same answer as a sentence, for a confirmation that leads with what the change would do rather than
+    /// tabulating it (#1275). Null where <see cref="ForConfirmation"/> would state nothing, and null where the
+    /// preview found nothing: a confirmation that already lists the properties changing does not need a line saying
+    /// no objects move, and the reassurance is better placed on the preview panel the administrator just read.
+    /// </summary>
+    public static PreviewVerdict? ForConfirmationVerdict(ConfigurationChangePreview? preview, bool isStale) =>
+        MayState(preview, isStale)
+            ? ConfigurationChangePreviewVerdict.Describe(preview.ReadImpactCounts())
+            : null;
+
+    /// <summary>
+    /// Whether a preview is entitled to say anything at all on a save confirmation. A preview that failed has
+    /// evaluated an arbitrary subset of the population, one still counting has no answer yet, and one run against
+    /// settings the administrator has since edited describes a different change; none of those is something to
+    /// hedge on screen, so all three say nothing.
+    /// </summary>
+    private static bool MayState([NotNullWhen(true)] ConfigurationChangePreview? preview, bool isStale) =>
+        !isStale &&
+        preview is { HasFailed: false, ImpactCountsStatus: ConfigurationChangePreviewStageStatus.Complete };
 }
