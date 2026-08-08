@@ -2952,6 +2952,8 @@ html[lang] .jim-schema-change-table td {
 
 .jim-run-metric-value {
     font-variant-numeric: tabular-nums;
+}
+
 /* ─── Set Password dialog (#1121, #1172) ───
    The fan-out across several Connected Systems is reported the same way a Run Profile execution is: a rail of
    markers with a filling line between them. It is not the same component (a password set is not an Activity,
@@ -3229,6 +3231,7 @@ html[lang] .jim-password-guidance .mud-alert-position {
    specificity; qualifying the selector with the wrapper's class is what makes the offset stick. */
 .jim-password-account-control.mud-input-control {
     margin-top: -0.375rem;
+}
 
 /* Count chip inside a navigation button (the Connector Space and Pending Exports actions on a
    Connected System). Sits inside the button label rather than as a MudBadge corner overlay, so the
@@ -3256,15 +3259,228 @@ html[lang] .jim-password-guidance .mud-alert-position {
     color: var(--mud-palette-warning);
 }
 
-/* The Container Scope chip on the Partitions & Containers tab is a control, not a badge: selecting it switches the
-   Container between Whole subtree and This level only. Left as a plain chip it reads as a passive label, so it
-   carries the pointer and the hover treatment of something you can act on. Qualified with .mud-chip because
-   MudBlazor's own chip rules load after site.css and win every tie on specificity. */
-.jim-container-scope.mud-chip {
-    cursor: pointer;
+/* ─── Scoped hierarchy picker ────────────────────────────────────────────────────────────────
+   The Container tree on a Connected System's Partitions & Containers tab. Rows are a grid rather
+   than free-flowing inline content so the checkbox, name, scope control and metadata line up in
+   columns down the tree, and so a row costs ~32px instead of ~56px: a directory with a couple of
+   hundred OUs has to be navigable, not just renderable.
+
+   The depth indent is driven by --jim-picker-depth, set per row as an inline custom property, so
+   nesting needs no per-level class. The token lives on :root because more than one rule below
+   depends on it (a token declared on the component's own selector resolves to nothing anywhere
+   else, which has bitten this codebase before). */
+:root {
+    --jim-picker-indent: 1.25rem;
+    --jim-picker-depth: 0;
 }
 
-.jim-container-scope.mud-chip:hover {
+.jim-picker {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.jim-picker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--mud-palette-divider-light);
+    background-color: var(--mud-palette-background-grey);
+}
+
+.jim-picker-filter {
+    flex: 1 1 14rem;
+    min-width: 9rem;
+}
+
+.jim-picker-count {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.jim-picker-count strong {
+    color: var(--mud-palette-text-primary);
+    font-weight: 600;
+}
+
+.jim-picker-empty {
+    padding: 1.25rem 0.75rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-picker-rows {
+    padding: 0.125rem 0;
+    max-height: 32rem;
+    overflow-y: auto;
+}
+
+.jim-picker-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2rem;
+    padding: 0.125rem 0.75rem 0.125rem calc(0.25rem + (var(--jim-picker-depth) * var(--jim-picker-indent)));
+}
+
+.jim-picker-row + .jim-picker-row {
+    border-top: 1px solid var(--mud-palette-divider-light);
+}
+
+.jim-picker-row:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+.jim-picker-row-selected {
+    background-color: var(--mud-palette-primary-hover);
+}
+
+/* A Container a selected ancestor already covers: still readable, plainly not actionable. */
+.jim-picker-row-covered .jim-picker-name,
+.jim-picker-row-covered .jim-picker-meta {
+    opacity: 0.6;
+}
+
+/* Reserves the expander column on rows without children, so every name starts at the same x. */
+.jim-picker-expander {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    flex: none;
+}
+
+.jim-picker-name {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+/* Fixed widths on the two trailing columns. Each row is its own grid, so without them every row
+   sizes its own columns and the scope controls stagger down the tree instead of forming a column. */
+.jim-picker-meta {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 6.5rem;
+    text-align: right;
+}
+
+.jim-picker-scope {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 11rem;
+}
+
+/* The two-segment scope control. Both states stay visible: scope decides what the next import
+   returns, so which one is active must be readable without hovering anything. Deliberately below
+   the site-wide "default sizes" rule (JIM.Web/CLAUDE.md > UI element sizing): at default size the
+   pair dominated the row it annotates, and it sits on a ~32px row by design. */
+.jim-picker-seg .mud-button-root {
+    padding: 0 0.4rem;
+    min-width: 0;
+    font-size: 0.65rem;
+    line-height: 1.15rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+html[lang] .jim-picker-seg .jim-picker-seg-on {
+    background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
     border-color: var(--mud-palette-primary);
+}
+
+html[lang] .jim-picker-seg .jim-picker-seg-off {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* ─── Scope selection: summary, guidance strip and action bar ────────────────────────────────
+   The Partitions & Containers tab's page furniture around the picker above. The summary answers
+   "what does this system import?" before anything explains how to change it; the hint strip
+   demotes the hierarchy-refresh guidance from a permanent alert to a line carrying the fact that
+   is actually useful (when it was last retrieved), with the caveat behind a disclosure. */
+.jim-scope-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    padding: 0 0 0.25rem;
+}
+
+.jim-scope-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.0625rem;
+}
+
+.jim-scope-stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-scope-stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-scope-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    background-color: var(--mud-palette-background-grey);
+    border: 1px solid var(--mud-palette-divider-light);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.jim-scope-partition-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 1rem;
+}
+
+.jim-scope-partition-name {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.jim-scope-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.jim-scope-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex: 1 1 auto;
+    font-size: 0.8125rem;
     color: var(--mud-palette-primary);
+}
+
+.jim-scope-pending-clean {
+    color: var(--mud-palette-text-secondary);
 }

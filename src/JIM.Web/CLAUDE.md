@@ -25,6 +25,20 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
+| `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
+
+## Choosing Containers
+
+**A control for picking Containers out of a hierarchy is `<ScopedHierarchyPicker />`.** It renders one partition's Containers with the filter, the selection count, the Clear action, the tick boxes and the Container Scope control, and edits the partition's graph in place, raising `OnChanged` so the host can refresh its summary, its pending-changes state and its stale-preview notice.
+
+Four rules are baked into it rather than left to each call site, because each has a failure mode that is invisible until a customer hits it:
+
+- **The Container's own name leads the row; its Distinguished Name is a tooltip.** Printing the full DN on every row restates the ancestry the indentation already draws and buries the one component that tells two Containers apart. (What made this possible is a Connector fix: discovered Containers used to be *named* after their whole DN on every directory except Active Directory.)
+- **Rows are ~32px and there is a filter.** A directory with a couple of hundred OUs has to be navigable, not merely renderable.
+- **A hierarchy above `AutoExpandThreshold` Containers opens only as far as its selections.** Small hierarchies still open fully, which is what they have always done; expanding a large one on arrival is a wall to scroll. Expansion is seeded once, so a branch the administrator collapses stays collapsed.
+- **A Container that cannot be ticked says why** ("Covered by ou=People") rather than being greyed out with no explanation.
+
+The selection rules themselves are **not** in the component: `ContainerSelectionEditor` (JIM.Utilities) owns the cascade down a branch, the roll-up to a parent, the partition auto-selection, the filter predicate and the coverage recalculation, and is unit-tested there. They decide what a Full Import returns, so they must be testable without rendering anything. Coverage in particular is `ConnectedSystemUtilities.ApplyContainerInclusion`'s, shared with the import's own search-root resolution, so the tree can never show one scope while the import performs another.
 
 ## Form action gating and input immediacy
 
