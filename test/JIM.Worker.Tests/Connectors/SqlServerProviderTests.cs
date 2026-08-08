@@ -549,6 +549,39 @@ public class SqlServerProviderTests
 
     #endregion
 
+    #region Driver values
+
+    /// <summary>
+    /// SqlClient materialises an output parameter as a CLR value, so this dialect has nothing to unwrap
+    /// and must change nothing about what it was handed.
+    /// </summary>
+    [Test]
+    public void ConvertFromDriverValue_AValueSqlClientReturned_IsHandedBackUnchanged()
+    {
+        var identifier = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_provider.ConvertFromDriverValue(4711), Is.EqualTo(4711));
+            Assert.That(_provider.ConvertFromDriverValue(4711m), Is.EqualTo(4711m));
+            Assert.That(_provider.ConvertFromDriverValue("EMP-4711"), Is.EqualTo("EMP-4711"));
+            Assert.That(_provider.ConvertFromDriverValue(identifier), Is.EqualTo(identifier));
+        }
+    }
+
+    [Test]
+    public void ConvertFromDriverValue_NothingAtAll_IsNull()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_provider.ConvertFromDriverValue(null), Is.Null);
+            Assert.That(_provider.ConvertFromDriverValue(DBNull.Value), Is.Null,
+                "DBNull is how ADO.NET states SQL NULL, and it is not a value any anchor could be composed from.");
+        }
+    }
+
+    #endregion
+
     #region Schema catalogue queries
 
     [Test]

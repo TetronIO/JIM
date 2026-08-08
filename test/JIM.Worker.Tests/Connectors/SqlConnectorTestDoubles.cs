@@ -251,20 +251,22 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     }
 
     /// <summary>
-    /// The byte order of the dialect this stand-in is speaking, delegated to that dialect's own
-    /// provider rather than reimplemented here. GUID byte order is the one value conversion a database
-    /// server genuinely differs on, and a stand-in that passed bytes through unchanged would let a test
-    /// assert a round trip that no real driver performs.
+    /// The value conversions of the dialect this stand-in is speaking, delegated to that dialect's own
+    /// provider rather than reimplemented here. GUID byte order and the driver's own value types are
+    /// the two things a database server genuinely differs on, and a stand-in that passed either through
+    /// unchanged would let a test assert a round trip that no real driver performs.
     /// </summary>
-    private static readonly SqlServerProvider SqlServerByteOrder = new();
+    private static readonly SqlServerProvider SqlServerValues = new();
 
-    private static readonly OracleProvider OracleByteOrder = new();
+    private static readonly OracleProvider OracleValues = new();
 
-    private ISqlProvider ByteOrder => DialectUnderTest == SqlDatabaseType.Oracle ? OracleByteOrder : SqlServerByteOrder;
+    private ISqlProvider Values => DialectUnderTest == SqlDatabaseType.Oracle ? OracleValues : SqlServerValues;
 
-    public override Guid ConvertToGuid(object value) => ByteOrder.ConvertToGuid(value);
+    public override object? ConvertFromDriverValue(object? value) => Values.ConvertFromDriverValue(value);
 
-    public override object ConvertFromGuid(Guid value) => ByteOrder.ConvertFromGuid(value);
+    public override Guid ConvertToGuid(object value) => Values.ConvertToGuid(value);
+
+    public override object ConvertFromGuid(Guid value) => Values.ConvertFromGuid(value);
 
     // Catalogue queries are the real providers' own SQL, which no stand-in database could answer. These
     // stand in for them as recognisable tokens, so a test can still assert that discovery asked the

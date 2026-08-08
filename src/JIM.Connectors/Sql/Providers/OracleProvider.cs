@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Utilities;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using System.Data;
 using System.Data.Common;
 
@@ -271,6 +272,55 @@ internal class OracleProvider : SqlProviderBase
     #endregion
 
     #region Values
+
+    /// <summary>
+    /// Unwraps ODP.NET's own value types, which is what a bound parameter answers with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ODP.NET never answers <see cref="DbParameter.Value"/> with a CLR primitive: a
+    /// <c>RETURNING ... INTO</c> parameter comes back as an <see cref="OracleDecimal"/>, an
+    /// <see cref="OracleBinary"/> or an <see cref="OracleString"/> according to how it was bound. Only
+    /// the last of those survived being read straight through, and only because
+    /// <see cref="Convert.ToString(object?, IFormatProvider?)"/> falls back to a type's own
+    /// <c>ToString</c>; a sequence-backed <c>NUMBER</c> key, which is the ordinary Oracle case, failed
+    /// every create.
+    /// </para>
+    /// <para>
+    /// <b>The null sentinel is the part that has to be right.</b> Each wrapper states "no value" as a
+    /// null instance of itself rather than as <see cref="DBNull"/>, so an
+    /// <see cref="OracleDecimal"/>.<see cref="OracleDecimal.Null"/> read without this is an ordinary
+    /// boxed struct that passes every emptiness test the Connector makes. Answering null instead is what
+    /// keeps "the database returned no key" the clear failure it already was, rather than a wrong
+    /// external ID composed from a wrapper's <c>ToString</c>.
+    /// </para>
+    /// <para>
+    /// A wrapper this Connector never binds a value as is refused rather than passed on, because passing
+    /// it on is exactly the defect this method exists to fix.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">The driver answered with an ODP.NET type no value this Connector binds is ever returned as.</exception>
+    public override object? ConvertFromDriverValue(object? value)
+    {
+        if (value == null || value == DBNull.Value)
+            return null;
+
+        // Ahead of the type switch, so that every wrapper's null sentinel is answered the same way
+        // whichever type it is an instance of.
+        if (value is INullable { IsNull: true })
+            return null;
+
+        return value switch
+        {
+            OracleDecimal number => number.Value,
+            OracleString text => text.Value,
+            OracleBinary bytes => bytes.Value,
+            INullable => throw new NotSupportedException(
+                $"The Oracle driver returned a generated key as an {value.GetType().Name}, which JIM has no CLR value for. " +
+                "A generated key is bound as an exact numeric, a character string or a RAW, so this is a defect in the JIM SQL Connector rather than anything to correct in the database; report it with the Object Type's anchor column and its type."),
+            _ => value
+        };
+    }
 
     public override Guid ConvertToGuid(object value)
     {

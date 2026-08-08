@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using NUnit.Framework;
+using Oracle.ManagedDataAccess.Types;
 using Serilog;
 using Serilog.Core;
 
@@ -82,6 +83,18 @@ public class SqlConnectorExportTests
         {
           "objectTypes": [
             { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "STAFF_GUID" ] }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// An object type identified by a character column, which is what an Oracle table keyed on a
+    /// <c>VARCHAR2</c> filled by a trigger looks like.
+    /// </summary>
+    private const string TextAnchorDocument = """
+        {
+          "objectTypes": [
+            { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "STAFF_CODE" ] }
           ]
         }
         """;
@@ -832,6 +845,127 @@ public class SqlConnectorExportTests
             Assert.That(results[0].Success, Is.False);
             Assert.That(provider.Transactions.Single().RolledBack, Is.True);
         }
+    }
+
+    #endregion
+
+    #region Oracle driver values
+
+    /// <summary>
+    /// A sequence-backed <c>NUMBER</c> primary key, which is the ordinary way an Oracle table generates
+    /// one. ODP.NET never hands a CLR primitive back through an output parameter, so every create
+    /// against one failed on a cast the driver's own wrapper struct could not satisfy.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_AnOracleNumberKeyReturnedAsAnOracleDecimal_ComposesTheExternalIdAnImportOfTheSameRowWouldCompose()
+    {
+        var provider = OracleGeneratedKeyProvider(new OracleDecimal(4711));
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].ExternalId, Is.EqualTo("4711"),
+                "The driver's own numeric wrapper has to be unwrapped before the external ID is composed, or the object is never findable again.");
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// <c>RAW(16) DEFAULT SYS_GUID()</c>, whose key ODP.NET returns as an <c>OracleBinary</c> rather
+    /// than as the <c>byte[]</c> the same column reads back as through a data reader.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_AnOracleRaw16KeyReturnedAsAnOracleBinary_ComposesTheGuidInOraclesOwnByteOrder()
+    {
+        var identifier = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+        var provider = OracleGeneratedKeyProvider(new OracleBinary(IdentifierParser.ToRfc4122Bytes(identifier)));
+
+        var results = await ExportAsync(provider, GuidAnchorDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].ExternalId, Is.EqualTo(identifier.ToString("D")),
+                "Oracle stores a GUID big-endian, so the unwrapped bytes still have to cross the dialect seam before they are rendered.");
+        }
+    }
+
+    /// <summary>
+    /// A text key, which happened to survive because <see cref="Convert.ToString(object?, IFormatProvider?)"/>
+    /// falls back to a wrapper's own <c>ToString</c>. It is covered so the unwrapping cannot regress it.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_AnOracleTextKeyReturnedAsAnOracleString_ComposesTheExternalIdFromTheTextItHolds()
+    {
+        var provider = OracleGeneratedKeyProvider(new OracleString("EMP-4711"));
+
+        var results = await ExportAsync(provider, TextAnchorDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].ExternalId, Is.EqualTo("EMP-4711"));
+        }
+    }
+
+    /// <summary>
+    /// ODP.NET expresses "no value" with a null sentinel of the wrapper's own type, which is not
+    /// <see cref="DBNull"/>: a null <c>OracleDecimal</c> is a perfectly ordinary boxed struct. Read
+    /// without unwrapping, an <c>OracleString.Null</c> composes an external ID out of the wrapper's
+    /// <c>ToString</c>, which is worse than the failure it should have been.
+    /// </summary>
+    [TestCaseSource(nameof(OracleNullSentinels))]
+    public async Task ExportAsync_AnOracleKeyThatCameBackNull_FailsTheObjectAndRollsItBack(object nullSentinel, string objectTypesDocument, string anchorColumn)
+    {
+        var provider = OracleGeneratedKeyProvider(nullSentinel);
+
+        var results = await ExportAsync(provider, objectTypesDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False, "Nothing would identify the new object, so the create cannot be confirmed.");
+            Assert.That(results[0].ErrorMessage, Does.Contain($"returned no value for its anchor column '{anchorColumn}'"));
+            Assert.That(provider.Transactions.Single().RolledBack, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// The null sentinel of every wrapper this Connector can bind a generated key as, each against the
+    /// kind of anchor column that wrapper actually comes back from.
+    /// </summary>
+    private static IEnumerable<TestCaseData> OracleNullSentinels()
+    {
+        yield return new TestCaseData(OracleDecimal.Null, PersonDocument, "EMPLOYEE_ID").SetArgDisplayNames("OracleDecimal.Null");
+        yield return new TestCaseData(OracleString.Null, TextAnchorDocument, "STAFF_CODE").SetArgDisplayNames("OracleString.Null");
+        yield return new TestCaseData(OracleBinary.Null, GuidAnchorDocument, "STAFF_GUID").SetArgDisplayNames("OracleBinary.Null");
+    }
+
+    /// <summary>
+    /// A stand-in Oracle Database that generates the given key and hands it back the way ODP.NET does:
+    /// through a bound output parameter, as the driver's own wrapper rather than as a CLR value.
+    /// </summary>
+    private static FakeSqlProvider OracleGeneratedKeyProvider(object? generatedKey)
+    {
+        var provider = new FakeSqlProvider
+        {
+            DialectUnderTest = SqlDatabaseType.Oracle,
+            GeneratedKeyRetrievalMode = SqlGeneratedKeyRetrieval.OutputParameter,
+            GeneratedKey = generatedKey
+        };
+
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("STAFF_CODE", "VARCHAR2", MaxLength: 30, IsNullable: false),
+            new FakeCatalogueColumn("STAFF_GUID", "RAW", MaxLength: 16, IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "NVARCHAR2", MaxLength: 200));
+
+        return provider;
     }
 
     #endregion

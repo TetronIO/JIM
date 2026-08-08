@@ -194,6 +194,31 @@ internal interface ISqlProvider
     #region Values
 
     /// <summary>
+    /// Materialises a value a driver handed back through a bound parameter as the CLR type the rest of
+    /// the Connector works in, so that no provider-specific type crosses this seam.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It exists because a driver is not obliged to answer <see cref="DbParameter.Value"/> with a CLR
+    /// primitive, and ODP.NET does not: a generated key comes back as an
+    /// <c>Oracle.ManagedDataAccess.Types</c> wrapper struct whose type depends on how the parameter was
+    /// bound. Read unwrapped, a sequence-backed <c>NUMBER</c> key fails every create with a cast error
+    /// naming a type an administrator has no way to act on.
+    /// </para>
+    /// <para>
+    /// The data reader path needs none of this: every driver JIM speaks to materialises a column as a
+    /// CLR value already. This is the parameter path only.
+    /// </para>
+    /// <para>
+    /// Null, <see cref="DBNull"/> and a driver's own per-type null sentinel all answer null, so a caller
+    /// has exactly one thing to test for. That matters: a driver's null sentinel need not be
+    /// <see cref="DBNull"/>, and a caller checking only for <see cref="DBNull"/> would read "the database
+    /// returned nothing" as a value.
+    /// </para>
+    /// </remarks>
+    object? ConvertFromDriverValue(object? value);
+
+    /// <summary>
     /// Materialises a GUID from whatever the reader returned for a GUID-typed column. The byte order
     /// is dialect-specific and getting it wrong transposes the first three components silently, so it
     /// belongs behind the seam rather than at the call site.
