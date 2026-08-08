@@ -1228,7 +1228,9 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 Gets whether JIM sets an initial password on the accounts a Synchronisation Rule provisions, how it generates one,
 and which accounts are waiting on a person.
 
-No password value is ever returned. Passwords are generated at the moment they are set and are not stored.
+No password value is ever returned. A generated password is produced at the moment it is set and stored nowhere;
+where the rule uses one password for every account, that password is stored encrypted and is write-only, so all
+that comes back is that one is set and when it last changed.
 
 #### Syntax
 
@@ -1242,10 +1244,12 @@ Get-JIMSyncRule -Id <int> | Get-JIMSyncRuleInitialPassword
 | Property | Type | Description |
 |----------|------|-------------|
 | `enabled` | `bool` | Whether JIM sets an initial password on accounts this rule provisions |
-| `source` | `string` | `Discovered` (follow the Connected System's policy) or `Custom` |
+| `source` | `string` | `Discovered` (follow the Connected System's policy), `Custom`, or `Static` (one password for every account) |
 | `customPolicy` | `object` | The generator settings used when `source` is `Custom` |
 | `expiryBehaviour` | `string` | What happens to the password once it is set |
 | `enableAccount` | `bool` | Whether the account is enabled once the password is set |
+| `staticPasswordSet` | `bool` | Whether one password is stored for every account this rule provisions |
+| `staticPasswordSetAt` | `datetime` | When that password last changed, or null where none is set |
 | `parkedAccountCount` | `int` | Accounts waiting on a change to these settings |
 | `expiredAccountCount` | `int` | Accounts never given an initial password within its time to live |
 | `parkedReasons` | `array` | One entry per distinct refusal, biggest group first |
@@ -1272,11 +1276,44 @@ Get-JIMSyncRule -All | ForEach-Object {
 }
 ```
 
+```powershell title="Find shared initial passwords nobody has changed for 90 days"
+Get-JIMSyncRule -All | ForEach-Object {
+    $p = Get-JIMSyncRuleInitialPassword -Id $_.id
+    if ($p.staticPasswordSet -and $p.staticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
+        [PSCustomObject]@{ Rule = $_.name; LastChanged = $p.staticPasswordSetAt }
+    }
+}
+```
+
 ### Set-JIMSyncRuleInitialPassword
 
 Replaces the configuration above. Saving a change that alters what would be delivered releases every account
 parked against the rule, and they are attempted again on the Connected System's next export run; saving a change
 that would deliver the same password in the same way releases nothing.
+
+Only what you supply changes, with one exception: the generator settings travel as a set, so supplying any one of
+them sends the whole policy.
+
+#### One password for every account
+
+`-Source Static` with `-StaticPassword` sets one password you choose on every account the rule provisions, so you
+can tell a new starter what it is. **JIM does not recommend it**: every account the rule provisions shares that
+password until each person changes it. See
+[Passwords](../concepts/passwords.md#one-password-for-every-account) before using it.
+
+`-StaticPassword` takes a `SecureString`, so the password does not sit in your session's command history in clear
+text. It is write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
+is what makes changing another setting safe.
+
+```powershell title="Set one password for every account this rule provisions"
+$password = Read-Host -AsSecureString "Initial password for every new account"
+Set-JIMSyncRuleInitialPassword -Id 5 -Enable -Source Static -StaticPassword $password
+```
+
+```powershell title="Rotate the shared password after a leaver"
+$password = Read-Host -AsSecureString "New shared initial password"
+Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
+```
 
 ## See also
 

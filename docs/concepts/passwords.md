@@ -13,7 +13,7 @@ This page covers what JIM does with passwords and why. To actually configure it,
 
 Most directories will not let an account be used, or even enabled, until it has a password. Switching on **Initial Password** on an export Synchronisation Rule has JIM set one on every account that rule creates, so the account is complete and enabled from the moment it exists instead of waiting on somebody to do it by hand.
 
-That password is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below.
+By default that password is different for every account and JIM keeps no copy, so it is not one anybody receives; see [how the person gets their password](#so-how-does-the-person-get-their-password) below. One password for every account is offered as well, and is [not recommended](#one-password-for-every-account).
 
 --8<-- "assets/diagrams/initial-password.svg"
 
@@ -42,9 +42,26 @@ A parked account keeps **the system's own words, unaltered**, because why a dire
 
 ### Getting parked accounts moving again
 
-Parking is not a dead end. **Saving a change to the rule's initial password settings releases every account parked against it**, and they are tried again on that Connected System's next export run. There is nothing to regenerate or invalidate first, because no password was ever stored: the retry uses your corrected settings automatically. Before you save, the portal tells you how many accounts saving will release, and says nothing at all for an edit that would not change what gets delivered.
+Parking is not a dead end. **Saving a change to the rule's initial password settings releases every account parked against it**, and they are tried again on that Connected System's next export run. There is nothing to regenerate or invalidate first: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work, so the retry uses your corrected settings either way. Before you save, the portal tells you how many accounts saving will release, and says nothing at all for an edit that would not change what gets delivered.
 
 You are told where the work is waiting without going looking for it: parked and expired counts appear on the Synchronisation Rules and Connected Systems list pages, on the rule's own Initial Password panel, and through `Get-JIMSyncRuleInitialPassword` and `Get-JIMConnectedSystem`. The two counts are shown separately and never added together, because parked work is fixable where it is reported and expired work is not.
+
+### One password for every account
+
+A generated password nobody can be told is the right answer for getting an account working and the wrong one for the day a new starter arrives. **One password for every account** is the third option under Password Settings: you choose it, JIM sets that same password on every account the rule provisions, and you can put it on an onboarding sheet or read it out.
+
+!!! warning "JIM does not recommend this"
+    Every account the rule provisions shares this password until each person changes it, so anybody who learns it can sign in as any new starter who has not. It is also the only password JIM stores anywhere.
+
+    Leave **Require a change at the next sign-in** switched on: it is what ends each account's share of the password. Any other setting leaves every account the rule provisions on it until somebody changes it by hand.
+
+If you use it, three things are worth knowing:
+
+- **You cannot read it back.** JIM encrypts it and no surface will show it to you again, so keep your own record of it. What JIM will tell you is that one is set and when it last changed, on the rule's panel and through `Get-JIMSyncRuleInitialPassword`.
+- **Change it whenever somebody who knew it leaves.** The date JIM reports is what makes that checkable across every rule at once; there is nothing else that can date a shared password.
+- **A password the target would refuse is refused here.** JIM checks it against the policy it discovered when you set it, rather than letting it park every account the rule provisions.
+
+Delivering a generated password to somebody who should have it, by email, is the answer that replaces this one; it is not built yet.
 
 ## 🧭 Knowing what each system will accept
 
@@ -89,22 +106,24 @@ This is the case where letting JIM generate the password matters most. You canno
 
 ## 🛡️ How JIM handles passwords safely
 
-**No password value is ever stored.** Not in JIM's database, its logs, its Activities, its configuration history, its previews or its search. Each password is generated at the moment it is needed, handed to the Connected System, and dropped.
+**No password value is stored, with one exception you have to choose.** Not in JIM's database, its logs, its Activities, its configuration history, its previews or its search. Each password is generated at the moment it is needed, handed to the Connected System, and dropped.
 
-The one deliberate exception is a password you explicitly asked JIM to generate for you: it is handed back once, to you, and still stored nowhere. That is also why the portal generates one for you on screen but the provisioning path does not; there is nothing kept to look up later.
+The exception is a [shared initial password](#one-password-for-every-account) you set on a Synchronisation Rule. That one has to survive until the next account is provisioned, so it is stored, encrypted at rest exactly as a Connected System's credentials are. It is write-only on every surface: no portal page, REST response or cmdlet will return it, and your configuration history records a keyed hash of it, which is enough to show that it changed and when without carrying the password.
+
+A password you explicitly asked JIM to generate for you is a different case and is stored nowhere: it is handed back once, to you, and forgotten. That is why the portal generates one for you on screen but the provisioning path does not; there is nothing kept to look up later.
 
 Every attempt is recorded as an Activity against the account, whether it worked or not, carrying the outcome and the system's own words on a refusal. The Activity records that a password was set. It never records the password.
 
 ### So how does the person get their password?
 
-**Not the one set during provisioning.** It is different for every account and JIM keeps no copy, so there is nothing for anyone to look up or pass on. Nobody can tell a new starter what it is, including you.
+**Not the generated one set during provisioning.** It is different for every account and JIM keeps no copy, so there is nothing for anyone to look up or pass on. Nobody can tell a new starter what it is, including you.
 
 That is deliberate, and it means the initial password is doing a different job from the one it might look like it is doing. Its job is to get the account into a working state: many directories will not enable an account, or let it be used at all, until it holds a password that meets their rules, and an account left sitting with no password while it waits for somebody to get round to it is worth closing off. It is not a password anybody is meant to receive.
 
-When the person actually needs to sign in, set their password then, using **Set Password** on that account, and hand them the value. Requiring a change at next sign-in (the default) then does what you would expect: they use what you gave them once, and choose their own.
+There are two ways to give somebody something they can actually sign in with:
 
-!!! note "There is no shared initial password"
-    JIM has no option to set one known password on every account a Synchronisation Rule provisions. Each is generated per account and stored nowhere, so it cannot be printed on an onboarding sheet or read back out of JIM afterwards.
+- **Set their password when they need it,** using **Set Password** on that account, and hand them the value. Requiring a change at next sign-in (the default) then does what you would expect: they use what you gave them once, and choose their own. This is the right answer for one person at a time.
+- **Use [one password for every account](#one-password-for-every-account)** where handing out a password per person is not practical, accepting that every new starter shares it until they change it. Read that section before you do.
 
 !!! warning "Anyone who can set a password can reset any account"
     These actions reset the password on whichever account they are pointed at, including privileged ones, limited only by what the Connected System's service account is allowed to do. Grant the Administrator role accordingly, and restrict the service account's rights to the parts of the directory JIM manages.
@@ -121,7 +140,7 @@ Passwords therefore travel their own path, which never touches any of it.
 |---|---|---|
 | Held centrally in the Metaverse | ✅ | ❌ |
 | Queued as a Pending Export | ✅ | ❌ written straight to the system |
-| Kept in configuration and object history | ✅ | ❌ |
+| Kept in configuration and object history | ✅ | ❌ a shared initial password is recorded as a keyed hash, never a value |
 | Read back when JIM imports | ✅ | ❌ |
 | Retried automatically | ✅ | Only an initial password, and only while a retry could help |
 

@@ -151,13 +151,30 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 
 ### What you configure
 
-- **Password Settings**<br /> Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here. Choosing your own starts from the discovered policy rather than from nothing, and switching between the two never discards what you configured. The generator produces random characters, words, or a pronounceable password, and tells you the minimum length and character classes the result is guaranteed to carry.
+- **Password Settings**<br /> Where the password comes from. Either the policy JIM discovered on the Connected System itself (the default, so the generated password satisfies the target's own rules without you restating them), or settings you write here, or [one password you choose for every account](#one-password-for-every-account). The first two generate a different password per account: choosing your own settings starts from the discovered policy rather than from nothing, switching between the two never discards what you configured, and the generator produces random characters, words, or a pronounceable password, telling you the minimum length and character classes the result is guaranteed to carry.
 - **After the password is set**<br /> Whether the account holder must choose a new password at their next sign-in (the default), whether it ages normally, or whether it never expires. Only the behaviours the Connector can actually apply are offered.
 - **Enable the account once the password is set**<br /> On by default. A provisioned account nobody can sign in to is rarely what was wanted, and directories that refuse to enable an account without a policy-compliant password need the enable to follow the password rather than accompany the create.
 
 **No generated password is ever stored**, in JIM's database, its logs, its Activities, its API responses or anywhere else. Each is generated at the moment it is delivered, handed to the Connector, and dropped.
 
-**Nobody receives this password, including you.** Its job is to get the account into a working state, since most directories will not enable an account or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) and hand them the value; requiring a change at their next sign-in then does what you would expect. There is no option to set one known password on every account a rule provisions. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
+**Nobody receives a generated password, including you.** Its job is to get the account into a working state, since most directories will not enable an account or let it be used until it holds a password that meets their rules. When the person actually needs to sign in, set their password then with the [set-password action on the Connected System Object](connected-systems.md#setting-the-password-on-one-account) and hand them the value; requiring a change at their next sign-in then does what you would expect. See [Passwords](../concepts/passwords.md#so-how-does-the-person-get-their-password).
+
+### One password for every account
+
+The third Password Settings option sets one password you choose on every account the rule provisions, so you can tell a new starter what it is. **JIM does not recommend it**, and says so beside the option: every account the rule provisions shares that password until each person changes it, so anybody who learns it can sign in as any new starter who has not.
+
+Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each account's share of the password; any other choice leaves every account the rule provisions on it until somebody changes it by hand.
+
+This is the only password JIM stores. It is encrypted at rest exactly as a Connected System's credentials are, and it is write-only everywhere: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. Leaving those fields blank keeps the stored password, so changing another setting is safe.
+
+What JIM will tell you is that a password is set and when it last changed, on the panel and through `Get-JIMSyncRuleInitialPassword` (`staticPasswordSet` and `staticPasswordSetAt`). Change it whenever somebody who knew it leaves; that date is the only thing that can date a shared password:
+
+```powershell
+$password = Read-Host -AsSecureString "New shared initial password"
+Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
+```
+
+A password the Connected System would refuse is rejected when you set it, rather than parking every account the rule provisions. A rule set to this option with no password stored is refused too, for the same reason.
 
 ### What happens after provisioning
 
@@ -178,7 +195,7 @@ The target's own words are kept verbatim on a parked account, because why a dire
 
 ### Clearing parked accounts
 
-Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every account parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime, because no password was ever stored: the retry uses your corrected settings by construction.
+Parking is not a one-way door. **Saving a change to the Synchronisation Rule's initial password settings releases every account parked against that rule**, and they are attempted again on that Connected System's next export run. Nothing needs to be regenerated or invalidated in the meantime: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work.
 
 Saving an unrelated part of the same rule releases nothing. Those accounts were refused on settings the target has already given its answer on, so retrying them unchanged would fail identically and inflate an attempt count that is supposed to mean "distinct configurations tried".
 

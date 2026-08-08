@@ -1,10 +1,10 @@
 # Static Initial Password
 
-- **Status:** Doing
+- **Status:** Done
 - **Issue:** [#1273](https://github.com/TetronIO/JIM/issues/1273)
 - **Follows:** [#1121](https://github.com/TetronIO/JIM/issues/1121) Initial password generation and delivery on provisioning
 - **Superseded eventually by:** [#1252](https://github.com/TetronIO/JIM/issues/1252) Deliver a new account's initial password by email (sub-task of [#618](https://github.com/TetronIO/JIM/issues/618))
-- **UI mockup:** [Initial Password: adding a static option](https://claude.ai/code/artifact/6e7bbeb5-2023-47b8-beed-0d4f9828b4d4)
+- **UI artefact:** [Initial Password: adding a static option](https://claude.ai/code/artifact/6e7bbeb5-2023-47b8-beed-0d4f9828b4d4) (updated to the panel as built)
 
 ## Overview
 
