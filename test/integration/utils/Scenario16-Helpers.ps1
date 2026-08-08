@@ -71,6 +71,51 @@ function Invoke-Scenario16Query {
     }
 }
 
+function Invoke-Scenario16NonQuery {
+    <#
+    .SYNOPSIS
+        Run a data-modifying statement against the source database.
+    .DESCRIPTION
+        The export rows need the source data to change between runs (a new email address, a disabled
+        employee, an extra phone number), and the scalar helper above cannot commit on Oracle. Same
+        interpolation rule applies: nothing that did not originate in this test suite goes into $Statement.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][string]$Statement
+    )
+
+    if ($Config.Provider -eq "SqlServer") {
+        $arguments = @("exec", $Config.ContainerName) + $Config.SqlCommand +
+                     @("-d", $Config.DatabaseName, "-Q", "SET NOCOUNT ON; $Statement")
+        $output = & docker @arguments 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Source statement failed on $($Config.DisplayName): $($output | Out-String)" }
+        return
+    }
+
+    # SQL*Plus does not commit implicitly, so an uncommitted change would be invisible to JIM's own
+    # session and the row would fail for a reason that has nothing to do with the connector.
+    $scriptName = "jim-s16-dml-$([Guid]::NewGuid().ToString('N')).sql"
+    $localPath = Join-Path ([System.IO.Path]::GetTempPath()) $scriptName
+    $script = "WHENEVER SQLERROR EXIT FAILURE`nSET DEFINE OFF`nSET FEEDBACK OFF`n$Statement`nCOMMIT;`nEXIT SUCCESS`n"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($localPath, $script, $utf8NoBom)
+
+    try {
+        docker cp $localPath "$($Config.ContainerName):/tmp/$scriptName" 2>&1 | Out-Null
+        $arguments = @("exec", $Config.ContainerName) + $Config.SqlCommand + @("@/tmp/$scriptName")
+        $output = & docker @arguments 2>&1
+        $text = ($output | Out-String)
+        if ($LASTEXITCODE -ne 0 -or $text -match 'ORA-\d{5}') {
+            throw "Source statement failed on $($Config.DisplayName): $text"
+        }
+    }
+    finally {
+        Remove-Item $localPath -ErrorAction SilentlyContinue
+        docker exec $Config.ContainerName rm -f "/tmp/$scriptName" 2>&1 | Out-Null
+    }
+}
+
 function Get-Scenario16ObjectTypeId {
     param(
         [Parameter(Mandatory=$true)][hashtable]$Context,
@@ -110,17 +155,19 @@ function Invoke-Scenario16Row {
         'ConfigurationValidation'          { return Test-S16ConfigurationValidation -Context $Context -Config $Config }
         'Scale.FullImport500k'             { return Test-S16ScaleImport -Context $Context -Config $Config }
 
-        # Rows whose implementation depends on outbound Synchronisation Rules, which Setup-Scenario16.ps1
-        # does not yet create. Reported as skipped with the reason rather than passed; see this file's
-        # header on why a green cell nobody ran is worse than an amber one.
+        'Export.Create'                    { return Test-S16ExportCreate -Context $Context -Config $Config }
+        'Export.Update'                    { return Test-S16ExportUpdate -Context $Context -Config $Config }
+        'Export.Delete'                    { return Test-S16ExportDelete -Context $Context -Config $Config }
+        'Export.NaturalKey'                { return Test-S16ExportNaturalKey -Context $Context -Config $Config }
+        'Reference.Export'                 { return Test-S16ReferenceExport -Context $Context -Config $Config }
+        'TypeMapping.RoundTrip'            { return Test-S16TypeMappingRoundTrip -Context $Context -Config $Config }
+
+        # Both delta rows remain unimplemented, and for a different reason from the export rows: they need
+        # the Connected System's Delta Import Mode changed and its persisted watermark cleared mid-run,
+        # neither of which the matrix has a mechanism for. Reported as skipped with the reason rather than
+        # passed; see this file's header on why a green cell nobody ran is worse than an amber one.
         'Delta.WatermarkColumn'  { return @{ Status = 'skip'; Detail = 'Not implemented: needs a second Connected System configured for Watermark Column delta mode.' } }
         'Delta.Fallback'         { return @{ Status = 'skip'; Detail = 'Not implemented: needs the persisted watermark to be cleared between runs.' } }
-        'Export.Create'          { return @{ Status = 'skip'; Detail = 'Not implemented: outbound Synchronisation Rules are not yet created by Setup-Scenario16.ps1.' } }
-        'Export.Update'          { return @{ Status = 'skip'; Detail = 'Not implemented: outbound Synchronisation Rules are not yet created by Setup-Scenario16.ps1.' } }
-        'Export.Delete'          { return @{ Status = 'skip'; Detail = 'Not implemented: outbound Synchronisation Rules are not yet created by Setup-Scenario16.ps1.' } }
-        'Export.NaturalKey'      { return @{ Status = 'skip'; Detail = 'Not implemented: outbound Synchronisation Rules are not yet created by Setup-Scenario16.ps1.' } }
-        'Reference.Export'       { return @{ Status = 'skip'; Detail = 'Not implemented: outbound Synchronisation Rules are not yet created by Setup-Scenario16.ps1.' } }
-        'TypeMapping.RoundTrip'  { return @{ Status = 'skip'; Detail = 'Partially covered by the driver-shape rows; the export half needs outbound Synchronisation Rules.' } }
 
         default { return @{ Status = 'skip'; Detail = "No implementation is registered for matrix row '$($Row.name)'." } }
     }
@@ -225,6 +272,329 @@ function Test-S16DeltaChangeLog {
     Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 Delta Import ($($Context.Provider))"
 
     return @{ Status = 'pass'; Detail = "Delta Import completed against the change-log table and persisted its watermark." }
+}
+
+# ─── Shared machinery for the synchronisation and export rows ──────────────────
+
+function Invoke-S16RunProfile {
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][string]$Name
+    )
+
+    $result = Start-JIMRunProfile -ConnectedSystemId $Context.ConnectedSystemId -RunProfileName $Name -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($($Context.Provider))"
+    return $result
+}
+
+function Invoke-S16Pipeline {
+    <#
+    .SYNOPSIS
+        Import, synchronise, export, then import again to confirm.
+    .DESCRIPTION
+        The trailing Full Import is not housekeeping. An object JIM exported carries an external ID the
+        connector composed from whatever the insert handed back; the confirming import composes one from
+        the row it reads. If the two disagree the import does not recognise its own work and creates a
+        second Connected System Object, so an object-count assertion after this sequence is what settles
+        anchor-token agreement. Nothing else in the suite can settle it.
+    #>
+    param([Parameter(Mandatory=$true)][hashtable]$Context)
+
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Export"               | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+}
+
+function Initialize-S16ExportBaseline {
+    <#
+    .SYNOPSIS
+        Ensure the export pipeline has run once for this provider, and only once.
+    .DESCRIPTION
+        Memoised on the context so each export row can be run on its own with -Step without every row
+        paying for a full pipeline when they run together.
+    #>
+    param([Parameter(Mandatory=$true)][hashtable]$Context)
+
+    if ($Context.ContainsKey('ExportBaselineDone') -and $Context.ExportBaselineDone) { return }
+
+    Invoke-S16Pipeline -Context $Context
+    $Context['ExportBaselineDone'] = $true
+}
+
+function Get-S16ExpectedCount {
+    <#
+    .SYNOPSIS
+        How many seeded employees satisfy one of the outbound rules' scopes.
+    .DESCRIPTION
+        Derived arithmetically from the row count rather than hard-coded, because the seeder's values are
+        derived arithmetically too and the matrix is meant to hold at 50 rows and at 500,000.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][int]$RowCount,
+        [Parameter(Mandatory=$true)][ValidateSet('Enabled', 'Research', 'Finance')][string]$Scope
+    )
+
+    switch ($Scope) {
+        # IS_ACTIVE is 0 for every seventh employee.
+        'Enabled'  { return $RowCount - [math]::Floor($RowCount / 7) }
+        # DEPARTMENT cycles Engineering, Finance, Operations, Research on n modulo 4.
+        'Research' { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 3 }).Count }
+        'Finance'  { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 1 }).Count }
+    }
+}
+
+function Get-S16EmployeeNumber {
+    param([Parameter(Mandatory=$true)][int]$EmployeeId)
+    return "E{0:D8}" -f $EmployeeId
+}
+
+function Get-S16MetaverseObject {
+    <#
+    .SYNOPSIS
+        The Metaverse Object the inbound rule projected for one seeded employee, with its values.
+    #>
+    param([Parameter(Mandatory=$true)][int]$EmployeeId)
+
+    $employeeNumber = Get-S16EmployeeNumber -EmployeeId $EmployeeId
+    $match = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search $employeeNumber -PageSize 10) | Select-Object -First 1
+    if (-not $match) { return $null }
+    return Get-JIMMetaverseObject -Id $match.id
+}
+
+function Get-S16MvoValue {
+    <#
+    .SYNOPSIS
+        One attribute value row off a Metaverse Object, or $null when the attribute carries no value.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]$Mvo,
+        [Parameter(Mandatory=$true)][string]$AttributeName
+    )
+
+    if (-not $Mvo -or -not $Mvo.attributeValues) { return $null }
+    return @($Mvo.attributeValues | Where-Object { $_.attributeName -ceq $AttributeName }) | Select-Object -First 1
+}
+
+# ─── Export rows ───────────────────────────────────────────────────────────────
+
+function Test-S16ExportCreate {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Initialize-S16ExportBaseline -Context $Context
+
+    $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'Enabled'
+    $actualRows = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS;")
+
+    if ($actualRows -ne $expected) {
+        return @{ Status = 'fail'; Detail = "The outbound rule is scoped to enabled employees, so $expected row(s) should have been inserted into APP_USERS; the table holds $actualRows." }
+    }
+
+    # Anchor-token agreement. The confirming Full Import in the pipeline re-read every row it had just
+    # written; if the external ID it composed from the row differed from the one the insert returned, the
+    # import would have created a second Connected System Object for each and the count would be doubled.
+    $appUserTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'AppUser'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -Count)
+
+    if ($csoCount -ne $expected) {
+        return @{ Status = 'fail'; Detail = "APP_USERS holds $actualRows row(s) but JIM holds $csoCount Connected System Object(s) for the type. A mismatch here means the external ID composed on export does not equal the one composed on import, so the confirming import did not recognise the objects it had just created." }
+    }
+
+    # A generated key is only proof of anything if it actually came from the database: the seeded table is
+    # empty before this row runs, so every identifier present was returned by an insert.
+    $anchors = @(Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -All -Force |
+                 ForEach-Object { $_.externalIdValue })
+    $unusable = @($anchors | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -notmatch '^\d+$' })
+    if ($unusable.Count -gt 0) {
+        return @{ Status = 'fail'; Detail = "$($unusable.Count) exported object(s) carry an external ID that is not the integer the IDENTITY column generates: '$(($unusable | Select-Object -First 5) -join "', '")'." }
+    }
+
+    return @{ Status = 'pass'; Detail = "$expected row(s) inserted with a database-generated key, and the confirming import composed the same anchor token for every one." }
+}
+
+function Test-S16ExportUpdate {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Initialize-S16ExportBaseline -Context $Context
+
+    # Employee 12 is enabled (12 is not a multiple of seven) and has two phone numbers (12 is a multiple
+    # of three), so both a scalar change and a multi-valued change have somewhere to land.
+    $employeeId = 12
+    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $newEmail = "updated.employee$employeeId@panoply.local"
+    $newPhone = "+44 113 496 9999"
+
+    Invoke-Scenario16NonQuery -Config $Config -Statement "UPDATE $($Config.Schema).EMPLOYEES SET EMAIL = '$newEmail' WHERE EMPLOYEE_ID = $employeeId;"
+    Invoke-Scenario16NonQuery -Config $Config -Statement "INSERT INTO $($Config.Schema).EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED) SELECT $employeeId, '$newPhone', LAST_MODIFIED FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;"
+
+    Invoke-S16Pipeline -Context $Context
+
+    $exportedEmail = (Invoke-Scenario16Query -Config $Config -Query "SELECT EMAIL FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';").Trim()
+    if ($exportedEmail -ne $newEmail) {
+        return @{ Status = 'fail'; Detail = "APP_USERS.EMAIL for $userName should be '$newEmail' after the update export; it is '$exportedEmail'." }
+    }
+
+    $roleCount = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USER_ROLES r JOIN $($Config.Schema).APP_USERS u ON u.ID = r.USER_ID WHERE u.USER_NAME = '$userName';")
+    if ($roleCount -ne 3) {
+        return @{ Status = 'fail'; Detail = "Employee $employeeId now has three phone numbers, so three related-table rows should exist for $userName; found $roleCount." }
+    }
+
+    # And the removal half. A related-table maintenance that only ever adds passes an add-only assertion.
+    Invoke-Scenario16NonQuery -Config $Config -Statement "DELETE FROM $($Config.Schema).EMPLOYEE_PHONES WHERE EMPLOYEE_ID = $employeeId AND PHONE_NUMBER = '$newPhone';"
+    Invoke-S16Pipeline -Context $Context
+
+    $roleCountAfter = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USER_ROLES r JOIN $($Config.Schema).APP_USERS u ON u.ID = r.USER_ID WHERE u.USER_NAME = '$userName';")
+    if ($roleCountAfter -ne 2) {
+        return @{ Status = 'fail'; Detail = "The third phone number was removed at source, so $userName should be back to two related-table rows; found $roleCountAfter." }
+    }
+
+    return @{ Status = 'pass'; Detail = "Scalar update applied, and the related table gained and then lost a row in step with the source." }
+}
+
+function Test-S16ExportDelete {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Initialize-S16ExportBaseline -Context $Context
+
+    # Employee 20 is enabled in the seeded data, so disabling it takes its Metaverse Object out of the
+    # outbound rule's scope; the rule's OutboundDeprovisionAction is Delete, so that becomes a delete
+    # export rather than a disconnect.
+    $employeeId = 20
+    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+
+    $before = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';")
+    if ($before -ne 1) {
+        return @{ Status = 'fail'; Detail = "Employee $employeeId should have been provisioned by the baseline export before this row runs; APP_USERS holds $before row(s) for $userName." }
+    }
+
+    $disabledValue = if ($Config.Provider -eq "SqlServer") { "0" } else { "0" }
+    Invoke-Scenario16NonQuery -Config $Config -Statement "UPDATE $($Config.Schema).EMPLOYEES SET IS_ACTIVE = $disabledValue WHERE EMPLOYEE_ID = $employeeId;"
+
+    Invoke-S16Pipeline -Context $Context
+
+    $after = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';")
+    if ($after -ne 0) {
+        return @{ Status = 'fail'; Detail = "$userName left the outbound rule's scope, so its APP_USERS row should have been deleted; $after row(s) remain." }
+    }
+
+    # The related rows go with it. They are removed by the foreign key's cascade rather than by JIM, but a
+    # delete that left them behind would still be a defect worth catching here.
+    $orphanRoles = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USER_ROLES r WHERE NOT EXISTS (SELECT 1 FROM $($Config.Schema).APP_USERS u WHERE u.ID = r.USER_ID);")
+    if ($orphanRoles -ne 0) {
+        return @{ Status = 'fail'; Detail = "$orphanRoles related-table row(s) survived the parent's deletion." }
+    }
+
+    return @{ Status = 'pass'; Detail = "Deprovisioning removed the row and left no orphaned related-table rows." }
+}
+
+function Test-S16ExportNaturalKey {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Initialize-S16ExportBaseline -Context $Context
+
+    # The opposite half of the Export.Create question. Here the primary key is a natural identifier JIM
+    # authors and writes, so the external ID is a value JIM chose rather than one the database returned;
+    # the confirming import still has to compose the same token from the row.
+    $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'Research'
+    $actualRows = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_ACCOUNTS_NATURAL;")
+
+    if ($actualRows -ne $expected) {
+        return @{ Status = 'fail'; Detail = "The rule is scoped to Department = Research, so $expected row(s) should exist in APP_ACCOUNTS_NATURAL; the table holds $actualRows." }
+    }
+
+    $naturalTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'NaturalKeyAccount'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $naturalTypeId -Count)
+    if ($csoCount -ne $expected) {
+        return @{ Status = 'fail'; Detail = "APP_ACCOUNTS_NATURAL holds $actualRows row(s) but JIM holds $csoCount Connected System Object(s), so the anchor JIM authored on export is not the one it composed on import." }
+    }
+
+    # The key JIM authored has to be the value the Attribute Flow supplied, not a surrogate of its own.
+    $malformed = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_ACCOUNTS_NATURAL WHERE ACCOUNT_CODE NOT LIKE 'E%';")
+    if ($malformed -ne 0) {
+        return @{ Status = 'fail'; Detail = "$malformed row(s) carry an ACCOUNT_CODE that did not come from the Metaverse 'Account Name' flow." }
+    }
+
+    return @{ Status = 'pass'; Detail = "$expected row(s) provisioned into a natural-key table, with JIM's authored key surviving the confirming import." }
+}
+
+function Test-S16ReferenceExport {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Initialize-S16ExportBaseline -Context $Context
+
+    # Employee 12's manager is employee 3 (the seeder gives every row past the tenth a manager of
+    # (n modulo 10) + 1), and employee 3 is itself enabled, so the manager has an exported row for the
+    # reference to point at. What is asserted is that JIM wrote the manager's OWN generated key rather
+    # than the source system's employee identifier.
+    $employeeId = 12
+    $managerEmployeeId = ($employeeId % 10) + 1
+    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $managerUserName = Get-S16EmployeeNumber -EmployeeId $managerEmployeeId
+
+    $expectedManagerId = (Invoke-Scenario16Query -Config $Config -Query "SELECT ID FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$managerUserName';").Trim()
+    if ([string]::IsNullOrWhiteSpace($expectedManagerId)) {
+        return @{ Status = 'fail'; Detail = "The manager ($managerUserName) has no APP_USERS row, so the reference had nothing to resolve to." }
+    }
+
+    $writtenManagerId = (Invoke-Scenario16Query -Config $Config -Query "SELECT MANAGER_ID FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';").Trim()
+    if ($writtenManagerId -ne $expectedManagerId) {
+        return @{ Status = 'fail'; Detail = "APP_USERS.MANAGER_ID for $userName should be $expectedManagerId (the generated key of $managerUserName); it is '$writtenManagerId'." }
+    }
+
+    return @{ Status = 'pass'; Detail = "Reference exported as the target object's own anchor ($managerUserName resolved to $expectedManagerId)." }
+}
+
+function Test-S16TypeMappingRoundTrip {
+    param([hashtable]$Context, [hashtable]$Config)
+
+    Initialize-S16ExportBaseline -Context $Context
+
+    # One employee, every mapped shape, source value against exported value. Employee 12 is enabled so it
+    # has an exported row, and its FTE is 0.25, a value binary floating point cannot represent exactly.
+    $employeeId = 12
+    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $failures = @()
+
+    $sourceFte = [decimal](Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(FTE) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" | ForEach-Object { $_ }).Trim()
+    if ($Config.Provider -eq "SqlServer") {
+        $sourceFte = [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT CAST(FTE AS varchar(32)) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;").Trim())
+    }
+
+    $exportedFteText = (Invoke-Scenario16Query -Config $Config -Query $(
+        if ($Config.Provider -eq "SqlServer") { "SELECT CAST(FTE AS varchar(32)) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';" }
+        else { "SELECT TO_CHAR(FTE) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';" })).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($exportedFteText)) {
+        $failures += "FTE was not written to APP_USERS at all."
+    }
+    elseif ([decimal]$exportedFteText -ne $sourceFte) {
+        $failures += "FTE round-tripped as $exportedFteText but the source holds $sourceFte; the exact-numeric value did not survive."
+    }
+
+    # The zoneless date and time column. Whatever the Database Time Zone does on the way in, the reverse
+    # conversion on the way out must land on the same wall clock, or the two directions are not inverses.
+    $sourceStart = (Invoke-Scenario16Query -Config $Config -Query $(
+        if ($Config.Provider -eq "SqlServer") { "SELECT CONVERT(varchar(19), START_DATE, 120) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" }
+        else { "SELECT TO_CHAR(START_DATE,'YYYY-MM-DD HH24:MI:SS') FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" })).Trim()
+
+    $exportedStart = (Invoke-Scenario16Query -Config $Config -Query $(
+        if ($Config.Provider -eq "SqlServer") { "SELECT CONVERT(varchar(19), STARTS_ON, 120) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';" }
+        else { "SELECT TO_CHAR(STARTS_ON,'YYYY-MM-DD HH24:MI:SS') FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';" })).Trim()
+
+    if ($exportedStart -ne $sourceStart) {
+        $failures += "The zoneless date and time round-tripped as '$exportedStart' but the source wall clock is '$sourceStart'. Import and export are not inverting the Database Time Zone the same way."
+    }
+
+    $exportedEnabled = (Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName' AND IS_ENABLED = 1;").Trim()
+    if ($exportedEnabled -ne '1') {
+        $failures += "The Boolean did not round-trip: IS_ENABLED is not set for an employee whose IS_ACTIVE is set."
+    }
+
+    if ($failures.Count -gt 0) {
+        return @{ Status = 'fail'; Detail = ($failures -join ' ') }
+    }
+
+    return @{ Status = 'pass'; Detail = "Exact-numeric Decimal, zoneless date and time, and Boolean all round-tripped for employee $employeeId." }
 }
 
 # ─── Driver-shape rows ─────────────────────────────────────────────────────────

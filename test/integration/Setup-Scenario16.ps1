@@ -21,9 +21,9 @@
 
     The Database Time Zone is deliberately NOT UTC. At the UTC default every zone conversion is the
     identity, so a zone-inversion defect (import and export applying the offset the same way round
-    rather than inverting each other) passes unnoticed. Europe/London in summer is one hour off UTC,
-    which makes the two directions distinguishable. This is a PRD acceptance requirement, not a
-    preference.
+    rather than inverting each other) passes unnoticed. Australia/Sydney is eleven hours off UTC over
+    the seeded date range, which makes the two directions distinguishable. This is a PRD acceptance
+    requirement, not a preference; see the parameter's own comment for why it is not Europe/London.
 
     Both Oracle opt-ins are turned on (NUMBER(1) as Boolean, RAW(16) as Guid), because the columns those
     settings reinterpret are exactly the ones the matrix exists to pin down.
@@ -50,8 +50,15 @@ param(
     [int]$RowCount = 50,
 
     # The zone zoneless columns are declared to be in. Not UTC by default, on purpose; see above.
+    #
+    # Australia/Sydney rather than Europe/London. Every seeded date sits in January or February (the
+    # generator derives START_DATE as 2020-01-06 plus n days, so a 50-row seed never leaves winter), and
+    # Europe/London is UTC+00:00 for all of them: the conversion would be the identity and the assertion
+    # would pass with a zone-inversion defect fully present, which is precisely the failure this setting
+    # exists to prevent. Sydney is UTC+11:00 over the seeded range and UTC+10:00 in the southern winter,
+    # so the offset is both non-zero and season-dependent.
     [Parameter(Mandatory=$false)]
-    [string]$DatabaseTimeZone = "Europe/London",
+    [string]$DatabaseTimeZone = "Australia/Sydney",
 
     [Parameter(Mandatory=$false)]
     [string]$Template = "Nano",
