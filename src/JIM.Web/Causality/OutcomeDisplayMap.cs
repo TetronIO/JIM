@@ -102,8 +102,13 @@ public static class OutcomeDisplayMap
         // Named for the disconnection rather than for the scope change, which is the fact that distinguishes it
         // from WouldFallOutOfScope above; that the object also leaves scope is carried by the delta's old and new
         // values, so the label does not have to spend itself restating it.
+        //
+        // Warning rather than Error, matching its own run-time outcomes (Disconnected, DisconnectedOutOfScope). A
+        // disconnection recalls the attribute values the object contributed, which is serious, but re-selecting the
+        // container and importing puts it back; a deletion past its grace period does not come back. Toning both
+        // the same left the preview's severity column encoding nothing on the change that most needs it.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] =
-            new OutcomeDisplay("Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff,
+            new OutcomeDisplay("Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Warning, Icons.Material.Filled.LinkOff,
                 "disconnect from their Metaverse Object")
     };
 
