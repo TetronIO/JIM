@@ -631,7 +631,9 @@
     public EventCallback OnChanged { get; set; }
 
     private bool _addAttributeFlowRuleDialogVisible;
-    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    // Medium rather than the default Small: the dialog carries the attribute priority list (#91 Surface 1), whose
+    // Connected System and Synchronisation Rule names wrap onto three lines each at 600px and are unreadable.
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium };
 
     // ─── Attribute Priority context (#91 Surface 1) ───
 
