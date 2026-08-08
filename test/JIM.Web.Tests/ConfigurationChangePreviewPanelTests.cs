@@ -7,6 +7,7 @@ using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Preview;
 using JIM.Models.Utility;
 using JIM.Web.Services;
@@ -43,6 +44,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     private Mock<IRepository> _repository = null!;
     private Mock<IActivityRepository> _activityRepository = null!;
     private Mock<IConfigurationChangePreviewRepository> _previewRepository = null!;
+    private Mock<IMetaverseRepository> _metaverseRepository = null!;
     private FakeUiNotificationService _notifications = null!;
 
     [SetUp]
@@ -54,6 +56,13 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         _repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
         _repository.Setup(r => r.ConfigurationChangePreviews).Returns(_previewRepository.Object);
         _repository.Setup(r => r.Tasking).Returns(new Mock<ITaskingRepository>().Object);
+
+        // The panel writes a summary row's population in the plural, and the administrator's own plural on the
+        // Metaverse Object Type is the only source that knows a Person is one of several People (#1275).
+        _metaverseRepository = new Mock<IMetaverseRepository>();
+        _metaverseRepository.Setup(r => r.GetMetaverseObjectTypesAsync(false)).ReturnsAsync(
+            [new MetaverseObjectType { Id = 11, Name = "User", PluralName = "Users" }]);
+        _repository.Setup(r => r.Metaverse).Returns(_metaverseRepository.Object);
         _previewRepository.Setup(r => r.GetPreviewGroupsAsync(It.IsAny<Guid>())).ReturnsAsync([]);
         _previewRepository
             .Setup(r => r.GetPreviewDeltasAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()))
@@ -184,6 +193,41 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         Assert.That(panel.Markup, Does.Not.Contain("sample").IgnoreCase,
             "labelling a complete list as a sample teaches the label to be ignored where it matters");
+    }
+
+    [Test]
+    public void Panel_SummaryRow_NamesItsPopulationInThePlural()
+    {
+        // A summary row covers many objects, so "User in Yellowstone Verify" was describing one of them. The plural
+        // comes from the Metaverse Object Type the administrator authored, not from a rule applied to the singular,
+        // because only that knows a Person is one of several People (#1275).
+        GivenPreview(Complete);
+        GivenGroups(Group(4_812));
+
+        var panel = RenderPanel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.Markup, Does.Contain("Users"));
+            Assert.That(panel.Markup, Does.Not.Contain(">User<"),
+                "the singular reaching the markup means the authored plural was not applied");
+        }
+    }
+
+    [Test]
+    public void Panel_SummaryRowForAConnectedSystemObjectType_DerivesThePlural()
+    {
+        // No Metaverse Object Type id, so the name is a class the Connector discovered and there is no authored
+        // plural to read. The row still has to read as a population.
+        GivenPreview(Complete);
+        var group = Group(2);
+        group.MetaverseObjectTypeId = null;
+        group.MetaverseObjectTypeName = "inetOrgPerson";
+        GivenGroups(group);
+
+        var panel = RenderPanel();
+
+        Assert.That(panel.Markup, Does.Contain("inetOrgPersons"));
     }
 
     [Test]

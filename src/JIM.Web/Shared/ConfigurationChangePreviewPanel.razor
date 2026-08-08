@@ -226,8 +226,8 @@
                                     {
                                         @* The object type is a schema identifier, so it takes the inline-code
                                            treatment the rest of the portal gives one; the system it belongs to is
-                                           prose beside it. *@
-                                        <span class="jim-code-inline">@context.MetaverseObjectTypeName</span>
+                                           prose beside it. Plural, because a row covers a population. *@
+                                        <span class="jim-code-inline">@PopulationTypeName(context)</span>
                                         @if (!string.IsNullOrEmpty(context.ConnectedSystemName))
                                         {
                                             <span> in @context.ConnectedSystemName</span>
@@ -400,6 +400,14 @@
     private ConfigurationChangePreviewGroup? _selectedGroup;
     private MudTable<ConfigurationChangePreviewDelta>? _deltasTable;
 
+    /// <summary>
+    /// Plural names by Metaverse Object Type id, for writing a summary row's population. Loaded once rather than on
+    /// every refresh: the panel polls while a preview runs, and an administrator's plural for "User" does not change
+    /// between one tick and the next.
+    /// </summary>
+    private IReadOnlyDictionary<int, string> _objectTypePluralNames = new Dictionary<int, string>();
+    private bool _objectTypePluralNamesLoaded;
+
     /// <summary>The preview this panel has loaded, so a parent re-render does not re-read the one it already has.</summary>
     private Guid _loadedActivityId;
 
@@ -516,6 +524,13 @@
             // Groups are read but deliberately not rendered for a failed preview; keeping the read unconditional
             // means the failure branch is the only thing deciding what is shown.
             _groups = await jim.ConfigurationChangePreviews.GetPreviewGroupsAsync(ActivityId);
+
+            if (!_objectTypePluralNamesLoaded && _groups.Exists(g => g.MetaverseObjectTypeId.HasValue))
+            {
+                _objectTypePluralNames = (await jim.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects: false))
+                    .ToDictionary(t => t.Id, t => t.PluralName);
+                _objectTypePluralNamesLoaded = true;
+            }
 
             // A group the administrator had open can disappear between refreshes only if the preview was re-run;
             // dropping the selection is better than paging a group that is no longer in the summary.
@@ -708,11 +723,18 @@
             : $"{group.AttributeName}: {group.OldValue} → {group.NewValue}";
     }
 
-    private static string DescribePopulation(ConfigurationChangePreviewGroup group)
+    /// <summary>
+    /// The object type a summary row covers, in the plural, because a row covers a population rather than one
+    /// object. The drill-down's own Type column stays singular: each row there is one object.
+    /// </summary>
+    private string PopulationTypeName(ConfigurationChangePreviewGroup group) =>
+        PreviewPopulationName.Pluralised(group.MetaverseObjectTypeName, group.MetaverseObjectTypeId, _objectTypePluralNames);
+
+    private string DescribePopulation(ConfigurationChangePreviewGroup group)
     {
         var parts = new List<string>(2);
-        if (!string.IsNullOrEmpty(group.MetaverseObjectTypeName))
-            parts.Add(group.MetaverseObjectTypeName);
+        if (PopulationTypeName(group) is { Length: > 0 } typeName)
+            parts.Add(typeName);
         if (!string.IsNullOrEmpty(group.ConnectedSystemName))
             parts.Add(group.ConnectedSystemName);
         return string.Join(" in ", parts);
