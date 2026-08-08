@@ -35,8 +35,13 @@
     }
 
     @* Virtualised (infinite-scroll) list: the grid fills the available viewport height and streams windows of rows
-       from the server as the user scrolls, so there is no page size to choose and no wasted space or page controls. *@
-    <MudDataGrid @ref="_dataGrid" T="MetaverseObjectHeader" VirtualizeServerData="ServerReload" Virtualize="true"
+       from the server as the user scrolls, so there is no page size to choose and no wasted space or page controls.
+
+       OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
+       SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
+       Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
+       rather than repeatedly out-running the fetch. It stays far inside the 500-row window cap. *@
+    <MudDataGrid @ref="_dataGrid" T="MetaverseObjectHeader" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
                  FixedHeader="true" Height="calc(100vh - 320px)" ItemSize="@(_dense ? 36f : 50f)"
                  Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
                  RowClass="cursor-pointer" RowClick="HandleRowClick" Class="mt-5">
@@ -85,7 +90,14 @@
             }
         </Columns>
         <NoRecordsContent>
-            No results
+            @* Only speak once the match set is known to be empty. MudDataGrid renders this fragment whenever it holds
+               no rows, and a virtualiser holds none between windows, so an unguarded message flashes "No results"
+               over data that is merely in flight. _totalItems is null until the first window returns and zero only
+               when the search genuinely matched nothing. *@
+            @if (_totalItems == 0)
+            {
+                <text>No results</text>
+            }
         </NoRecordsContent>
     </MudDataGrid>
 }
