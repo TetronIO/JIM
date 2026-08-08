@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -252,6 +252,34 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
             return await ldapConnectorSchema.GetSchemaAsync();
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorObjectClassUsage members
+    public async Task<ObjectClassUsageResult> ReadObjectClassUsageAsync(
+        ConnectedSystem connectedSystem,
+        ObjectClassUsageRequest request,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        IConnectorProgress progress)
+    {
+        // Its own connection, as schema discovery takes: this runs as a worker task of its own rather than as part
+        // of a synchronisation run, so there is no import connection already open to borrow.
+        OpenImportConnection(connectedSystem.SettingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to read object class usage with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var usage = new LdapConnectorObjectClassUsage(_connection, logger, rootDse);
+            return await usage.ReadAsync(connectedSystem, request, cancellationToken, progress);
         }
         finally
         {
