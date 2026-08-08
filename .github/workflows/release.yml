@@ -300,7 +300,10 @@ jobs:
         run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
 
       - name: Build site
-        run: mkdocs build
+        # --strict: see the comment on the equivalent step in docs.yml. Safe to fail a release on,
+        # because nothing in the release depends on publish-docs; a broken-link failure here loses the
+        # docs publish for that release and leaves the containers, module and GitHub Release intact.
+        run: mkdocs build --strict
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0

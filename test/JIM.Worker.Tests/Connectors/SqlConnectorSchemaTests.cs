@@ -245,6 +245,101 @@ public class SqlConnectorSchemaTests
     }
 
     [Test]
+    public async Task GetSchemaAsync_ATableBackedObjectTypesAnchor_IsWritableOnCreateSoTheTableCanBeProvisionedIntoAsync()
+    {
+        // A table whose primary key is a natural identifier can only be provisioned into if a
+        // Synchronisation Rule may author the key. Marking the anchor Read-Only refuses that Attribute
+        // Flow outright, which makes provisioning impossible; marking it Writable would let an Update
+        // Pending Export rewrite the key and orphan the Connected System Object.
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("GIVEN_NAME", "nvarchar", MaxLength: 64));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
+
+        var objectType = schema.ObjectTypes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Writability(objectType, "EMPLOYEE_ID"), Is.EqualTo(AttributeWritability.WritableOnCreate),
+                "JIM supplies a natural primary key when it inserts the row, and never rewrites it afterwards.");
+            Assert.That(Writability(objectType, "GIVEN_NAME"), Is.EqualTo(AttributeWritability.Writable),
+                "An ordinary column of a table is writable whenever the object exists.");
+        }
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_AViewBackedObjectTypesAnchor_StaysReadOnlyBecauseNothingAboutThatSourceIsWritableAsync()
+    {
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddView("HR", "V_EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("GIVEN_NAME", "nvarchar", MaxLength: 64));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "V_EMPLOYEES"));
+
+        Assert.That(Writability(schema.ObjectTypes.Single(), "EMPLOYEE_ID"), Is.EqualTo(AttributeWritability.ReadOnly),
+            "A view is not an export target at all, so there is no create for its anchor to be writable on.");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_ASelectBackedObjectTypesAnchor_StaysReadOnlyAsync()
+    {
+        const string statement = "SELECT EMPLOYEE_ID, GIVEN_NAME FROM HR.EMPLOYEES WHERE ACTIVE = 1";
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddSelectStatement(statement,
+            new FakeCatalogueColumn("EMPLOYEE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("GIVEN_NAME", "nvarchar", MaxLength: 64));
+
+        var schema = await GetSchemaAsync(provider, $$"""
+            {
+              "objectTypes": [
+                { "name": "Person", "select": "{{statement}}", "anchorColumns": [ "EMPLOYEE_ID" ] }
+              ]
+            }
+            """);
+
+        Assert.That(Writability(schema.ObjectTypes.Single(), "EMPLOYEE_ID"), Is.EqualTo(AttributeWritability.ReadOnly),
+            "A SELECT statement is not something JIM can write to, so nothing it exposes is writable.");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_ACompositeAnchorOnATable_LeavesTheComposedAttributeReadOnlyAndEachAnchorColumnWritableOnCreateAsync()
+    {
+        // The composed attribute is JIM's own projection rather than a column, so nothing is ever
+        // written to it; the columns it is composed from are real columns of the table, and a composite
+        // natural key would be unprovisionable if they were not individually writable on create.
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddTable("HR", "ENROLMENTS",
+            new FakeCatalogueColumn("STUDENT_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("COURSE_ID", "int", IsNullable: false),
+            new FakeCatalogueColumn("GRADE", "nvarchar", MaxLength: 2));
+
+        var schema = await GetSchemaAsync(provider, """
+            {
+              "objectTypes": [
+                {
+                  "name": "Enrolment",
+                  "schema": "HR",
+                  "table": "ENROLMENTS",
+                  "anchorColumns": [ "STUDENT_ID", "COURSE_ID" ]
+                }
+              ]
+            }
+            """);
+
+        var objectType = schema.ObjectTypes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectType.RecommendedExternalIdAttribute.Writability, Is.EqualTo(AttributeWritability.ReadOnly),
+                "A composed anchor is JIM's own projection, so nothing can be written to it.");
+            Assert.That(Writability(objectType, "STUDENT_ID"), Is.EqualTo(AttributeWritability.WritableOnCreate));
+            Assert.That(Writability(objectType, "COURSE_ID"), Is.EqualTo(AttributeWritability.WritableOnCreate));
+            Assert.That(Writability(objectType, "GRADE"), Is.EqualTo(AttributeWritability.Writable));
+        }
+    }
+
+    [Test]
     public void GetSchemaAsync_AnAnchorColumnTheSourceDoesNotHave_ThrowsNamingBoth()
     {
         var provider = new FakeSqlProvider();
@@ -647,6 +742,9 @@ public class SqlConnectorSchemaTests
 
     private static AttributeDataType AttributeType(ConnectorSchemaObjectType objectType, string attributeName) =>
         objectType.Attributes.Single(a => a.Name == attributeName).Type;
+
+    private static AttributeWritability Writability(ConnectorSchemaObjectType objectType, string attributeName) =>
+        objectType.Attributes.Single(a => a.Name == attributeName).Writability;
 
     private static string ObjectTypesDocument(string? schemaName, string tableName)
     {
