@@ -7,9 +7,15 @@ function Set-JIMSyncRuleInitialPassword {
         Configures the initial password a Synchronisation Rule sets on the accounts it provisions.
 
     .DESCRIPTION
-        A newly provisioned account has no password and cannot be signed in to. Turning this on has JIM
-        generate one per account and set it through the Connected System's password channel, straight after the
-        account is created. The password is generated at the moment it is set and is never stored by JIM.
+        A newly provisioned account has no password and cannot be signed in to. Turning this on has JIM set one
+        through the Connected System's password channel, straight after the account is created. By default JIM
+        generates a different password for each account at the moment it is set, and stores none of them.
+
+        -Source Static is the exception: it sets one password you choose on every account the rule provisions,
+        so you can tell a new starter what it is. That password is the only one JIM stores. It is encrypted, it
+        is never returned by any surface, and every account the rule provisions shares it until each person
+        changes it, so anybody who learns it can sign in as any new starter who has not. JIM does not recommend
+        it; #1252 will deliver a generated password to somebody who should have it instead.
 
         Only the parameters provided are changed; everything else keeps its stored value. The exception is the
         generator settings, which are replaced as a set: supplying any of the -Style, -Length, -Minimum*,
@@ -34,11 +40,21 @@ function Set-JIMSyncRuleInitialPassword {
         Stops setting an initial password. The settings are kept, so re-enabling restores them.
 
     .PARAMETER Source
-        Where the generator settings come from.
+        Where the password comes from.
         Valid values:
-          - Discovered: derive them from the password policy JIM discovered on the Connected System, and
-            re-derive whenever that policy is read again.
-          - Custom: use exactly the settings saved on this rule.
+          - Discovered: generate one per account, deriving the settings from the password policy JIM discovered
+            on the Connected System, and re-deriving whenever that policy is read again.
+          - Custom: generate one per account using exactly the settings saved on this rule.
+          - Static: set the one password supplied with -StaticPassword on every account. Not recommended; see
+            the description.
+
+    .PARAMETER StaticPassword
+        The one password to set on every account this Synchronisation Rule provisions, used when -Source is
+        Static. Supply it as a SecureString so it does not sit in the session's command history in clear text.
+
+        Write-only: JIM encrypts it and never returns it. Omit it to leave the stored password as it is, which
+        is what makes changing another setting safe. A password the Connected System would refuse is rejected
+        here rather than parking every account the rule provisions.
 
     .PARAMETER Style
         How the password is composed. Valid values: RandomCharacters, Words, Pronounceable.
@@ -114,6 +130,21 @@ function Set-JIMSyncRuleInitialPassword {
         telephone than a random string.
 
     .EXAMPLE
+        $password = Read-Host -AsSecureString "Initial password for every new account"
+        Set-JIMSyncRuleInitialPassword -Id 5 -Enable -Source Static -StaticPassword $password
+
+        Sets one password on every account this rule provisions. Not recommended: every new starter shares it
+        until each of them changes it. Leave -ExpiryBehaviour at its default so that first sign-in ends each
+        account's share of it.
+
+    .EXAMPLE
+        $password = Read-Host -AsSecureString "New shared initial password"
+        Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -ChangeReason "Rotated after a leaver (CHG0043)"
+
+        Rotates the shared password, leaving every other setting alone. Do this whenever somebody who knew it
+        leaves; Get-JIMSyncRuleInitialPassword reports when it last changed.
+
+    .EXAMPLE
         Set-JIMSyncRuleInitialPassword -Id 5 -Disable -ChangeReason "Accounts are now provisioned pre-enabled (CHG0042)"
 
         Stops setting an initial password, recording why against the rule's change history.
@@ -143,8 +174,12 @@ function Set-JIMSyncRuleInitialPassword {
         [switch]$Disable,
 
         [Parameter()]
-        [ValidateSet('Discovered', 'Custom')]
+        [ValidateSet('Discovered', 'Custom', 'Static')]
         [string]$Source,
+
+        [Parameter()]
+        [ValidateNotNull()]
+        [securestring]$StaticPassword,
 
         [Parameter()]
         [ValidateSet('RandomCharacters', 'Words', 'Pronounceable')]
@@ -234,6 +269,12 @@ function Set-JIMSyncRuleInitialPassword {
 
         if ($PSBoundParameters.ContainsKey('Source')) {
             $body.source = $Source
+        }
+
+        if ($PSBoundParameters.ContainsKey('StaticPassword')) {
+            # Unwrapped once, here, and sent over TLS for the API to encrypt. A SecureString on the parameter is
+            # what keeps it out of the session's command history and any transcript of it.
+            $body.staticPassword = ConvertFrom-SecureString -SecureString $StaticPassword -AsPlainText
         }
 
         if ($PSBoundParameters.ContainsKey('ExpiryBehaviour')) {

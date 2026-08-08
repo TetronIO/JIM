@@ -2371,6 +2371,10 @@ public class SynchronisationController(
     /// replaces the generator settings as a set rather than merging field by field, because they only make
     /// sense together.
     ///
+    /// `staticPassword` is write-only: it is encrypted before it is stored and is never returned. Omit it to
+    /// leave the stored password as it is. A rule using the `Static` source with no password stored is refused,
+    /// because delivery would park every account it provisions.
+    ///
     /// Only Export rules that provision can set an initial password: only an account JIM has just created has
     /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
     /// </remarks>
@@ -2416,6 +2420,24 @@ public class SynchronisationController(
         if (request.EnableAccount.HasValue)
             configuration.EnableAccount = request.EnableAccount.Value;
 
+        // Assessed before it is stored, and against the same discovered policy the generator is checked against.
+        // One static password goes to every account this rule provisions, so a value the target refuses is not
+        // one account's problem, and the administrator sending it is the person who can fix it.
+        if (!string.IsNullOrEmpty(request.StaticPassword))
+        {
+            var suppliedAssessment = _application.PasswordGenerator.AssessSupplied(
+                request.StaticPassword,
+                await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId));
+
+            // The assessment's problems never quote the password, which is what makes them safe to return here.
+            if (!suppliedAssessment.IsUsable)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"This password cannot be used: {string.Join(" ", suppliedAssessment.Problems)}"));
+
+            configuration.StaticPasswordEncryptedValue = _application.InitialPasswords.ProtectStaticPassword(request.StaticPassword);
+            configuration.StaticPasswordSetAt = DateTime.UtcNow;
+        }
+
         // Refused rather than silently accepted: a rule that never creates an account has nothing to give a
         // first password to, and storing the setting anyway would have it do nothing while reading as configured.
         if (configuration.Enabled && !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
@@ -2424,7 +2446,17 @@ public class SynchronisationController(
 
         // Checked here rather than left to fail per account: an unsatisfiable configuration parks every account
         // it touches, and the administrator saving it is the person who can fix it.
-        if (configuration.Enabled)
+        if (configuration.Enabled && configuration.Source == InitialPasswordSource.Static)
+        {
+            // A rule that will set one static password but has none would park every account it provisions. That
+            // is the same class of fault as an unsatisfiable generator configuration, and refused for the same
+            // reason. A stored password needs no re-checking here: it was assessed when it was set.
+            if (string.IsNullOrEmpty(configuration.StaticPasswordEncryptedValue))
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    "This Synchronisation Rule is set to use one password for every account it provisions, but no password " +
+                    "has been set. Supply staticPassword, or choose a different source."));
+        }
+        else if (configuration.Enabled)
         {
             var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId);
             var policy = configuration.Source == InitialPasswordSource.Custom
