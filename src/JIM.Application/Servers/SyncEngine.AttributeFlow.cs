@@ -73,6 +73,19 @@ public partial class SyncEngine
                     contributingSyncRuleId, syncRuleMapping.TargetMetaverseAttribute.Id, mvo.Id);
                 return;
             }
+
+            // This contribution has won the gate, so under winner-takes-all-values a losing rule contributes
+            // nothing. Discard any values a losing rule staged for this attribute earlier in this same pass
+            // (#1199). The Process*Attribute writers below diff against the Metaverse Object's PERSISTED values,
+            // which cannot see a pending addition, so without this a second contributing rule appends its value
+            // beside the loser's instead of replacing it, leaving a single-valued attribute holding two values.
+            // Reachable only when two contributing rules are evaluated in the same pass, which in turn requires
+            // two import rules on the SAME Connected System contributing to one attribute: the fine-grained
+            // authority topology. Contributions from different systems arrive in different runs, by which point
+            // the incumbent's value is persisted and the ordinary diff removes it.
+            mvo.PendingAttributeValueAdditions.RemoveAll(av =>
+                av.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id &&
+                av.ContributedBySyncRuleId != contributingSyncRuleId);
         }
 
         foreach (var source in syncRuleMapping.Sources.OrderBy(q => q.Order))

@@ -16,6 +16,22 @@ Because priority is held per Synchronisation Rule mapping, the same Connected Sy
 
 A single-source attribute (only one rule maps to it) needs no configuration and is unaffected.
 
+## 🎯 Giving one system authority over a subset of objects
+
+Because the priority list is a list of **Synchronisation Rules**, not of Connected Systems, a system can appear in it more than once through rules with different Scoping Criteria. That is how you express "this system is authoritative for these objects, that system is authoritative for the rest" without any extra machinery.
+
+The usual shape is two import rules on the same Connected System:
+
+- an **unscoped** rule that applies to everything it imports, sitting low in the priority order; and
+- a **narrowly scoped** rule covering just the exception objects, sitting at the top.
+
+An object inside the scoped rule's criteria is contributed by that rule and wins. An object outside them is not contributed by that rule at all (the rule has no opinion for it, exactly as a disabled rule has none), so the next priority decides. Authority is therefore per object, not per system, and the two rules never fight: at most one of them applies to any given object.
+
+Two consequences are worth stating plainly:
+
+- **Scoping Criteria are evaluated against Connected System Object attributes, so an object can move in and out of a rule's scope as its own attributes change.** Renaming a group so it matches an exceptions pattern transfers authority for it on the next synchronisation. That is the intended behaviour, and it is quiet: nothing announces it beyond the resolution decision itself.
+- **The losing system is not corrected automatically.** A change made directly in a system that loses resolution never reaches the Metaverse, but it stays in that system until an export Synchronisation Rule with **Enforce State** targets it, at which point export re-evaluation stages a corrective Pending Export and puts the winning value back. Without such a rule the losing system simply remains divergent; the Metaverse and every other system are protected either way.
+
 ## ⛔ "Null is a value"
 
 By default, if the highest-priority source has **no** value for an attribute, JIM falls through to the next source. Sometimes that is wrong: when the authoritative source clears a value, you want the clear to propagate, not to be back-filled from a stale secondary copy.
