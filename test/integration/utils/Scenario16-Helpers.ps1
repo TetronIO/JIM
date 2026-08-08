@@ -304,6 +304,28 @@ function Invoke-S16Pipeline {
     Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
     Invoke-S16RunProfile -Context $Context -Name "Export"               | Out-Null
     Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+
+    # A pipeline satisfies the lighter baseline too, so a driver-shape row running after an export row
+    # does not import and synchronise all over again for nothing.
+    $Context['SyncBaselineDone'] = $true
+}
+
+function Initialize-S16SyncBaseline {
+    <#
+    .SYNOPSIS
+        Ensure Metaverse Objects exist for the seeded population, and only import once to get them.
+    .DESCRIPTION
+        What the driver-shape rows need, and no more: they assert on the instant JIM derived from a
+        source column, which lives on the Metaverse Object, and none of them cares whether anything has
+        been exported.
+    #>
+    param([Parameter(Mandatory=$true)][hashtable]$Context)
+
+    if ($Context.ContainsKey('SyncBaselineDone') -and $Context.SyncBaselineDone) { return }
+
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
+    $Context['SyncBaselineDone'] = $true
 }
 
 function Initialize-S16ExportBaseline {
@@ -599,6 +621,89 @@ function Test-S16TypeMappingRoundTrip {
 
 # ─── Driver-shape rows ─────────────────────────────────────────────────────────
 
+function ConvertTo-S16Utc {
+    <#
+    .SYNOPSIS
+        Normalise a Metaverse DateTime attribute value to a UTC DateTime.
+    .DESCRIPTION
+        JIM stores DateTime attribute values as UTC instants; how they arrive over the wire depends on
+        the JSON deserialiser, so both a DateTime and a string are accepted and both end up as Kind Utc.
+        Everything downstream compares instants, never wall clocks, because a wall-clock comparison is
+        the very confusion these rows exist to detect.
+    #>
+    param([Parameter(Mandatory=$true)]$Value)
+
+    if ($Value -is [datetime]) {
+        if ($Value.Kind -eq [System.DateTimeKind]::Utc) { return $Value }
+        return [System.DateTime]::SpecifyKind($Value, [System.DateTimeKind]::Utc)
+    }
+
+    return [System.DateTime]::Parse(
+        [string]$Value,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)
+}
+
+function Get-S16SourceUtc {
+    <#
+    .SYNOPSIS
+        The UTC instant the database itself says an offset-carrying column holds.
+    .DESCRIPTION
+        The ground truth for the offset-carrying rows, computed by the server rather than by this script.
+        Deriving the expected instant here in PowerShell would mean reimplementing the very conversion
+        under test, and a test that reimplements its subject agrees with it by construction.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][string]$Column,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
+
+    $query = if ($Config.Provider -eq "SqlServer") {
+        "SELECT CONVERT(varchar(19), SWITCHOFFSET($Column, 0), 120) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $EmployeeId;"
+    }
+    else {
+        "SELECT TO_CHAR(SYS_EXTRACT_UTC($Column),'YYYY-MM-DD HH24:MI:SS') FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $EmployeeId;"
+    }
+
+    $text = (Invoke-Scenario16Query -Config $Config -Query $query).Trim()
+    return ConvertTo-S16Utc -Value $text
+}
+
+function Get-S16ZonelessWallClock {
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][string]$Column,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
+
+    $query = if ($Config.Provider -eq "SqlServer") {
+        "SELECT CONVERT(varchar(19), $Column, 120) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $EmployeeId;"
+    }
+    else {
+        "SELECT TO_CHAR($Column,'YYYY-MM-DD HH24:MI:SS') FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $EmployeeId;"
+    }
+
+    return (Invoke-Scenario16Query -Config $Config -Query $query).Trim()
+}
+
+function Get-S16ExpectedUtcForZoneless {
+    <#
+    .SYNOPSIS
+        The UTC instant a zoneless wall clock names when read in the Connected System's Database Time Zone.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$WallClock,
+        [Parameter(Mandatory=$true)][string]$TimeZoneId
+    )
+
+    $unspecified = [System.DateTime]::SpecifyKind(
+        [System.DateTime]::ParseExact($WallClock, 'yyyy-MM-dd HH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture),
+        [System.DateTimeKind]::Unspecified)
+    $zone = [System.TimeZoneInfo]::FindSystemTimeZoneById($TimeZoneId)
+    return [System.TimeZoneInfo]::ConvertTimeToUtc($unspecified, $zone)
+}
+
 function Test-S16DateTimeNonUtc {
     param([hashtable]$Context, [hashtable]$Config)
 
@@ -606,67 +711,202 @@ function Test-S16DateTimeNonUtc {
         return @{ Status = 'fail'; Detail = "The Connected System is configured for UTC, which makes every zone conversion the identity and the assertion meaningless. This row requires a non-UTC Database Time Zone." }
     }
 
-    # START_DATE is zoneless, so JIM must interpret it in the declared zone and store the corresponding
-    # UTC instant. Employee 7's START_DATE is 2020-01-13 00:00:00 local; Europe/London is UTC+0 in
-    # January, so the stored UTC instant is the same wall clock. Employee 200's is in July, where
-    # Europe/London is UTC+1 and the stored instant must be an hour earlier than the wall clock. Both
-    # are checked because a zone applied as a fixed offset passes the January case alone.
-    $januaryWallClock = (Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(START_DATE,'YYYY-MM-DD HH24:MI:SS') FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = 7;").Trim()
+    Initialize-S16SyncBaseline -Context $Context
 
-    return @{
-        Status = 'skip'
-        Detail = "Authored but not executed. Asserting the stored UTC instant requires reading the Metaverse Object's DateTime value back, which needs the inbound Synchronisation Rule Setup-Scenario16.ps1 does not yet create. Source wall clock for employee 7 is '$januaryWallClock' in $($Context.DatabaseTimeZone)."
+    # START_DATE is zoneless, so JIM must interpret it in the declared zone and store the corresponding
+    # UTC instant. Both sides of a daylight-saving transition are checked, because a zone applied as a
+    # fixed offset passes a single-season test: Australia/Sydney is UTC+11:00 over the seeded January
+    # dates and UTC+10:00 in the southern winter, so a fixed-offset implementation gets the second case
+    # an hour wrong and nothing else distinguishes the two.
+    $employeeId = 7
+    $failures = @()
+    $observed = @()
+
+    $originalWallClock = Get-S16ZonelessWallClock -Config $Config -Column 'START_DATE' -EmployeeId $employeeId
+
+    function Test-S16ZonelessInstant {
+        param([hashtable]$RowContext, [string]$Label, [string]$WallClock, [int]$Employee)
+
+        $attributeName = $RowContext.MetaverseAttributes.ZonelessDate
+        $mvo = Get-S16MetaverseObject -EmployeeId $Employee
+        if (-not $mvo) { return @{ Failure = "No Metaverse Object was projected for employee $Employee ($Label)."; Observation = $null } }
+
+        $value = Get-S16MvoValue -Mvo $mvo -AttributeName $attributeName
+        if (-not $value -or -not $value.dateTimeValue) {
+            return @{ Failure = "The Metaverse Object for employee $Employee carries no '$attributeName' value ($Label)."; Observation = $null }
+        }
+
+        $actual = ConvertTo-S16Utc -Value $value.dateTimeValue
+        $expected = Get-S16ExpectedUtcForZoneless -WallClock $WallClock -TimeZoneId $RowContext.DatabaseTimeZone
+        $observation = "$Label wall clock '$WallClock' in $($RowContext.DatabaseTimeZone) stored as $($actual.ToString('o'))"
+
+        if ($actual -ne $expected) {
+            return @{ Failure = "$Label : the source wall clock is '$WallClock' in $($RowContext.DatabaseTimeZone), so the stored instant should be $($expected.ToString('o')); JIM stored $($actual.ToString('o'))."; Observation = $observation }
+        }
+        return @{ Failure = $null; Observation = $observation }
     }
+
+    $summerOutcome = Test-S16ZonelessInstant -RowContext $Context -Label 'Southern summer (UTC+11:00)' -WallClock $originalWallClock -Employee $employeeId
+    if ($summerOutcome.Failure) { $failures += $summerOutcome.Failure } else { $observed += $summerOutcome.Observation }
+
+    # The seeded population never leaves January and February, so the other side of the transition has to
+    # be written in rather than found. Restored afterwards so later rows still see the deterministic seed.
+    $winterWallClock = '2020-07-15 09:30:00'
+    try {
+        Invoke-Scenario16NonQuery -Config $Config -Statement $(
+            if ($Config.Provider -eq "SqlServer") { "UPDATE $($Config.Schema).EMPLOYEES SET START_DATE = CAST('$winterWallClock' AS datetime2(3)) WHERE EMPLOYEE_ID = $employeeId;" }
+            else { "UPDATE $($Config.Schema).EMPLOYEES SET START_DATE = TIMESTAMP '$winterWallClock' WHERE EMPLOYEE_ID = $employeeId;" })
+
+        Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+        Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
+
+        $winterOutcome = Test-S16ZonelessInstant -RowContext $Context -Label 'Southern winter (UTC+10:00)' -WallClock $winterWallClock -Employee $employeeId
+        if ($winterOutcome.Failure) { $failures += $winterOutcome.Failure } else { $observed += $winterOutcome.Observation }
+    }
+    finally {
+        Invoke-Scenario16NonQuery -Config $Config -Statement $(
+            if ($Config.Provider -eq "SqlServer") { "UPDATE $($Config.Schema).EMPLOYEES SET START_DATE = CAST('$originalWallClock' AS datetime2(3)) WHERE EMPLOYEE_ID = $employeeId;" }
+            else { "UPDATE $($Config.Schema).EMPLOYEES SET START_DATE = TIMESTAMP '$originalWallClock' WHERE EMPLOYEE_ID = $employeeId;" })
+        Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+        Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
+    }
+
+    if ($failures.Count -gt 0) {
+        return @{ Status = 'fail'; Detail = ($failures -join ' ') }
+    }
+
+    return @{ Status = 'pass'; Detail = "Zoneless values interpreted in $($Context.DatabaseTimeZone) on both sides of the daylight-saving transition. $($observed -join '; ')." }
 }
 
 function Test-S16OffsetVersusZoneless {
     param([hashtable]$Context, [hashtable]$Config)
 
-    # LAST_MODIFIED (zoneless) and HIRED_AT (offset-carrying, -05:00) name the same wall clock in the
-    # seeded data but different instants. Import must treat them differently: the zoneless one through
-    # the Database Time Zone, the offset-carrying one at the instant it states.
-    return @{
-        Status = 'skip'
-        Detail = "Authored but not executed. Needs the inbound Synchronisation Rule to read both values back as Metaverse DateTime attributes."
+    Initialize-S16SyncBaseline -Context $Context
+
+    # START_DATE (zoneless) and HIRED_AT (offset-carrying, stated as -05:00) sit in the same table and are
+    # read by the same import. Import decides which is which from the runtime CLR type the driver returns,
+    # and the failure this row is built to catch is the Database Time Zone being applied to the
+    # offset-carrying column as well: the instant would then be wrong by the difference between the two
+    # offsets, and no single-column test would notice.
+    $employeeId = 7
+    $failures = @()
+
+    $mvo = Get-S16MetaverseObject -EmployeeId $employeeId
+    if (-not $mvo) {
+        return @{ Status = 'fail'; Detail = "No Metaverse Object was projected for employee $employeeId, so neither value can be read back." }
     }
+
+    $zonelessValue = Get-S16MvoValue -Mvo $mvo -AttributeName $Context.MetaverseAttributes.ZonelessDate
+    $offsetValue   = Get-S16MvoValue -Mvo $mvo -AttributeName $Context.MetaverseAttributes.OffsetDate
+
+    if (-not $zonelessValue -or -not $zonelessValue.dateTimeValue) { $failures += "The zoneless column produced no Metaverse value." }
+    if (-not $offsetValue   -or -not $offsetValue.dateTimeValue)   { $failures += "The offset-carrying column produced no Metaverse value." }
+
+    if ($failures.Count -gt 0) {
+        return @{ Status = 'fail'; Detail = ($failures -join ' ') }
+    }
+
+    $zonelessWallClock = Get-S16ZonelessWallClock -Config $Config -Column 'START_DATE' -EmployeeId $employeeId
+    $expectedZoneless = Get-S16ExpectedUtcForZoneless -WallClock $zonelessWallClock -TimeZoneId $Context.DatabaseTimeZone
+    $actualZoneless = ConvertTo-S16Utc -Value $zonelessValue.dateTimeValue
+    if ($actualZoneless -ne $expectedZoneless) {
+        $failures += "The zoneless column should have been read in $($Context.DatabaseTimeZone) as $($expectedZoneless.ToString('o')); JIM stored $($actualZoneless.ToString('o'))."
+    }
+
+    $expectedOffset = Get-S16SourceUtc -Config $Config -Column 'HIRED_AT' -EmployeeId $employeeId
+    $actualOffset = ConvertTo-S16Utc -Value $offsetValue.dateTimeValue
+    if ($actualOffset -ne $expectedOffset) {
+        $failures += "The offset-carrying column states its own offset, so the stored instant should be the $($expectedOffset.ToString('o')) the server itself reports; JIM stored $($actualOffset.ToString('o')). A difference matching the Database Time Zone's offset means the zone was applied to a column that did not need it."
+    }
+
+    if ($failures.Count -gt 0) {
+        return @{ Status = 'fail'; Detail = ($failures -join ' ') }
+    }
+
+    return @{ Status = 'pass'; Detail = "Both columns in one table read correctly and differently: zoneless through $($Context.DatabaseTimeZone), offset-carrying at the instant it states." }
 }
 
 function Test-S16LocalTimeZone {
     param([hashtable]$Context, [hashtable]$Config)
 
+    Initialize-S16SyncBaseline -Context $Context
+
     # Oracle's TIMESTAMP WITH LOCAL TIME ZONE is the case where the connector's two oracles can
     # disagree: SqlTypeMapper.CarriesAnOffset (which export consults, via the catalogue's type name)
     # lists it as offset-carrying, while import decides from the runtime CLR type the driver returns.
+    # SYS_EXTRACT_UTC is the arbiter, because it is the server's own answer for the absolute instant the
+    # column holds and it does not depend on either session's time zone.
+    $employeeId = 7
     $catalogueType = (Invoke-Scenario16Query -Config $Config -Query "SELECT DATA_TYPE FROM ALL_TAB_COLUMNS WHERE OWNER = '$($Config.Schema)' AND TABLE_NAME = 'EMPLOYEES' AND COLUMN_NAME = 'HIRED_AT_LOCAL';").Trim()
 
-    return @{
-        Status = 'skip'
-        Detail = "Authored but not executed. The catalogue reports '$catalogueType', which SqlTypeMapper treats as offset-carrying; a standalone driver probe established that ODP.NET returns a zoneless DateTime for this column, so import and export disagree. Confirming that end to end needs the inbound Synchronisation Rule."
+    $mvo = Get-S16MetaverseObject -EmployeeId $employeeId
+    if (-not $mvo) {
+        return @{ Status = 'fail'; Detail = "No Metaverse Object was projected for employee $employeeId." }
     }
+
+    $value = Get-S16MvoValue -Mvo $mvo -AttributeName $Context.MetaverseAttributes.LocalZoneDate
+    if (-not $value -or -not $value.dateTimeValue) {
+        return @{ Status = 'fail'; Detail = "The catalogue reports '$catalogueType' for HIRED_AT_LOCAL, but the column produced no Metaverse value at all." }
+    }
+
+    $expected = Get-S16SourceUtc -Config $Config -Column 'HIRED_AT_LOCAL' -EmployeeId $employeeId
+    $actual = ConvertTo-S16Utc -Value $value.dateTimeValue
+
+    if ($actual -ne $expected) {
+        return @{ Status = 'fail'; Detail = "HIRED_AT_LOCAL (catalogue type '$catalogueType') holds the instant $($expected.ToString('o')) according to Oracle's own SYS_EXTRACT_UTC; JIM imported $($actual.ToString('o')). The session time zone pinning is not holding through the import, or the column is being classified differently by import and export." }
+    }
+
+    # The two neighbouring shapes have to agree in the same import, or the classification is arbitrary.
+    $offsetValue = Get-S16MvoValue -Mvo $mvo -AttributeName $Context.MetaverseAttributes.OffsetDate
+    if ($offsetValue -and $offsetValue.dateTimeValue) {
+        $offsetExpected = Get-S16SourceUtc -Config $Config -Column 'HIRED_AT' -EmployeeId $employeeId
+        $offsetActual = ConvertTo-S16Utc -Value $offsetValue.dateTimeValue
+        if ($offsetActual -ne $offsetExpected) {
+            return @{ Status = 'fail'; Detail = "HIRED_AT_LOCAL imported correctly but its TIMESTAMP WITH TIME ZONE neighbour did not (expected $($offsetExpected.ToString('o')), got $($offsetActual.ToString('o'))), so the three date and time shapes in this table are not being told apart consistently." }
+        }
+    }
+
+    return @{ Status = 'pass'; Detail = "TIMESTAMP WITH LOCAL TIME ZONE imported at the instant Oracle's own SYS_EXTRACT_UTC reports, alongside a TIMESTAMP WITH TIME ZONE and a zoneless column in the same table." }
 }
 
 function Test-S16Raw16Anchor {
     param([hashtable]$Context, [hashtable]$Config)
+
+    # The export half is the reason this row exists at all: a key defaulted from SYS_GUID() comes back
+    # through a bound output parameter as an ODP.NET wrapper struct rather than a plain byte[], and
+    # nothing in the unit suite can see that shape. Running the baseline first means the table holds both
+    # the three pre-seeded rows (the import half) and the rows JIM provisioned (the export half).
+    Initialize-S16ExportBaseline -Context $Context
 
     $guidTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'GuidKeyedPerson'
     $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -Count
     $expected = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).GUID_KEYED_PEOPLE;")
 
     if ([int]$imported -ne $expected) {
-        return @{ Status = 'fail'; Detail = "Expected $expected GuidKeyedPerson object(s) from the RAW(16)-anchored table, found $imported." }
+        return @{ Status = 'fail'; Detail = "GUID_KEYED_PEOPLE holds $expected row(s) but JIM holds $imported Connected System Object(s). If JIM holds more, the RAW(16) anchor it composed on export does not equal the one it composed on import and the confirming import did not recognise its own rows." }
     }
 
-    # The import half is what this proves: a RAW(16) anchor read back as bytes and rendered as a GUID.
-    # The export half (a generated key returned from RETURNING ... INTO) needs an outbound rule.
+    # The seeder writes three rows before anything runs; everything beyond that was provisioned by JIM
+    # and therefore had its key generated by the database and read back through the output parameter.
+    $provisioned = $expected - 3
+    $expectedProvisioned = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'Finance'
+    if ($provisioned -ne $expectedProvisioned) {
+        return @{ Status = 'fail'; Detail = "The rule is scoped to Department = Finance, so $expectedProvisioned row(s) should have been provisioned on top of the three seeded ones; GUID_KEYED_PEOPLE holds $expected row(s) in total." }
+    }
+
     $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -All -Force
     $anchors = @($objects | ForEach-Object { $_.externalIdValue })
     $malformed = @($anchors | Where-Object { $_ -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' })
 
     if ($malformed.Count -gt 0) {
-        return @{ Status = 'fail'; Detail = "RAW(16) anchors did not render as hyphenated GUIDs: $($malformed -join ', ')" }
+        return @{ Status = 'fail'; Detail = "RAW(16) anchors did not render as hyphenated GUIDs: $(($malformed | Select-Object -First 5) -join ', ')" }
     }
 
-    return @{ Status = 'pass'; Detail = "$imported RAW(16) anchor(s) imported and rendered as GUIDs (import half only; the generated-key export half needs an outbound Synchronisation Rule)." }
+    if (@($anchors | Select-Object -Unique).Count -ne $anchors.Count) {
+        return @{ Status = 'fail'; Detail = "The RAW(16) anchors are not distinct, which is what an output parameter read back as a default-initialised wrapper struct would look like." }
+    }
+
+    return @{ Status = 'pass'; Detail = "$expected RAW(16) anchor(s) round-tripped: three seeded rows imported, $provisioned provisioned with a SYS_GUID() key returned through the output parameter, and every one recognised again by the confirming import." }
 }
 
 function Test-S16NumberShapes {
