@@ -127,7 +127,7 @@ If you select a Partition for a domain the connected domain controller does not 
 
 ### Container Scope
 
-Each selected Container carries a scope, shown beside it in the Container tree on the Connected System's **Partitions** tab:
+Each selected Container carries a scope, shown beside it in the Container tree on the Connected System's **Partitions** tab. The scope is a control as well as a label: select it to switch the Container between the two values.
 
 | Scope | What is imported | Containers beneath it |
 |-------|------------------|-----------------------|

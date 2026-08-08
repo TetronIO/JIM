@@ -97,7 +97,7 @@ Two limits are worth knowing, and the preview states both where they apply:
 - **Objects JIM has never imported cannot be counted.** Selecting new scope makes the next Full Import discover objects that are not in the connector space yet, and there is nothing to count until it runs.
 - **Some objects cannot be placed.** An object imported before JIM recorded partitions, or one whose Connector cannot say what container an object is in, is left out of the counts entirely rather than guessed at in either direction.
 
-Save after previewing and the confirmation states the preview's counts alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+Save after previewing and the confirmation opens with the preview's own sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
 
 The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/scope-selection/preview` in the [REST API](../../api/reference/). Send the whole proposed selection rather than one flag: what a deselection costs depends on the rest of the selection, because an object leaves scope only when nothing else still covers it.
 
