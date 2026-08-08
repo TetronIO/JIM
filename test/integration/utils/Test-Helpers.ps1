@@ -641,9 +641,12 @@ function Get-DatabaseConfig {
                 Binary          = "RAW(64)"
             }
 
-            # Oracle's third date/time shape, and the one the matrix exists to pin down: the catalogue
-            # calls it offset-carrying, but ODP.NET returns a zoneless DateTime for it, converted into
-            # the session's time zone rather than the Connected System's.
+            # Oracle's third date/time shape, and the one the matrix exists to pin down. Its catalogue
+            # name reads as though it carried an offset, but ODP.NET returns a zoneless DateTime for it,
+            # already converted into the session's time zone. The connector therefore classifies it as
+            # zoneless in both directions and pins the session to the Connected System's Database Time
+            # Zone as each connection opens; those two together are what make a value written here read
+            # back as the same instant, whichever host the Worker happens to run on.
             LocalZoneDateColumn = "TIMESTAMP(3) WITH LOCAL TIME ZONE"
             GeneratedKeyStyle   = "Sequence"
         }
