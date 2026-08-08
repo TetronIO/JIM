@@ -118,6 +118,28 @@
         test/JIM.Worker.Tests/Workflows/AttributePriorityRecallWorkflowTests.cs), so this cell is
         now implemented rather than skipped.
 
+    13. EnforceStateCorrectsLoser - the outbound half of Attribute Priority, and the first step in this
+        file to assert on a Connected System's actual contents rather than on the Metaverse. The
+        Enforce State export Synchronisation Rule on Secondary (Setup-Scenario14.ps1 Step 10b) is run
+        once to drain the divergence every earlier step has been staging, then Frank's (S14-5) Secondary
+        `description` is edited directly in the directory. A Full Import + Full Synchronisation
+        (Secondary) carry the change into his Connected System Object but no further: it loses
+        resolution to Primary at priority 1, so the Metaverse keeps Primary's value, and the directory
+        is still diverged afterwards (inbound processing never writes to a Connected System). A
+        subsequent Export (Secondary) then corrects the directory back to the winning value, read back
+        over LDAP. Dave (S14-3) is the control.
+    14. ScopedExceptionAuthority - fine-grained authority (worked example 2). A SECOND import
+        Synchronisation Rule is created on Primary, scoped to Dave (S14-3) alone, and Description is
+        ordered Exceptions=1, Secondary=2, Primary's plain rule=3: one Connected System holding two
+        positions in one attribute's priority list, which a per-system priority model cannot express.
+        Dave, in the exception rule's scope, resolves to Primary's value with the EXCEPTION rule's
+        provenance; Frank (S14-5), outside it, resolves to Secondary's value, because the exception rule
+        has no opinion for him and Secondary at 2 beats Primary's plain rule at 3. Same two systems,
+        same attribute, opposite winners: authority is per object. One Export (Secondary) then proves
+        both directions of the correction at once, rewriting Dave's Secondary entry (it lost) while
+        leaving Frank's alone (it won). The exception rule is removed and the original
+        Primary=1/Secondary=2 order restored before returning.
+
     Step composition under -Step All: RecallReElection through NoContributorCleared were each
     given a distinct subject (Alice, Bob, Carol, Erin) precisely so they compose safely when run
     back-to-back after BaselineResolution; none of them touches a user another step depends on.
@@ -161,11 +183,27 @@
     since IdenticalValueHandOver) is read as Erin's re-elected Manager reference, not written, so this
     step leaves him untouched too.
 
+    EnforceStateCorrectsLoser and ScopedExceptionAuthority (Phase F) are the first steps to write to a
+    Connected System, and they run last for that reason. The Enforce State export rule has existed
+    since setup, so every earlier step's Full Synchronisation (Secondary) has been staging corrective
+    Pending Exports for the whole population; nothing runs the Export Run Profile until Phase F, so
+    those stage harmlessly and no earlier assertion is affected (they all read the Metaverse, which an
+    unexecuted Pending Export cannot change). Phase F's first act is to drain that backlog, which
+    rewrites Secondary's Description and Job Title for EVERY joined object to the Metaverse's values,
+    including clearing the ones Phases B and C left absent or asserted null. That is a one-way change to
+    the directory's contents and is why this phase is last: a future phase must establish its own
+    Secondary-side values rather than assume the populate script's. Both steps use Frank (S14-5) and
+    Dave (S14-3), and both stage the Secondary values their assertions depend on, so each reads
+    identically under -Step All and standalone. ScopedExceptionAuthority removes its own configuration
+    mutation (the exception Synchronisation Rule and the three-way Description order) before returning,
+    exactly as Phases D and E restore theirs.
+
 .PARAMETER Step
     Which test step to execute (BaselineResolution, RecallReElection, IdenticalValueHandOver,
     WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor,
     NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet,
-    DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion, All).
+    DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion,
+    EnforceStateCorrectsLoser, ScopedExceptionAuthority, All).
     Run-IntegrationTests.ps1 resets and repopulates OpenLDAP for every scenario invocation, so a
     single named -Step run starts from a fresh environment with no synchronised state; the script
     therefore establishes the baseline (both systems fully imported and synchronised) before
@@ -212,7 +250,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "EnforceStateCorrectsLoser", "ScopedExceptionAuthority", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -237,8 +275,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Import helpers
+# Import helpers. LDAP-Helpers supplies the read side (Invoke-LDAPSearch / Expand-LDIFFoldedLine) that
+# the Enforce State export assertions need: they have to observe the directory's ACTUAL state, which
+# only an independent LDAP read can show.
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
+. "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
 if (-not $DirectoryConfig) {
     $DirectoryConfig = Get-DirectoryConfig -DirectoryType OpenLDAP -Instance Source
@@ -290,6 +331,52 @@ function Invoke-Scenario14LdapModify {
     finally {
         Remove-Item -Path $ldifPath -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Get-Scenario14LdapAttribute {
+    <#
+    .SYNOPSIS
+        Reads a single-valued attribute straight from a Scenario 14 OpenLDAP suffix, bypassing JIM.
+
+    .DESCRIPTION
+        The Enforce State export assertions (EnforceStateCorrectsLoser, ScopedExceptionAuthority) must
+        observe the Connected System's ACTUAL state, not JIM's view of it. A Connected System Object
+        mirrors whatever the last import saw, so asserting against it would only prove that JIM
+        remembers staging a Pending Export, never that the directory itself was corrected; an
+        independent LDAP read is the only assertion that distinguishes the two.
+
+        Returns $null when the entry carries no value for the attribute, which is itself a meaningful
+        outcome (an export that cleared the attribute rather than rewriting it).
+    #>
+    param(
+        [Parameter(Mandatory=$true)] [hashtable]$LdapConfig,
+        [Parameter(Mandatory=$true)] [string]$Uid,
+        [Parameter(Mandatory=$true)] [string]$AttributeName
+    )
+
+    $raw = Invoke-LDAPSearch -ContainerName $LdapConfig.ContainerName -Server "localhost" -Port $LdapConfig.Port `
+        -BaseDN $LdapConfig.UserContainer -BindDN $LdapConfig.BindDN -BindPassword $LdapConfig.BindPassword `
+        -Filter "(uid=$Uid)" -Attributes @($AttributeName)
+    if ($null -eq $raw) {
+        throw "ldapsearch for uid=$Uid under $($LdapConfig.UserContainer) returned nothing; the entry is missing or the directory is unreachable."
+    }
+
+    # Unfold first: ldapsearch wraps values at 78 columns, and Scenario 14's description strings sit
+    # close enough to that boundary that a naive line-by-line read would silently truncate them.
+    foreach ($line in (Expand-LDIFFoldedLine -RawLdif ($raw -join "`n"))) {
+        # "attr:: <base64>" is ldapsearch's encoding for values it cannot represent safely in plain
+        # LDIF (leading/trailing whitespace, non-ASCII). Decode rather than treating it as a miss.
+        # Case-insensitive: LDAP attribute descriptions are case-insensitive and slapd echoes back the
+        # schema's canonical spelling, which need not match what was asked for.
+        if ($line.StartsWith("${AttributeName}:: ", [System.StringComparison]::OrdinalIgnoreCase)) {
+            return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($line.Substring($AttributeName.Length + 3)))
+        }
+        if ($line.StartsWith("${AttributeName}: ", [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $line.Substring($AttributeName.Length + 2)
+        }
+    }
+
+    return $null
 }
 
 Write-TestSection "Scenario 14: Attribute Priority"
@@ -362,8 +449,12 @@ try {
     $secondaryFullImport = $secondaryProfiles | Where-Object { $_.name -eq "Full Import" }
     $primaryFullSync = $primaryProfiles | Where-Object { $_.name -eq "Full Synchronisation" }
     $secondaryFullSync = $secondaryProfiles | Where-Object { $_.name -eq "Full Synchronisation" }
+    # Export exists on Secondary only: it is the sole system with an export Synchronisation Rule
+    # (Setup-Scenario14.ps1 Step 10b), because Secondary is the loser whose divergence Enforce State
+    # corrects. Primary is the winner and is never written to.
+    $secondaryExport = $secondaryProfiles | Where-Object { $_.name -eq "Export" }
 
-    if (-not $primaryFullImport -or -not $secondaryFullImport -or -not $primaryFullSync -or -not $secondaryFullSync) {
+    if (-not $primaryFullImport -or -not $secondaryFullImport -or -not $primaryFullSync -or -not $secondaryFullSync -or -not $secondaryExport) {
         throw "Required Run Profiles not found. Ensure Setup-Scenario14.ps1 completed successfully."
     }
 
@@ -1779,6 +1870,362 @@ userPassword: Test@123!
         }
     }
 
+    # ========================================================================
+    # Test 13: EnforceStateCorrectsLoser
+    # ========================================================================
+    if ($Step -eq "EnforceStateCorrectsLoser" -or $Step -eq "All") {
+        Write-TestSection "Test 13: Enforce State Corrects The Loser (Frank, a direct Secondary edit corrected by export)"
+
+        $enforceSuccess = $true
+        $enforceNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+
+            $frankMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-5" -PageSize 5) | Select-Object -First 1
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $frankMvo -or -not $daveMvo) {
+                throw "Could not resolve Frank (S14-5) and/or Dave (S14-3) Metaverse Objects."
+            }
+
+            $frankUid = "frank14"
+            $frankWinningDescription = "Primary-sourced description for Frank Foster (S14)"
+
+            # Converge the loser first. The Enforce State export rule has existed since setup, so every
+            # Full Synchronisation (Secondary) run by an earlier step has been staging corrective
+            # Pending Exports for the whole population (Secondary's seeded description/title differ from
+            # the Metaverse values Primary won). Draining that backlog BEFORE the direct edit below is
+            # what makes this test honest: without it, the correction observed at the end could be the
+            # baseline divergence being cleaned up rather than the direct edit being reverted, and the
+            # step would pass even if a losing contributor's change were never corrected at all.
+            #
+            # Blast radius: this converges Description and Job Title for EVERY joined Secondary object,
+            # not just Frank's, and it is a one-way change to the directory's contents (Erin's
+            # description and Frank's/Grace's title are cleared outright, since their Metaverse values
+            # are absent or asserted null by Phases B and C). Nothing later in this file reads
+            # Secondary's seeded description or title values, and Phase F is the last phase, so this is
+            # contained; a future phase must not assume Secondary still carries its populate-time values.
+            Write-Host "Running Export (Secondary) to converge the losing system onto the Metaverse's values..." -ForegroundColor Gray
+            $exportResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryExport.id -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Export (Secondary) baseline convergence"
+
+            Write-Host "Running Full Import (Secondary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Secondary) after baseline convergence"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary) after baseline convergence"
+
+            $converged = Get-Scenario14LdapAttribute -LdapConfig $secondaryLdapConfig -Uid $frankUid -AttributeName "description"
+            if ($converged -ne $frankWinningDescription) {
+                throw "Convergence precondition failed: expected the Enforce State export to have written the Metaverse value '$frankWinningDescription' into Frank's Secondary entry, found '$converged'."
+            }
+            Write-Host "  OK Frank's Secondary 'description' converged on the winning value; the directory and the Metaverse now agree" -ForegroundColor Green
+            $enforceNotes += "Drained the Enforce State export backlog so the correction below is attributable to the direct edit alone"
+
+            # The direct change in the LOSING system: an administrator editing the lower-priority
+            # directory by hand, which is exactly the "direct AD 1 changes to non-exception groups" leg
+            # of worked example 2 (engineering/plans/doing/ATTRIBUTE_PRIORITY.md).
+            $frankDirectEdit = "Directly edited in the Secondary directory for Frank Foster (S14)"
+            Write-Host "Editing Frank's Secondary 'description' directly in the directory..." -ForegroundColor Gray
+            $editLdif = "dn: uid=$frankUid,$($secondaryLdapConfig.UserContainer)`nchangetype: modify`nreplace: description`ndescription: $frankDirectEdit`n"
+            Invoke-Scenario14LdapModify -ContainerName $secondaryLdapConfig.ContainerName -LdapUri $secondaryLdapUri `
+                -BindDN $secondaryLdapConfig.BindDN -BindPassword $secondaryLdapConfig.BindPassword -Ldif $editLdif
+
+            Write-Host "Running Full Import (Secondary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Secondary) after Frank's direct Secondary edit"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary) after Frank's direct Secondary edit"
+
+            # Inbound leg: the losing contribution never reaches the Metaverse. Sync flow stays linear;
+            # the import still updated the Connected System Object (it mirrors the source system's real
+            # state), the contribution simply lost resolution to Primary at priority 1.
+            Assert-MvoAttributeValue -MvoId $frankMvo.id -AttributeName "Description" `
+                -ExpectedValue $frankWinningDescription `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Frank's Description (the losing system's direct edit never reaches the Metaverse)"
+
+            # The divergence must still be present in the directory at this point: inbound processing
+            # never writes to a Connected System, so nothing has corrected it yet. Asserting this
+            # explicitly separates "the export corrected it" from "it was never diverged".
+            $beforeCorrection = Get-Scenario14LdapAttribute -LdapConfig $secondaryLdapConfig -Uid $frankUid -AttributeName "description"
+            if ($beforeCorrection -ne $frankDirectEdit) {
+                throw "Expected Frank's Secondary entry to still carry the direct edit '$frankDirectEdit' before the corrective export ran, found '$beforeCorrection'."
+            }
+            Write-Host "  OK Secondary still diverged after synchronisation (inbound processing never writes to a Connected System)" -ForegroundColor Green
+
+            # Outbound leg: the correction is the ordinary export path. Secondary is also an export
+            # target, so export evaluation finds its actual state differs from the state derived from
+            # the Metaverse Object and stages a corrective Pending Export like any other.
+            Write-Host "Running Export (Secondary)..." -ForegroundColor Gray
+            $exportResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryExport.id -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Export (Secondary) correcting Frank's direct edit"
+
+            $afterCorrection = Get-Scenario14LdapAttribute -LdapConfig $secondaryLdapConfig -Uid $frankUid -AttributeName "description"
+            if ($afterCorrection -ne $frankWinningDescription) {
+                throw "Enforce State did not correct the losing system: expected Frank's Secondary 'description' to be restored to '$frankWinningDescription', found '$afterCorrection'."
+            }
+            Write-Host "  OK Frank's Secondary 'description' corrected back to the winning contributor's value" -ForegroundColor Green
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (control: unaffected by Frank's direct edit and its correction)"
+
+            $enforceNotes += "Frank's direct Secondary edit lost resolution to Primary (priority 1), stayed out of the Metaverse, and was corrected back in the directory by the Enforce State export; Dave unaffected"
+        }
+        catch {
+            $enforceSuccess = $false
+            $enforceNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "EnforceStateCorrectsLoser"
+                Success = $enforceSuccess
+                Note = ($enforceNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 14: ScopedExceptionAuthority
+    # ========================================================================
+    if ($Step -eq "ScopedExceptionAuthority" -or $Step -eq "All") {
+        Write-TestSection "Test 14: Scoped Exception Authority (per-object authority: Dave in scope, Frank out)"
+
+        $exceptionSuccess = $true
+        $exceptionNotes = @()
+        $exceptionRuleName = "$primarySystemName Import Users (Exceptions)"
+        $exceptionRule = $null
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+            $secondaryImportRuleName = "$secondarySystemName Import Users"
+
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            $frankMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-5" -PageSize 5) | Select-Object -First 1
+            if (-not $daveMvo -or -not $frankMvo) {
+                throw "Could not resolve Dave (S14-3) and/or Frank (S14-5) Metaverse Objects."
+            }
+
+            $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+            $mvDescriptionAttr = @(Get-JIMMetaverseAttribute) | Where-Object { $_.name -eq "Description" }
+            if (-not $mvUserType -or -not $mvDescriptionAttr) {
+                throw "Could not resolve the Metaverse 'User' object type and/or the 'Description' attribute."
+            }
+
+            $primaryObjectTypes = @(Get-JIMConnectedSystem -Id $primarySystem.id -ObjectTypes)
+            $primaryUserType = $primaryObjectTypes | Where-Object { $_.name -eq "inetOrgPerson" }
+            $employeeNumberAttr = $primaryUserType.attributes | Where-Object { $_.name -eq "employeeNumber" }
+            $descriptionCsAttr = $primaryUserType.attributes | Where-Object { $_.name -eq "description" }
+            if (-not $employeeNumberAttr -or -not $descriptionCsAttr) {
+                throw "'employeeNumber' and/or 'description' not found on the Primary system's inetOrgPerson object type."
+            }
+
+            # A SECOND import Synchronisation Rule on the SAME Connected System, narrowly scoped. This is
+            # the whole mechanism behind fine-grained authority: priority list entries are Synchronisation
+            # Rules, not Connected Systems, so a system can hold two positions in one attribute's list and
+            # authority becomes per object rather than per system. Deliberately created WITHOUT
+            # -ProjectToMetaverse: the plain Primary rule already projects, and a second projecting rule on
+            # the same system would add nothing here beyond a second chance to project the same objects.
+            Write-Host "Creating the scoped exception Synchronisation Rule on Primary..." -ForegroundColor Gray
+            $exceptionRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq $exceptionRuleName } | Select-Object -First 1
+            if (-not $exceptionRule) {
+                $exceptionRule = New-JIMSyncRule -Name $exceptionRuleName `
+                    -ConnectedSystemId $primarySystem.id `
+                    -ConnectedSystemObjectTypeId $primaryUserType.id `
+                    -MetaverseObjectTypeId $mvUserType.id `
+                    -Direction Import `
+                    -PassThru
+            }
+
+            # Scope it to Dave (S14-3) alone. Equals on the excluded-from-nothing subject's own join key
+            # is the right operator here, the mirror image of OutOfScopeNoOpinion's NotEquals: there the
+            # criterion had to keep everyone EXCEPT one subject in scope, here it must admit ONLY one.
+            if (@(Get-JIMScopingCriteria -SyncRuleId $exceptionRule.id).Count -eq 0) {
+                $scopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $exceptionRule.id -Type All -PassThru
+                New-JIMScopingCriterion -SyncRuleId $exceptionRule.id -GroupId $scopeGroup.id `
+                    -ConnectedSystemAttributeId $employeeNumberAttr.id -ComparisonType Equals -StringValue "S14-3" | Out-Null
+            }
+
+            $exceptionMappings = @(Get-JIMSyncRuleMapping -SyncRuleId $exceptionRule.id)
+            $exceptionMapping = $exceptionMappings | Where-Object { $_.targetMetaverseAttributeId -eq $mvDescriptionAttr.id } | Select-Object -First 1
+            if (-not $exceptionMapping) {
+                $exceptionMapping = New-JIMSyncRuleMapping -SyncRuleId $exceptionRule.id `
+                    -TargetMetaverseAttributeId $mvDescriptionAttr.id `
+                    -SourceConnectedSystemAttributeId $descriptionCsAttr.id
+            }
+            Write-Host "  OK '$exceptionRuleName' created, scoped to employeeNumber = 'S14-3', contributing 'Description'" -ForegroundColor Green
+
+            # Order Description as exception=1, Secondary=2, Primary's plain rule=3. Contributors are
+            # matched on syncRuleName, not connectedSystemName: two of the three now belong to the SAME
+            # Connected System, which is precisely the configuration a per-system priority model cannot
+            # express (see the plan's "Traditional ILM systems cannot express this" note).
+            $priorityBefore = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id
+            $contributorsBefore = @($priorityBefore.contributors)
+            $plainPrimaryContributor = $contributorsBefore | Where-Object { $_.syncRuleName -eq $primaryImportRuleName } | Select-Object -First 1
+            $secondaryContributor = $contributorsBefore | Where-Object { $_.syncRuleName -eq $secondaryImportRuleName } | Select-Object -First 1
+            if (-not $plainPrimaryContributor -or -not $secondaryContributor) {
+                throw "Could not resolve the plain Primary and Secondary 'Description' contributors: found $(@($contributorsBefore | ForEach-Object { $_.syncRuleName }) -join ', ')."
+            }
+
+            Write-Host "Ordering 'Description' as Exceptions=1, Secondary=2, Primary=3..." -ForegroundColor Gray
+            Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id `
+                -MappingId @($exceptionMapping.id, $secondaryContributor.mappingId, $plainPrimaryContributor.mappingId) | Out-Null
+
+            $priorityAfter = @((Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id).contributors)
+            if ($priorityAfter.Count -ne 3 -or
+                $priorityAfter[0].syncRuleName -ne $exceptionRuleName -or $priorityAfter[0].priority -ne 1 -or
+                $priorityAfter[1].syncRuleName -ne $secondaryImportRuleName -or $priorityAfter[1].priority -ne 2 -or
+                $priorityAfter[2].syncRuleName -ne $primaryImportRuleName -or $priorityAfter[2].priority -ne 3) {
+                throw "'Description' priority read-back mismatch: expected Exceptions(1)/Secondary(2)/Primary(3), got $(@($priorityAfter | ForEach-Object { "$($_.syncRuleName)=$($_.priority)" }) -join ', ')."
+            }
+            Write-Host "  OK 'Description' ordered Exceptions=1, Secondary=2, Primary=3 and verified via read-back" -ForegroundColor Green
+
+            # Give both subjects distinctive Secondary values, so this step's assertions read identically
+            # under -Step All (where EnforceStateCorrectsLoser has already rewritten Secondary's
+            # descriptions to the Metaverse values) and standalone (where they are still the populate
+            # script's seeded values). Establishing its own preconditions rather than inheriting them is
+            # the same discipline Set-Scenario14ErinDescriptionWithdrawn applies for Phase E.
+            $daveDirectEdit = "Directly edited in the Secondary directory for Dave Dixon (S14)"
+            $frankSecondaryDescription = "Exception-era Secondary description for Frank Foster (S14)"
+            Write-Host "Staging Dave's and Frank's Secondary 'description' values..." -ForegroundColor Gray
+            foreach ($staged in @(
+                @{ Uid = "dave14"; Value = $daveDirectEdit }
+                @{ Uid = "frank14"; Value = $frankSecondaryDescription }
+            )) {
+                $stageLdif = "dn: uid=$($staged.Uid),$($secondaryLdapConfig.UserContainer)`nchangetype: modify`nreplace: description`ndescription: $($staged.Value)`n"
+                Invoke-Scenario14LdapModify -ContainerName $secondaryLdapConfig.ContainerName -LdapUri $secondaryLdapUri `
+                    -BindDN $secondaryLdapConfig.BindDN -BindPassword $secondaryLdapConfig.BindPassword -Ldif $stageLdif
+            }
+
+            Write-Host "Running Full Import (Secondary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Secondary) with the exception rule in place"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            # Both systems get a Full Synchronisation: a priority change only propagates to objects a
+            # synchronisation actually processes (PriorityReorderPropagation, Test 11), and the newly
+            # created exception rule has never been evaluated against Primary's Connected System Objects
+            # at all, which only a Full Synchronisation (Primary) does.
+            Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary) with the exception rule in place"
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) with the exception rule in place"
+
+            # Dave is in the exception rule's scope, so Primary's value wins at priority 1 with the
+            # EXCEPTION rule's provenance, not the plain rule's. Asserting the contributing rule name is
+            # what makes this a test of the scoped rule rather than of Primary generally: the two rules
+            # carry the same value from the same directory entry, and only the provenance distinguishes
+            # which one won.
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $exceptionRuleName `
+                -Name "Dave's Description (in the exception rule's scope: priority 1 wins)"
+
+            # Frank is outside the exception rule's scope, so that rule has no opinion for him and
+            # Secondary at priority 2 beats Primary's plain rule at priority 3. Same two Connected
+            # Systems, same attribute, opposite winner: authority is per object.
+            Assert-MvoAttributeValue -MvoId $frankMvo.id -AttributeName "Description" `
+                -ExpectedValue $frankSecondaryDescription `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Frank's Description (outside the exception rule's scope: Secondary at 2 beats Primary's plain rule at 3)"
+
+            $exceptionNotes += "With Description ordered Exceptions=1/Secondary=2/Primary=3, Dave (in scope) resolved to Primary's value via the exception rule while Frank (out of scope) resolved to Secondary's: per-object authority across the same two systems"
+
+            # The export leg, for both outcomes at once. Dave's Secondary entry diverges from the
+            # Metaverse (it lost), so Enforce State corrects it; Frank's Secondary entry IS the Metaverse
+            # value (it won), so there is nothing to correct. Asserting the second is what proves the
+            # correction is priority-driven rather than a blanket overwrite of the export target.
+            Write-Host "Running Export (Secondary)..." -ForegroundColor Gray
+            $exportResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryExport.id -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "Export (Secondary) correcting Dave's direct edit"
+
+            $daveAfterCorrection = Get-Scenario14LdapAttribute -LdapConfig $secondaryLdapConfig -Uid "dave14" -AttributeName "description"
+            if ($daveAfterCorrection -ne "Primary-sourced description for Dave Dixon (S14)") {
+                throw "Enforce State did not correct the losing system for an in-scope exception object: expected Dave's Secondary 'description' to be 'Primary-sourced description for Dave Dixon (S14)', found '$daveAfterCorrection'."
+            }
+            Write-Host "  OK Dave's Secondary 'description' corrected to the exception rule's winning value" -ForegroundColor Green
+
+            $frankAfterExport = Get-Scenario14LdapAttribute -LdapConfig $secondaryLdapConfig -Uid "frank14" -AttributeName "description"
+            if ($frankAfterExport -ne $frankSecondaryDescription) {
+                throw "Frank's Secondary 'description' was rewritten to '$frankAfterExport'; the winning contributor's own system must not be corrected (expected '$frankSecondaryDescription')."
+            }
+            Write-Host "  OK Frank's Secondary 'description' left alone; the winner's own system is never corrected" -ForegroundColor Green
+
+            $exceptionNotes += "Enforce State corrected Dave's Secondary entry (it lost) and left Frank's alone (it won), in the same export"
+
+            # Restore. Deleting the exception rule takes its mapping out of the priority list, leaving
+            # Secondary and Primary to densify to 1 and 2 in their current relative order (Secondary
+            # first), so the original Primary=1/Secondary=2 must be set back explicitly, exactly as
+            # PriorityReorderPropagation restores its own reorder.
+            Write-Host "Removing the exception Synchronisation Rule..." -ForegroundColor Gray
+            Remove-JIMSyncRule -Id $exceptionRule.id -Force | Out-Null
+            if (@(Get-JIMSyncRule) | Where-Object { $_.name -eq $exceptionRuleName }) {
+                throw "'$exceptionRuleName' still present after removal."
+            }
+
+            Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id `
+                -MappingId @($plainPrimaryContributor.mappingId, $secondaryContributor.mappingId) | Out-Null
+
+            $priorityRestored = @((Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserType.id).contributors)
+            if ($priorityRestored.Count -ne 2 -or
+                $priorityRestored[0].syncRuleName -ne $primaryImportRuleName -or $priorityRestored[0].priority -ne 1 -or
+                $priorityRestored[1].syncRuleName -ne $secondaryImportRuleName -or $priorityRestored[1].priority -ne 2) {
+                throw "'Description' priority read-back mismatch after restore: expected Primary(1)/Secondary(2), got $(@($priorityRestored | ForEach-Object { "$($_.syncRuleName)=$($_.priority)" }) -join ', ')."
+            }
+            Write-Host "  OK Exception rule removed and 'Description' restored to Primary=1, Secondary=2" -ForegroundColor Green
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after removing the exception rule"
+
+            # Value only, deliberately, for Dave: deleting the Synchronisation Rule that contributed his value nulls
+            # the value row's ContributedBySyncRuleId (the FK is ON DELETE SET NULL), and the following Full
+            # Synchronisation does not re-stamp it, because the plain rule contributes the IDENTICAL string and the
+            # attribute-flow writers diff by value, so there is nothing to remove and re-add. Provenance therefore
+            # stays absent until the value itself changes. That is a real gap (a value with no contributing rule is
+            # invisible to drift detection's contributor check and to recall's incumbent lookup), but it belongs to
+            # Synchronisation Rule deletion rather than to Attribute Priority, so it is recorded separately rather
+            # than papered over here. Frank's value did change in this step, so his provenance is asserted in full.
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -Name "Dave's Description (exception rule removed: Primary's plain rule value holds)"
+
+            Assert-MvoAttributeValue -MvoId $frankMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Frank Foster (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Frank's Description (exception rule removed: authority returns to Primary)"
+
+            $exceptionNotes += "Removed the exception rule and restored Primary=1/Secondary=2; both subjects returned to Primary's plain rule"
+        }
+        catch {
+            $exceptionSuccess = $false
+            $exceptionNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "ScopedExceptionAuthority"
+                Success = $exceptionSuccess
+                Note = ($exceptionNotes -join "; ")
+            }
+        }
+    }
+
     # Inherited end-state at this point (under -Step All, or after the last Phase D/E step run
     # standalone left its flags/data in place): Phase D's two steps (DisabledRuleNoOpinion,
     # PriorityReorderPropagation) each restore their own configuration mutation (rule Enabled state;
@@ -1797,6 +2244,14 @@ userPassword: Test@123!
     # began), and leaves Erin (S14-4) exactly where Phase B left her: Description absent both sides,
     # Job Title/Manager/Other Telephones back on Primary (Job Title "Consultant (Primary)", Manager
     # Frank via rotation offset 1, Other Telephones the 1040/1041 pair).
+    #
+    # Phase F then adds the only Connected-System-side change in the file: Secondary's Description and
+    # Job Title now hold the Metaverse's values for every joined object rather than the populate
+    # script's, and Frank's Secondary Description holds ScopedExceptionAuthority's staged
+    # "Exception-era ..." string (his Metaverse value is back on Primary's, so a further Export
+    # (Secondary) would correct it; none is run). Metaverse state is unchanged by Phase F: both steps
+    # restore their configuration mutations and both subjects end on Primary's Description, exactly as
+    # Phase E left them.
 
     # Calculate overall success
     $failedSteps = @($testResults.Steps | Where-Object { $_.Success -eq $false })
