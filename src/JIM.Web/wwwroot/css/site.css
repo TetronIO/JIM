@@ -3255,3 +3255,16 @@ html[lang] .jim-password-guidance .mud-alert-position {
     background-color: var(--mud-palette-warning-hover);
     color: var(--mud-palette-warning);
 }
+
+/* The Container Scope chip on the Partitions & Containers tab is a control, not a badge: selecting it switches the
+   Container between Whole subtree and This level only. Left as a plain chip it reads as a passive label, so it
+   carries the pointer and the hover treatment of something you can act on. Qualified with .mud-chip because
+   MudBlazor's own chip rules load after site.css and win every tie on specificity. */
+.jim-container-scope.mud-chip {
+    cursor: pointer;
+}
+
+.jim-container-scope.mud-chip:hover {
+    border-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary);
+}
