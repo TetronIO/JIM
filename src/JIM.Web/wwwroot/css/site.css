@@ -2936,6 +2936,8 @@ html[lang] .jim-schema-change-table td {
 
 .jim-run-metric-value {
     font-variant-numeric: tabular-nums;
+}
+
 /* ─── Set Password dialog (#1121, #1172) ───
    The fan-out across several Connected Systems is reported the same way a Run Profile execution is: a rail of
    markers with a filling line between them. It is not the same component (a password set is not an Activity,
@@ -3213,6 +3215,7 @@ html[lang] .jim-password-guidance .mud-alert-position {
    specificity; qualifying the selector with the wrapper's class is what makes the offset stick. */
 .jim-password-account-control.mud-input-control {
     margin-top: -0.375rem;
+}
 
 /* Count chip inside a navigation button (the Connector Space and Pending Exports actions on a
    Connected System). Sits inside the button label rather than as a MudBadge corner overlay, so the
