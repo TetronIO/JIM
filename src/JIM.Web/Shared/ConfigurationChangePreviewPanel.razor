@@ -3,6 +3,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Preview
 @using JIM.Models.Utility
+@using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IUiNotificationService UiNotifications
@@ -45,7 +46,7 @@
 
     <LoadingGate IsLoading="@_loading">
         <Loading>
-            <div class="jim-preview-loading">
+            <div>
                 <MudSkeleton Class="mt-4" Height="12px" />
                 <MudSkeleton Height="12px" />
                 <MudSkeleton Height="180px" />
@@ -85,6 +86,12 @@
                 }
 
                 @* ─── Stages ─── *@
+                @* Only while there is something to watch. A preview whose every stage completed says so once, in the *@
+                @* header's status chip; the four green ticks underneath restated it in five more elements and were  *@
+                @* the largest thing on a finished panel. A stage that failed, was cancelled or did not apply is     *@
+                @* kept, because those genuinely qualify the answer below.                                          *@
+                @if (StagesAreWorthShowing(preview))
+                {
                 <div class="d-flex flex-wrap gap-4 mt-4">
                     @foreach (var stage in Stages(preview))
                     {
@@ -96,6 +103,7 @@
                         </div>
                     }
                 </div>
+                }
 
                 @* ─── Failure ─── *@
                 @if (preview.HasFailed)
@@ -155,24 +163,20 @@
 
                 @if (!preview.HasFailed)
                 {
-                    @* ─── Impact counts ─── *@
-                    @if (_impactCounts.Count > 0)
+                    @* ─── Verdict ─── *@
+                    @* What the counts add up to, in one sentence, worst consequence first. This replaced a list of *@
+                    @* transition chips and their counts that said exactly what the summary table below says, only  *@
+                    @* without ordering it by how much the consequence matters.                                     *@
+                    @if (ConfigurationChangePreviewVerdict.Describe(_impactCounts) is { } verdict)
                     {
-                        <MudText Typo="Typo.subtitle1" Class="mt-6">Objects affected</MudText>
-                        @* A short list, not a table: these are a handful of transition/count pairs, and a full-width
-                           table strands each count on the far side of the panel from the label it belongs to. *@
-                        <div class="d-flex flex-column gap-2 mt-2">
-                            @foreach (var count in _impactCounts.OrderByDescending(c => c.ObjectCount))
+                        <MudAlert Severity="@verdict.Severity" Variant="Variant.Outlined" Class="mt-6"
+                                  data-testid="jim-preview-verdict">
+                            <MudText Typo="Typo.body1"><b>@verdict.Lead</b></MudText>
+                            @if (!string.IsNullOrEmpty(verdict.Detail))
                             {
-                                <div class="d-flex align-center gap-3">
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0"
-                                             Color="@Helpers.GetOutcomeTypeMudBlazorColor(count.TransitionType)">
-                                        @Helpers.GetOutcomeTypePlainName(count.TransitionType)
-                                    </MudChip>
-                                    <MudText Typo="Typo.body1">@count.ObjectCount.ToString("N0")</MudText>
-                                </div>
+                                <MudText Typo="Typo.body2" Class="mt-1">@verdict.Detail</MudText>
                             }
-                        </div>
+                        </MudAlert>
                     }
 
                     @* ─── Summary groups: the landing view ─── *@
@@ -188,16 +192,22 @@
                                   RowClass="cursor-pointer" Class="mt-2">
                             <HeaderContent>
                                 <MudTh><MudText Typo="Typo.button">Change</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Population</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Applies to</MudText></MudTh>
                                 <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Objects</MudText></MudTh>
+                                <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Objects</MudText></MudTh>
+                                @* Unlabelled, and deliberately: the column holds the chevron that says a row opens. *@
+                                <MudTh Style="width: 1%;"></MudTh>
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd DataLabel="Change">
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                             Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)">
-                                        @Helpers.GetOutcomeTypePlainName(context.TransitionType)
-                                    </MudChip>
+                                    @* A dot, not a chip. The outlined pill was carrying five unrelated meanings on  *@
+                                    @* one panel (status, transition, sampling, scope), so it had stopped encoding  *@
+                                    @* anything; severity is the one thing worth reading at a glance here.          *@
+                                    <div class="d-flex align-center gap-2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small"
+                                                 Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)" />
+                                        <span>@Helpers.GetOutcomeTypePlainName(context.TransitionType)</span>
+                                    </div>
                                     @* The pattern is what turns a transition into a sentence: "38,900 would have Email
                                        changed" reads very differently from "38,900 would have their email domain changed".
                                        Absent where no detector recognised the change, or where the group's deltas did not
@@ -207,14 +217,21 @@
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary">@patternName</MudText>
                                     }
                                 </MudTd>
-                                <MudTd DataLabel="Population">
-                                    @if (string.IsNullOrEmpty(DescribePopulation(context)))
+                                <MudTd DataLabel="Applies to">
+                                    @if (string.IsNullOrEmpty(context.MetaverseObjectTypeName))
                                     {
                                         <EmptyValue />
                                     }
                                     else
                                     {
-                                        @DescribePopulation(context)
+                                        @* The object type is a schema identifier, so it takes the inline-code
+                                           treatment the rest of the portal gives one; the system it belongs to is
+                                           prose beside it. *@
+                                        <span class="jim-code-inline">@context.MetaverseObjectTypeName</span>
+                                        @if (!string.IsNullOrEmpty(context.ConnectedSystemName))
+                                        {
+                                            <span> in @context.ConnectedSystemName</span>
+                                        }
                                     }
                                 </MudTd>
                                 <MudTd DataLabel="Attribute">
@@ -233,17 +250,25 @@
                                         }
                                     }
                                 </MudTd>
-                                <MudTd DataLabel="Objects">
-                                    @context.ObjectCount.ToString("N0")
+                                @* Right-aligned and tabular so the counts line up as a column of numbers rather than
+                                   starting wherever the label beside them happened to end. *@
+                                <MudTd DataLabel="Objects" Class="jim-preview-count">
                                     @if (context.DeltasSampled)
                                     {
                                         <MudTooltip Arrow="true" Placement="Placement.Top"
                                                     Text="@($"This count is exact. Its object list below is a sample of {ConfigurationChangePreviewServer.MaximumDeltasPerGroup:N0} of them, not all of them.")">
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="ml-2">
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="mr-2">
                                                 List sampled
                                             </MudChip>
                                         </MudTooltip>
                                     }
+                                    @context.ObjectCount.ToString("N0")
+                                </MudTd>
+                                @* Says the row opens. The drill-down is the most useful thing in the panel and its
+                                   only affordance was a pointer cursor, which nothing on a touch screen ever sees. *@
+                                <MudTd Class="jim-preview-open">
+                                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                                             Class="mud-text-secondary" />
                                 </MudTd>
                             </RowTemplate>
                         </MudTable>
@@ -700,6 +725,16 @@
         ("Summary", preview.SummaryStatus),
         ("Object detail", preview.DeltasStatus)
     ];
+
+    /// <summary>
+    /// Whether the stage row still earns its space. It does while the preview is working, because it is the only
+    /// thing saying which part of the answer has arrived; and it does when a stage ended in anything other than
+    /// success, because that qualifies whatever is rendered below it. A preview whose every stage completed has
+    /// already said so in the header's status chip, and four green ticks repeating it were the largest element on
+    /// a finished panel.
+    /// </summary>
+    private static bool StagesAreWorthShowing(ConfigurationChangePreview preview) =>
+        Stages(preview).Any(s => s.Status != ConfigurationChangePreviewStageStatus.Complete);
 
     private static string StageIcon(ConfigurationChangePreviewStageStatus status) => status switch
     {

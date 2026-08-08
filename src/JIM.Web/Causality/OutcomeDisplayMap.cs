@@ -85,20 +85,26 @@ public static class OutcomeDisplayMap
         // heading already establishes that nothing has happened yet, so repeating it per row spent a column's width
         // saying nothing, and the technical labels beside them (which the causality views want) stay untouched.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] =
-            new OutcomeDisplay("Enters import scope", "Would Fall In Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
+            new OutcomeDisplay("Enters import scope", "Would Fall In Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt,
+                "enter import scope"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] =
-            new OutcomeDisplay("Leaves import scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
+            new OutcomeDisplay("Leaves import scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff,
+                "leave import scope"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] =
-            new OutcomeDisplay("Becomes eligible for deletion", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
+            new OutcomeDisplay("Becomes eligible for deletion", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline,
+                "become eligible for deletion"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] =
-            new OutcomeDisplay("No longer eligible for deletion", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
+            new OutcomeDisplay("No longer eligible for deletion", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash,
+                "no longer be eligible for deletion"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] =
-            new OutcomeDisplay("Deletion date changes", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
+            new OutcomeDisplay("Deletion date changes", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar,
+                "have their deletion date changed"),
         // Named for the disconnection rather than for the scope change, which is the fact that distinguishes it
         // from WouldFallOutOfScope above; that the object also leaves scope is carried by the delta's old and new
         // values, so the label does not have to spend itself restating it.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] =
-            new OutcomeDisplay("Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff)
+            new OutcomeDisplay("Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff,
+                "disconnect from their Metaverse Object")
     };
 
     /// <summary>

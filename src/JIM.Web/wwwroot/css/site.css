@@ -1222,6 +1222,22 @@ html[lang] .mud-alert-filled-normal {
     overflow-wrap: anywhere;
 }
 
+/* A preview's object counts are a column of numbers and are read by comparing them, so they are right-aligned and
+   set in tabular figures; left alone they start wherever the label beside them happens to end, and no two line up.
+   Qualified with .mud-table-cell because MudBlazor's own cell rule sets text-align and loads after site.css. */
+.jim-preview-count.mud-table-cell {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The chevron column: as narrow as its icon, and never the thing that wraps. */
+.jim-preview-open.mud-table-cell {
+    width: 1%;
+    padding-left: 0;
+    text-align: right;
+}
+
 /* Switch/checkbox label text */
 .mud-switch .mud-switch-label,
 .mud-checkbox .mud-checkbox-label {
