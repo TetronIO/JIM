@@ -105,16 +105,33 @@ internal static class SqlTypeMapper
     /// the value conversions either side of it.
     /// <para>
     /// The spellings are the ones each catalogue reports, normalised: SQL Server's
-    /// <c>datetimeoffset</c>, and Oracle's <c>TIMESTAMP(n) WITH TIME ZONE</c> and
-    /// <c>TIMESTAMP(n) WITH LOCAL TIME ZONE</c>. PostgreSQL's <c>timestamptz</c> is present on the same
-    /// reasoning as the priority 2 spellings above: adding that provider stays additive.
+    /// <c>datetimeoffset</c> and Oracle's <c>TIMESTAMP(n) WITH TIME ZONE</c>. PostgreSQL's
+    /// <c>timestamptz</c> is present on the same reasoning as the priority 2 spellings above: adding
+    /// that provider stays additive.
+    /// </para>
+    /// <para>
+    /// <b>Oracle's <c>TIMESTAMP(n) WITH LOCAL TIME ZONE</c> is deliberately absent, and its absence is
+    /// the one worth explaining.</b> The catalogue names it as though it carried an offset, but the wire
+    /// says otherwise: ODP.NET hands the column back as a bare <see cref="DateTime"/> with
+    /// <see cref="DateTimeKind.Unspecified"/>, the same shape a zoneless <c>TIMESTAMP</c> arrives in,
+    /// because Oracle has already converted the stored value into the session's time zone. Listing it
+    /// here is what made import and export disagree about one column: import decides from the CLR type
+    /// the driver returned (zoneless, so the Database Time Zone applies), while export decides from this
+    /// set (offset-carrying, so it did not). Treating it as zoneless is what makes the two agree.
+    /// </para>
+    /// <para>
+    /// <b>That agreement is only correct because
+    /// <see cref="OracleProvider.ConfigureOpenedConnection"/> pins the session time zone to the
+    /// Connected System's Database Time Zone.</b> The two changes are one fix. Left unpinned, Oracle
+    /// converts the value into whichever zone the Worker's host happens to run in, and the zoneless path
+    /// then reads that wall clock as though it were the administrator's declared zone, silently out by
+    /// the difference. Neither half is redundant: removing either one reintroduces the defect.
     /// </para>
     /// </summary>
     private static readonly HashSet<string> OffsetCarryingTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "DATETIMEOFFSET",
         "TIMESTAMP WITH TIME ZONE",
-        "TIMESTAMP WITH LOCAL TIME ZONE",
         "TIMESTAMPTZ"
     };
 
@@ -127,6 +144,11 @@ internal static class SqlTypeMapper
     /// it (PRD requirement 9): import takes the instant the driver hands back, and export writes the
     /// instant JIM holds. A zoneless column states nothing, so its values are wall-clock time in the
     /// zone the administrator declared, and both directions convert through it.
+    /// <para>
+    /// "At the wire level" is the whole test, and it is why Oracle's <c>TIMESTAMP WITH LOCAL TIME
+    /// ZONE</c> answers false here despite a catalogue name that reads otherwise. See
+    /// <see cref="OffsetCarryingTypes"/>.
+    /// </para>
     /// </remarks>
     internal static bool CarriesAnOffset(SqlColumnType columnType)
     {

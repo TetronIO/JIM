@@ -130,6 +130,15 @@ internal class SqlServerProvider : SqlProviderBase
         return new SqlConnection(connectionString);
     }
 
+    // ConfigureOpenedConnection is deliberately not overridden, and that is a finding rather than an
+    // omission. Microsoft SQL Server has no session time zone to pin, and no column type that would need
+    // one: 'datetime2', 'datetime' and 'date' are returned exactly as stored, so the Connected System's
+    // Database Time Zone interprets them after the fact and nothing about the client's own zone reaches
+    // the value, while 'datetimeoffset' carries its own offset and needs no interpreting at all. The
+    // Oracle case that hook exists for, TIMESTAMP WITH LOCAL TIME ZONE, has no analogue here; SQL
+    // Server's AT TIME ZONE is a per-expression operator rather than session state, and JIM never
+    // writes it.
+
     #endregion
 
     #region Import

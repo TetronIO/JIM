@@ -151,6 +151,18 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal List<SqlConnectionSettings> ConfiguredConnectionSettings { get; } = [];
 
     /// <summary>
+    /// The settings every connection was configured with once it was open, which is the only point a
+    /// session setting such as Oracle Database's session time zone can be applied at.
+    /// </summary>
+    internal List<SqlConnectionSettings> ConfiguredOpenConnectionSettings { get; } = [];
+
+    /// <summary>
+    /// What state each connection was actually in when the dialect was given its post-open chance, so a
+    /// test can prove the hook is not simply the pre-open one called a second time.
+    /// </summary>
+    internal List<ConnectionState> ConnectionStatesWhenConfiguredOpen { get; } = [];
+
+    /// <summary>
     /// Which dialect this stand-in speaks. Settable so a test can exercise the Oracle type-mapping
     /// opt-ins, which are the one place schema discovery's answer depends on the database server.
     /// </summary>
@@ -211,6 +223,15 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     {
         ArgumentNullException.ThrowIfNull(settings);
         ConfiguredConnectionSettings.Add(settings);
+    }
+
+    public override void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        ConfiguredOpenConnectionSettings.Add(settings);
+        ConnectionStatesWhenConfiguredOpen.Add(connection.State);
     }
 
     /// <summary>

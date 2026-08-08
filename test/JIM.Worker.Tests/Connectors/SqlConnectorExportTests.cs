@@ -1179,6 +1179,55 @@ public class SqlConnectorExportTests
     }
 
     [Test]
+    public async Task ExportAsync_AnOracleLocalTimeZoneColumn_WritesLocalWallClockTimeInTheConfiguredZone()
+    {
+        // Oracle's catalogue calls this column offset-carrying, but ODP.NET hands it back as a bare
+        // DateTime that Oracle has already converted into the session's time zone, which the Connector
+        // pins to this same Database Time Zone. So it is written exactly as any other zoneless column is;
+        // treating it as offset-carrying wrote the UTC instant instead, an hour out under British Summer
+        // Time, with nothing to say so.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("LOCAL_UPDATED", AttributeDataType.DateTime, dateTime: new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc), changeType: PendingExportAttributeChangeType.Update));
+
+        await ExportAsync(provider, PersonDocument, [pendingExport], databaseTimeZone: "Europe/London");
+
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "LOCAL_UPDATED")];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bound, Is.EqualTo(new DateTime(2026, 7, 1, 13, 0, 0)), "British Summer Time is one hour ahead of UTC on that date.");
+            Assert.That(((DateTime)bound!).Kind, Is.EqualTo(DateTimeKind.Unspecified),
+                "A kind of UTC would have the driver convert the value a second time on its way into the column.");
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AnOracleLocalTimeZoneColumn_WritesTheSameWallClockAnImportWouldReadBackAsTheOriginalInstant()
+    {
+        // The round trip is the property that matters: what an export writes into a local-time-zone
+        // column is what a session pinned to the same zone reads back, and interpreting that reading in
+        // the Database Time Zone has to land on the instant JIM started with.
+        var provider = new FakeSqlProvider();
+        var instant = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("LOCAL_UPDATED", AttributeDataType.DateTime, dateTime: instant, changeType: PendingExportAttributeChangeType.Update));
+
+        await ExportAsync(provider, PersonDocument, [pendingExport], databaseTimeZone: "Europe/London");
+
+        var written = (DateTime)provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "LOCAL_UPDATED")]!;
+
+        // What an import does with the value a pinned session hands back: a zoneless reading interpreted
+        // in the Connected System's declared zone.
+        var readBack = DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(written, DateTimeKind.Unspecified), TimeZoneInfo.FindSystemTimeZoneById("Europe/London")),
+            DateTimeKind.Utc);
+
+        Assert.That(readBack, Is.EqualTo(instant),
+            "Export inverts exactly what import applies, so the instant survives the round trip through a local-time-zone column.");
+    }
+
+    [Test]
     public async Task ExportAsync_AResolvedReferenceToANumericColumn_WritesTheReferencedObjectsAnchorAsANumber()
     {
         var provider = new FakeSqlProvider();
@@ -1472,6 +1521,11 @@ public class SqlConnectorExportTests
             new FakeCatalogueColumn("STAFF_GUID", "uniqueidentifier"),
             new FakeCatalogueColumn("START_DATE", "datetime2"),
             new FakeCatalogueColumn("LAST_REVIEWED", "datetimeoffset"),
+
+            // Oracle's third date and time shape. It sits in an otherwise Microsoft SQL Server catalogue
+            // because the classification is the provider-independent part; what is being pinned down here
+            // is that the Connector writes wall-clock time into it, not the dialect that declared it.
+            new FakeCatalogueColumn("LOCAL_UPDATED", "TIMESTAMP(3) WITH LOCAL TIME ZONE"),
             new FakeCatalogueColumn("MANAGER_EMPLOYEE_ID", "int"),
             new FakeCatalogueColumn("MANAGER_STAFF_GUID", "uniqueidentifier"));
 

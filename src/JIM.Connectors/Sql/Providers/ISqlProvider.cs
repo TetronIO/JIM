@@ -82,6 +82,21 @@ internal interface ISqlProvider
     void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings);
 
     /// <summary>
+    /// Applies any configuration this dialect can only apply to a live session, immediately after the
+    /// connection has been opened and before anything is read or written through it.
+    /// <para>
+    /// Oracle Database's session time zone is the case this exists for. It decides what a
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> column reads back as, ODP.NET defaults it to the client
+    /// host's zone, and the driver offers no way to set it before the connection is open, so
+    /// <see cref="ConfigureConnection"/> cannot reach it. Pinning it to
+    /// <see cref="SqlConnectionSettings.DatabaseTimeZone"/> is half of what keeps that column type
+    /// correct; <see cref="ColumnCarriesAnOffset"/> is the other half.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The session could not be configured as the Connected System asks, so the connection is unusable rather than quietly reading values in the wrong zone.</exception>
+    void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings);
+
+    /// <summary>
     /// Creates a command on a connection, with any dialect-specific command configuration applied.
     /// </summary>
     DbCommand CreateCommand(DbConnection connection, string commandText);

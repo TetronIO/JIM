@@ -703,6 +703,13 @@ internal sealed class SqlConnectorImport
     /// divergence to hide behind the provider seam: an aggregate over a source is the same statement in
     /// both, built from the same quoting the seam already provides.
     /// </summary>
+    /// <remarks>
+    /// The value is read straight rather than through
+    /// <see cref="Providers.ISqlProvider.ConvertFromDriverValue"/>, and deliberately so. That seam exists
+    /// because ODP.NET answers a <i>bound parameter</i> with a wrapper struct of its own; a query result
+    /// is a different matter, and measured against Oracle Database Free 23ai this call answers with
+    /// ordinary CLR types. Routing it through the seam anyway would suggest the two cases were the same.
+    /// </remarks>
     private async Task<object?> ReadHighestValueAsync(string source, string column)
     {
         using var command = _provider.CreateCommand(_connection, $"SELECT MAX({_provider.QuoteIdentifier(column)}) FROM {source}");
