@@ -4,6 +4,7 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using JIM.Application.Staging;
 using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -1528,7 +1529,7 @@ public class ConnectedSystemServer
     /// through the REST API or PowerShell left different configuration behind than the same import run through the
     /// portal. The initiator decides who the Activity is attributed to; it does not decide what a schema means.
     /// </remarks>
-    private static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
+    internal static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
     {
         // Discovery warnings travel on the result so the portal can show them beside what changed; the import's
         // Activity carries the same warnings for the other surfaces.
@@ -1571,10 +1572,19 @@ public class ConnectedSystemServer
                 var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
                 var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
 
+                // Attributes an administrator's selected auxiliary classes contribute are not in the discovered
+                // schema for this type, because an RFC 4512 directory attaches an auxiliary class to an entry rather
+                // than to the class. They are carried across as the same rows rather than dropped and rebuilt: a new
+                // row would hand every Synchronisation Rule mapping that references one a dangling attribute id.
+                var contributedAttributes = ContributedAuxiliaryAttributes(existingObjectType, existingAttributes, existingObjectTypes);
+
                 connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
 
                 // Track removed attributes for this object type
-                var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
+                var removedAttributeNames = existingAttributeNames
+                    .Except(newAttributeNames)
+                    .Except(contributedAttributes.Select(a => a.Name))
+                    .ToList();
                 if (removedAttributeNames.Count > 0)
                 {
                     result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
@@ -1613,6 +1623,12 @@ public class ConnectedSystemServer
                         });
                     }
                 }
+
+                // Put the auxiliary contributions back, as the rows they already were. A directory that has since
+                // declared one of them on the structural class itself wins: that attribute is now native, and the
+                // discovery pass above has already carried its row across.
+                foreach (var contributedAttribute in contributedAttributes.Where(a => !newAttributeNames.Contains(a.Name)))
+                    connectedSystemObjectType.Attributes.Add(contributedAttribute);
 
                 if (addedAttributeNames.Count > 0)
                 {
@@ -1671,6 +1687,11 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
         }
 
+        // Bring the auxiliary classes an administrator selected onto the structural types that extend them. This
+        // runs after every type has been rebuilt, because an extension names another object type and that type may
+        // not have been reached yet while the loop above was running.
+        ApplyAuxiliaryClassSelections(connectedSystem, result);
+
         // Any credential attribute that survived the merge is one that was already persisted; force it into a
         // state where JIM neither manages it nor lets an administrator turn it back on.
         QuarantineCredentialAttributes(connectedSystem);
@@ -1686,6 +1707,57 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes[0].Selected = true;
 
         return result;
+    }
+
+    /// <summary>
+    /// The attributes on a persisted Object Type that got there by an administrator selecting an auxiliary class,
+    /// rather than by the Connector discovering them.
+    /// </summary>
+    /// <remarks>
+    /// Recognised by the attribute's <c>ClassName</c> naming a currently-selected auxiliary type: discovery stamps
+    /// every attribute with the class its Object Type was built from, so nothing native ever carries another class's
+    /// name. Selections pointing at a type this refresh removed contribute nothing, which is the documented
+    /// data-loss semantic of a refresh and is reported by the merge that follows.
+    /// </remarks>
+    private static List<ConnectedSystemObjectTypeAttribute> ContributedAuxiliaryAttributes(
+        ConnectedSystemObjectType existingObjectType,
+        List<ConnectedSystemObjectTypeAttribute> existingAttributes,
+        List<ConnectedSystemObjectType> existingObjectTypes)
+    {
+        if (existingObjectType.Extensions.Count == 0)
+            return [];
+
+        var contributingClassNames = existingObjectType.Extensions
+            .Select(extension => existingObjectTypes.FirstOrDefault(ot => ot.Id == extension.ExtensionObjectTypeId)?.Name)
+            .Where(name => name != null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase)!;
+
+        return existingAttributes
+            .Where(attribute => attribute.ClassName != null && contributingClassNames.Contains(attribute.ClassName))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Merges the auxiliary classes an administrator selected onto the structural Object Types that extend them, and
+    /// folds what changed into the refresh result so the portal reports it beside everything else that changed.
+    /// </summary>
+    private static void ApplyAuxiliaryClassSelections(ConnectedSystem connectedSystem, SchemaRefreshResult result)
+    {
+        var merge = AuxiliaryClassAttributeMerger.Merge(connectedSystem);
+
+        foreach (var (objectTypeName, attributeNames) in merge.AddedAttributes)
+            result.AddedAttributes[objectTypeName] = result.AddedAttributes.TryGetValue(objectTypeName, out var added)
+                ? added.Union(attributeNames).ToList()
+                : attributeNames;
+
+        foreach (var (objectTypeName, attributeNames) in merge.RemovedAttributes)
+            result.RemovedAttributes[objectTypeName] = result.RemovedAttributes.TryGetValue(objectTypeName, out var removed)
+                ? removed.Union(attributeNames).ToList()
+                : attributeNames;
+
+        // An auxiliary class the directory no longer publishes takes its selection with it. Say so on the refresh
+        // rather than letting an administrator discover it as attributes that quietly stopped being there.
+        result.DiscoveryWarnings.AddRange(merge.UnresolvedExtensions);
     }
 
     /// <summary>

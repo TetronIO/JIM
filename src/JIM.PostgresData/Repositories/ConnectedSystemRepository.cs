@@ -253,6 +253,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
+            // An administrator's auxiliary class selections. The schema refresh merges their attributes onto the
+            // structural type from this graph, so a selection that is not fetched is one the merge cannot see, and
+            // the refresh would succeed while quietly dropping every attribute those classes contribute.
+            .Include(ot => ot.Extensions)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)

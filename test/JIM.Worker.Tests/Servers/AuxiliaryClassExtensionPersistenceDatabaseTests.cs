@@ -451,6 +451,42 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// The schema refresh merges an administrator's auxiliary class selections onto the structural type that
+    /// extends them, working from the Connected System graph the application layer loaded. A selection the query
+    /// does not fetch is a selection the merge cannot see, and the failure is silent: the refresh succeeds and the
+    /// attributes simply are not there. The EF Core in-memory provider cannot catch this, because it populates
+    /// navigations from its change tracker whether the query asked for them or not.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemAsync_ForATypeWithAnAuxiliaryClassSelection_LoadsThatSelectionAsync()
+    {
+        var seeded = await SeedAsync();
+
+        await using (var create = NewContext())
+        {
+            create.ConnectedSystemObjectTypeExtensions.Add(new ConnectedSystemObjectTypeExtension
+            {
+                BaseObjectTypeId = seeded.PersonId,
+                ExtensionObjectTypeId = seeded.PosixAccountId
+            });
+            await create.SaveChangesAsync();
+        }
+
+        await using var readContext = NewContext();
+        var repository = new PostgresDataRepository(readContext);
+        var connectedSystem = await repository.ConnectedSystems.GetConnectedSystemAsync(seeded.ConnectedSystemId);
+
+        Assert.That(connectedSystem, Is.Not.Null);
+        var person = connectedSystem!.ObjectTypes!.Single(objectType => objectType.Id == seeded.PersonId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(person.Extensions, Has.Count.EqualTo(1));
+            Assert.That(person.Extensions[0].ExtensionObjectTypeId, Is.EqualTo(seeded.PosixAccountId));
+        }
+    }
+
+    /// <summary>
     /// Seeds a Connected System carrying a structural Object Type and an auxiliary one, shaped like the
     /// inetOrgPerson + posixAccount pairing that is near-universal in OpenLDAP estates.
     /// </summary>
