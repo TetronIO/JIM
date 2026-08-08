@@ -152,6 +152,71 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(Child(flow, "initialExportOnly")!.Label, Is.EqualTo("Initial Export Only"));
     }
 
+    /// <summary>
+    /// A Synchronisation Rule now carries a secret: the one password an administrator chose for every account it
+    /// provisions (#1273). Change history has to record that it changed, and only that; the ciphertext must not
+    /// reach the snapshot, and neither must the password behind it.
+    /// </summary>
+    [Test]
+    public void CreateSnapshot_SyncRule_HashesTheStaticInitialPasswordRatherThanRecordingIt()
+    {
+        const string password = "Brown-Chicken-Ladder-47";
+        var rule = new SyncRule
+        {
+            Id = 42,
+            Name = "Directory Outbound",
+            Direction = SyncRuleDirection.Export,
+            InitialPassword = new SyncRuleInitialPassword
+            {
+                Id = 9,
+                Enabled = true,
+                Source = InitialPasswordSource.Static,
+                StaticPasswordEncryptedValue = _protection.Protect(password)
+            }
+        };
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+        var json = ConfigurationSnapshotService.Serialise(snapshot);
+
+        var node = Child(Child(snapshot.Root, "initialPassword")!, "staticPassword")!;
+        Assert.Multiple(() =>
+        {
+            Assert.That(node.IsSecret, Is.True, "a password must be recorded as a secret, never as a value");
+            Assert.That(node.Value, Is.Not.Empty);
+            Assert.That(json, Does.Not.Contain(password), "the password itself must never reach a snapshot");
+            Assert.That(json, Does.Not.Contain(rule.InitialPassword.StaticPasswordEncryptedValue!),
+                "nor may the stored ciphertext, which is the password to anyone holding the encryption key");
+        });
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_WithADifferentStaticInitialPassword_ProducesADifferentHash()
+    {
+        // The whole point of hashing it: an auditor has to be able to see that the shared password changed, and
+        // when, without the history carrying the password.
+        static SyncRule RuleWith(string? encrypted) => new()
+        {
+            Id = 42,
+            Name = "Directory Outbound",
+            Direction = SyncRuleDirection.Export,
+            InitialPassword = new SyncRuleInitialPassword { Id = 9, Enabled = true, Source = InitialPasswordSource.Static, StaticPasswordEncryptedValue = encrypted }
+        };
+
+        var first = _service.CreateSnapshot(RuleWith(_protection.Protect("Brown-Chicken-Ladder-47")), HashKey);
+        var second = _service.CreateSnapshot(RuleWith(_protection.Protect("Green-Otter-Bicycle-12")), HashKey);
+        var none = _service.CreateSnapshot(RuleWith(null), HashKey);
+
+        var firstHash = Child(Child(first.Root, "initialPassword")!, "staticPassword")!.Value;
+        var secondHash = Child(Child(second.Root, "initialPassword")!, "staticPassword")!.Value;
+        var noneHash = Child(Child(none.Root, "initialPassword")!, "staticPassword")!.Value;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(secondHash, Is.Not.EqualTo(firstHash));
+            Assert.That(noneHash, Is.Empty, "no password set is its own state, and diffs against one that is");
+        });
+    }
+
     [Test]
     public void CreateSnapshot_SyncRule_OmitsSentinelPriority()
     {

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Interfaces;
@@ -42,7 +43,7 @@ public class InitialPasswordDeliveryServer
 
     private readonly ISyncRepository _syncRepo;
     private readonly IPasswordGeneratorService _passwordGenerator;
-    private readonly Func<ICredentialProtection> _credentialProtection;
+    private readonly Func<ICredentialProtectionService> _credentialProtection;
 
     /// <param name="credentialProtection">
     /// How to reach credential protection, resolved when a pass runs rather than now. The hosts set
@@ -52,7 +53,7 @@ public class InitialPasswordDeliveryServer
     internal InitialPasswordDeliveryServer(
         ISyncRepository syncRepository,
         IPasswordGeneratorService passwordGenerator,
-        Func<ICredentialProtection> credentialProtection)
+        Func<ICredentialProtectionService> credentialProtection)
     {
         _syncRepo = syncRepository;
         _passwordGenerator = passwordGenerator;
@@ -171,6 +172,25 @@ public class InitialPasswordDeliveryServer
             result.RetryingCount, result.ParkedCount, result.NoLongerApplicableCount, result.ExpiredCount);
 
         return result;
+    }
+
+    /// <summary>
+    /// Encrypts the one password an administrator chose for every account a Synchronisation Rule provisions, ready
+    /// to be stored on the rule (issue #1273).
+    /// <para>
+    /// Here rather than at each surface so the portal, the REST API and PowerShell cannot encrypt it three
+    /// slightly different ways, and so no surface has to decide what to do when credential protection is not
+    /// reachable. The answer to that is never "store the plaintext", and keeping it in one place is what
+    /// guarantees it.
+    /// </para>
+    /// </summary>
+    /// <returns>The encrypted value to store. The plaintext is not retained.</returns>
+    public string ProtectStaticPassword(string password)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+
+        // Protect returns null only for a null or empty input, which the guard above has already ruled out.
+        return _credentialProtection().Protect(password)!;
     }
 
     /// <summary>

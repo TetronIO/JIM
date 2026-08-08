@@ -6,6 +6,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional.DTOs;
 using JIM.Web.Pages.Admin.Components;
+using Microsoft.AspNetCore.Components;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -160,4 +161,204 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
 
         Assert.That(cut.Markup, Does.Not.Contain("Saving will release"));
     }
+
+    #region the static password (#1273)
+    /// <summary>
+    /// The stored value is ciphertext, but it is still the password: it must never reach the page, where it
+    /// would sit in the DOM and in every screenshot of it.
+    /// </summary>
+    private const string StoredCiphertext = "$JIM$v1$QnJvd24tQ2hpY2tlbi1MYWRkZXItNDc=";
+
+    private static SyncRuleInitialPassword StaticConfiguration(string? storedPassword = StoredCiphertext) => new()
+    {
+        Enabled = true,
+        Source = InitialPasswordSource.Static,
+        StaticPasswordEncryptedValue = storedPassword,
+        StaticPasswordSetAt = storedPassword == null ? null : DateTime.UtcNow.AddDays(-30),
+        ExpiryBehaviour = PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+        EnableAccount = true
+    };
+
+    private IRenderedComponent<SyncRuleInitialPasswordSection> RenderStatic(
+        SyncRuleInitialPassword? configuration = null,
+        SuppliedPasswordAssessment? staticAssessment = null,
+        EventCallback<string?>? onStaticPasswordEntered = null)
+    {
+        return Render<SyncRuleInitialPasswordSection>(p =>
+        {
+            p.Add(c => c.Configuration, configuration ?? StaticConfiguration())
+                .Add(c => c.SupportedExpiryBehaviours, new[] { PasswordExpiryBehaviour.RequireChangeAtNextSignIn })
+                .Add(c => c.ConnectorName, "LDAP")
+                .Add(c => c.StaticPasswordAssessment, staticAssessment);
+
+            if (onStaticPasswordEntered.HasValue)
+                p.Add(c => c.OnStaticPasswordEntered, onStaticPasswordEntered.Value);
+        });
+    }
+
+    [Test]
+    public void InitialPasswordSection_OffersTheStaticSource_MarkedNotRecommended()
+    {
+        // The recommendation has to be visible while an administrator is choosing, not only after they have
+        // chosen. This is the whole mitigation the option ships with.
+        var cut = Render(parkedReasons: []);
+
+        Assert.That(cut.Markup, Does.Contain("Not recommended"));
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithTheStaticSource_HidesTheGeneratorSettings()
+    {
+        // Replaced rather than sat beside, so no stale generator setting is left on screen looking as though it
+        // still applied to what gets delivered.
+        var cut = RenderStatic();
+
+        Assert.That(cut.Markup, Does.Not.Contain("Permitted symbols"));
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithTheCustomSource_StillShowsTheGeneratorSettings()
+    {
+        var configuration = EnabledConfiguration();
+        configuration.Source = InitialPasswordSource.Custom;
+
+        var cut = Render(parkedReasons: [], configuration: configuration);
+
+        Assert.That(cut.Markup, Does.Contain("Permitted symbols"));
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithTheStaticSource_HidesTheGeneratorAssessment()
+    {
+        // The generator assessment describes passwords this rule will never produce. Leaving it on screen would
+        // have the panel promise an entropy figure for a password an administrator typed.
+        var cut = Render<SyncRuleInitialPasswordSection>(p => p
+            .Add(c => c.Configuration, StaticConfiguration())
+            .Add(c => c.SupportedExpiryBehaviours, new[] { PasswordExpiryBehaviour.RequireChangeAtNextSignIn })
+            .Add(c => c.Assessment, new PasswordGenerationAssessment
+            {
+                GuaranteedMinimumLength = 16,
+                GuaranteedCharacterClasses = PasswordCharacterClasses.Lowercase,
+                EntropyBits = 91.2,
+                Problems = []
+            }));
+
+        Assert.That(cut.Markup, Does.Not.Contain("bits of entropy"));
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithAStoredStaticPassword_NeverRendersTheStoredValue()
+    {
+        var cut = RenderStatic();
+
+        Assert.That(cut.Markup, Does.Not.Contain(StoredCiphertext),
+            "the stored value is write-only on every surface, and the portal is a surface");
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithAStoredStaticPassword_SaysOneIsSetAndWhen()
+    {
+        // The password itself is never shown, so the only things that can tell an administrator where they stand
+        // are that one exists and how long it has been in use. A shared password wants changing when somebody who
+        // knew it leaves, and nothing else in JIM can date it.
+        var cut = RenderStatic();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("A password is set"));
+            Assert.That(cut.Markup, Does.Contain("ago"), "how long it has been in use is the actionable part");
+        });
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithTheStaticSourceAndNothingStored_SaysSo()
+    {
+        // Delivery parks in this state rather than generating something nobody expects, so the panel has to say
+        // it before a run does.
+        var cut = RenderStatic(StaticConfiguration(storedPassword: null));
+
+        Assert.That(cut.Markup, Does.Contain("No password has been set"));
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithASuppliedPasswordProblem_ShowsIt()
+    {
+        var cut = RenderStatic(staticAssessment: new SuppliedPasswordAssessment
+        {
+            Length = 5,
+            CharacterClasses = PasswordCharacterClasses.Lowercase,
+            Problems = ["This Connected System requires at least 30 characters, and this password has 5."]
+        });
+
+        Assert.That(cut.Markup, Does.Contain("requires at least 30 characters"));
+    }
+
+    [Test]
+    public void InitialPasswordSection_WithAUsableSuppliedPassword_ReportsNoEntropyFigure()
+    {
+        // Deliberate: entropy is a property of how a value was chosen, and JIM knows nothing about how an
+        // administrator chose this one. A figure it cannot stand behind is worse than no figure.
+        var cut = RenderStatic(staticAssessment: new SuppliedPasswordAssessment
+        {
+            Length = 23,
+            CharacterClasses = PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase |
+                               PasswordCharacterClasses.Digit | PasswordCharacterClasses.Symbol,
+            Problems = []
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("23 characters"));
+            Assert.That(cut.Markup, Does.Not.Contain("entropy"));
+        });
+    }
+
+    [Test]
+    public void InitialPasswordSection_WhenTheTwoPasswordFieldsMatch_RaisesThePassword()
+    {
+        string? raised = null;
+        var cut = RenderStatic(onStaticPasswordEntered: EventCallback.Factory.Create<string?>(this, p => raised = p));
+
+        cut.Find("[data-testid=initial-password-static]").Input("Brown-Chicken-Ladder-47");
+        cut.Find("[data-testid=initial-password-static-confirm]").Input("Brown-Chicken-Ladder-47");
+
+        Assert.That(raised, Is.EqualTo("Brown-Chicken-Ladder-47"));
+    }
+
+    /// <summary>
+    /// A password committed from a field the administrator has since edited is the trap here: the two fields
+    /// would disagree on screen while the model still held the earlier value, and saving would store a password
+    /// nobody typed. Nothing usable is raised until they agree.
+    /// </summary>
+    [Test]
+    public void InitialPasswordSection_WhenTheTwoPasswordFieldsDiffer_RaisesNothingAndSaysSo()
+    {
+        var raised = new List<string?>();
+        var cut = RenderStatic(onStaticPasswordEntered: EventCallback.Factory.Create<string?>(this, p => raised.Add(p)));
+
+        cut.Find("[data-testid=initial-password-static]").Input("Brown-Chicken-Ladder-47");
+        cut.Find("[data-testid=initial-password-static-confirm]").Input("Brown-Chicken-Ladder-48");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(raised, Has.All.Null);
+            Assert.That(cut.Markup, Does.Contain("do not match"));
+        });
+    }
+
+    [Test]
+    public void InitialPasswordSection_OnLoad_LeavesThePasswordFieldsBlank()
+    {
+        // Blank means "leave the stored password as it is". Prefilling with anything, including a placeholder of
+        // the right length, would say something about a password that is never shown.
+        var cut = RenderStatic();
+
+        Assert.Multiple(() =>
+        {
+            // Null where no value attribute is rendered at all, which is the same "blank" from the reader's side.
+            Assert.That(cut.Find("[data-testid=initial-password-static]").GetAttribute("value"), Is.Null.Or.Empty);
+            Assert.That(cut.Find("[data-testid=initial-password-static-confirm]").GetAttribute("value"), Is.Null.Or.Empty);
+        });
+    }
+    #endregion
 }
