@@ -1852,12 +1852,16 @@ public class MetaverseRepository : IMetaverseRepository
 
         var offset = (page - 1) * pageSize;
         var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
-            predefinedSearch, offset, pageSize, searchQuery, sortBy, sortDescending, hasAttributeId);
+            predefinedSearch, offset, pageSize, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount: true);
 
         var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
         {
             PageSize = pageSize,
-            TotalResults = grossCount,
+            // The count was requested above, so it is always present here; paging derives TotalPages from it and
+            // cannot work without it. Stated as an invariant rather than dereferenced, so the compiler and CodeQL
+            // both see a non-nullable value.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged header read asked for the total match count and did not receive one."),
             CurrentPage = page,
             Results = results
         };
@@ -1882,7 +1886,8 @@ public class MetaverseRepository : IMetaverseRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        int? hasAttributeId = null)
+        int? hasAttributeId = null,
+        bool includeTotalCount = true)
     {
         if (count < 1)
             throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
@@ -1895,7 +1900,7 @@ public class MetaverseRepository : IMetaverseRepository
             count = 100;
 
         var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
-            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId);
+            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount);
 
         return new RangeResultSet<MetaverseObjectHeader>
         {
@@ -1906,17 +1911,19 @@ public class MetaverseRepository : IMetaverseRepository
 
     /// <summary>
     /// Shared core for the paged and range header reads: builds the projected, filtered and sorted header window for
-    /// an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it alongside the total match count.
+    /// an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it alongside the total match count,
+    /// or null for that total when <paramref name="includeTotalCount"/> is false.
     /// Callers own input validation and clamping; this method assumes sane values.
     /// </summary>
-    private async Task<(List<MetaverseObjectHeader> Results, int TotalResults)> QueryMetaverseObjectHeadersByRangeAsync(
+    private async Task<(List<MetaverseObjectHeader> Results, int? TotalResults)> QueryMetaverseObjectHeadersByRangeAsync(
         PredefinedSearch predefinedSearch,
         int offset,
         int count,
         string? searchQuery,
         string? sortBy,
         bool sortDescending,
-        int? hasAttributeId)
+        int? hasAttributeId,
+        bool includeTotalCount)
     {
         // Extract the attribute IDs to project from the PredefinedSearch
         var returnAttributeIds = predefinedSearch.Attributes
@@ -1983,10 +1990,13 @@ public class MetaverseRepository : IMetaverseRepository
             whereClause += $" AND ({string.Join(" OR ", groupClauses)})";
         }
 
-        // Count query — lean, no joins
-        int grossCount;
-        await using (var countCmd = connection.CreateCommand())
+        // Count query - lean, no joins. It scans every matching object rather than a window of them, so it is the
+        // expensive half of this method at scale and is skipped entirely when the caller already holds the total.
+        // Sorting cannot change how many objects match, so a caller only has to re-count when the filters change.
+        int? grossCount = null;
+        if (includeTotalCount)
         {
+            await using var countCmd = connection.CreateCommand();
             countCmd.CommandText = $"""SELECT COUNT(*)::int FROM "MetaverseObjects" m WHERE {whereClause}""";
             foreach (var p in sharedParams)
                 countCmd.Parameters.Add(p.Clone());

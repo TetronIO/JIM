@@ -208,6 +208,12 @@ public interface IMetaverseRepository
     /// <param name="sortBy">Optional attribute name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>
     /// <param name="hasAttributeId">Optional attribute presence filter; see <see cref="GetMetaverseObjectHeadersPagedAsync"/>.</param>
+    /// <param name="includeTotalCount">
+    /// Whether to count the whole match set alongside the window. Counting is a second query over every matching
+    /// object and is what a window read spends most of its time on, so a scroller that already knows the total (the
+    /// filters have not changed since it last asked) should pass false and reuse it. When false,
+    /// <see cref="RangeResultSet{T}.TotalResults"/> comes back null rather than zero.
+    /// </param>
     public Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
         PredefinedSearch predefinedSearch,
         int offset,
@@ -215,7 +221,8 @@ public interface IMetaverseRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        int? hasAttributeId = null);
+        int? hasAttributeId = null,
+        bool includeTotalCount = true);
 
     /// <summary>
     /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.

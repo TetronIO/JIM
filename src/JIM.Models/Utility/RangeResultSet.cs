@@ -17,6 +17,9 @@ public class RangeResultSet<T>
 
     /// <summary>
     /// The total number of items matching the query across all windows, used to size the virtualised scroll area.
+    /// Null when the caller asked for the window without the total (it already knows it), which is deliberately
+    /// distinct from zero: counting the whole match set is the expensive half of a window read, and a scroll that
+    /// reads it once per filter change rather than once per window must not confuse "not counted" with "no matches".
     /// </summary>
-    public int TotalResults { get; set; }
+    public int? TotalResults { get; set; }
 }

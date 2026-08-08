@@ -1501,6 +1501,8 @@ public class MetaverseServer
     /// <summary>
     /// Gets a window of lightweight Metaverse Object headers addressed by absolute offset and count, for virtualised
     /// (infinite-scroll) list views. Shares its query and projection with <see cref="GetMetaverseObjectHeadersPagedAsync"/>.
+    /// Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
     /// </summary>
     public async Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
         PredefinedSearch predefinedSearch,
@@ -1509,10 +1511,11 @@ public class MetaverseServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        int? hasAttributeId = null)
+        int? hasAttributeId = null,
+        bool includeTotalCount = true)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeadersRangeAsync(
-            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId);
+            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount);
     }
 
     /// <summary>

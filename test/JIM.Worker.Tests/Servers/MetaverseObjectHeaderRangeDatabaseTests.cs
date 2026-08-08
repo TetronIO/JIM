@@ -175,4 +175,44 @@ public class MetaverseObjectHeaderRangeDatabaseTests
         Assert.That(result.TotalResults, Is.EqualTo(105));
         Assert.That(result.Results, Has.Count.EqualTo(100));
     }
+
+    [Test]
+    public async Task Range_TotalCountNotRequested_ReturnsWindowWithNoTotalAsync()
+    {
+        var searchId = await SeedAsync(10);
+        var (jim, search) = await LoadAsync(searchId);
+
+        var result = await jim.Metaverse.GetMetaverseObjectHeadersRangeAsync(
+            search, offset: 3, count: 3, sortBy: DisplayName, sortDescending: false, includeTotalCount: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            // Null rather than zero: the count query did not run, and zero would read as "nothing matches", which is
+            // the one wrong answer a caller cannot distinguish from a real result.
+            Assert.That(result.TotalResults, Is.Null);
+            Assert.That(result.Results.Select(r => r.CachedDisplayName), Is.EqualTo(new[] { "User 04", "User 05", "User 06" }));
+        }
+    }
+
+    [Test]
+    public async Task Range_TotalCountNotRequested_ReturnsTheSameWindowAsACountedReadAsync()
+    {
+        var searchId = await SeedAsync(10);
+        var (jim, search) = await LoadAsync(searchId);
+
+        // Skipping the count must change what the caller is told about the total and nothing else; the window itself
+        // comes from the same filtered, sorted query either way.
+        var counted = await jim.Metaverse.GetMetaverseObjectHeadersRangeAsync(
+            search, offset: 5, count: 4, sortBy: DisplayName, sortDescending: true);
+        var uncounted = await jim.Metaverse.GetMetaverseObjectHeadersRangeAsync(
+            search, offset: 5, count: 4, sortBy: DisplayName, sortDescending: true, includeTotalCount: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counted.TotalResults, Is.EqualTo(10));
+            Assert.That(uncounted.TotalResults, Is.Null);
+            Assert.That(uncounted.Results.Select(r => r.CachedDisplayName),
+                Is.EqualTo(counted.Results.Select(r => r.CachedDisplayName)));
+        }
+    }
 }

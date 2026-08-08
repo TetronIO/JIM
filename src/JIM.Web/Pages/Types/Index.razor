@@ -119,6 +119,15 @@ else if (_isInitialised)
     private string _sortBy = Constants.BuiltInAttributes.DisplayName;
     private bool _sortDescending;
 
+    // The total match count, held across window reads. It exists only to size the scroll area, and counting the whole
+    // match set is a second query over every matching object, so asking for it on every window would make scrolling
+    // cost twice what it needs to: a pager asked once per page click, a virtualiser would ask once per window. Set
+    // back to null wherever the filters change (the search text, the presence filter, the Predefined Search) so the
+    // next window read re-counts. Sorting deliberately does not reset it: reordering the same match set cannot change
+    // its size. The figure is therefore as old as the last filter change, which is what a list view wants; objects
+    // created by a sync in the meantime appear on the next navigation, as they did under paging.
+    private int? _totalItems;
+
     // Attribute-presence filter (the ?search=hasAttribute:{name} deep link). _hasAttributeName is the parsed token
     // (null when no presence filter is active); _hasAttributeId is its resolved attribute id; _hasAttributeUnknown is
     // true when a name was supplied but no such attribute exists, in which case no object can match.
@@ -139,6 +148,7 @@ else if (_isInitialised)
         _hasAttributeName = null;
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
+        _totalItems = null;
 
         using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
@@ -244,17 +254,24 @@ else if (_isInitialised)
             string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
             _sortBy,
             _sortDescending,
-            _hasAttributeId);
+            _hasAttributeId,
+            includeTotalCount: _totalItems == null);
+
+        // Null means the count was not requested because we already hold it (see _totalItems), never that nothing
+        // matched; a genuine zero comes back as zero and is kept.
+        _totalItems = result.TotalResults ?? _totalItems;
 
         return new GridData<MetaverseObjectHeader>
         {
-            TotalItems = result.TotalResults,
+            TotalItems = _totalItems ?? 0,
             Items = result.Results
         };
     }
 
     private async Task ToggleSortAsync(string attrName)
     {
+        // Note there is no _totalItems reset here, deliberately: sorting reorders the match set without changing
+        // which objects are in it, so the total the scroll area is sized from still holds.
         // Clicking the active column flips direction; clicking a new column sorts it ascending.
         if (_sortBy == attrName)
             _sortDescending = !_sortDescending;
@@ -271,6 +288,7 @@ else if (_isInitialised)
     private void OnSearch(string text)
     {
         _searchString = text;
+        _totalItems = null;
         _dataGrid?.ReloadServerData();
     }
 
@@ -279,6 +297,7 @@ else if (_isInitialised)
         _hasAttributeName = null;
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
+        _totalItems = null;
 
         // Drop the presence filter from the URL (keep the base path) without a full reload, then refresh the grid.
         var baseUrl = NavManager.ToAbsoluteUri(NavManager.Uri).GetLeftPart(UriPartial.Path);
