@@ -48,7 +48,9 @@ public static class ConfigurationChangePreviewCounts
                 .ThenBy(c => c.TransitionType)
                 .Select(c => new ImpactCount
                 {
-                    Label = Helpers.GetOutcomeTypeDisplayName(c.TransitionType),
+                    // The plain label, not the technical one: this is read by an administrator deciding whether to
+                    // save, not by an operator reading a completed run.
+                    Label = Helpers.GetOutcomeTypePlainName(c.TransitionType),
                     Count = c.ObjectCount,
                     Note = "from the preview"
                 })

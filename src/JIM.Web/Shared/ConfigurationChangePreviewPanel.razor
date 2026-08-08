@@ -167,7 +167,7 @@
                                 <div class="d-flex align-center gap-3">
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0"
                                              Color="@Helpers.GetOutcomeTypeMudBlazorColor(count.TransitionType)">
-                                        @Helpers.GetOutcomeTypeDisplayName(count.TransitionType)
+                                        @Helpers.GetOutcomeTypePlainName(count.TransitionType)
                                     </MudChip>
                                     <MudText Typo="Typo.body1">@count.ObjectCount.ToString("N0")</MudText>
                                 </div>
@@ -196,7 +196,7 @@
                                 <MudTd DataLabel="Change">
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
                                              Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)">
-                                        @Helpers.GetOutcomeTypeDisplayName(context.TransitionType)
+                                        @Helpers.GetOutcomeTypePlainName(context.TransitionType)
                                     </MudChip>
                                     @* The pattern is what turns a transition into a sentence: "38,900 would have Email
                                        changed" reads very differently from "38,900 would have their email domain changed".
@@ -265,7 +265,7 @@
                         <div class="d-flex align-start mt-6" data-testid="jim-preview-drilldown-heading">
                             <div>
                                 <MudText Typo="Typo.subtitle1">
-                                    @Helpers.GetOutcomeTypeDisplayName(selected.TransitionType)@(string.IsNullOrEmpty(DescribePopulation(selected)) ? "" : $": {DescribePopulation(selected)}")
+                                    @Helpers.GetOutcomeTypePlainName(selected.TransitionType)@(string.IsNullOrEmpty(DescribePopulation(selected)) ? "" : $": {DescribePopulation(selected)}")
                                 </MudText>
                                 @if (!string.IsNullOrEmpty(DescribeAttributeChange(selected)))
                                 {

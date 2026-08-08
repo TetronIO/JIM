@@ -50,6 +50,23 @@ public class HelpersOutcomeDelegationTests
         Assert.That(Helpers.GetOutcomeTypeDisplayName(outcomeType), Is.EqualTo(expected));
     }
 
+    // The technical label above is what the Activity and causality views want: an operator reading a run's outcomes
+    // is looking for the exact outcome name. A Configuration Change Preview (#827) is read by an administrator
+    // deciding whether to save, and there the plain label is the right one; these two methods exist so a surface
+    // states which audience it is writing for rather than picking a label by accident.
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope, "Enters import scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, "Leaves import scope")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, "Becomes eligible for deletion")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible, "No longer eligible for deletion")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate, "Deletion date changes")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject, "Disconnects from its Metaverse Object")]
+    [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, "Identity created")]
+    public void GetOutcomeTypePlainName_EveryOutcomeType_ReturnsThePlainLabel(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType, string expected)
+    {
+        Assert.That(Helpers.GetOutcomeTypePlainName(outcomeType), Is.EqualTo(expected));
+    }
+
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, Color.Success)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, Color.Info)]
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, Color.Error)]

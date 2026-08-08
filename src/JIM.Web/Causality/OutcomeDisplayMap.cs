@@ -79,18 +79,26 @@ public static class OutcomeDisplayMap
         // the one place an outcome type's vocabulary lives, and a preview surface rendering through it should
         // inherit the same labels rather than grow a second, drifting set. Conditional tone throughout: a preview
         // states what would happen, so the tone marks the consequence's weight, not a failure that has occurred.
+        //
+        // The plain labels here are held to a stricter standard than the run outcomes above, because these are the
+        // ones an administrator reads while deciding whether to save: present tense, no "Would" prefix. The panel
+        // heading already establishes that nothing has happened yet, so repeating it per row spent a column's width
+        // saying nothing, and the technical labels beside them (which the causality views want) stay untouched.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallInScope] =
-            new OutcomeDisplay("Would enter scope", "Would Fall In Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
+            new OutcomeDisplay("Enters import scope", "Would Fall In Scope", CausalityTone.Info, Icons.Material.Filled.FilterAlt),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope] =
-            new OutcomeDisplay("Would leave scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
+            new OutcomeDisplay("Leaves import scope", "Would Fall Out Of Scope", CausalityTone.Warning, Icons.Material.Filled.FilterAltOff),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible] =
-            new OutcomeDisplay("Would become deletion eligible", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
+            new OutcomeDisplay("Becomes eligible for deletion", "Would Become Deletion Eligible", CausalityTone.Error, Icons.Material.Filled.DeleteOutline),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldCeaseToBeDeletionEligible] =
-            new OutcomeDisplay("Would no longer be deletion eligible", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
+            new OutcomeDisplay("No longer eligible for deletion", "Would Cease To Be Deletion Eligible", CausalityTone.Success, Icons.Material.Filled.RestoreFromTrash),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeletionEligibleDate] =
-            new OutcomeDisplay("Deletion date would change", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
+            new OutcomeDisplay("Deletion date changes", "Would Change Deletion Eligible Date", CausalityTone.Warning, Icons.Material.Filled.EditCalendar),
+        // Named for the disconnection rather than for the scope change, which is the fact that distinguishes it
+        // from WouldFallOutOfScope above; that the object also leaves scope is carried by the delta's old and new
+        // values, so the label does not have to spend itself restating it.
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] =
-            new OutcomeDisplay("Would disconnect from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff)
+            new OutcomeDisplay("Disconnects from its Metaverse Object", "Would Disconnect From Metaverse Object", CausalityTone.Error, Icons.Material.Filled.LinkOff)
     };
 
     /// <summary>

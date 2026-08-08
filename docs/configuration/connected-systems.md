@@ -85,10 +85,10 @@ The preview reports:
 
 | Transition | What it means |
 |---|---|
-| Would fall out of scope | Connected System Objects that leave import scope and are not joined to anything. Nothing in the Metaverse changes as a result. |
-| Would disconnect from a Metaverse Object | Objects that leave import scope and *are* joined. Each takes the attribute values it contributed out of the Metaverse Object with it. |
-| Would become eligible for deletion | Metaverse Objects that those disconnections would leave satisfying their [deletion rule](metaverse.md#deletion-behaviour). These are deletions your selection would set in motion. |
-| Would fall in scope | Objects JIM still holds from scope you are re-selecting. |
+| Leaves import scope | Connected System Objects that leave import scope and are not joined to anything. Nothing in the Metaverse changes as a result. |
+| Disconnects from its Metaverse Object | Objects that leave import scope and *are* joined. Each takes the attribute values it contributed out of the Metaverse Object with it. |
+| Becomes eligible for deletion | Metaverse Objects that those disconnections would leave satisfying their [deletion rule](metaverse.md#deletion-behaviour). These are deletions your selection would set in motion. |
+| Enters import scope | Objects JIM still holds from scope you are re-selecting. |
 
 The counts honour each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope): beneath a One Level container an import returns nothing, so objects a level deeper are already out of scope and deselecting it takes nothing further away.
 
