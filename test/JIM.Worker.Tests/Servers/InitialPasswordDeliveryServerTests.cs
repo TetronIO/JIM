@@ -8,6 +8,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Worker.Tests.Services;
 using Moq;
 using SyncRepository = JIM.InMemoryData.SyncRepository;
 
@@ -36,7 +37,7 @@ public class InitialPasswordDeliveryServerTests
     public void Setup()
     {
         _syncRepo = new SyncRepository();
-        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService());
+        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService(), () => new TestCredentialProtection());
 
         _connectedSystem = new ConnectedSystem
         {

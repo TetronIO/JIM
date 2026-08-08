@@ -5,6 +5,7 @@ using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Worker.Tests.Services;
 using SyncRepository = JIM.InMemoryData.SyncRepository;
 
 namespace JIM.Worker.Tests.Servers;
@@ -34,7 +35,7 @@ public class InitialPasswordAttentionTests
     public void Setup()
     {
         _syncRepo = new SyncRepository();
-        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService());
+        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService(), () => new TestCredentialProtection());
     }
 
     #region Attention counts

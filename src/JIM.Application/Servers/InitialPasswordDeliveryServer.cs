@@ -22,9 +22,10 @@ namespace JIM.Application.Servers;
 /// right granted or a directory brought back online is picked up by the next run that happens anyway.
 /// </para>
 /// <para>
-/// <b>No password value leaves this class, or is written anywhere.</b> Each one is generated at the moment of
-/// delivery, handed to the Connector, and dropped. What is recorded is that a password was owed, how many
-/// times JIM has tried, and what the target said when it refused.
+/// <b>No password value leaves this class, or is written anywhere.</b> A generated password is produced at the
+/// moment of delivery, handed to the Connector and dropped; a rule set to use one static password decrypts it
+/// here and drops it the same way. What is recorded is that a password was owed, how many times JIM has tried,
+/// and what the target said when it refused.
 /// </para>
 /// </summary>
 public class InitialPasswordDeliveryServer
@@ -40,12 +41,22 @@ public class InitialPasswordDeliveryServer
     public const int MaximumAccountsPerPass = 1000;
 
     private readonly ISyncRepository _syncRepo;
-    private readonly InitialPasswordDeliveryService _deliveryService;
+    private readonly IPasswordGeneratorService _passwordGenerator;
+    private readonly Func<ICredentialProtection> _credentialProtection;
 
-    internal InitialPasswordDeliveryServer(ISyncRepository syncRepository, IPasswordGeneratorService passwordGenerator)
+    /// <param name="credentialProtection">
+    /// How to reach credential protection, resolved when a pass runs rather than now. The hosts set
+    /// <see cref="JimApplication.CredentialProtection"/> after constructing the facade, so anything captured here
+    /// would capture the null that precedes it.
+    /// </param>
+    internal InitialPasswordDeliveryServer(
+        ISyncRepository syncRepository,
+        IPasswordGeneratorService passwordGenerator,
+        Func<ICredentialProtection> credentialProtection)
     {
         _syncRepo = syncRepository;
-        _deliveryService = new InitialPasswordDeliveryService(passwordGenerator);
+        _passwordGenerator = passwordGenerator;
+        _credentialProtection = credentialProtection;
     }
 
     /// <summary>
@@ -101,6 +112,11 @@ public class InitialPasswordDeliveryServer
             outstanding.Where(p => p.SyncRuleId.HasValue).Select(p => p.SyncRuleId!.Value).Distinct().ToList());
         var discoveredPolicy = await _syncRepo.GetDiscoveredPasswordPolicyAsync(connectedSystem.Id);
 
+        // Built per pass rather than held, because credential protection is only reachable once the host has set
+        // it, and built here rather than at the top so a pass with nothing to do never asks for it. The service
+        // holds no state, so this costs nothing.
+        var deliveryService = new InitialPasswordDeliveryService(_passwordGenerator, _credentialProtection());
+
         var delivered = new List<Guid>();
         var attempts = new List<PendingInitialPassword>();
 
@@ -129,7 +145,7 @@ public class InitialPasswordDeliveryServer
                     ? found
                     : null;
 
-                var outcome = await _deliveryService.DeliverAsync(
+                var outcome = await deliveryService.DeliverAsync(
                     passwordConnector, pending.ConnectedSystemObject, configuration, discoveredPolicy, cancellationToken);
 
                 Record(pending, outcome, result, delivered, attempts);

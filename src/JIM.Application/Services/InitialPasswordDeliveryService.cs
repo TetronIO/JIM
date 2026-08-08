@@ -5,6 +5,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using System.Security.Cryptography;
 
 namespace JIM.Application.Services;
 
@@ -17,17 +18,24 @@ namespace JIM.Application.Services;
 /// reach the same decisions the export path does rather than growing a second copy of them.
 /// </para>
 /// <para>
-/// <b>The generated password does not leave this class.</b> It is produced, handed to the Connector, and
-/// dropped. The result carries the outcome and the target's reason, never the value.
+/// <b>No password leaves this class.</b> A generated one is produced, handed to the Connector and dropped; a
+/// static one is decrypted, handed to the Connector and dropped. The result carries the outcome and the target's
+/// reason, never a value, and neither does anything this class logs.
 /// </para>
 /// </summary>
 public class InitialPasswordDeliveryService
 {
     private readonly IPasswordGeneratorService _passwordGenerator;
+    private readonly ICredentialProtection _credentialProtection;
 
-    public InitialPasswordDeliveryService(IPasswordGeneratorService passwordGenerator)
+    /// <param name="credentialProtection">
+    /// Decrypts the static password an administrator chose, which is the only password JIM stores. Held here
+    /// rather than passed per delivery because it is a property of the deployment, not of the account.
+    /// </param>
+    public InitialPasswordDeliveryService(IPasswordGeneratorService passwordGenerator, ICredentialProtection credentialProtection)
     {
         _passwordGenerator = passwordGenerator;
+        _credentialProtection = credentialProtection;
     }
 
     /// <summary>
@@ -59,15 +67,15 @@ public class InitialPasswordDeliveryService
             return InitialPasswordDeliveryResult.NotApplicable(
                 "This Synchronisation Rule does not set an initial password on the accounts it provisions.");
 
-        var policy = ResolvePolicy(configuration, discoveredPolicy);
+        // Which password to set is decided before anything is sent, and either answer can be a reason not to
+        // send at all. An unsatisfiable configuration is an administrator's to fix, and no number of attempts
+        // against the target changes that, so it parks for the same reason a policy rejection does.
+        var (password, refusal) = configuration.Source == InitialPasswordSource.Static
+            ? ResolveStaticPassword(configuration, discoveredPolicy)
+            : GeneratePassword(configuration, discoveredPolicy);
 
-        // Checked before anything is generated or sent. An unsatisfiable configuration is an administrator's to
-        // fix, and no number of attempts against the target changes that, so it parks for the same reason a
-        // policy rejection does.
-        var assessment = _passwordGenerator.Assess(policy, discoveredPolicy);
-        if (!assessment.IsUsable)
-            return InitialPasswordDeliveryResult.Parked(PasswordSetFailureReason.ConfigurationFault,
-                $"JIM did not attempt a password, because this Synchronisation Rule's password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}");
+        if (refusal != null)
+            return refusal;
 
         var options = new PasswordSetOptions
         {
@@ -75,7 +83,7 @@ public class InitialPasswordDeliveryService
             EnableAccount = configuration.EnableAccount
         };
 
-        var result = await connector.SetPasswordAsync(target, _passwordGenerator.Generate(policy), options, cancellationToken);
+        var result = await connector.SetPasswordAsync(target, password!, options, cancellationToken);
 
         if (result.Success)
             // The applied behaviour, not the requested one: a directory with no equivalent of what was asked for
@@ -87,12 +95,85 @@ public class InitialPasswordDeliveryService
     }
 
     /// <summary>
+    /// Generates a password from the rule's settings, or explains why none can be.
+    /// </summary>
+    private (string? Password, InitialPasswordDeliveryResult? Refusal) GeneratePassword(
+        SyncRuleInitialPassword configuration, ConnectedSystemPasswordPolicy? discoveredPolicy)
+    {
+        var policy = ResolvePolicy(configuration, discoveredPolicy);
+
+        var assessment = _passwordGenerator.Assess(policy, discoveredPolicy);
+        if (!assessment.IsUsable)
+            return (null, InitialPasswordDeliveryResult.Parked(PasswordSetFailureReason.ConfigurationFault,
+                $"JIM did not attempt a password, because this Synchronisation Rule's password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}"));
+
+        return (_passwordGenerator.Generate(policy), null);
+    }
+
+    /// <summary>
+    /// Reads back the one password an administrator chose for every account this rule provisions, or explains why
+    /// it cannot be used.
+    /// <para>
+    /// Everything that can go wrong here parks rather than retries, and all of it for the same reason: an absent
+    /// password, an encryption key that no longer opens it, and a value the target will refuse are each resolved
+    /// only by a person changing something. Retrying in the meantime reaches an identical answer while inflating
+    /// an attempt count that is supposed to mean "distinct configurations tried".
+    /// </para>
+    /// <para>
+    /// The password and the stored ciphertext both stay inside this method. What comes back is either a value to
+    /// send or a reason to show, and a reason is written to Activities, logs and the portal.
+    /// </para>
+    /// </summary>
+    private (string? Password, InitialPasswordDeliveryResult? Refusal) ResolveStaticPassword(
+        SyncRuleInitialPassword configuration, ConnectedSystemPasswordPolicy? discoveredPolicy)
+    {
+        if (string.IsNullOrEmpty(configuration.StaticPasswordEncryptedValue))
+            return (null, InitialPasswordDeliveryResult.Parked(PasswordSetFailureReason.ConfigurationFault,
+                "JIM did not attempt a password, because this Synchronisation Rule is set to use one password for every " +
+                "account it provisions and no password has been set. Generating one instead would leave nobody able to " +
+                "tell the account holder what it is."));
+
+        string? password;
+        try
+        {
+            password = _credentialProtection.Unprotect(configuration.StaticPasswordEncryptedValue);
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
+        {
+            // The exception's own message is used rather than the value it failed on, and the stored ciphertext
+            // is deliberately not included: this string is displayed, logged and carried on Activities.
+            return (null, InitialPasswordDeliveryResult.Parked(PasswordSetFailureReason.ConfigurationFault,
+                "JIM could not decrypt the password stored on this Synchronisation Rule, which usually means the " +
+                $"deployment's encryption key has been changed or lost. Set the password again to repair it. ({ex.Message})"));
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+            return (null, InitialPasswordDeliveryResult.Parked(PasswordSetFailureReason.ConfigurationFault,
+                "JIM did not attempt a password, because the password stored on this Synchronisation Rule is empty."));
+
+        // Assessed for the same reason a generator configuration is, and with more at stake: one password is
+        // going to every account this rule provisions, so a rejection is not one account's problem.
+        var assessment = _passwordGenerator.AssessSupplied(password, discoveredPolicy);
+        if (!assessment.IsUsable)
+            return (null, InitialPasswordDeliveryResult.Parked(PasswordSetFailureReason.ConfigurationFault,
+                "JIM did not attempt a password, because the password set on this Synchronisation Rule will not be " +
+                $"accepted by this Connected System: {string.Join(" ", assessment.Problems)}"));
+
+        return (password, null);
+    }
+
+    /// <summary>
     /// Works out which generator settings apply.
     /// <para>
     /// Following the Connected System means re-deriving from what JIM last discovered, so a target whose policy
     /// has been re-read and changed is honoured on the next delivery without an administrator touching
     /// anything. Custom means exactly what the administrator saved, which JIM will not quietly change under
     /// them because a target published something different.
+    /// </para>
+    /// <para>
+    /// Meaningful only for the sources that generate. A rule set to
+    /// <see cref="InitialPasswordSource.Static"/> generates nothing, and the settings this returns for it are
+    /// the ones the rule would fall back to were the source changed, not the ones in use.
     /// </para>
     /// </summary>
     public PasswordGenerationPolicy ResolvePolicy(SyncRuleInitialPassword configuration, ConnectedSystemPasswordPolicy? discoveredPolicy)
