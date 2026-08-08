@@ -52,6 +52,14 @@ function New-JIMSyncRuleMapping {
         For import mappings only. Normalises the case of the imported text value: None (default), Upper, Lower
         or Title.
 
+    .PARAMETER NullIsValue
+        For import mappings only. When this Synchronisation Rule applies to a Connected System Object that is
+        joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value":
+        clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor.
+        A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope)
+        is skipped regardless. Off by default. Change it on an existing mapping with
+        Set-JIMMetaverseAttributePriority or Move-JIMMetaverseAttributePriority.
+
     .PARAMETER InitialExportOnly
         For export mappings only. When set, the mapping only flows during the initial provisioning (Create)
         export; afterwards the target attribute is unmanaged by JIM on that Connected System Object and
@@ -85,6 +93,14 @@ function New-JIMSyncRuleMapping {
 
         Creates an import mapping that trims surrounding whitespace and lower-cases the value (and, by default,
         treats whitespace-only values as no value).
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -NullIsValue
+
+        Creates an import mapping that asserts no value when the source is connected and in scope but supplies
+        nothing, clearing the Metaverse Object attribute value instead of falling through to a lower-priority
+        contributor. The mapping still lands at the bottom of the attribute's priority list; promote it with
+        Move-JIMMetaverseAttributePriority before it can win resolution.
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -SourceMetaverseAttributeId 8 -InitialExportOnly
@@ -143,6 +159,12 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ImportExpression')]
         [ValidateSet('None', 'Upper', 'Lower', 'Title')]
         [string]$CaseNormalisation = 'None',
+
+        # Attribute Priority (#91), import mappings only: treat "connected, in scope, but no value" as an
+        # authoritative clear rather than falling through to the next contributor.
+        [Parameter(ParameterSetName = 'ImportAttribute')]
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [switch]$NullIsValue,
 
         # Initial Export Only (#223), export mappings only: the mapping flows solely during the initial
         # provisioning (Create) export; the attribute is unmanaged by JIM afterwards.
@@ -207,6 +229,9 @@ function New-JIMSyncRuleMapping {
             if ($CollapseInternalWhitespace) { $processingFlags += 'CollapseInternalWhitespace' }
             $body.inboundValueProcessing = if ($processingFlags.Count -gt 0) { $processingFlags -join ', ' } else { 'None' }
             $body.caseNormalisation = $CaseNormalisation
+
+            # Attribute Priority (#91). Sent only when asked for, so the server's default of false stands otherwise.
+            if ($NullIsValue) { $body.nullIsValue = $true }
 
             $targetDescription = "MV Attribute $TargetMetaverseAttributeId"
         }
