@@ -33,9 +33,24 @@ public static class ConfigurationChangePreflightConsequences
             // No per-item icon: the alert already carries one, and two side by side reads as a rendering fault.
             Items = destructive.Select(item => new ConsequenceItem
             {
-                Text = $"{item.Label}: {item.Consequence}"
+                Text = $"{LeafOf(item.Label)}: {item.Consequence}"
             }).ToList()
         };
+    }
+
+    /// <summary>
+    /// The last segment of a qualified label ("Partitions &gt; dc=corp,dc=local &gt; Containers &gt; ou=Contractors,
+    /// dc=corp,dc=local" becomes "ou=Contractors,dc=corp,dc=local").
+    /// </summary>
+    /// <remarks>
+    /// The dialog lists every changing property directly beneath this alert, each under its full qualified label, so
+    /// spelling the whole path out here printed the same string twice on one screen. The leaf is what identifies
+    /// which consequence belongs to which item, which is all this line needs it for.
+    /// </remarks>
+    private static string LeafOf(string label)
+    {
+        var lastSeparator = label.LastIndexOf('>');
+        return lastSeparator < 0 ? label : label[(lastSeparator + 1)..].Trim();
     }
 
     /// <summary>

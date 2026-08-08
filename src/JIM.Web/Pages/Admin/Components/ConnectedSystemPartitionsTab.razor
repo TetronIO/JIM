@@ -3,6 +3,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @using Serilog
 @using System.Text
@@ -282,7 +283,7 @@
         <MudPaper Class="mt-5" Outlined="true">
             <div class="pa-4">
                 <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
-                <MudSwitch @bind-Value="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
+                <MudSwitch @bind-Value="@partition.Selected" Color="Color.Primary" Label="Manage this partition" />
             </div>
             <MudDivider />
 
@@ -321,7 +322,13 @@
                                                          ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
                                                          title="@(item.Value.Selected ? "Selected" : string.Empty)"/>
                                         }
-                                        <span class="jim-code-inline">@item.Value.Name</span>
+                                        @* Named relative to the partition, whose own name is the card's heading. A *@
+                                        @* directory names a container by its full Distinguished Name, so spelling  *@
+                                        @* the suffix out on every row spent most of the row's width on the part    *@
+                                        @* every row has in common. The full name stays a hover away.               *@
+                                        <MudTooltip Arrow="true" Placement="Placement.Top" Text="@item.Value.Name">
+                                            <span class="jim-code-inline">@ContainerDisplayName.RelativeTo(item.Value.Name, partition.Name)</span>
+                                        </MudTooltip>
 
                                         @* Scope only means anything on a selected Container, so the control only appears on one *@
                                         @if (item.Value.Selected)
@@ -331,16 +338,21 @@
                                             <MudTooltip Arrow="true" Placement="Placement.Top">
                                                 <TooltipContent>
                                                     <TooltipText Text="@(isOneLevel
-                                                                           ? "Only the objects held directly in this Container are imported. Click to import its whole subtree instead."
-                                                                           : "This Container and every Container beneath it are imported. Click to import only the objects held directly in it.")" />
+                                                                           ? "Only the objects held directly in this Container are imported. Select to import its whole subtree instead."
+                                                                           : "This Container and every Container beneath it are imported. Select to import only the objects held directly in it.")" />
                                                 </TooltipContent>
                                                 <ChildContent>
+                                                    @* One colour for both values, and a caret. The chip is the      *@
+                                                    @* control that changes the scope, and colouring One Level amber  *@
+                                                    @* announced a warning over an ordinary, entirely valid setting   *@
+                                                    @* while giving no hint that either chip could be clicked at all. *@
                                                     <MudChip T="string"
                                                              Variant="Variant.Outlined"
-                                                             Color="@(isOneLevel ? Color.Warning : Color.Primary)"
+                                                             Color="Color.Default"
                                                              OnClick="@(() => ConnectedSystemContainerScopeChanged(container))"
-                                                             Class="ml-2">
+                                                             Class="ml-2 jim-container-scope">
                                                         @(isOneLevel ? "This level only" : "Whole subtree")
+                                                        <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" Class="ml-1" />
                                                     </MudChip>
                                                 </ChildContent>
                                             </MudTooltip>
@@ -538,7 +550,8 @@
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
                 "Connected System", ConnectedSystem.Name,
-                ConfigurationChangePreviewCounts.ForConfirmation(_preview, ScopeSelectionPreviewIsStale)))
+                ConfigurationChangePreviewCounts.ForConfirmation(_preview, ScopeSelectionPreviewIsStale),
+                ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, ScopeSelectionPreviewIsStale)))
             return;
 
         // The preview is linked only when it actually describes this change. A link to a preview run against a
