@@ -32,6 +32,32 @@ Implement `IConnectorContainment` alongside it. `IsWithinContainer` answers whet
 - **Never throw, and never open a connection.** JIM asks this about data it already holds, sometimes for a Connected System that is currently unreachable. Answer `false` for an empty or unparseable identifier: that under-counts a preview and refuses a write, which are the safe failures.
 - **Not implementing it is a valid answer.** A Connector with containers that cannot express containment gets a preview that says so, rather than one reporting a zero an administrator would read as "this change is safe".
 
+## Classifying the Object Types you discover
+
+A Connected System's schema usually contains more than an administrator wants to manage, and the Connector is the only thing that can tell the difference. Say so during schema discovery by attaching **classification tags** to each `ConnectorSchemaObjectType`.
+
+Tags are open key/value pairs rather than an enum, so a Connector can express something JIM does not model without a schema change. The well-known keys and values JIM itself consumes are in `ObjectTypeTags` (`JIM.Models.Staging`):
+
+| Key | Values | What it says |
+|-----|--------|--------------|
+| `class-kind` | `structural`, `auxiliary`, `abstract` | What kind of class this is in the Connected System's own schema model. |
+| `visibility` | `internal` | The Connected System uses this Object Type for its own configuration or operation. The Schema tab hides these by default, and `Get-JIMConnectedSystemObjectType` omits them unless `-IncludeInternal` is passed. |
+
+```csharp
+var objectType = new ConnectorSchemaObjectType(name);
+objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(
+    ObjectTypeTags.Keys.ClassKind, ObjectTypeTags.Values.ClassKindStructural));
+```
+
+Four rules matter:
+
+- **Say nothing rather than guess.** An Object Type carrying no tags is *unclassified*, and every consumer treats that as "show it, do not group it". Where your Connected System has no equivalent of a classification, leave it unset; a wrong tag is worse than no tag, because `visibility = internal` hides something an administrator may need.
+- **Tags are Connector-owned and replaced on refresh.** JIM overwrites an Object Type's tags with whatever you report on each schema refresh, so a classification that changes at the Connected System is reflected rather than accumulated. Do not expect a tag you stopped reporting to persist.
+- **Classify from something stable, not from a name.** The LDAP Connector decides `visibility` from the class's OID arc, because an arc is assigned to an enterprise by IANA and does not change, whereas matching `olc*` or `audit*` by name would hide a customer's own class that happens to be spelled similarly. Prefer whatever your system's equivalent of a durable identifier is.
+- **Only report what is true of the system, not what is convenient for the UI.** Tags describe the Connected System's schema. Which of them a screen chooses to act on is JIM's decision, not yours.
+
+You may add keys of your own alongside JIM's. They are persisted and returned on the REST API's Object Type representation, so an automation author can act on them even where JIM's own surfaces do not.
+
 ## Reporting progress and errors
 
 A Connector is the only thing that knows what is happening inside a Connected System. JIM can count the objects you hand back and time how long you took, but everything else (which container you are reading, why one object could not be exported, that a Delta Import quietly became a Full Import) is invisible unless you report it.

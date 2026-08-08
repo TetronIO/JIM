@@ -54,6 +54,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.DeleteConnectedSystemWorkerTasks.Add(deleteConnectedSystemTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case AuxiliaryClassDiscoveryWorkerTask auxiliaryClassDiscoveryTask:
+                Repository.Database.AuxiliaryClassDiscoveryWorkerTasks.Add(auxiliaryClassDiscoveryTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             default:
                 throw new ArgumentException("workerTask was of an unexpected type: " + workerTask.GetType());
         }

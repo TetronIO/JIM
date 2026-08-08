@@ -368,9 +368,9 @@ internal class LdapConnectorSchema
 
             _logger.Debug("GetRfcSchemaAsync: Querying subschema subentry at '{SubschemaDn}'", subschemaDn);
 
-            // Step 2: Query the subschema subentry for objectClasses and attributeTypes
+            // Step 2: Query the subschema subentry for objectClasses, attributeTypes and DIT Content Rules
             var request = new SearchRequest(subschemaDn, "(objectClass=subschema)", SearchScope.Base);
-            request.Attributes.AddRange(["objectClasses", "attributeTypes"]);
+            request.Attributes.AddRange(["objectClasses", "attributeTypes", "dITContentRules"]);
             var response = (SearchResponse)_connection.SendRequest(request);
 
             if (response.ResultCode != ResultCode.Success || response.Entries.Count == 0)
@@ -382,22 +382,34 @@ internal class LdapConnectorSchema
             var attributeTypeDefs = ParseAllAttributeTypes(subschemaEntry);
             _logger.Debug("GetRfcSchemaAsync: Parsed {Count} attribute type definitions", attributeTypeDefs.Count);
 
-            // Step 4: Parse all object class definitions
-            var objectClassDefs = ParseAllObjectClasses(subschemaEntry);
+            // Step 4: Parse all object class definitions, reachable by name and by OID
+            var objectClassIndex = ParseAllObjectClasses(subschemaEntry);
+            var objectClassDefs = objectClassIndex.ByName;
             _logger.Debug("GetRfcSchemaAsync: Parsed {Count} object class definitions", objectClassDefs.Count);
 
-            // Step 5: Build the connector schema from structural (and optionally auxiliary) object classes
+            // Step 5: Parse the directory's DIT Content Rules, keyed by the structural class OID each one governs.
+            // A directory need publish none at all (a stock OpenLDAP does not), which is an ordinary state rather
+            // than a discovery failure: it means nothing is suggested, not that nothing is permitted.
+            var contentRules = ParseAllDitContentRules(subschemaEntry);
+            _logger.Debug("GetRfcSchemaAsync: Parsed {Count} DIT Content Rules", contentRules.Count);
+
+            // Step 6: Build the connector schema. Abstract classes are excluded: they exist only to be inherited
+            // from. Auxiliary classes are always reported, because JIM merges an administrator's selected auxiliary
+            // classes into the structural type they extend, and cannot do that for a class it never discovered.
+            // They carry a class-kind tag saying what they are, so a consumer can tell them apart.
             foreach (var objectClassDef in objectClassDefs.Values)
             {
-                // Only expose structural classes by default — these are the ones that can have objects instantiated.
-                // When _includeAuxiliaryClasses is enabled, also include auxiliary classes for directories
-                // where objects may use auxiliary classes as their primary structural class.
                 var isStructural = objectClassDef.Kind == Rfc4512ObjectClassKind.Structural;
                 var isAuxiliary = objectClassDef.Kind == Rfc4512ObjectClassKind.Auxiliary;
-                if (!isStructural && !(isAuxiliary && _includeAuxiliaryClasses))
+                if (!isStructural && !isAuxiliary)
                     continue;
 
                 var objectType = new ConnectorSchemaObjectType(objectClassDef.Name!);
+
+                // Report which auxiliary classes the directory permits on this class, where it says so. These are
+                // suggestions that narrow what the portal offers; the administrator's selection is what JIM acts on.
+                if (isStructural && objectClassDef.Oid != null && contentRules.TryGetValue(objectClassDef.Oid, out var contentRule))
+                    ApplyPermittedAuxiliaryClasses(objectType, objectClassDef, contentRule, objectClassIndex);
 
                 // Report the class kind so the schema screen can tell a structural class from an auxiliary one.
                 var classification = LdapObjectTypeClassification.FromRfc4512Kind(objectClassDef.Kind);
@@ -588,23 +600,60 @@ internal class LdapConnectorSchema
     }
 
     /// <summary>
-    /// Parses all objectClasses values from the subschema entry into a name-keyed dictionary.
+    /// Parses all dITContentRules values from the subschema entry, keyed by the OID of the structural class each
+    /// rule governs.
     /// </summary>
-    private Dictionary<string, Rfc4512ObjectClassDescription> ParseAllObjectClasses(SearchResultEntry subschemaEntry)
+    /// <remarks>
+    /// The attribute is absent on most directories, including a stock OpenLDAP, so an empty result is the common
+    /// case. Where two rules claim the same structural class the first wins, matching how object classes are
+    /// indexed.
+    /// </remarks>
+    private static Dictionary<string, Rfc4512DitContentRuleDescription> ParseAllDitContentRules(SearchResultEntry subschemaEntry)
     {
-        var result = new Dictionary<string, Rfc4512ObjectClassDescription>(StringComparer.OrdinalIgnoreCase);
+        if (!subschemaEntry.Attributes.Contains("dITContentRules"))
+            return new Dictionary<string, Rfc4512DitContentRuleDescription>(StringComparer.Ordinal);
 
+        return Rfc4512SchemaParser.IndexDitContentRules(
+            subschemaEntry.Attributes["dITContentRules"].GetValues(typeof(string)).Cast<string>());
+    }
+
+    /// <summary>
+    /// Records the auxiliary classes a DIT Content Rule permits on a structural class as tags on its object type,
+    /// and warns about any reference the schema does not back.
+    /// </summary>
+    private void ApplyPermittedAuxiliaryClasses(
+        ConnectorSchemaObjectType objectType,
+        Rfc4512ObjectClassDescription objectClassDef,
+        Rfc4512DitContentRuleDescription contentRule,
+        Rfc4512ObjectClassIndex objectClassIndex)
+    {
+        var resolution = LdapDitContentRuleResolver.ResolvePermittedAuxiliaryClasses(contentRule, objectClassIndex);
+
+        foreach (var auxiliaryClassName in resolution.AuxiliaryClassNames)
+            objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(ObjectTypeTags.Keys.PermittedAuxiliaryClass, auxiliaryClassName));
+
+        if (resolution.UnresolvedReferences.Count == 0)
+            return;
+
+        // The directory is serving a rule that names a class it does not publish as auxiliary. JIM cannot suggest
+        // it, and an administrator expecting to see it needs to know why it is missing rather than assume JIM
+        // failed to read the schema.
+        var warning = $"The DIT Content Rule for '{objectClassDef.Name}' permits auxiliary classes the schema does " +
+                      $"not publish as auxiliary, so they cannot be offered: {string.Join(", ", resolution.UnresolvedReferences)}.";
+        _schema.Warnings.Add(warning);
+        _logger.Warning("GetRfcSchemaAsync: {Warning}", warning);
+    }
+
+    /// <summary>
+    /// Parses all objectClasses values from the subschema entry, indexed by both name and OID.
+    /// </summary>
+    private static Rfc4512ObjectClassIndex ParseAllObjectClasses(SearchResultEntry subschemaEntry)
+    {
         if (!subschemaEntry.Attributes.Contains("objectClasses"))
-            return result;
+            return new Rfc4512ObjectClassIndex();
 
-        foreach (string definition in subschemaEntry.Attributes["objectClasses"].GetValues(typeof(string)))
-        {
-            var parsed = Rfc4512SchemaParser.ParseObjectClassDescription(definition);
-            if (parsed?.Name != null && !result.ContainsKey(parsed.Name))
-                result[parsed.Name] = parsed;
-        }
-
-        return result;
+        return Rfc4512SchemaParser.IndexObjectClasses(
+            subschemaEntry.Attributes["objectClasses"].GetValues(typeof(string)).Cast<string>());
     }
 
     /// <summary>

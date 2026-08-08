@@ -13,6 +13,21 @@ namespace JIM.Models.Staging;
 public static class ConnectedSystemObjectTypeTagExtensions
 {
     /// <summary>
+    /// Whether the Connected System classified this object type as an auxiliary class: one that augments another
+    /// rather than standing alone.
+    /// </summary>
+    /// <remarks>
+    /// An object type carrying no class-kind tag is unclassified, and is deliberately not auxiliary. Guessing would
+    /// put a structural class in front of an administrator as something to attach to their objects.
+    /// </remarks>
+    public static bool IsAuxiliary(this ConnectedSystemObjectType objectType)
+    {
+        return objectType.Tags.Any(tag =>
+            tag.Key == ObjectTypeTags.Keys.ClassKind &&
+            tag.Value == ObjectTypeTags.Values.ClassKindAuxiliary);
+    }
+
+    /// <summary>
     /// Whether the Connected System reported this object type as one it uses for its own configuration or operation,
     /// rather than one an administrator would manage.
     /// </summary>

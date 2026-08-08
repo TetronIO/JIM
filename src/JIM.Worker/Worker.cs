@@ -541,6 +541,50 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case AuxiliaryClassDiscoveryWorkerTask auxiliaryClassDiscoveryTask:
+                                {
+                                    Log.Information("ExecuteAsync: AuxiliaryClassDiscoveryWorkerTask received for Connected System id: {ConnectedSystemId}, scope: {Scope}, initiated by: {InitiatedBy}",
+                                        auxiliaryClassDiscoveryTask.ConnectedSystemId, auxiliaryClassDiscoveryTask.Scope, auxiliaryClassDiscoveryTask.InitiatedByName ?? "Unknown");
+
+                                    try
+                                    {
+                                        // A discovery run declares no phases: it is one activity (reading objects)
+                                        // repeated per Object Type, so the Connector's narration reaches the
+                                        // Activity as messages rather than as phase changes.
+                                        var progress = ActivityPhaseReporter.None.CreateConnectorProgress(
+                                            reportMessage: async message =>
+                                            {
+                                                newWorkerTask.Activity.Message = message;
+                                                await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
+                                            });
+
+                                        var run = await taskJim.ConnectedSystems.RunAuxiliaryClassDiscoveryAsync(
+                                            auxiliaryClassDiscoveryTask, newWorkerTask.Activity, progress, stoppingToken);
+
+                                        // A failed run records why on itself; the Activity has to say so too, or an
+                                        // administrator sees a completed Activity sitting over a failed run.
+                                        if (run.Status == AuxiliaryClassDiscoveryStatus.Failed)
+                                        {
+                                            await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity,
+                                                new Exception(run.ErrorMessage ?? "Auxiliary class discovery failed."));
+                                        }
+                                        else
+                                        {
+                                            newWorkerTask.Activity.Message = $"Read {run.EntriesRead} object(s) and found {run.Results.Count} auxiliary class suggestion(s).";
+                                            await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+                                        }
+
+                                        Log.Information("ExecuteAsync: Auxiliary class discovery for Connected System {ConnectedSystemId} finished {Status} in {ExecutionTime}: {EntriesRead} object(s) read, {ResultCount} suggestion(s).",
+                                            auxiliaryClassDiscoveryTask.ConnectedSystemId, run.Status, newWorkerTask.Activity.ExecutionTime, run.EntriesRead, run.Results.Count);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst discovering auxiliary class usage.");
+                                    }
+
+                                    break;
+                                }
                                 case TemporalScopeReconciliationWorkerTask:
                                 {
                                     Log.Information("ExecuteAsync: TemporalScopeReconciliationWorkerTask received, initiated by: {InitiatedBy}",

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805195055_AuxiliaryClassExtensionsAndDiscovery")]
+    partial class AuxiliaryClassExtensionsAndDiscovery
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2733,9 +2736,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("PartitionId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Scope")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
 
@@ -3930,28 +3930,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("StaticMembersId");
 
                     b.ToTable("MetaverseObjectRole");
-                });
-
-            modelBuilder.Entity("JIM.Models.Tasking.AuxiliaryClassDiscoveryWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int>("ConnectedSystemId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SampleSizePerObjectType")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Scope")
-                        .HasColumnType("integer");
-
-                    b.ToTable("WorkerTasks", t =>
-                        {
-                            t.Property("ConnectedSystemId")
-                                .HasColumnName("AuxiliaryClassDiscoveryWorkerTask_ConnectedSystemId");
-                        });
-
-                    b.HasDiscriminator().HasValue("AuxiliaryClassDiscoveryWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.ClearConnectedSystemObjectsWorkerTask", b =>

@@ -37,7 +37,7 @@ internal static class Rfc4512SchemaParser
         var result = new Rfc4512ObjectClassDescription
         {
             // RFC 4512 § 4.1.1 puts the OID first, immediately after the opening parenthesis.
-            Oid = tokens.Count > 1 && tokens[0] == "(" ? tokens[1] : null
+            Oid = ReadLeadingOid(tokens)
         };
 
         for (var i = 0; i < tokens.Count; i++)
@@ -77,6 +77,118 @@ internal static class Rfc4512SchemaParser
         }
 
         return result.Name != null ? result : null;
+    }
+
+    /// <summary>
+    /// Parses an RFC 4512 DIT Content Rule description string into a structured representation.
+    /// </summary>
+    /// <remarks>
+    /// This is the only machine-readable statement in LDAP of which auxiliary classes an entry of a given structural
+    /// class may carry; an auxiliary class's own definition says nothing about where it may be used. The rule
+    /// identifies its structural class by OID and never by name, which is what <see cref="IndexObjectClasses"/>'s
+    /// OID index exists to resolve.
+    /// </remarks>
+    internal static Rfc4512DitContentRuleDescription? ParseDitContentRuleDescription(string definition)
+    {
+        if (string.IsNullOrWhiteSpace(definition))
+            return null;
+
+        var tokens = Tokenise(definition);
+        if (tokens.Count == 0)
+            return null;
+
+        var result = new Rfc4512DitContentRuleDescription
+        {
+            // RFC 4512 § 4.1.6 puts the governed structural class's OID first, immediately after the opening
+            // parenthesis. Unlike an objectClass description, NAME is optional, so the OID is the rule's identity.
+            Oid = ReadLeadingOid(tokens)
+        };
+
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            switch (tokens[i])
+            {
+                case "OBSOLETE":
+                    result.IsObsolete = true;
+                    break;
+                case "NAME":
+                    result.Name = ReadNameValue(tokens, ref i);
+                    break;
+                case "DESC":
+                    result.Description = ReadQuotedString(tokens, ref i);
+                    break;
+                case "AUX":
+                    result.AuxiliaryClasses = ReadOidList(tokens, ref i);
+                    break;
+                case "MUST":
+                    result.MustAttributes = ReadOidList(tokens, ref i);
+                    break;
+                case "MAY":
+                    result.MayAttributes = ReadOidList(tokens, ref i);
+                    break;
+                case "NOT":
+                    result.ProhibitedAttributes = ReadOidList(tokens, ref i);
+                    break;
+            }
+        }
+
+        // A rule with no OID names no structural class, so there is nothing it could be applied to.
+        return result.Oid != null ? result : null;
+    }
+
+    /// <summary>
+    /// Parses a directory's objectClass descriptions once and indexes them by both name and OID.
+    /// </summary>
+    /// <remarks>
+    /// Two indexes because the schema is referred to both ways: entries and class definitions name classes by
+    /// descriptor, whereas a DIT Content Rule names the class it governs by OID. Definitions that cannot be parsed
+    /// are skipped rather than failing the discovery, so one malformed definition does not cost an administrator the
+    /// rest of the directory's schema. The first definition of a given key wins.
+    /// </remarks>
+    internal static Rfc4512ObjectClassIndex IndexObjectClasses(IEnumerable<string> definitions)
+    {
+        var index = new Rfc4512ObjectClassIndex();
+
+        foreach (var definition in definitions)
+        {
+            var parsed = ParseObjectClassDescription(definition);
+            if (parsed?.Name == null)
+                continue;
+
+            // A parsed class always has a name (the parser discards it otherwise) but not necessarily an OID, so the
+            // name index is the complete one and the OID index is best-effort. Index the OID only for a class the
+            // name index accepted, so a lookup by either key can never hand back a class the other one rejected.
+            if (!index.ByName.TryAdd(parsed.Name, parsed))
+                continue;
+
+            if (parsed.Oid != null)
+                index.ByOid.TryAdd(parsed.Oid, parsed);
+        }
+
+        return index;
+    }
+
+    /// <summary>
+    /// Parses a directory's DIT Content Rule descriptions and keys them by the OID of the structural class each one
+    /// governs.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by OID because that is how a rule names its class, and because that is the only key it is guaranteed to
+    /// have. Rules that cannot be parsed, or that name no class, are skipped rather than failing the discovery.
+    /// Where two rules claim the same structural class the first wins, matching <see cref="IndexObjectClasses"/>.
+    /// </remarks>
+    internal static Dictionary<string, Rfc4512DitContentRuleDescription> IndexDitContentRules(IEnumerable<string> definitions)
+    {
+        var result = new Dictionary<string, Rfc4512DitContentRuleDescription>(StringComparer.Ordinal);
+
+        foreach (var definition in definitions)
+        {
+            var parsed = ParseDitContentRuleDescription(definition);
+            if (parsed?.Oid != null)
+                result.TryAdd(parsed.Oid, parsed);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -210,6 +322,31 @@ internal static class Rfc4512SchemaParser
     // -----------------------------------------------------------------------
     // Tokeniser and token readers
     // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Every keyword RFC 4512 allows to open a clause. A token matching one of these is not an OID, however early in
+    /// the definition it appears.
+    /// </summary>
+    private static readonly HashSet<string> Rfc4512Keywords =
+    [
+        "NAME", "DESC", "OBSOLETE", "SUP", "ABSTRACT", "STRUCTURAL", "AUXILIARY", "MUST", "MAY", "AUX", "NOT",
+        "SYNTAX", "SINGLE-VALUE", "NO-USER-MODIFICATION", "USAGE", "EQUALITY", "ORDERING", "SUBSTR", "COLLECTIVE"
+    ];
+
+    /// <summary>
+    /// Reads the object identifier that opens a description, immediately after the opening parenthesis.
+    /// </summary>
+    /// <remarks>
+    /// A malformed definition can omit the OID and open straight onto a clause, so the leading token is only an OID
+    /// when it is not a keyword. Taking it positionally would hand callers "NAME" as an object identifier.
+    /// </remarks>
+    private static string? ReadLeadingOid(List<string> tokens)
+    {
+        if (tokens.Count < 2 || tokens[0] != "(")
+            return null;
+
+        return Rfc4512Keywords.Contains(tokens[1]) ? null : tokens[1];
+    }
 
     /// <summary>
     /// Splits an RFC 4512 description string into tokens, handling parenthesised groups
@@ -426,6 +563,60 @@ internal class Rfc4512ObjectClassDescription
     public Rfc4512ObjectClassKind Kind { get; set; } = Rfc4512ObjectClassKind.Structural;
     public List<string> MustAttributes { get; set; } = new();
     public List<string> MayAttributes { get; set; } = new();
+}
+
+/// <summary>
+/// Parsed representation of an RFC 4512 § 4.1.6 DIT Content Rule description.
+/// </summary>
+internal class Rfc4512DitContentRuleDescription
+{
+    /// <summary>
+    /// The OID of the structural class this rule governs. This, not the name, is the rule's identity: NAME is
+    /// optional in the grammar, and a rule that named no class could not be applied to anything.
+    /// </summary>
+    public string? Oid { get; set; }
+
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// Whether the directory has declared the rule superseded.
+    /// </summary>
+    public bool IsObsolete { get; set; }
+
+    /// <summary>
+    /// The auxiliary classes an entry of the governed structural class may carry, named by descriptor or by OID as
+    /// the directory chose. An empty list is a statement that the rule permits none, not an absence of information.
+    /// </summary>
+    public List<string> AuxiliaryClasses { get; set; } = new();
+
+    public List<string> MustAttributes { get; set; } = new();
+    public List<string> MayAttributes { get; set; } = new();
+
+    /// <summary>
+    /// Attributes the rule forbids on the governed class, from the NOT clause. A prohibition, not another MAY:
+    /// treating these as permitted would offer an administrator an attribute the directory will refuse to write.
+    /// </summary>
+    public List<string> ProhibitedAttributes { get; set; } = new();
+}
+
+/// <summary>
+/// A directory's objectClass descriptions, parsed once and reachable by either of the two ways LDAP refers to a
+/// class.
+/// </summary>
+internal class Rfc4512ObjectClassIndex
+{
+    /// <summary>
+    /// Keyed by descriptor, case-insensitively, because LDAP descriptors are case-insensitive and a directory does
+    /// not spell a class the same way everywhere it mentions it.
+    /// </summary>
+    public Dictionary<string, Rfc4512ObjectClassDescription> ByName { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Keyed by OID, for the references that carry no name: a DIT Content Rule identifies the structural class it
+    /// governs by OID only. Best-effort, because a malformed definition may yield no OID.
+    /// </summary>
+    public Dictionary<string, Rfc4512ObjectClassDescription> ByOid { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>

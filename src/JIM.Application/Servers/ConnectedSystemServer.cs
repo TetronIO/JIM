@@ -4,6 +4,7 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using JIM.Application.Staging;
 using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -1528,7 +1529,7 @@ public class ConnectedSystemServer
     /// through the REST API or PowerShell left different configuration behind than the same import run through the
     /// portal. The initiator decides who the Activity is attributed to; it does not decide what a schema means.
     /// </remarks>
-    private static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
+    internal static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
     {
         // Discovery warnings travel on the result so the portal can show them beside what changed; the import's
         // Activity carries the same warnings for the other surfaces.
@@ -1571,10 +1572,19 @@ public class ConnectedSystemServer
                 var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
                 var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
 
+                // Attributes an administrator's selected auxiliary classes contribute are not in the discovered
+                // schema for this type, because an RFC 4512 directory attaches an auxiliary class to an entry rather
+                // than to the class. They are carried across as the same rows rather than dropped and rebuilt: a new
+                // row would hand every Synchronisation Rule mapping that references one a dangling attribute id.
+                var contributedAttributes = ContributedAuxiliaryAttributes(existingObjectType, existingAttributes, existingObjectTypes);
+
                 connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
 
                 // Track removed attributes for this object type
-                var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
+                var removedAttributeNames = existingAttributeNames
+                    .Except(newAttributeNames)
+                    .Except(contributedAttributes.Select(a => a.Name))
+                    .ToList();
                 if (removedAttributeNames.Count > 0)
                 {
                     result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
@@ -1613,6 +1623,12 @@ public class ConnectedSystemServer
                         });
                     }
                 }
+
+                // Put the auxiliary contributions back, as the rows they already were. A directory that has since
+                // declared one of them on the structural class itself wins: that attribute is now native, and the
+                // discovery pass above has already carried its row across.
+                foreach (var contributedAttribute in contributedAttributes.Where(a => !newAttributeNames.Contains(a.Name)))
+                    connectedSystemObjectType.Attributes.Add(contributedAttribute);
 
                 if (addedAttributeNames.Count > 0)
                 {
@@ -1671,6 +1687,11 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
         }
 
+        // Bring the auxiliary classes an administrator selected onto the structural types that extend them. This
+        // runs after every type has been rebuilt, because an extension names another object type and that type may
+        // not have been reached yet while the loop above was running.
+        ApplyAuxiliaryClassSelections(connectedSystem, result);
+
         // Any credential attribute that survived the merge is one that was already persisted; force it into a
         // state where JIM neither manages it nor lets an administrator turn it back on.
         QuarantineCredentialAttributes(connectedSystem);
@@ -1686,6 +1707,57 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes[0].Selected = true;
 
         return result;
+    }
+
+    /// <summary>
+    /// The attributes on a persisted Object Type that got there by an administrator selecting an auxiliary class,
+    /// rather than by the Connector discovering them.
+    /// </summary>
+    /// <remarks>
+    /// Recognised by the attribute's <c>ClassName</c> naming a currently-selected auxiliary type: discovery stamps
+    /// every attribute with the class its Object Type was built from, so nothing native ever carries another class's
+    /// name. Selections pointing at a type this refresh removed contribute nothing, which is the documented
+    /// data-loss semantic of a refresh and is reported by the merge that follows.
+    /// </remarks>
+    private static List<ConnectedSystemObjectTypeAttribute> ContributedAuxiliaryAttributes(
+        ConnectedSystemObjectType existingObjectType,
+        List<ConnectedSystemObjectTypeAttribute> existingAttributes,
+        List<ConnectedSystemObjectType> existingObjectTypes)
+    {
+        if (existingObjectType.Extensions.Count == 0)
+            return [];
+
+        var contributingClassNames = existingObjectType.Extensions
+            .Select(extension => existingObjectTypes.FirstOrDefault(ot => ot.Id == extension.ExtensionObjectTypeId)?.Name)
+            .Where(name => name != null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase)!;
+
+        return existingAttributes
+            .Where(attribute => attribute.ClassName != null && contributingClassNames.Contains(attribute.ClassName))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Merges the auxiliary classes an administrator selected onto the structural Object Types that extend them, and
+    /// folds what changed into the refresh result so the portal reports it beside everything else that changed.
+    /// </summary>
+    private static void ApplyAuxiliaryClassSelections(ConnectedSystem connectedSystem, SchemaRefreshResult result)
+    {
+        var merge = AuxiliaryClassAttributeMerger.Merge(connectedSystem);
+
+        foreach (var (objectTypeName, attributeNames) in merge.AddedAttributes)
+            result.AddedAttributes[objectTypeName] = result.AddedAttributes.TryGetValue(objectTypeName, out var added)
+                ? added.Union(attributeNames).ToList()
+                : attributeNames;
+
+        foreach (var (objectTypeName, attributeNames) in merge.RemovedAttributes)
+            result.RemovedAttributes[objectTypeName] = result.RemovedAttributes.TryGetValue(objectTypeName, out var removed)
+                ? removed.Union(attributeNames).ToList()
+                : attributeNames;
+
+        // An auxiliary class the directory no longer publishes takes its selection with it. Say so on the refresh
+        // rather than letting an administrator discover it as attributes that quietly stopped being there.
+        result.DiscoveryWarnings.AddRange(merge.UnresolvedExtensions);
     }
 
     /// <summary>
@@ -3225,6 +3297,161 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetObjectTypeAsync(id);
     }
+
+    #region Object Type extensions (auxiliary classes)
+
+    /// <summary>
+    /// Gets every auxiliary class selection an administrator has made on a Connected System.
+    /// </summary>
+    public async Task<List<ConnectedSystemObjectTypeExtension>> GetObjectTypeExtensionsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetObjectTypeExtensionsAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Records that one Object Type should be extended with the attributes of another.
+    /// </summary>
+    /// <returns>True if a new selection was recorded; false if it was already there.</returns>
+    public async Task<bool> AddObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.AddObjectTypeExtensionAsync(baseObjectTypeId, extensionObjectTypeId);
+    }
+
+    /// <summary>
+    /// Withdraws an auxiliary class selection.
+    /// </summary>
+    /// <returns>True if a selection was removed; false if there was nothing to remove.</returns>
+    public async Task<bool> RemoveObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        return await Application.Repository.ConnectedSystems.RemoveObjectTypeExtensionAsync(baseObjectTypeId, extensionObjectTypeId);
+    }
+
+    /// <summary>
+    /// Names the structural Object Type to use as the carrier when creating objects of a type that cannot stand
+    /// alone, or clears it when passed null.
+    /// </summary>
+    public async Task SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId)
+    {
+        await Application.Repository.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(objectTypeId, carrierObjectTypeId);
+    }
+
+    #endregion
+
+    #region Auxiliary class discovery
+
+    /// <summary>
+    /// Starts an auxiliary class discovery run for a Connected System.
+    /// </summary>
+    public async Task<AuxiliaryClassDiscoveryRun> CreateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        return await Application.Repository.ConnectedSystems.CreateAuxiliaryClassDiscoveryRunAsync(run);
+    }
+
+    /// <summary>
+    /// Queues an auxiliary class discovery run for a Connected System, refusing if one is already in flight.
+    /// </summary>
+    /// <remarks>
+    /// One at a time per Connected System, because a full scan reads every object and two of them would double the
+    /// load on a directory an administrator is still using for authentication. The database enforces the same rule
+    /// with a filtered unique index; this check is what turns that into an explanation rather than a constraint
+    /// violation.
+    /// </remarks>
+    public async Task<AuxiliaryClassDiscoveryStartResult> StartAuxiliaryClassDiscoveryAsync(
+        int connectedSystemId,
+        AuxiliaryClassDiscoveryScope scope,
+        int? sampleSizePerObjectType,
+        MetaverseObject? initiatedBy)
+    {
+        if (scope == AuxiliaryClassDiscoveryScope.NotSet)
+            return AuxiliaryClassDiscoveryStartResult.Failed("A discovery scope must be chosen: a quick sample, or a full scan.");
+
+        if (scope == AuxiliaryClassDiscoveryScope.QuickSample && sampleSizePerObjectType is null or < 1)
+            return AuxiliaryClassDiscoveryStartResult.Failed("A quick sample needs to know how many objects of each Object Type to read.");
+
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return AuxiliaryClassDiscoveryStartResult.Failed($"Connected System {connectedSystemId} does not exist.");
+
+        var inFlight = await GetInProgressAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+        if (inFlight != null)
+            return AuxiliaryClassDiscoveryStartResult.Failed(
+                $"A discovery run for '{connectedSystem.Name}' is already in progress. Wait for it to finish, or cancel it, before starting another.");
+
+        var workerTask = new AuxiliaryClassDiscoveryWorkerTask
+        {
+            ConnectedSystemId = connectedSystemId,
+            Scope = scope,
+
+            // A full scan reads everything, so a sample size on one would be a number that silently did nothing.
+            SampleSizePerObjectType = scope == AuxiliaryClassDiscoveryScope.QuickSample ? sampleSizePerObjectType : null,
+            InitiatedByType = initiatedBy != null ? ActivityInitiatorType.User : ActivityInitiatorType.System,
+            InitiatedById = initiatedBy?.Id,
+            InitiatedByName = initiatedBy?.NameOrId
+        };
+
+        var creationResult = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
+        return creationResult.Success
+            ? AuxiliaryClassDiscoveryStartResult.Queued(workerTask.Id, workerTask.Activity.Id)
+            : AuxiliaryClassDiscoveryStartResult.Failed(creationResult.ErrorMessage ?? "The discovery task could not be queued.");
+    }
+
+    /// <summary>
+    /// Executes a queued auxiliary class discovery run. Called by JIM.Worker.
+    /// </summary>
+    /// <remarks>
+    /// The Connector is created here rather than in the worker, so that connector construction stays in one place;
+    /// the progress reporter comes from the worker, because it is the thing holding the Activity being narrated.
+    /// </remarks>
+    public async Task<AuxiliaryClassDiscoveryRun> RunAuxiliaryClassDiscoveryAsync(
+        AuxiliaryClassDiscoveryWorkerTask workerTask,
+        Activity activity,
+        IConnectorProgress progress,
+        CancellationToken cancellationToken)
+    {
+        // The full graph: the runner needs the Object Types an administrator selected, their classification tags,
+        // and the containers that bound what is in scope.
+        var connectedSystem = await GetConnectedSystemAsync(workerTask.ConnectedSystemId)
+                              ?? throw new InvalidDataException($"Connected System {workerTask.ConnectedSystemId} does not exist.");
+
+        var connector = CreateConnector(connectedSystem);
+        try
+        {
+            var runner = new AuxiliaryClassDiscoveryRunner(Application, Log.Logger);
+            return await runner.RunAsync(connectedSystem, workerTask.Scope, workerTask.SampleSizePerObjectType,
+                activity, connector, progress, cancellationToken);
+        }
+        finally
+        {
+            (connector as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Gets the most recently started discovery run for a Connected System, with its results.
+    /// </summary>
+    public async Task<AuxiliaryClassDiscoveryRun?> GetLatestAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetLatestAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Gets the discovery run currently in flight for a Connected System, or null if none is.
+    /// </summary>
+    public async Task<AuxiliaryClassDiscoveryRun?> GetInProgressAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetInProgressAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Persists a discovery run's progress, outcome and results. The run must have been loaded on the same
+    /// JimApplication instance used to save it.
+    /// </summary>
+    public async Task UpdateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        await Application.Repository.ConnectedSystems.UpdateAuxiliaryClassDiscoveryRunAsync(run);
+    }
+
+    #endregion
 
     /// <summary>
     /// Updates a Connected System Object Type.

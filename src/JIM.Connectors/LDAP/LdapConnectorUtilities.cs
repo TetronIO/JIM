@@ -499,6 +499,26 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Escapes a value for safe inclusion in an LDAP search filter, per RFC 4515 § 3.
+    /// </summary>
+    /// <remarks>
+    /// Every character that would otherwise be read as filter syntax becomes its backslash-escaped hex form, so a
+    /// value can only ever be matched against and never change what is being asked. Values reaching a filter are
+    /// usually names JIM discovered from the directory itself rather than anything a person typed, but a Connected
+    /// System is still a system boundary, and a filter assembled by string concatenation is the LDAP shape of an
+    /// injection. The backslash is replaced first, so the escapes introduced after it are not escaped again.
+    /// </remarks>
+    internal static string EscapeLdapFilterValue(string value)
+    {
+        return value
+            .Replace("\\", "\\5c")
+            .Replace("*", "\\2a")
+            .Replace("(", "\\28")
+            .Replace(")", "\\29")
+            .Replace("\0", "\\00");
+    }
+
+    /// <summary>
     /// Translates a Container's scope into the LDAP search scope to use when searching from it as a base.
     /// </summary>
     internal static SearchScope GetSearchScope(ConnectedSystemContainer connectedSystemContainer) =>

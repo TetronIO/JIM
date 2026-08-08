@@ -28,6 +28,17 @@ public static class ObjectTypeTags
         /// internally (configuration or operational classes that only add noise to the schema screen).
         /// </summary>
         public const string Visibility = "visibility";
+
+        /// <summary>
+        /// An auxiliary class the Connected System says may be attached to entries of this object type. Repeated
+        /// once per class, with the class's name as the value.
+        /// </summary>
+        /// <remarks>
+        /// A suggestion, never configuration: it narrows what the portal offers an administrator, and what they
+        /// actually select is held separately as an extension. Its absence says nothing, because most directories
+        /// publish no such statement at all.
+        /// </remarks>
+        public const string PermittedAuxiliaryClass = "permitted-auxiliary-class";
     }
 
     public static class Values

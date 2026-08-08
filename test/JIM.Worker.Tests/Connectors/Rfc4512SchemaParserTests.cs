@@ -136,6 +136,23 @@ public class Rfc4512SchemaParserTests
     }
 
     [Test]
+    public void ParseObjectClass_WithoutAnOid_ReportsNoOidRatherThanTheFirstKeyword()
+    {
+        // The OID is read positionally, so a definition that opens straight onto a clause must not yield "NAME" as
+        // an object identifier: LdapObjectTypeClassification decides visibility by matching the OID against the
+        // directory's own arcs, and a junk OID there is a classification made on nonsense.
+        var definition = "( NAME 'malformed' SUP top STRUCTURAL MUST cn )";
+        var result = Rfc4512SchemaParser.ParseObjectClassDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Oid, Is.Null);
+            Assert.That(result.Name, Is.EqualTo("malformed"), "the rest of the definition is still usable");
+        }
+    }
+
+    [Test]
     public void ParseObjectClass_ClassWithoutTheObsoleteKeyword_IsNotReportedObsolete()
     {
         var definition = "( 2.5.6.6 NAME 'person' SUP top STRUCTURAL MUST ( sn $ cn ) )";
@@ -143,6 +160,242 @@ public class Rfc4512SchemaParserTests
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.IsObsolete, Is.False);
+    }
+
+    #endregion
+
+    #region ParseDitContentRuleDescription
+
+    // A DIT Content Rule (RFC 4512 § 4.1.6) is how a directory says which auxiliary classes may be attached to
+    // entries of one structural class, and it is the only machine-readable statement of that anywhere in LDAP: the
+    // auxiliary class's own definition says nothing about where it may be used. The rule names its structural class
+    // by OID and never by name, which is why the connector needs an OID-keyed class index alongside the name-keyed
+    // one.
+
+    [Test]
+    public void ParseDitContentRule_WithAuxMustMayAndNot_ParsesEveryList()
+    {
+        var definition = "( 2.5.6.6 NAME 'personContentRule' DESC 'what a person entry may carry' " +
+                         "AUX ( posixAccount $ shadowAccount ) MUST uid MAY ( loginShell $ gecos ) NOT ( telephoneNumber ) )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Oid, Is.EqualTo("2.5.6.6"), "the OID identifies the structural class the rule governs");
+            Assert.That(result.Name, Is.EqualTo("personContentRule"));
+            Assert.That(result.Description, Is.EqualTo("what a person entry may carry"));
+            Assert.That(result.AuxiliaryClasses, Is.EquivalentTo(new[] { "posixAccount", "shadowAccount" }));
+            Assert.That(result.MustAttributes, Is.EquivalentTo(new[] { "uid" }));
+            Assert.That(result.MayAttributes, Is.EquivalentTo(new[] { "loginShell", "gecos" }));
+            Assert.That(result.ProhibitedAttributes, Is.EquivalentTo(new[] { "telephoneNumber" }),
+                "NOT is a prohibition, not another MAY; merging the two would offer administrators an attribute the directory will refuse");
+        }
+    }
+
+    [Test]
+    public void ParseDitContentRule_WithASingleAuxClassAndNoParentheses_ParsesTheOneClass()
+    {
+        var definition = "( 2.16.840.1.113730.3.2.2 NAME 'inetOrgPersonContentRule' AUX pkiUser )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.AuxiliaryClasses, Is.EquivalentTo(new[] { "pkiUser" }));
+    }
+
+    [Test]
+    public void ParseDitContentRule_WithAuxClassesNamedByOid_PreservesThemVerbatim()
+    {
+        // A directory may name classes in these lists by OID rather than by descriptor. Resolving them is the
+        // caller's job (that is what the OID index is for); the parser must not silently drop what it cannot name.
+        var definition = "( 2.5.6.6 AUX ( 1.3.6.1.1.1.2.0 $ 1.3.6.1.1.1.2.1 ) )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.AuxiliaryClasses, Is.EquivalentTo(new[] { "1.3.6.1.1.1.2.0", "1.3.6.1.1.1.2.1" }));
+    }
+
+    [Test]
+    public void ParseDitContentRule_WithoutAName_IsStillParsed()
+    {
+        // Unlike an objectClass description, NAME is optional here and the OID alone identifies the rule, so
+        // discarding an unnamed rule would lose auxiliary classes a directory genuinely permits.
+        var definition = "( 2.5.6.6 AUX posixAccount )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Oid, Is.EqualTo("2.5.6.6"));
+            Assert.That(result.Name, Is.Null);
+        }
+    }
+
+    [Test]
+    public void ParseDitContentRule_WithoutAnOid_ReturnsNull()
+    {
+        // With no OID there is no structural class to attach the rule to, so it cannot be acted on.
+        var definition = "( NAME 'orphanRule' AUX posixAccount )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ParseDitContentRule_WithMultipleNames_TakesTheFirst()
+    {
+        var definition = "( 2.5.6.6 NAME ( 'personContentRule' 'personRule' ) AUX posixAccount )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Name, Is.EqualTo("personContentRule"));
+    }
+
+    [Test]
+    public void ParseDitContentRule_MarkedObsolete_IsReportedObsolete()
+    {
+        var definition = "( 2.5.6.6 NAME 'personContentRule' OBSOLETE AUX posixAccount )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.IsObsolete, Is.True);
+    }
+
+    [Test]
+    public void ParseDitContentRule_WithNoAuxClauseAtAll_PermitsNoAuxiliaryClasses()
+    {
+        // A rule may exist purely to constrain attributes. It permits no auxiliary classes, which is a statement,
+        // not an absence of one.
+        var definition = "( 2.5.6.6 NAME 'personContentRule' MUST uid )";
+        var result = Rfc4512SchemaParser.ParseDitContentRuleDescription(definition);
+
+        Assert.That(result, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.AuxiliaryClasses, Is.Empty);
+            Assert.That(result.MustAttributes, Is.EquivalentTo(new[] { "uid" }));
+        }
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public void ParseDitContentRule_WithNothingToParse_ReturnsNull(string definition)
+    {
+        Assert.That(Rfc4512SchemaParser.ParseDitContentRuleDescription(definition), Is.Null);
+    }
+
+    #endregion
+
+    #region IndexObjectClasses
+
+    private static readonly string[] SampleClassDefinitions =
+    [
+        "( 2.5.6.6 NAME 'person' SUP top STRUCTURAL MUST ( sn $ cn ) )",
+        "( 1.3.6.1.1.1.2.0 NAME 'posixAccount' SUP top AUXILIARY MUST ( cn $ uid $ uidNumber ) )",
+        "( 2.5.6.0 NAME 'top' ABSTRACT MUST objectClass )"
+    ];
+
+    [Test]
+    public void IndexObjectClasses_KeysTheSameClassByBothNameAndOid()
+    {
+        var index = Rfc4512SchemaParser.IndexObjectClasses(SampleClassDefinitions);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(index.ByName.Keys, Is.EquivalentTo(new[] { "person", "posixAccount", "top" }));
+            Assert.That(index.ByOid.Keys, Is.EquivalentTo(new[] { "2.5.6.6", "1.3.6.1.1.1.2.0", "2.5.6.0" }));
+            Assert.That(index.ByOid["1.3.6.1.1.1.2.0"], Is.SameAs(index.ByName["posixAccount"]),
+                "both indexes must hand back the same parsed class, so a caller that resolves by OID and one that resolves by name never disagree");
+        }
+    }
+
+    [Test]
+    public void IndexObjectClasses_LooksUpNamesWithoutRegardToCase()
+    {
+        // LDAP descriptors are case-insensitive, and a DIT Content Rule may spell a class differently from the
+        // class's own definition.
+        var index = Rfc4512SchemaParser.IndexObjectClasses(SampleClassDefinitions);
+
+        Assert.That(index.ByName.ContainsKey("POSIXACCOUNT"), Is.True);
+    }
+
+    [Test]
+    public void IndexObjectClasses_WhenTwoDefinitionsShareAnOid_KeepsTheFirst()
+    {
+        var index = Rfc4512SchemaParser.IndexObjectClasses(
+        [
+            "( 2.5.6.6 NAME 'person' SUP top STRUCTURAL MUST sn )",
+            "( 2.5.6.6 NAME 'personDuplicate' SUP top STRUCTURAL MUST cn )"
+        ]);
+
+        Assert.That(index.ByOid["2.5.6.6"].Name, Is.EqualTo("person"));
+    }
+
+    [Test]
+    public void IndexObjectClasses_WithAnUnparseableDefinition_SkipsItRatherThanFailing()
+    {
+        // One malformed definition must not cost an administrator the rest of the directory's schema.
+        var index = Rfc4512SchemaParser.IndexObjectClasses(
+        [
+            "not a schema definition at all",
+            "( 2.5.6.6 NAME 'person' SUP top STRUCTURAL MUST sn )"
+        ]);
+
+        Assert.That(index.ByName.Keys, Is.EquivalentTo(new[] { "person" }));
+    }
+
+    #endregion
+
+    #region IndexDitContentRules
+
+    [Test]
+    public void IndexDitContentRules_KeysEachRuleByTheClassItGoverns()
+    {
+        var rules = Rfc4512SchemaParser.IndexDitContentRules(
+        [
+            "( 2.5.6.6 NAME 'personContentRule' AUX posixAccount )",
+            "( 2.16.840.1.113730.3.2.2 NAME 'inetOrgPersonContentRule' AUX shadowAccount )"
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rules.Keys, Is.EquivalentTo(new[] { "2.5.6.6", "2.16.840.1.113730.3.2.2" }));
+            Assert.That(rules["2.5.6.6"].AuxiliaryClasses, Is.EquivalentTo(new[] { "posixAccount" }));
+        }
+    }
+
+    [Test]
+    public void IndexDitContentRules_WithNoRulesPublished_ReturnsAnEmptyIndex()
+    {
+        // The ordinary case: a stock OpenLDAP publishes no dITContentRules attribute at all. That means nothing is
+        // suggested, not that nothing is permitted, so it must not read as a discovery failure.
+        Assert.That(Rfc4512SchemaParser.IndexDitContentRules([]), Is.Empty);
+    }
+
+    [Test]
+    public void IndexDitContentRules_WhenTwoRulesGovernTheSameClass_KeepsTheFirst()
+    {
+        var rules = Rfc4512SchemaParser.IndexDitContentRules(
+        [
+            "( 2.5.6.6 NAME 'first' AUX posixAccount )",
+            "( 2.5.6.6 NAME 'second' AUX shadowAccount )"
+        ]);
+
+        Assert.That(rules["2.5.6.6"].Name, Is.EqualTo("first"));
+    }
+
+    [Test]
+    public void IndexDitContentRules_WithAnUnusableRule_SkipsItRatherThanFailing()
+    {
+        // One malformed or class-less rule must not cost an administrator the suggestions from every other rule.
+        var rules = Rfc4512SchemaParser.IndexDitContentRules(
+        [
+            "not a rule at all",
+            "( NAME 'noClassToAttachTo' AUX posixAccount )",
+            "( 2.5.6.6 NAME 'personContentRule' AUX posixAccount )"
+        ]);
+
+        Assert.That(rules.Keys, Is.EquivalentTo(new[] { "2.5.6.6" }));
     }
 
     #endregion
