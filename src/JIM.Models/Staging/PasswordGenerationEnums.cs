@@ -52,7 +52,25 @@ public enum InitialPasswordSource
     /// Use the configuration held on this Synchronisation Rule, which an administrator has set deliberately and
     /// which JIM will not change underneath them.
     /// </summary>
-    Custom = 1
+    Custom = 1,
+
+    /// <summary>
+    /// Set one password an administrator chose on every account the rule provisions, rather than generating a
+    /// different one per account.
+    /// <para>
+    /// <b>Not recommended, and the portal says so.</b> Every account the rule provisions shares this password
+    /// until each person changes it, so anybody who learns it can sign in as any new starter who has not. It
+    /// exists because the alternative is worse for the people who need it: JIM stores no generated password, so
+    /// without this there is no way to tell a new starter what to sign in with, and every account needs a
+    /// password set by hand instead. Delivering a generated password to somebody who should have it (#1252) is
+    /// the answer that replaces this one.
+    /// </para>
+    /// <para>
+    /// This is the only password value JIM stores. It is encrypted at rest and never returned by any surface;
+    /// see <see cref="JIM.Models.Logic.SyncRuleInitialPassword.StaticPasswordEncryptedValue"/>.
+    /// </para>
+    /// </summary>
+    Static = 2
 }
 
 /// <summary>

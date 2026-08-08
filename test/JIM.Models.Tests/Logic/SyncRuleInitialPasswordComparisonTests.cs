@@ -107,6 +107,46 @@ public class SyncRuleInitialPasswordComparisonTests
     }
 
     /// <summary>
+    /// Changing the static password is the whole reason an administrator would return to a rule whose accounts
+    /// parked: the target refused the password they chose, and the corrected one has to be tried.
+    /// </summary>
+    [Test]
+    public void WouldDeliverTheSameAs_WithADifferentStaticPassword_IsFalse()
+    {
+        var original = Configuration();
+        original.Source = InitialPasswordSource.Static;
+        original.StaticPasswordEncryptedValue = "jim-enc-v1:first";
+
+        var changed = Configuration();
+        changed.Source = InitialPasswordSource.Static;
+        changed.StaticPasswordEncryptedValue = "jim-enc-v1:second";
+
+        Assert.That(SyncRuleInitialPassword.WouldDeliverTheSameAs(original, changed), Is.False);
+    }
+
+    /// <summary>
+    /// The other half of that, and the one a mistake would break silently: saving a rule without touching its
+    /// static password must leave the parked accounts parked. The stored ciphertext is only replaced when a new
+    /// plaintext is supplied precisely so that this holds; re-encrypting an unchanged password would produce a
+    /// different string every save and set every parked account retrying against a password the target has
+    /// already refused.
+    /// </summary>
+    [Test]
+    public void WouldDeliverTheSameAs_WithTheSameStoredStaticPassword_IsTrue()
+    {
+        var saved = Configuration();
+        saved.Source = InitialPasswordSource.Static;
+        saved.StaticPasswordEncryptedValue = "jim-enc-v1:unchanged";
+
+        var resaved = Configuration();
+        resaved.Source = InitialPasswordSource.Static;
+        resaved.StaticPasswordEncryptedValue = "jim-enc-v1:unchanged";
+        resaved.StaticPasswordSetAt = DateTime.UtcNow;
+
+        Assert.That(SyncRuleInitialPassword.WouldDeliverTheSameAs(saved, resaved), Is.True);
+    }
+
+    /// <summary>
     /// The guard that keeps the comparison honest as the model grows.
     /// <para>
     /// A hand-written comparison falls behind the moment somebody adds a setting, and the failure is silent:
@@ -126,7 +166,11 @@ public class SyncRuleInitialPasswordComparisonTests
             nameof(SyncRuleInitialPassword.SyncRule),
             nameof(SyncRuleInitialPassword.SyncRuleId),
             // The policy is compared property by property below rather than by reference.
-            nameof(SyncRuleInitialPassword.CustomPolicy)
+            nameof(SyncRuleInitialPassword.CustomPolicy),
+            // A record of when the static password last changed, not an input to what gets delivered. It moves
+            // only when StaticPasswordEncryptedValue does, and that is compared, so treating this as a setting
+            // would add nothing and would make an unchanged save look like a change on any clock skew.
+            nameof(SyncRuleInitialPassword.StaticPasswordSetAt)
         };
 
         var undetected = new List<string>();
@@ -179,7 +223,9 @@ public class SyncRuleInitialPasswordComparisonTests
                      .Where(p => p.CanWrite && p.Name is not (nameof(SyncRuleInitialPassword.Id)
                          or nameof(SyncRuleInitialPassword.SyncRule)
                          or nameof(SyncRuleInitialPassword.SyncRuleId)
-                         or nameof(SyncRuleInitialPassword.CustomPolicy))))
+                         or nameof(SyncRuleInitialPassword.CustomPolicy)
+                         // Not a delivery setting; see the ignore list on the comparison guard above.
+                         or nameof(SyncRuleInitialPassword.StaticPasswordSetAt))))
         {
             property.SetValue(configuration, Different(property.GetValue(configuration), property.PropertyType));
         }
