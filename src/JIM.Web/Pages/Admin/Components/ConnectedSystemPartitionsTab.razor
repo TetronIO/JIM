@@ -3,6 +3,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @using Serilog
 @using System.Text
@@ -564,7 +565,8 @@ else
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
                 "Connected System", ConnectedSystem.Name,
-                ConfigurationChangePreviewCounts.ForConfirmation(_preview, ScopeSelectionPreviewIsStale)))
+                ConfigurationChangePreviewCounts.ForConfirmation(_preview, ScopeSelectionPreviewIsStale),
+                ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, ScopeSelectionPreviewIsStale)))
             return;
 
         // The preview is linked only when it actually describes this change. A link to a preview run against a

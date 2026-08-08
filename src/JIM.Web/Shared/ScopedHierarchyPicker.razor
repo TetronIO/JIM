@@ -1,5 +1,6 @@
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -61,9 +62,12 @@
                                  aria-label="@($"Manage {container.Name}")" />
 
                     @* The Container's own name leads; its Distinguished Name is one hover away rather than printed
-                       on every row, where it restates the ancestry the indentation already draws. *@
+                       on every row, where it restates the ancestry the indentation already draws. A Connector that
+                       names its Containers by full path rather than by leaf name (#1275) has the partition's own
+                       suffix trimmed off, so those rows read the same way; for a Connector that already supplies a
+                       leaf name, nothing matches and nothing is trimmed. *@
                     <MudTooltip Arrow="true" Placement="Placement.Top" Text="@container.ExternalId">
-                        <span class="jim-picker-name">@container.Name</span>
+                        <span class="jim-picker-name">@ContainerDisplayName.RelativeTo(container.Name, Partition.Name)</span>
                     </MudTooltip>
 
                     @* Scope only means anything on a selected Container, so the control only appears on one. Both

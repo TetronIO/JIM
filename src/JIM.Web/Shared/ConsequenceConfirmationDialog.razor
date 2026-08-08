@@ -51,6 +51,10 @@
                 }
                 else
                 {
+                    @* What the change would do, before the enumeration of what is changing. Callers that have an *@
+                    @* answer state it here so the dialog opens with the consequence rather than with a table.    *@
+                    @LeadingContent
+
                     @if (!string.IsNullOrEmpty(IrreversibleWarning))
                     {
                         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
@@ -94,14 +98,21 @@
                             {
                                 <MudText Typo="Typo.body2" Class="mt-1 mb-1">@consequences.Note</MudText>
                             }
-                            @if (consequences.Items.Count > 0)
+                            @* Plain lines, not a MudList. A list item inside an alert paints its own surface, so *@
+                            @* the consequence arrived as a differently-tinted box nested inside the alert's box,  *@
+                            @* which reads as a rendering fault rather than as emphasis.                          *@
+                            @foreach (var item in consequences.Items)
                             {
-                                <MudList T="string" Dense="true" Class="mt-1">
-                                    @foreach (var item in consequences.Items)
+                                <MudText Typo="Typo.body2" Class="mt-1">
+                                    @if (!string.IsNullOrEmpty(item.Href))
                                     {
-                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href" Gutters="false">@item.Text</MudListItem>
+                                        <MudLink Href="@item.Href" Color="Color.Inherit" Underline="Underline.Always">@item.Text</MudLink>
                                     }
-                                </MudList>
+                                    else
+                                    {
+                                        @item.Text
+                                    }
+                                </MudText>
                             }
                         </MudAlert>
                     }
@@ -176,6 +187,13 @@
     /// </summary>
     [Parameter]
     public IReadOnlyList<ConsequenceBlocker> Blockers { get; set; } = [];
+
+    /// <summary>
+    /// What the change would do, rendered first so the dialog opens with the consequence rather than with an
+    /// enumeration of what is changing. Suppressed whilst blocked, where nothing would happen yet.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? LeadingContent { get; set; }
 
     /// <summary>
     /// Stated prominently above everything else when the change cannot be undone. Suppressed whilst
