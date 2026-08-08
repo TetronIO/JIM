@@ -26,6 +26,13 @@ namespace JIM.Connectors.Sql;
 /// would drop digits or write "1,5", and the next page would resume from the wrong row without any error.
 /// </para>
 /// <para>
+/// <b>That only holds because the value arriving here is already exact.</b> Nothing in this class can
+/// recover a digit a driver dropped before it was called, and ODP.NET infers a <c>Single</c> or a
+/// <c>Double</c> for a <c>NUMBER</c> from its declared precision and scale. Keeping a Decimal-mapped
+/// column exact is <see cref="SqlValueReader"/>'s job, and the two are one guarantee: the conversion
+/// below is exact, on a value that was read exactly.
+/// </para>
+/// <para>
 /// <b>The dialect seam is crossed here, not at the call site.</b> A GUID's byte order is the database
 /// server's own (Oracle stores RAW(16) big-endian, Microsoft SQL Server stores <c>uniqueidentifier</c>
 /// with its first three components little-endian), so the provider converts it. Taking the provider as a

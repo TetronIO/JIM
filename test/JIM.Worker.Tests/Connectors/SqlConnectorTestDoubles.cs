@@ -485,6 +485,100 @@ internal sealed class FakeSqlCatalogue
 }
 
 /// <summary>
+/// A numeric value as a driver hands it over, which for an exact numeric column is not necessarily as a
+/// decimal. An ordinary value in a row stands for a driver that answers with whatever CLR type the value
+/// already is; this stands for one that does not.
+/// </summary>
+/// <remarks>
+/// <para>
+/// ODP.NET chooses the CLR type a <c>NUMBER</c> column materialises as from the column's declared
+/// precision and scale rather than from the value. Measured against Oracle Database Free 23ai with
+/// Oracle.ManagedDataAccess.Core 23.26.300: scale 0 gives Int16, Int32, Int64 or Decimal by precision,
+/// a precision of 7 or less with a scale gives Single, 8 to 15 gives Double, and 16 or more gives
+/// Decimal. Microsoft.Data.SqlClient makes the same kind of distinction for <c>float</c> and
+/// <c>real</c>.
+/// </para>
+/// <para>
+/// <b>The values these tests use are wider than the bands ODP.NET currently applies Single and Double
+/// at.</b> That is deliberate. Those bands happen to line up with what
+/// <see cref="Convert.ToDecimal(object?, IFormatProvider?)"/> preserves (7 significant digits from a
+/// Single, 15 from a Double), so no value a NUMBER(7,s) or NUMBER(15,s) column can hold was found to
+/// read back wrongly. The alignment is an undocumented property of one driver version, not a guarantee
+/// JIM has; what the Connector must do is read a Decimal-mapped column as a decimal whatever the driver
+/// inferred, and that is what these values make observable.
+/// </para>
+/// </remarks>
+internal sealed class FakeDriverNumber
+{
+    private readonly decimal? _exact;
+    private readonly object? _inferred;
+    private readonly Func<Exception>? _refusal;
+
+    private FakeDriverNumber(decimal? exact, object? inferred, Type fieldType, Func<Exception>? refusal = null)
+    {
+        _exact = exact;
+        _inferred = inferred;
+        _refusal = refusal;
+        FieldType = fieldType;
+    }
+
+    /// <summary>
+    /// An exact numeric column the driver infers a Double for, as ODP.NET does for a NUMBER with a scale
+    /// and a precision of 8 to 15.
+    /// </summary>
+    internal static FakeDriverNumber InferredAsADouble(decimal exact) => new(exact, (double)exact, typeof(double));
+
+    /// <summary>
+    /// An exact numeric column the driver infers a Single for, as ODP.NET does for a NUMBER with a scale
+    /// and a precision of 7 or less.
+    /// </summary>
+    internal static FakeDriverNumber InferredAsASingle(decimal exact) => new(exact, (float)exact, typeof(float));
+
+    /// <summary>
+    /// A genuinely approximate binary column (Microsoft SQL Server's <c>float</c> and <c>real</c>,
+    /// Oracle's <c>BINARY_FLOAT</c> and <c>BINARY_DOUBLE</c>). Both drivers refuse to hand one over as a
+    /// decimal, because it is not one.
+    /// </summary>
+    internal static FakeDriverNumber Approximate(double value) =>
+        new(null, value, typeof(double), () => new InvalidCastException("Specified cast is not valid."));
+
+    /// <summary>
+    /// An exact numeric column holding more significant digits than a CLR decimal has. The driver has
+    /// already committed to the column as a decimal, so the refusal is about this value rather than about
+    /// the accessor. ODP.NET raises an <see cref="InvalidCastException"/> for it and
+    /// Microsoft.Data.SqlClient an <see cref="OverflowException"/>; both were observed against the live
+    /// containers, and neither says which column or row it came from.
+    /// </summary>
+    internal static FakeDriverNumber BeyondDecimal(bool asOracleReportsIt) =>
+        new(null, null, typeof(decimal), asOracleReportsIt
+            ? () => new InvalidCastException("Specified cast is not valid.")
+            : () => new OverflowException("Conversion overflows."));
+
+    /// <summary>
+    /// The CLR type <see cref="DbDataReader.GetFieldType"/> reports for the column.
+    /// </summary>
+    internal Type FieldType { get; }
+
+    /// <summary>
+    /// What this stand-in orders and matches on, which is the value rather than the driver's rendering
+    /// of it.
+    /// </summary>
+    internal object? SortValue => _exact ?? _inferred;
+
+    /// <summary>
+    /// What <see cref="DbDataReader.GetValue"/> answers with: the driver's own rendering where it has
+    /// one, and the refusal where the value is beyond anything it can render.
+    /// </summary>
+    internal object ReadValue() => _inferred ?? throw _refusal!();
+
+    /// <summary>
+    /// What <see cref="DbDataReader.GetDecimal"/> answers with: the value the column holds, or the
+    /// driver's refusal where it will not hand this column over as a decimal at all.
+    /// </summary>
+    internal decimal ReadDecimal() => _exact ?? throw _refusal!();
+}
+
+/// <summary>
 /// A table or view holding rows, as an import reads it.
 /// </summary>
 internal sealed record FakeSqlDataTable(string? SchemaName, string ObjectName, string[] Columns, List<object?[]> Rows)
@@ -833,7 +927,7 @@ internal sealed class FakeDbCommand : DbCommand
                 .ToList());
 
         var wanted = anchorTuples
-            .SelectMany(tuple => dataTable.Rows.Where(row => tuple.All(part => Equals(row[part.Ordinal], part.Value))))
+            .SelectMany(tuple => dataTable.Rows.Where(row => tuple.All(part => CompareValues(row[part.Ordinal], part.Value) == 0)))
             .ToList();
 
         return FakeDbDataReader.ForRows(dataTable.Columns, wanted);
@@ -889,8 +983,13 @@ internal sealed class FakeDbCommand : DbCommand
             .FirstOrDefault(comparison => comparison != 0);
     }
 
-    private static int CompareValues(object? left, object? right)
+    private static int CompareValues(object? leftValue, object? rightValue)
     {
+        // A database orders and matches on the value it holds, not on the CLR type its driver happens to
+        // render that value as, so a value declared in driver-shaped form is compared on what it holds.
+        var left = leftValue is FakeDriverNumber leftNumber ? leftNumber.SortValue : leftValue;
+        var right = rightValue is FakeDriverNumber rightNumber ? rightNumber.SortValue : rightValue;
+
         if (left == null || right == null)
             return left == null && right == null ? 0 : left == null ? -1 : 1;
 
@@ -975,7 +1074,7 @@ internal sealed class FakeDbCommand : DbCommand
 
         return relatedTable.Rows.Any(relatedRow =>
             predicate.Correlations.All(correlation =>
-                Equals(relatedRow[relatedTable.IndexOf(correlation.RelatedColumn)], parentRow[parentTable.IndexOf(correlation.ParentColumn)])) &&
+                CompareValues(relatedRow[relatedTable.IndexOf(correlation.RelatedColumn)], parentRow[parentTable.IndexOf(correlation.ParentColumn)]) == 0) &&
             (predicate.WatermarkColumn == null || CompareValues(relatedRow[relatedTable.IndexOf(predicate.WatermarkColumn)], predicate.Watermark) > 0));
     }
 
@@ -1271,9 +1370,19 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
 
     public override string GetName(int ordinal) => _columnNames[ordinal];
 
-    public override object GetValue(int ordinal) => _rows[_rowIndex][ordinal] ?? DBNull.Value;
+    public override object GetValue(int ordinal) => Cell(ordinal) switch
+    {
+        null => DBNull.Value,
+        FakeDriverNumber number => number.ReadValue(),
+        var value => value
+    };
 
-    public override bool IsDBNull(int ordinal) => _rows[_rowIndex][ordinal] == null;
+    public override bool IsDBNull(int ordinal) => Cell(ordinal) == null;
+
+    /// <summary>
+    /// The value this row holds for a column, before any driver rendering is applied to it.
+    /// </summary>
+    private object? Cell(int ordinal) => _rows[_rowIndex][ordinal];
 
     public override string GetString(int ordinal) => (string)GetValue(ordinal);
 
@@ -1295,11 +1404,26 @@ internal sealed class FakeDbDataReader : DbDataReader, IDbColumnSchemaGenerator
 
     public override DateTime GetDateTime(int ordinal) => Convert.ToDateTime(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
 
-    public override decimal GetDecimal(int ordinal) => Convert.ToDecimal(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>
+    /// Faithful to both real drivers rather than obliging: a column the driver does not materialise as a
+    /// decimal is refused rather than converted, which is what makes the Connector's fall back to the
+    /// driver's own value for an approximate binary column worth testing at all.
+    /// </summary>
+    public override decimal GetDecimal(int ordinal) => Cell(ordinal) switch
+    {
+        FakeDriverNumber number => number.ReadDecimal(),
+        decimal value => value,
+        var value => throw new InvalidCastException($"Unable to cast object of type '{value?.GetType().Name}' to type 'System.Decimal'.")
+    };
 
     public override double GetDouble(int ordinal) => Convert.ToDouble(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
 
-    public override Type GetFieldType(int ordinal) => GetValue(ordinal).GetType();
+    public override Type GetFieldType(int ordinal) => Cell(ordinal) switch
+    {
+        FakeDriverNumber number => number.FieldType,
+        null => typeof(DBNull),
+        var value => value.GetType()
+    };
 
     public override float GetFloat(int ordinal) => Convert.ToSingle(GetValue(ordinal), System.Globalization.CultureInfo.InvariantCulture);
 
