@@ -316,8 +316,8 @@ internal class OracleProvider : SqlProviderBase
             OracleString text => text.Value,
             OracleBinary bytes => bytes.Value,
             INullable => throw new NotSupportedException(
-                $"The Oracle driver returned a generated key as an {value.GetType().Name}, which JIM has no CLR value for. " +
-                "A generated key is bound as an exact numeric, a character string or a RAW, so this is a defect in the JIM SQL Connector rather than anything to correct in the database; report it with the Object Type's anchor column and its type."),
+                $"The Oracle driver returned an {value.GetType().Name}, which the JIM SQL Connector has no CLR value for, so it is refused rather than passed on as a driver type. " +
+                "The Connector binds only exact numerics, character strings and RAW values through a parameter, so this is a defect in JIM rather than anything to correct in the database; report it with the Object Type and the column involved."),
             _ => value
         };
     }

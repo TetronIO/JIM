@@ -690,7 +690,7 @@ public class OracleProviderTests
         // cast failure naming a type an administrator has no way to act on.
         var exception = Assert.Throws<NotSupportedException>(() => _provider.ConvertFromDriverValue(new OracleDate(new DateTime(2026, 8, 8, 0, 0, 0, DateTimeKind.Utc))));
 
-        Assert.That(exception.Message, Does.Contain(nameof(OracleDate)));
+        Assert.That(exception!.Message, Does.Contain(nameof(OracleDate)));
     }
 
     #endregion
