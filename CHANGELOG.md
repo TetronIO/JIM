@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Adding, removing or retargeting an inbound Attribute Flow in the portal now maintains the target Metaverse Attribute's priority order, as the REST API and PowerShell already did. A new Attribute Flow lands at the bottom of the list so it never wins resolution until promoted, and one moved to a different attribute arrives at the bottom rather than carrying its old rank across. (#1199)
+
 - 🐛 An export is no longer permitted into a Container narrowed to One Level, or anywhere beneath one. Container Scope narrows what an import returns, and the export scope guard still assumed a whole subtree, so JIM could write an object where its own next import would not find it: the change went unconfirmed, the Full Import treated the object as deleted, and the following synchronisation disconnected it. The same rule now answers the question for import search scope, export, and the partition and container preview. (#1251)
 
 - 🐛 Delta Imports from OpenLDAP and other changelog-based directories no longer bring in objects a Full Import would never have returned. Those directories publish one directory-wide change log rather than letting JIM search per Container, and JIM was filtering its entries by Partition alone, ignoring which Containers within it were actually selected. A Delta Import could therefore import an object from a Container nobody had selected, which the next Full Import would then mark obsolete. Both the changelog and accesslog paths now apply the same Container selection a Full Import uses, and report how many entries they skipped. Active Directory was unaffected, as its Delta Import searches each selected Container directly. (#351)

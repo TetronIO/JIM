@@ -699,6 +699,17 @@ public interface IConnectedSystemRepository
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
+    /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
+    /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
+    /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"
+    /// state that identifies which mappings the save adds, removes or retargets. Materialising entities would
+    /// resolve to those already-mutated instances and report the new state as the old one. Export mappings are
+    /// excluded (priority is an inbound concern).
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose import mappings are read.</param>
+    Task<Dictionary<int, int>> GetImportMappingTargetMetaverseAttributesAsync(int syncRuleId);
+
+    /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (one
     /// SaveChanges). Used when reordering an attribute's priority list, which inherently renumbers sibling
     /// <see cref="SyncRuleMapping.Priority"/> rows across other Synchronisation Rules (#91).

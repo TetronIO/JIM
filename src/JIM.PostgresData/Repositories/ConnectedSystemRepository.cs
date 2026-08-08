@@ -5059,6 +5059,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
+    /// database, keyed by mapping id (#1199). AsNoTracking with a scalar projection is load-bearing, not an
+    /// optimisation: the caller is mid-save on a tracked, already-mutated rule graph, and this must report what
+    /// the database holds, not what the graph has been changed to.
+    /// </summary>
+    public async Task<Dictionary<int, int>> GetImportMappingTargetMetaverseAttributesAsync(int syncRuleId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => m.SyncRuleId == syncRuleId && m.TargetMetaverseAttributeId != null)
+            .Select(m => new { m.Id, TargetMetaverseAttributeId = m.TargetMetaverseAttributeId!.Value })
+            .ToDictionaryAsync(m => m.Id, m => m.TargetMetaverseAttributeId);
+    }
+
+    /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (#91).
     /// Updates the scalar columns via a tracked reload rather than UpdateRange: contributor lists are
     /// materialised with the context's default no-tracking behaviour, so sibling mappings carry separate

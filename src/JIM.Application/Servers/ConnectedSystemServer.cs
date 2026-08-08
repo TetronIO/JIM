@@ -5169,7 +5169,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -5206,7 +5206,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -5306,23 +5306,35 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// After an import mapping (or its rule) is removed, re-densifies the target Metaverse attribute's remaining
-    /// contributor list to a dense 1..N (#91), so deleting a contributor never leaves a gap in the priority numbers.
-    /// Mirrors the safe-addition densify on creation, keeping the contributor list dense across add, reorder, and
-    /// delete. A sole remaining contributor is reset to the int.MaxValue sentinel (priority is meaningless with one
-    /// source, matching the invariant that explicit priorities exist only when an attribute has more than one
-    /// contributor); zero remaining contributors is a no-op. Order-preserving, so no resolution outcome changes.
-    /// Must be called after the removal is persisted, so the query returns only the surviving contributors.
+    /// Reconciles a Metaverse attribute's contributor list to a dense 1..N after its contributor set changes (#91),
+    /// so no gap or stale number is ever left behind. Called whenever a contribution is added, removed or retargeted,
+    /// by both the granular mapping methods and the whole-rule save path (#1199), which is what keeps the list dense
+    /// across every route an administrator can take. A sole remaining contributor is reset to the int.MaxValue
+    /// sentinel (priority is meaningless with one source, matching the invariant that explicit priorities exist only
+    /// when an attribute has more than one contributor); zero contributors is a no-op. Order-preserving, so no
+    /// resolution outcome changes. Must be called after the change is persisted, so the query returns the resulting
+    /// contributor set.
     /// </summary>
     /// <param name="metaverseObjectTypeId">The object type that scopes the attribute's priority list.</param>
-    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list was reduced.</param>
-    private async Task RedensifyAttributePriorityAfterRemovalAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list changed.</param>
+    /// <param name="arrivingMappingIds">Mappings joining this attribute's list from elsewhere (a retargeted mapping),
+    /// which must land at the bottom. Omit where nothing is arriving, such as a deletion.</param>
+    private async Task ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? arrivingMappingIds = null)
     {
         var contributors = await Application.Repository.ConnectedSystems
             .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
 
         if (contributors.Count == 0)
             return;
+
+        // An arriving contribution must land last, and its stored priority cannot put it there. The query orders by
+        // (Priority asc, Id asc), so while every contributor is still at the sentinel the tie-break is the mapping id,
+        // and a retargeted mapping is by definition older than at least some incumbents: it would take the top of its
+        // new attribute's list and silently start winning resolution. Ordering arrivals last is what makes the
+        // safe-addition promise hold for a retarget as well as for a genuine insert (whose id happens to be highest
+        // anyway). OrderBy is stable, so the existing contributors keep their relative order.
+        if (arrivingMappingIds is { Count: > 0 })
+            contributors = contributors.OrderBy(m => arrivingMappingIds.Contains(m.Id) ? 1 : 0).ToList();
 
         if (contributors.Count == 1)
         {
@@ -6308,6 +6320,10 @@ public class ConnectedSystemServer
         }
 
 
+        // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
+        // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
+        var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
@@ -6344,6 +6360,11 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
             await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
         }
+
+        // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
+        // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
+        // so the snapshot records the priorities as they end up (#1199).
+        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -6419,6 +6440,10 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
+        // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
+        var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
@@ -6447,6 +6472,11 @@ public class ConnectedSystemServer
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
+
+        // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
+        // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
+        // so the snapshot records the priorities as they end up (#1199).
+        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -6482,7 +6512,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
-            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -6515,9 +6545,103 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
-            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// The Metaverse attribute a mapping targets, read from the navigation property in preference to the scalar FK.
+    /// A whole-rule save arrives straight from the portal's editor, which binds the target to the navigation
+    /// (<see cref="SyncRuleMapping.TargetMetaverseAttribute"/>); EF only fixes the FK up at SaveChanges, so before
+    /// the write the scalar is still null on a new mapping and stale on a retargeted one. Null for export mappings.
+    /// </summary>
+    private static int? GetTargetMetaverseAttributeId(SyncRuleMapping mapping) =>
+        mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId;
+
+    /// <summary>
+    /// Captures, before a whole-rule save, which Metaverse attribute each of the rule's import mappings targets in
+    /// the database, and resets any retargeted mapping to the safe-addition sentinel (#1199).
+    /// <para>
+    /// The portal never calls the granular create/delete mapping methods: its Attribute Flow editor mutates
+    /// <see cref="SyncRule.AttributeFlowRules"/> in memory and saves the whole rule, so without this the
+    /// safe-addition default and the dense-list invariant applied only to API callers.
+    /// </para>
+    /// <para>
+    /// The sentinel reset is the subtle half. Retargeting moves a mapping between two attributes' priority lists,
+    /// and priority numbers are only meaningful within one list: a mapping sitting at priority 1 for its old
+    /// attribute would be renumbered straight to the top of its new attribute's list and silently start winning
+    /// resolution there. Resetting it makes it arrive last, like any other newly-added contribution. It happens
+    /// before the write so the new value rides the same SaveChanges rather than costing a second one.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRule">The rule about to be saved.</param>
+    /// <returns>Target Metaverse attribute id keyed by mapping id, as the database holds it. Empty for an export
+    /// rule or a rule being created, neither of which has import priority state to compare against.</returns>
+    private async Task<Dictionary<int, int>> CaptureImportPriorityStateBeforeSaveAsync(SyncRule syncRule)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import || syncRule.Id == 0)
+            return [];
+
+        var previousTargets = await Application.Repository.ConnectedSystems
+            .GetImportMappingTargetMetaverseAttributesAsync(syncRule.Id);
+
+        foreach (var mapping in syncRule.AttributeFlowRules
+                     .Where(m => GetTargetMetaverseAttributeId(m) is int target &&
+                                 previousTargets.TryGetValue(m.Id, out var previous) &&
+                                 previous != target))
+            mapping.Priority = int.MaxValue;
+
+        return previousTargets;
+    }
+
+    /// <summary>
+    /// After a whole-rule save, reconciles the priority list of every Metaverse attribute whose contributor set this
+    /// save changed (#1199), so adding, removing or retargeting an Attribute Flow in the portal maintains the same
+    /// dense 1..N invariant the granular API paths maintain.
+    /// <para>
+    /// Only genuinely affected attributes are reconciled: an unrelated edit (renaming the rule, changing a scoping
+    /// criterion) touches no contributor set and issues no queries at all. An attribute is affected when a mapping
+    /// now targets it that did not before, or no longer targets it and did.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRule">The just-saved rule. Its mappings now carry database-assigned ids.</param>
+    /// <param name="previousTargets">The pre-save state from <see cref="CaptureImportPriorityStateBeforeSaveAsync"/>.</param>
+    private async Task ReconcileAttributePriorityAfterRuleSaveAsync(SyncRule syncRule, Dictionary<int, int> previousTargets)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import)
+            return;
+
+        var currentTargets = syncRule.AttributeFlowRules
+            .Where(m => GetTargetMetaverseAttributeId(m).HasValue)
+            .ToDictionary(m => m.Id, m => GetTargetMetaverseAttributeId(m)!.Value);
+
+        var affectedAttributeIds = new HashSet<int>();
+        var arrivalsByAttribute = new Dictionary<int, HashSet<int>>();
+
+        // Attributes that gained a contribution: a mapping targeting something it did not target before. These are the
+        // arrivals, which have to land at the bottom of the attribute's list.
+        foreach (var current in currentTargets
+                     .Where(c => !previousTargets.TryGetValue(c.Key, out var previous) || previous != c.Value))
+        {
+            affectedAttributeIds.Add(current.Value);
+            if (!arrivalsByAttribute.TryGetValue(current.Value, out var arrivals))
+            {
+                arrivals = [];
+                arrivalsByAttribute[current.Value] = arrivals;
+            }
+
+            arrivals.Add(current.Key);
+        }
+
+        // Attributes that lost one: a mapping deleted outright, or retargeted away.
+        foreach (var previous in previousTargets
+                     .Where(p => !currentTargets.TryGetValue(p.Key, out var current) || current != p.Value))
+            affectedAttributeIds.Add(previous.Value);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId,
+                arrivalsByAttribute.GetValueOrDefault(attributeId));
     }
 
     /// <summary>
