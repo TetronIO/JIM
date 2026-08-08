@@ -164,16 +164,22 @@ public class MetaverseObjectHeaderRangeDatabaseTests
     }
 
     [Test]
-    public async Task Range_CountAboveCap_ClampsToOneHundredAsync()
+    public async Task Range_CountAboveCap_ClampsToFiveHundredAsync()
     {
-        var searchId = await SeedAsync(105);
+        var searchId = await SeedAsync(505);
         var (jim, search) = await LoadAsync(searchId);
 
         var result = await jim.Metaverse.GetMetaverseObjectHeadersRangeAsync(search, offset: 0, count: 1000, sortBy: DisplayName, sortDescending: false);
 
-        // count is clamped to 100 to bound latency, while the total still reflects every matching object.
-        Assert.That(result.TotalResults, Is.EqualTo(105));
-        Assert.That(result.Results, Has.Count.EqualTo(100));
+        using (Assert.EnterMultipleScope())
+        {
+            // The window is clamped to bound latency, while the total still reflects every matching object. The cap is
+            // 500 rather than the paged reader's 100 because nothing here is a person choosing a page size: the
+            // virtualiser asks for as many rows as the viewport needs, and a clamp it can reach silently renders the
+            // shortfall as blank rows. See the cap's own comment in MetaverseRepository for how 500 was derived.
+            Assert.That(result.TotalResults, Is.EqualTo(505));
+            Assert.That(result.Results, Has.Count.EqualTo(500));
+        }
     }
 
     [Test]

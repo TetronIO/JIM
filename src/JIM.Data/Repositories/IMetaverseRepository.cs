@@ -203,7 +203,7 @@ public interface IMetaverseRepository
     /// </summary>
     /// <param name="predefinedSearch">The Predefined Search defining the object type, projected attributes and criteria.</param>
     /// <param name="offset">The zero-based index of the first item to return (clamped to zero if negative).</param>
-    /// <param name="count">The number of items to return (max 100).</param>
+    /// <param name="count">The number of items to return; clamped to 500, which no realistic viewport reaches.</param>
     /// <param name="searchQuery">Optional search query to filter across all string attribute values.</param>
     /// <param name="sortBy">Optional attribute name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>

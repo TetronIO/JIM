@@ -1878,6 +1878,20 @@ public class MetaverseRepository : IMetaverseRepository
         return pagedResultSet;
     }
 
+    /// <summary>
+    /// The largest window <see cref="GetMetaverseObjectHeadersRangeAsync"/> will return, bounding the latency of a
+    /// single read. It is deliberately five times the paged reader's page-size cap, because the two caps protect
+    /// against different things: a page size is a number a person picked from a fixed list and never approaches 100,
+    /// whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach truncates
+    /// the window silently, rendering the shortfall as blank rows rather than raising anything.
+    ///
+    /// 500 puts it out of reach. The list grid is 100vh minus 320px at 36px per dense row, so the rows it needs are
+    /// roughly (viewportHeight - 320) / 36, plus the virtualiser's overscan: about 51 on a 4K display, and about 474
+    /// at Chrome's minimum 25% zoom on a 4320px-tall one, which is as far as CSS pixels stretch. If either the grid's
+    /// height expression or its row height changes, redo that arithmetic rather than assuming this still holds.
+    /// </summary>
+    private const int MaxHeaderWindowSize = 500;
+
     /// <inheritdoc/>
     public async Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
         PredefinedSearch predefinedSearch,
@@ -1895,9 +1909,8 @@ public class MetaverseRepository : IMetaverseRepository
         if (offset < 0)
             offset = 0;
 
-        // limit window size to avoid increasing latency unnecessarily (mirrors the paged path's cap)
-        if (count > 100)
-            count = 100;
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
 
         var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
             predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount);
