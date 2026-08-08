@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -486,6 +487,93 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
         }
     }
 
+    #region Starting a discovery run
+
+    /// <summary>
+    /// The one-at-a-time rule is enforced by a filtered unique index, which is what makes it safe against two
+    /// administrators pressing the button at once. On its own, though, it turns the second press into a constraint
+    /// violation. An administrator pressing a button twice deserves an explanation, not a stack trace.
+    /// </summary>
+    [Test]
+    public async Task StartAuxiliaryClassDiscoveryAsync_WhenARunIsAlreadyInFlight_RefusesWithAnExplanationAsync()
+    {
+        var seeded = await SeedAsync();
+
+        await using (var create = NewContext())
+            await new PostgresDataRepository(create).ConnectedSystems.CreateAuxiliaryClassDiscoveryRunAsync(InProgressRun(seeded.ConnectedSystemId));
+
+        await using var context = NewContext();
+        var application = new JimApplication(new PostgresDataRepository(context));
+
+        var result = await application.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+            seeded.ConnectedSystemId, AuxiliaryClassDiscoveryScope.FullScan, sampleSizePerObjectType: null, initiatedBy: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("already in progress"));
+        }
+    }
+
+    [Test]
+    public async Task StartAuxiliaryClassDiscoveryAsync_WithNoScopeChosen_RefusesAsync()
+    {
+        var seeded = await SeedAsync();
+
+        await using var context = NewContext();
+        var application = new JimApplication(new PostgresDataRepository(context));
+
+        var result = await application.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+            seeded.ConnectedSystemId, AuxiliaryClassDiscoveryScope.NotSet, sampleSizePerObjectType: 100, initiatedBy: null);
+
+        Assert.That(result.Success, Is.False);
+    }
+
+    [Test]
+    public async Task StartAuxiliaryClassDiscoveryAsync_ForAQuickSampleWithNoSampleSize_RefusesAsync()
+    {
+        // A quick sample with no size is not a quick sample; silently turning it into a full scan would read an
+        // administrator's entire directory when they asked for a sample.
+        var seeded = await SeedAsync();
+
+        await using var context = NewContext();
+        var application = new JimApplication(new PostgresDataRepository(context));
+
+        var result = await application.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+            seeded.ConnectedSystemId, AuxiliaryClassDiscoveryScope.QuickSample, sampleSizePerObjectType: null, initiatedBy: null);
+
+        Assert.That(result.Success, Is.False);
+    }
+
+    [Test]
+    public async Task StartAuxiliaryClassDiscoveryAsync_ForAFullScan_QueuesATaskCarryingNoSampleSizeAsync()
+    {
+        // A full scan reads everything, so a sample size on one would be a number that silently did nothing.
+        var seeded = await SeedAsync();
+
+        await using var context = NewContext();
+        var application = new JimApplication(new PostgresDataRepository(context));
+
+        var result = await application.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+            seeded.ConnectedSystemId, AuxiliaryClassDiscoveryScope.FullScan, sampleSizePerObjectType: 100, initiatedBy: null);
+
+        Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+        await using var readContext = NewContext();
+        var queued = await readContext.AuxiliaryClassDiscoveryWorkerTasks.SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(queued.Scope, Is.EqualTo(AuxiliaryClassDiscoveryScope.FullScan));
+            Assert.That(queued.SampleSizePerObjectType, Is.Null);
+            Assert.That(queued.ConnectedSystemId, Is.EqualTo(seeded.ConnectedSystemId));
+        }
+    }
+
+    #endregion
+
+    #region Helpers
+
     /// <summary>
     /// Seeds a Connected System carrying a structural Object Type and an auxiliary one, shaped like the
     /// inetOrgPerson + posixAccount pairing that is near-universal in OpenLDAP estates.
@@ -512,4 +600,6 @@ public class AuxiliaryClassExtensionPersistenceDatabaseTests
     }
 
     private sealed record SeededSchema(int ConnectedSystemId, int PersonId, int PosixAccountId);
+
+    #endregion
 }

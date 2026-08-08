@@ -3348,6 +3348,85 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Queues an auxiliary class discovery run for a Connected System, refusing if one is already in flight.
+    /// </summary>
+    /// <remarks>
+    /// One at a time per Connected System, because a full scan reads every object and two of them would double the
+    /// load on a directory an administrator is still using for authentication. The database enforces the same rule
+    /// with a filtered unique index; this check is what turns that into an explanation rather than a constraint
+    /// violation.
+    /// </remarks>
+    public async Task<AuxiliaryClassDiscoveryStartResult> StartAuxiliaryClassDiscoveryAsync(
+        int connectedSystemId,
+        AuxiliaryClassDiscoveryScope scope,
+        int? sampleSizePerObjectType,
+        MetaverseObject? initiatedBy)
+    {
+        if (scope == AuxiliaryClassDiscoveryScope.NotSet)
+            return AuxiliaryClassDiscoveryStartResult.Failed("A discovery scope must be chosen: a quick sample, or a full scan.");
+
+        if (scope == AuxiliaryClassDiscoveryScope.QuickSample && sampleSizePerObjectType is null or < 1)
+            return AuxiliaryClassDiscoveryStartResult.Failed("A quick sample needs to know how many objects of each Object Type to read.");
+
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return AuxiliaryClassDiscoveryStartResult.Failed($"Connected System {connectedSystemId} does not exist.");
+
+        var inFlight = await GetInProgressAuxiliaryClassDiscoveryRunAsync(connectedSystemId);
+        if (inFlight != null)
+            return AuxiliaryClassDiscoveryStartResult.Failed(
+                $"A discovery run for '{connectedSystem.Name}' is already in progress. Wait for it to finish, or cancel it, before starting another.");
+
+        var workerTask = new AuxiliaryClassDiscoveryWorkerTask
+        {
+            ConnectedSystemId = connectedSystemId,
+            Scope = scope,
+
+            // A full scan reads everything, so a sample size on one would be a number that silently did nothing.
+            SampleSizePerObjectType = scope == AuxiliaryClassDiscoveryScope.QuickSample ? sampleSizePerObjectType : null,
+            InitiatedByType = initiatedBy != null ? ActivityInitiatorType.User : ActivityInitiatorType.System,
+            InitiatedById = initiatedBy?.Id,
+            InitiatedByName = initiatedBy?.NameOrId
+        };
+
+        var creationResult = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
+        return creationResult.Success
+            ? AuxiliaryClassDiscoveryStartResult.Queued(workerTask.Id, workerTask.Activity.Id)
+            : AuxiliaryClassDiscoveryStartResult.Failed(creationResult.ErrorMessage ?? "The discovery task could not be queued.");
+    }
+
+    /// <summary>
+    /// Executes a queued auxiliary class discovery run. Called by JIM.Worker.
+    /// </summary>
+    /// <remarks>
+    /// The Connector is created here rather than in the worker, so that connector construction stays in one place;
+    /// the progress reporter comes from the worker, because it is the thing holding the Activity being narrated.
+    /// </remarks>
+    public async Task<AuxiliaryClassDiscoveryRun> RunAuxiliaryClassDiscoveryAsync(
+        AuxiliaryClassDiscoveryWorkerTask workerTask,
+        Activity activity,
+        IConnectorProgress progress,
+        CancellationToken cancellationToken)
+    {
+        // The full graph: the runner needs the Object Types an administrator selected, their classification tags,
+        // and the containers that bound what is in scope.
+        var connectedSystem = await GetConnectedSystemAsync(workerTask.ConnectedSystemId)
+                              ?? throw new InvalidDataException($"Connected System {workerTask.ConnectedSystemId} does not exist.");
+
+        var connector = CreateConnector(connectedSystem);
+        try
+        {
+            var runner = new AuxiliaryClassDiscoveryRunner(Application, Log.Logger);
+            return await runner.RunAsync(connectedSystem, workerTask.Scope, workerTask.SampleSizePerObjectType,
+                activity, connector, progress, cancellationToken);
+        }
+        finally
+        {
+            (connector as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Gets the most recently started discovery run for a Connected System, with its results.
     /// </summary>
     public async Task<AuxiliaryClassDiscoveryRun?> GetLatestAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)

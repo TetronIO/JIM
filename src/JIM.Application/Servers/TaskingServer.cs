@@ -186,6 +186,22 @@ namespace JIM.Application.Servers
                 if (workerTask.Activity == null)
                     return WorkerTaskCreationResult.Failed("A configuration change preview task must carry the Activity its preview was started under.");
             }
+            else if (workerTask is AuxiliaryClassDiscoveryWorkerTask auxiliaryClassDiscoveryTask)
+            {
+                // Core: only .Name is read for activity context.
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(auxiliaryClassDiscoveryTask.ConnectedSystemId);
+                var activity = new Activity
+                {
+                    TargetName = connectedSystem?.Name ?? $"Connected System {auxiliaryClassDiscoveryTask.ConnectedSystemId}",
+                    TargetType = ActivityTargetType.ConnectedSystem,
+                    TargetOperationType = ActivityTargetOperationType.DiscoverAuxiliaryClasses,
+                    ConnectedSystemId = auxiliaryClassDiscoveryTask.ConnectedSystemId
+                };
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
             else if (workerTask is TemporalScopeReconciliationWorkerTask)
             {
                 // The Temporal Scope Reconciler sweep (issue #892) is a system-wide maintenance operation not
