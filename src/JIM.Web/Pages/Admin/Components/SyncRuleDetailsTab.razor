@@ -141,8 +141,10 @@
 
     @if (SyncRule.Direction == SyncRuleDirection.Export)
     {
+        @* The label pluralises the Object Type's name, never the stand-in used before one is chosen: that is
+           already plural, and pluralising it again read "Provision objectses to the Connected System?". *@
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                   Label="@($"Provision {(SyncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
+                   Label="@($"Provision {SyncRule.ConnectedSystemObjectType?.Name.Pluralise() ?? "objects"} to the Connected System?")" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse Objects scoped to
             this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable

@@ -59,15 +59,15 @@ public enum InitialPasswordSource
     /// different one per account.
     /// <para>
     /// <b>Not recommended, and the portal says so.</b> Every account the rule provisions shares this password
-    /// until each person changes it, so anybody who learns it can sign in as any new starter who has not. It
-    /// exists because the alternative is worse for the people who need it: JIM stores no generated password, so
-    /// without this there is no way to tell a new starter what to sign in with, and every account needs a
+    /// until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
+    /// It exists because the alternative is worse for the people who need it: JIM stores no generated password,
+    /// so without this there is no way to tell a new starter what to sign in with, and every account needs a
     /// password set by hand instead. Delivering a generated password to somebody who should have it (#1252) is
     /// the answer that replaces this one.
     /// </para>
     /// <para>
-    /// This is the only password value JIM stores. It is encrypted at rest and never returned by any surface;
-    /// see <see cref="JIM.Models.Logic.SyncRuleInitialPassword.StaticPasswordEncryptedValue"/>.
+    /// This is the only password value JIM stores. It is stored encrypted and cannot be shown to anybody again,
+    /// by any surface; see <see cref="JIM.Models.Logic.SyncRuleInitialPassword.StaticPasswordEncryptedValue"/>.
     /// </para>
     /// </summary>
     Static = 2

@@ -197,14 +197,14 @@ public class UpdateSyncRuleInitialPasswordRequest
     /// The one password to set on every account this Synchronisation Rule provisions, used when <c>Source</c> is
     /// <c>Static</c>.
     /// <para>
-    /// <b>Write-only.</b> It is encrypted before it is stored and is never returned by any surface; the response
-    /// reports only that one is set and when. Omit it (or send null) to leave the stored password unchanged,
-    /// which is what makes changing another setting safe: re-encrypting an unchanged password would read as a
-    /// change and release every account parked against this rule for nothing.
+    /// <b>Write-only.</b> It is stored encrypted and cannot be shown to anybody again; the response reports only
+    /// that one is set and when. Omit it (or send null) to leave the stored password unchanged, which is what
+    /// makes changing another setting safe: re-encrypting an unchanged password would read as a change and
+    /// release every account parked against this rule for nothing.
     /// </para>
     /// <para>
     /// <b>Not recommended.</b> Every account the rule provisions shares this password until each person changes
-    /// it, so anybody who learns it can sign in as any new starter who has not.
+    /// it, so anybody who learns of this can sign in as any new starter who has not.
     /// </para>
     /// </summary>
     [StringLength(256, MinimumLength = 4)]

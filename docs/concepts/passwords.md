@@ -50,8 +50,8 @@ You are told where the work is waiting without going looking for it: parked and 
 
 A generated password nobody can be told is the right answer for getting an account working and the wrong one for the day a new starter arrives. **One password for every account** is the third option under Password Settings: you choose it, JIM sets that same password on every account the rule provisions, and you can put it on an onboarding sheet or read it out.
 
-!!! warning "JIM does not recommend this"
-    Every account the rule provisions shares this password until each person changes it, so anybody who learns it can sign in as any new starter who has not. It is also the only password JIM stores anywhere.
+!!! warning "This option is not recommended"
+    Every account the rule provisions shares this password until each person changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again, and it is the only password JIM stores anywhere.
 
     Leave **Require a change at the next sign-in** switched on: it is what ends each account's share of the password. Any other setting leaves every account the rule provisions on it until somebody changes it by hand.
 

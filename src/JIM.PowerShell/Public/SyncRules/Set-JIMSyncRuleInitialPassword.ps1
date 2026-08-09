@@ -12,10 +12,11 @@ function Set-JIMSyncRuleInitialPassword {
         generates a different password for each account at the moment it is set, and stores none of them.
 
         -Source Static is the exception: it sets one password you choose on every account the rule provisions,
-        so you can tell a new starter what it is. That password is the only one JIM stores. It is encrypted, it
-        is never returned by any surface, and every account the rule provisions shares it until each person
-        changes it, so anybody who learns it can sign in as any new starter who has not. JIM does not recommend
-        it; #1252 will deliver a generated password to somebody who should have it instead.
+        so you can tell a new starter what it is. This option is not recommended: every account the rule
+        provisions shares that password until each person changes it, so anybody who learns of this can sign in
+        as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again,
+        by this or any other surface, and it is the only password JIM stores. #1252 will deliver a generated
+        password to somebody who should have it instead.
 
         Only the parameters provided are changed; everything else keeps its stored value. The exception is the
         generator settings, which are replaced as a set: supplying any of the -Style, -Length, -Minimum*,

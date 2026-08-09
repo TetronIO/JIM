@@ -147,6 +147,8 @@ For how the password channel works as a whole (policy discovery and its limits, 
 
 It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
 
+It also depends on the rule provisioning. Only a newly created account has never had a password, so the section is shown only on an export rule with **Provision ... to the Connected System?** switched on. Switching that off hides the section and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any accounts parked waiting on those settings stop waiting. Switching provisioning back on brings the section back with its settings intact, switched off.
+
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
 
 ### What you configure
@@ -161,11 +163,11 @@ The setting lives on the Synchronisation Rule rather than on the Connected Syste
 
 ### One password for every account
 
-The third Password Settings option sets one password you choose on every account the rule provisions, so you can tell a new starter what it is. **JIM does not recommend it**, and says so beside the option: every account the rule provisions shares that password until each person changes it, so anybody who learns it can sign in as any new starter who has not.
+The third Password Settings option sets one password you choose on every account the rule provisions, so you can tell a new starter what it is. **This option is not recommended**, and the portal says so beside it: every account the rule provisions shares that password until each person changes it, so anybody who learns of this can sign in as any new starter who has not.
 
 Leave **After the password is set** on *Require a change at the next sign-in*. It is what ends each account's share of the password; any other choice leaves every account the rule provisions on it until somebody changes it by hand.
 
-This is the only password JIM stores. It is encrypted at rest exactly as a Connected System's credentials are, and it is write-only everywhere: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. Leaving those fields blank keeps the stored password, so changing another setting is safe.
+This is the only password JIM stores. It is stored encrypted and cannot be shown to you again: the portal fields are blank whenever you open them, no REST response or cmdlet returns it, and configuration change history records a keyed hash rather than the value. It is protected at rest exactly as a Connected System's credentials are. Leaving those fields blank keeps the stored password, so changing another setting is safe.
 
 What JIM will tell you is that a password is set and when it last changed, on the panel and through `Get-JIMSyncRuleInitialPassword` (`staticPasswordSet` and `staticPasswordSetAt`). Change it whenever somebody who knew it leaves; that date is the only thing that can date a shared password:
 

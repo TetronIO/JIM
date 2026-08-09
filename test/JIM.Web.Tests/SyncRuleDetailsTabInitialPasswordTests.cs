@@ -189,6 +189,35 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
         });
     }
 
+    /// <summary>
+    /// The provisioning switch names what the rule would create. Before an Object Type is chosen there is no
+    /// name to use, and the placeholder standing in for one is already plural: pluralising it again produced
+    /// "Provision objectses to the Connected System?" on every new Export rule.
+    /// </summary>
+    [Test]
+    public void SyncRuleDetailsTab_WithNoConnectedSystemObjectTypeChosen_DoesNotPluraliseThePlaceholderTwice()
+    {
+        var syncRule = CreateProvisioningSyncRule(initialPassword: null);
+        // Declared non-nullable and initialised to null!, which is exactly the state a rule is in before an
+        // Object Type has been chosen; the markup reads it through a null-conditional for that reason.
+        syncRule.ConnectedSystemObjectType = null!;
+
+        var cut = RenderTab(syncRule, []);
+
+        Assert.That(cut.Markup, Does.Contain("Provision objects to the Connected System?"));
+    }
+
+    /// <summary>
+    /// And where there is a name, it is still pluralised: the fix must not turn the label into a singular.
+    /// </summary>
+    [Test]
+    public void SyncRuleDetailsTab_WithAConnectedSystemObjectTypeChosen_PluralisesItsName()
+    {
+        var cut = RenderTab(CreateProvisioningSyncRule(initialPassword: null), []);
+
+        Assert.That(cut.Markup, Does.Contain("Provision users to the Connected System?"));
+    }
+
     #region Helper Methods
 
     /// <summary>
@@ -219,7 +248,7 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
             }));
     }
 
-    private SyncRule CreateProvisioningSyncRule(SyncRuleInitialPassword initialPassword) =>
+    private SyncRule CreateProvisioningSyncRule(SyncRuleInitialPassword? initialPassword) =>
         new()
         {
             Id = SyncRuleId,
@@ -228,6 +257,7 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
             ProvisionToConnectedSystem = true,
             ConnectedSystemId = ConnectedSystemId,
             ConnectedSystem = CreateFileConnectorConnectedSystem(),
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
             InitialPassword = initialPassword
         };
 
