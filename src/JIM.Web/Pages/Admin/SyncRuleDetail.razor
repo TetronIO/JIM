@@ -43,6 +43,7 @@ else if (_syncRule != null)
             <SyncRuleDetailsTab SyncRule="_syncRule"
                                 ConnectedSystemHeaders="_connectedSystemHeaders"
                                 MetaverseObjectTypes="_metaverseObjectTypes"
+                                OnInitialPasswordIssuesChanged="OnInitialPasswordIssuesChanged"
                                 OnChanged="OnChildChanged" />
         </MudTabPanel>
 
@@ -85,12 +86,15 @@ else if (_syncRule != null)
     @* Save bar - applies to the whole rule from any editing tab, but not the read-only Changes or Danger Zone tabs *@
     @if (!IsReadOnlyTabActive)
     {
+    @* Computed once per render: the same list gates the button below, and calling it twice would let the
+       alert and the button disagree if anything about the rule changed between the two calls. *@
+    var validationIssues = ValidationIssues();
     <div class="mt-6">
-        @if (_syncRule.Validate().Count > 0)
+        @if (validationIssues.Count > 0)
         {
             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" NoIcon="true" Class="mb-4">
                 <MudText Class="mb-3">There are issues:</MudText>
-                @foreach (var item in _syncRule.Validate())
+                @foreach (var item in validationIssues)
                 {
                     <div class="d-flex align-center mb-2">
                         <MudIcon Class="mr-2" Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
@@ -102,7 +106,7 @@ else if (_syncRule != null)
         }
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleCreateOrUpdateSyncRuleAsync"
-            Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Synchronisation Rule
+            Disabled="@(validationIssues.Any(issue => issue.Level > ValidityStatusItemLevel.Warning))" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Synchronisation Rule
         </MudButton>
     </div>
     }
@@ -193,6 +197,35 @@ else if (_syncRule != null)
             _connectedSystemHeaders = await _jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
+    }
+
+    /// <summary>
+    /// What is wrong with the rule's initial-password settings, as the Details tab last assessed them. Held here
+    /// rather than derived, because answering it needs the password policy discovered on the Connected System and
+    /// the application layer's own assessment, both of which that tab loads.
+    /// </summary>
+    private IReadOnlyList<string> _initialPasswordIssues = [];
+
+    /// <summary>
+    /// Everything stopping this Synchronisation Rule being saved, or worth warning about: the rule's own model
+    /// validation, plus whatever the tabs have reported that the model cannot see for itself.
+    /// <para>
+    /// Initial-password problems are Errors rather than Warnings because the REST API refuses the same settings
+    /// outright. A configuration the target cannot satisfy parks every account the rule provisions, which is not
+    /// something to let through with a note beside it.
+    /// </para>
+    /// </summary>
+    private List<ValidityStatusItem> ValidationIssues()
+    {
+        var issues = _syncRule!.Validate();
+        issues.AddRange(_initialPasswordIssues.Select(problem => new ValidityStatusItem(ValidityStatusItemLevel.Error, problem)));
+        return issues;
+    }
+
+    private void OnInitialPasswordIssuesChanged(IReadOnlyList<string> issues)
+    {
+        _initialPasswordIssues = issues;
+        StateHasChanged();
     }
 
     private void OnChildChanged()

@@ -222,6 +222,17 @@
     public EventCallback OnChanged { get; set; }
 
     /// <summary>
+    /// What is wrong with the initial-password settings, raised so the page's save bar can list it and refuse to
+    /// save. Empty means there is nothing to fix.
+    /// <para>
+    /// Raised rather than read, because the settings live behind this tab while the save bar belongs to the page,
+    /// and the assessment needs the discovered policy and the application layer that only this tab loads.
+    /// </para>
+    /// </summary>
+    [Parameter]
+    public EventCallback<IReadOnlyList<string>> OnInitialPasswordIssuesChanged { get; set; }
+
+    /// <summary>
     /// The password policy JIM discovered on the Connected System, loaded once per Connected System selection.
     /// </summary>
     private ConnectedSystemPasswordPolicy? DiscoveredPasswordPolicy { get; set; }
@@ -270,6 +281,28 @@
     private IReadOnlyList<InitialPasswordRejection>? InitialPasswordParkedReasons { get; set; }
 
     /// <summary>
+    /// What the last assessment found wrong with the initial-password settings, and what was last raised to the
+    /// page, so an unchanged answer is not raised again on every render.
+    /// </summary>
+    private IReadOnlyList<string> _initialPasswordIssues = [];
+    private IReadOnlyList<string> _raisedInitialPasswordIssues = [];
+
+    /// <summary>
+    /// The issues worth stopping a save for.
+    /// <para>
+    /// Empty while the Initial Password panel is hidden, which is the whole point: the panel is hidden on a rule
+    /// that provisions nothing, and blocking a save on settings the administrator cannot see, let alone correct,
+    /// would be a trap with no way out. Settings left enabled on such a rule deliver nothing anyway, because
+    /// nothing is ever provisioned for them to act on, and turning provisioning back on brings both the panel and
+    /// this gate back with the settings intact.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string> InitialPasswordIssues =>
+        SyncRule.Direction == SyncRuleDirection.Export && SyncRule.ProvisionToConnectedSystem == true
+            ? _initialPasswordIssues
+            : [];
+
+    /// <summary>
     /// Whether saving would release the parked accounts, decided by the same comparison the save path itself
     /// uses, so the panel cannot promise a release that saving will not perform.
     /// </summary>
@@ -310,6 +343,22 @@
     protected override async Task OnParametersSetAsync()
     {
         await LoadPasswordContextAsync();
+        await RaiseInitialPasswordIssuesAsync();
+    }
+
+    /// <summary>
+    /// Tells the page what is wrong with the initial-password settings, and only when the answer has changed.
+    /// Raising unconditionally would re-render the page on every parameter set, which re-renders this tab, which
+    /// raises again.
+    /// </summary>
+    private async Task RaiseInitialPasswordIssuesAsync()
+    {
+        var issues = InitialPasswordIssues;
+        if (_raisedInitialPasswordIssues.SequenceEqual(issues))
+            return;
+
+        _raisedInitialPasswordIssues = issues;
+        await OnInitialPasswordIssuesChanged.InvokeAsync(issues);
     }
 
     /// <summary>
@@ -355,25 +404,35 @@
         // The editor's instance, not the rule's navigation: they are the same object once anything has been
         // edited, and before that the rule has none while the editor still has settings worth assessing.
         var configuration = InitialPasswordConfiguration;
-        if (!configuration.Enabled)
-        {
-            InitialPasswordAssessment = null;
-            return;
-        }
+
+        // A password typed for a source that has since been changed away from is not a problem anybody needs to
+        // fix, and its alert is no longer on screen to explain a blocked save.
+        if (configuration.Source != InitialPasswordSource.Static)
+            StaticPasswordAssessment = null;
 
         // A static password is not generated, so there is no generator configuration to assess. Its own
         // assessment is made when one is typed, in HandleStaticPasswordEnteredAsync.
-        if (configuration.Source == InitialPasswordSource.Static)
+        if (!configuration.Enabled || configuration.Source == InitialPasswordSource.Static)
         {
             InitialPasswordAssessment = null;
-            return;
+        }
+        else
+        {
+            var policy = configuration.Source == InitialPasswordSource.Custom
+                ? configuration.CustomPolicy
+                : jim.PasswordGenerator.DeriveFrom(DiscoveredPasswordPolicy);
+
+            InitialPasswordAssessment = jim.PasswordGenerator.Assess(policy, DiscoveredPasswordPolicy);
         }
 
-        var policy = configuration.Source == InitialPasswordSource.Custom
-            ? configuration.CustomPolicy
-            : jim.PasswordGenerator.DeriveFrom(DiscoveredPasswordPolicy);
-
-        InitialPasswordAssessment = jim.PasswordGenerator.Assess(policy, DiscoveredPasswordPolicy);
+        // What the settings would produce is the panel's business; what is wrong with them is the save bar's.
+        // Asked of the application layer rather than decided here, so the portal and the REST API cannot differ
+        // on which settings are savable. A typed password the target would refuse supersedes the configuration's
+        // own problems: it is the thing in front of the administrator, and it is why nothing was stored.
+        _initialPasswordIssues = StaticPasswordAssessment is { IsUsable: false } supplied
+            ? [.. supplied.Problems.Select(problem => $"Initial Password: {problem}")]
+            : [.. jim.InitialPasswords.AssessConfiguration(configuration, DiscoveredPasswordPolicy)
+                .Select(problem => $"Initial Password: {problem}")];
     }
 
     private async Task HandleInitialPasswordChangedAsync()
@@ -387,6 +446,7 @@
             AssessInitialPassword(jim);
         }
 
+        await RaiseInitialPasswordIssuesAsync();
         await OnChanged.InvokeAsync();
     }
 
@@ -403,6 +463,12 @@
     /// puts the stored value back to what was saved. That is what makes an empty field mean "leave the stored
     /// password as it is" while stopping a password committed from a field since edited surviving on the model.
     /// </para>
+    /// <para>
+    /// A password the target would refuse is treated the same way: it is assessed before it is taken, and a
+    /// refusal leaves the stored value exactly as it was. One static password goes to every account the rule
+    /// provisions, so accepting one the target rejects would park all of them; the REST API refuses such a
+    /// password outright, and this is the portal saying the same thing.
+    /// </para>
     /// </summary>
     private async Task HandleStaticPasswordEnteredAsync(string? password)
     {
@@ -411,20 +477,25 @@
 
         using (var jim = JimFactory.Create())
         {
-            if (string.IsNullOrEmpty(password))
+            StaticPasswordAssessment = string.IsNullOrEmpty(password)
+                ? null
+                : jim.PasswordGenerator.AssessSupplied(password, DiscoveredPasswordPolicy);
+
+            if (StaticPasswordAssessment is { IsUsable: true })
             {
-                configuration.StaticPasswordEncryptedValue = _initialPasswordAsSaved?.StaticPasswordEncryptedValue;
-                configuration.StaticPasswordSetAt = _staticPasswordSetAtAsSaved;
-                StaticPasswordAssessment = null;
+                configuration.StaticPasswordEncryptedValue = jim.InitialPasswords.ProtectStaticPassword(password!);
+                configuration.StaticPasswordSetAt = DateTime.UtcNow;
             }
             else
             {
-                configuration.StaticPasswordEncryptedValue = jim.InitialPasswords.ProtectStaticPassword(password);
-                configuration.StaticPasswordSetAt = DateTime.UtcNow;
-                StaticPasswordAssessment = jim.PasswordGenerator.AssessSupplied(password, DiscoveredPasswordPolicy);
+                configuration.StaticPasswordEncryptedValue = _initialPasswordAsSaved?.StaticPasswordEncryptedValue;
+                configuration.StaticPasswordSetAt = _staticPasswordSetAtAsSaved;
             }
+
+            AssessInitialPassword(jim);
         }
 
+        await RaiseInitialPasswordIssuesAsync();
         await OnChanged.InvokeAsync();
     }
 

@@ -2445,29 +2445,14 @@ public class SynchronisationController(
                 "An initial password can only be set by an Export Synchronisation Rule that provisions to the Connected System."));
 
         // Checked here rather than left to fail per account: an unsatisfiable configuration parks every account
-        // it touches, and the administrator saving it is the person who can fix it.
-        if (configuration.Enabled && configuration.Source == InitialPasswordSource.Static)
-        {
-            // A rule that will set one static password but has none would park every account it provisions. That
-            // is the same class of fault as an unsatisfiable generator configuration, and refused for the same
-            // reason. A stored password needs no re-checking here: it was assessed when it was set.
-            if (string.IsNullOrEmpty(configuration.StaticPasswordEncryptedValue))
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    "This Synchronisation Rule is set to use one password for every account it provisions, but no password " +
-                    "has been set. Supply staticPassword, or choose a different source."));
-        }
-        else if (configuration.Enabled)
-        {
-            var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId);
-            var policy = configuration.Source == InitialPasswordSource.Custom
-                ? configuration.CustomPolicy
-                : _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+        // it touches, and the administrator saving it is the person who can fix it. The same assessment gates
+        // the portal's Save, so the two surfaces accept and refuse exactly the same settings.
+        var problems = _application.InitialPasswords.AssessConfiguration(
+            configuration, await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId));
 
-            var assessment = _application.PasswordGenerator.Assess(policy, discoveredPolicy);
-            if (!assessment.IsUsable)
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    $"These password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}"));
-        }
+        if (problems.Count > 0)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"These password settings cannot be satisfied: {string.Join(" ", problems)}"));
 
         var apiKey = await GetCurrentApiKeyAsync();
         var success = apiKey != null

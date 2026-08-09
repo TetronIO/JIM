@@ -194,6 +194,57 @@ public class InitialPasswordDeliveryServer
     }
 
     /// <summary>
+    /// What is wrong with a Synchronisation Rule's initial-password settings, in language meant for the
+    /// administrator reading it. Empty means there is nothing to fix.
+    /// <para>
+    /// Asked before the settings are saved rather than left to fail per account: an unsatisfiable configuration
+    /// parks every account the rule provisions, and the administrator saving it is the person who can fix it.
+    /// </para>
+    /// <para>
+    /// Here rather than at each surface so that the portal and the REST API cannot disagree about what is
+    /// savable. They did: the API refused an unsatisfiable generator configuration while the portal saved it
+    /// happily, so the same settings were accepted or rejected depending on which surface you used.
+    /// </para>
+    /// </summary>
+    /// <param name="configuration">
+    /// The settings to assess, as they would be saved. Null, or settings that are switched off, have nothing that
+    /// could be wrong with them: a rule that will not deliver an initial password cannot fail to deliver one.
+    /// </param>
+    /// <param name="discoveredPolicy">
+    /// The password policy JIM discovered on the target, so that a configuration the target would refuse is
+    /// reported as well as one JIM itself cannot satisfy.
+    /// </param>
+    public IReadOnlyList<string> AssessConfiguration(
+        SyncRuleInitialPassword? configuration,
+        ConnectedSystemPasswordPolicy? discoveredPolicy)
+    {
+        if (configuration is not { Enabled: true })
+            return [];
+
+        // A stored static password is never decrypted to be looked at again, so the only question left about one
+        // is whether it is there. It was assessed against this same target policy when it was set.
+        if (configuration.Source == InitialPasswordSource.Static)
+            return string.IsNullOrEmpty(configuration.StaticPasswordEncryptedValue)
+                ? [StaticPasswordMissingProblem]
+                : [];
+
+        var policy = configuration.Source == InitialPasswordSource.Custom
+            ? configuration.CustomPolicy
+            : _passwordGenerator.DeriveFrom(discoveredPolicy);
+
+        return _passwordGenerator.Assess(policy, discoveredPolicy).Problems;
+    }
+
+    /// <summary>
+    /// What an administrator is told when a rule is set to use one password for every account and has none. Held
+    /// as a constant so the portal and the REST API say the same thing, and so a test can pin the wording that
+    /// tells somebody how to get out of it.
+    /// </summary>
+    public const string StaticPasswordMissingProblem =
+        "This Synchronisation Rule is set to use one password for every account it provisions, but no password " +
+        "has been set. Set one, or choose a different source.";
+
+    /// <summary>
     /// Sets a Synchronisation Rule's parked accounts retrying, and returns how many were released.
     /// <para>
     /// This is the other half of parking. A policy rejection stops the retry loop because the same generator
