@@ -4619,6 +4619,120 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        // A flow is a mapping, so the query starts from mappings and reaches up to the owning rule for the direction
+        // and the systems either end. EF projection rather than raw SQL: this is a UI read of a small, configuration-
+        // sized set, not a worker hot path.
+        var mappings = Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => m.SyncRule != null);
+
+        if (query.Direction.HasValue)
+        {
+            var direction = query.Direction.Value;
+            mappings = mappings.Where(m => m.SyncRule!.Direction == direction);
+        }
+
+        if (query.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = query.ConnectedSystemId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (query.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var connectedSystemObjectTypeId = query.ConnectedSystemObjectTypeId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.ConnectedSystemObjectTypeId == connectedSystemObjectTypeId);
+        }
+
+        if (query.MetaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectTypeId = query.MetaverseObjectTypeId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.MetaverseObjectTypeId == metaverseObjectTypeId);
+        }
+
+        // An attribute filter matches whichever side the attribute sits on for the flow's direction: the target on
+        // one side, a source on the other. A flow whose relevant side is an expression cannot match, because an
+        // expression's attribute references live in its text and are not modelled.
+        if (query.ConnectedSystemAttributeId.HasValue)
+        {
+            var connectedSystemAttributeId = query.ConnectedSystemAttributeId.Value;
+            mappings = mappings.Where(m =>
+                m.TargetConnectedSystemAttributeId == connectedSystemAttributeId ||
+                m.Sources.Any(s => s.ConnectedSystemAttributeId == connectedSystemAttributeId));
+        }
+
+        if (query.MetaverseAttributeId.HasValue)
+        {
+            var metaverseAttributeId = query.MetaverseAttributeId.Value;
+            mappings = mappings.Where(m =>
+                m.TargetMetaverseAttributeId == metaverseAttributeId ||
+                m.Sources.Any(s => s.MetaverseAttributeId == metaverseAttributeId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            // Lowered on both sides so the comparison translates to a plain lower(...) LIKE ... in SQL rather than
+            // pulling the rows back to compare in memory.
+            var search = query.Search.Trim().ToLower();
+            mappings = mappings.Where(m =>
+                m.SyncRule!.Name.ToLower().Contains(search) ||
+                m.SyncRule.ConnectedSystem.Name.ToLower().Contains(search) ||
+                m.SyncRule.ConnectedSystemObjectType.Name.ToLower().Contains(search) ||
+                m.SyncRule.MetaverseObjectType.Name.ToLower().Contains(search) ||
+                (m.TargetMetaverseAttribute != null && m.TargetMetaverseAttribute.Name.ToLower().Contains(search)) ||
+                (m.TargetConnectedSystemAttribute != null && m.TargetConnectedSystemAttribute.Name.ToLower().Contains(search)) ||
+                m.Sources.Any(s =>
+                    (s.MetaverseAttribute != null && s.MetaverseAttribute.Name.ToLower().Contains(search)) ||
+                    (s.ConnectedSystemAttribute != null && s.ConnectedSystemAttribute.Name.ToLower().Contains(search)) ||
+                    (s.Expression != null && s.Expression.ToLower().Contains(search))));
+        }
+
+        return await mappings
+            .OrderBy(m => m.SyncRule!.MetaverseObjectType.Name)
+            .ThenBy(m => m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : m.TargetConnectedSystemAttribute!.Name)
+            .ThenBy(m => m.SyncRule!.Direction)
+            .ThenBy(m => m.Priority)
+            .ThenBy(m => m.Id)
+            .Select(m => new DataFlowHeader
+            {
+                SyncRuleMappingId = m.Id,
+                SyncRuleId = m.SyncRuleId!.Value,
+                SyncRuleName = m.SyncRule!.Name,
+                SyncRuleEnabled = m.SyncRule.Enabled,
+                Direction = m.SyncRule.Direction,
+                ConnectedSystemId = m.SyncRule.ConnectedSystemId,
+                ConnectedSystemName = m.SyncRule.ConnectedSystem.Name,
+                ConnectedSystemObjectTypeId = m.SyncRule.ConnectedSystemObjectTypeId,
+                ConnectedSystemObjectTypeName = m.SyncRule.ConnectedSystemObjectType.Name,
+                MetaverseObjectTypeId = m.SyncRule.MetaverseObjectTypeId,
+                MetaverseObjectTypeName = m.SyncRule.MetaverseObjectType.Name,
+                TargetMetaverseAttributeId = m.TargetMetaverseAttributeId,
+                TargetMetaverseAttributeName = m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : null,
+                TargetConnectedSystemAttributeId = m.TargetConnectedSystemAttributeId,
+                TargetConnectedSystemAttributeName = m.TargetConnectedSystemAttribute != null ? m.TargetConnectedSystemAttribute.Name : null,
+                Sources = m.Sources.OrderBy(s => s.Order).Select(s => new DataFlowSource
+                {
+                    Order = s.Order,
+                    MetaverseAttributeId = s.MetaverseAttributeId,
+                    MetaverseAttributeName = s.MetaverseAttribute != null ? s.MetaverseAttribute.Name : null,
+                    ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
+                    ConnectedSystemAttributeName = s.ConnectedSystemAttribute != null ? s.ConnectedSystemAttribute.Name : null,
+                    Expression = s.Expression
+                }).ToList(),
+                // Priority and "Null is a value" are import concerns; leaving them null on an export flow is what
+                // lets the portal and the API render direction-appropriate columns without re-deriving the direction.
+                Priority = m.SyncRule.Direction == SyncRuleDirection.Import ? m.Priority : null,
+                NullIsValue = m.SyncRule.Direction == SyncRuleDirection.Import ? m.NullIsValue : null,
+                EnforceState = m.SyncRule.Direction == SyncRuleDirection.Export ? m.SyncRule.EnforceState : null
+            })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize)
     {
         if (page < 1)

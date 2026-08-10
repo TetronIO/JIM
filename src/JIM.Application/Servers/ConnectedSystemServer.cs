@@ -5242,6 +5242,45 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets every attribute data flow, in both directions, for the system-wide Data Flow view (#1199): one flow per
+    /// Synchronisation Rule mapping, filtered by the supplied query. Import flows are stamped with how many
+    /// contributors their target Metaverse Attribute has, so the caller can tell a contested attribute from a
+    /// single-source one without asking again per row.
+    /// </summary>
+    /// <param name="query">The filters to apply. All are optional and combine with AND.</param>
+    public async Task<IList<DataFlowHeader>> GetDataFlowsAsync(DataFlowQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var flows = await Application.Repository.ConnectedSystems.GetDataFlowHeadersAsync(query);
+
+        // Contributor counts are taken across the WHOLE configuration, not the filtered set: filtering the view to
+        // one Connected System must not make an attribute that system shares with another look like a sole
+        // contributor, which would invert what the count is for. Counted per Metaverse Object Type present in the
+        // results, which is a handful of queries at configuration scale.
+        var importFlows = flows
+            .Where(f => f.Direction == SyncRuleDirection.Import && f.TargetMetaverseAttributeId.HasValue)
+            .ToList();
+
+        var countsByObjectType = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var objectTypeId in importFlows.Select(f => f.MetaverseObjectTypeId).Distinct())
+            countsByObjectType[objectTypeId] = await GetAttributeContributorCountsAsync(objectTypeId);
+
+        foreach (var flow in importFlows)
+        {
+            flow.ContributorCount = countsByObjectType[flow.MetaverseObjectTypeId]
+                .TryGetValue(flow.TargetMetaverseAttributeId!.Value, out var count) ? count : 0;
+        }
+
+        // Applied here rather than in the query because it depends on the counts above, which the query cannot see:
+        // it reads one flow at a time and the count spans every rule contributing to the same attribute.
+        if (query.MultipleContributorsOnly)
+            flows = flows.Where(f => f.HasMultipleContributors).ToList();
+
+        return flows;
+    }
+
+    /// <summary>
     /// Snapshots the current priority/null-handling of a set of mappings, keyed by mapping id, so a subsequent
     /// renumber can determine which rows actually changed (and avoid auditing/persisting no-op rows).
     /// </summary>

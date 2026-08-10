@@ -590,6 +590,18 @@ public interface IConnectedSystemRepository
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null);
 
     /// <summary>
+    /// Retrieves every attribute data flow, in both directions, for the system-wide Data Flow view (#1199). One flow
+    /// per Synchronisation Rule mapping, filtered by the supplied query.
+    /// </summary>
+    /// <remarks>
+    /// Returns the whole filtered set rather than a page. A flow exists per configured mapping, so the population is
+    /// bounded by how much an administrator has configured (hundreds at most), not by how many objects are
+    /// synchronised, and the view's value is in seeing and sorting the whole map at once.
+    /// </remarks>
+    /// <param name="query">The filters to apply. All are optional and combine with AND.</param>
+    public Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query);
+
+    /// <summary>
     /// Gets the change history for a Connected System Object.
     /// Includes all attribute changes and value changes for displaying in the UI.
     /// </summary>
