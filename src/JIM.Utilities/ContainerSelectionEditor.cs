@@ -33,6 +33,14 @@ public static class ContainerSelectionEditor
         container.Selected = !container.Included && !container.Selected;
         container.Included = false;
 
+        // A Container states one thing about itself, so selecting it replaces any exclusion it carried rather than
+        // leaving both standing. Selecting a Container an exclusion had carved out is how a branch is brought back
+        // into scope, and is the reason ticking one of those is meaningful where ticking a covered one is not.
+        if (container.Selected)
+            container.Excluded = false;
+
+        container.ExcludedByAncestor = false;
+
         // A Subtree selection covers everything beneath it, so those Containers can no longer be selected
         // separately; a OneLevel selection covers nothing beneath it, so they stay selectable in their own right.
         var coversDescendants = container.Selected && container.Scope == ConnectedSystemContainerScope.Subtree;
@@ -47,6 +55,32 @@ public static class ContainerSelectionEditor
             RollUpToParent(container.ParentContainer);
 
         SelectPartitionOfSelectedContainer(container);
+    }
+
+    /// <summary>
+    /// Carves a Container out of the selection an ancestor made, or hands it back to that ancestor.
+    /// </summary>
+    /// <remarks>
+    /// Only meaningful on a Container something above it already reaches; excluding one nothing covers changes
+    /// nothing, exactly as selecting one an ancestor already covers changes nothing. Clearing an exclusion does not
+    /// select the Container: it restores the state before the exclusion was made, which is whatever the ancestors
+    /// say.
+    /// </remarks>
+    public static void ToggleExcluded(ConnectedSystemContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+
+        container.Excluded = !container.Excluded;
+
+        // Mutually exclusive with the selection, for the reason given in ToggleSelected.
+        if (container.Excluded)
+            container.Selected = false;
+
+        // An exclusion changes what every Container beneath it has had decided about it, and clearing one hands
+        // that whole branch back, so the partition's coverage is recalculated rather than nudged.
+        var partition = FindPartition(container);
+        if (partition != null)
+            RecalculateCoverage(partition);
     }
 
     /// <summary>
@@ -85,6 +119,8 @@ public static class ContainerSelectionEditor
         {
             container.Selected = false;
             container.Included = false;
+            container.Excluded = false;
+            container.ExcludedByAncestor = false;
         }
     }
 
@@ -155,6 +191,12 @@ public static class ContainerSelectionEditor
     /// </remarks>
     private static void RollUpToParent(ConnectedSystemContainer parentContainer)
     {
+        // Never roll a selection up onto an excluded Container. Doing so would both break the rule that a Container
+        // states one thing about itself and silently undo the exclusion: the children being rolled up are precisely
+        // the re-inclusions an administrator made inside the branch they had carved out.
+        if (parentContainer.Excluded)
+            return;
+
         if (parentContainer.ChildContainers.All(c => c.Selected && c.Scope == ConnectedSystemContainerScope.Subtree))
         {
             parentContainer.Selected = true;

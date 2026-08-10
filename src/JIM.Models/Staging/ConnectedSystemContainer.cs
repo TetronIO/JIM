@@ -69,10 +69,27 @@ public class ConnectedSystemContainer
     public bool Selected { get; set; }
 
     /// <summary>
-    /// How far beneath this Container objects are imported from, when it is selected. Subtree (the default)
-    /// imports from this Container and every Container beneath it; OneLevel imports only objects held directly
-    /// in this Container, leaving descendants to be selected in their own right.
-    /// Ignored when <see cref="Selected"/> is false.
+    /// Indicates whether the Container has been carved out of a selection an ancestor made, i.e. whether objects
+    /// beneath a managed branch are deliberately left unimported.
+    /// </summary>
+    /// <remarks>
+    /// Mutually exclusive with <see cref="Selected"/>: a Container states one thing about itself, and "manage this"
+    /// and "do not manage this" cannot both be it. The two are kept apart by
+    /// <c>ContainerSelectionEditor</c> rather than by the database, because the invariant is about what an edit
+    /// means, not about what a row may hold.
+    ///
+    /// An exclusion only says anything where a selected ancestor would otherwise reach: excluding a Container
+    /// nothing covers changes nothing, exactly as selecting a Container an ancestor already covers changes nothing.
+    /// Whichever statement is nearest to an object decides its fate, so a Container beneath an excluded one may be
+    /// selected in its own right to bring that branch back into scope.
+    /// </remarks>
+    public bool Excluded { get; set; }
+
+    /// <summary>
+    /// How far this Container's own statement reaches, whether that statement is <see cref="Selected"/> or
+    /// <see cref="Excluded"/>. Subtree (the default) reaches this Container and every Container beneath it;
+    /// OneLevel reaches only objects held directly in this Container, leaving descendants to be spoken for in
+    /// their own right. Ignored when the Container states nothing.
     /// </summary>
     public ConnectedSystemContainerScope Scope { get; set; } = ConnectedSystemContainerScope.Subtree;
 
@@ -95,8 +112,25 @@ public class ConnectedSystemContainer
     [NotMapped]
     public bool Expanded { get; set; }
 
+    /// <summary>
+    /// Whether a selected ancestor's search already covers this Container, so it neither needs nor can be selected
+    /// in its own right. Recalculated from the hierarchy; never stored.
+    /// </summary>
     [NotMapped]
     public bool Included { get; set; }
+
+    /// <summary>
+    /// Whether an excluded ancestor has already carved this Container out, so it is out of scope without stating
+    /// anything itself. Recalculated from the hierarchy; never stored.
+    /// </summary>
+    /// <remarks>
+    /// The sibling of <see cref="Included"/>, and mutually exclusive with it: both answer "what has an ancestor
+    /// already decided about me?", and only the nearest ancestor with an opinion gets to answer. Selecting such a
+    /// Container is meaningful (it brings the branch back into scope), which is what separates this from
+    /// <see cref="Included"/>, where selecting would only restate what an ancestor already says.
+    /// </remarks>
+    [NotMapped]
+    public bool ExcludedByAncestor { get; set; }
     #endregion
 
     public void AddChildContainer(ConnectedSystemContainer container)
