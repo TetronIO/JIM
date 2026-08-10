@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="bunit" Version="2.8.6" />
+    <PackageReference Include="bunit" Version="2.9.0" />
     <!--
       No direct AngleSharp reference here. One used to sit at this line, pinning forward past
       CVE-2026-54570 (mXSS via MathML annotation-xml integration points) because bUnit 2.7.2
