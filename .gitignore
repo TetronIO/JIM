@@ -123,6 +123,10 @@ Generated\ Files/
 *.VisualState.xml
 TestResult.xml
 
+# Pester writes its NUnit results here by default (Invoke-Pester -CI), at the repository root.
+# The VisualStudio.gitignore block above covers TestResult.xml and TestResults/ but not this spelling.
+[Tt]est[Rr]esults.xml
+
 # Build Results of an ATL Project
 [Dd]ebugPS/
 [Rr]eleasePS/

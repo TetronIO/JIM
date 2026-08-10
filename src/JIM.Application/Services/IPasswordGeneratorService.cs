@@ -36,6 +36,26 @@ public interface IPasswordGeneratorService
     PasswordGenerationAssessment Assess(PasswordGenerationPolicy policy, ConnectedSystemPasswordPolicy? targetPolicy);
 
     /// <summary>
+    /// Works out what a password an administrator supplied contains, and whether the Connected System would
+    /// accept it.
+    /// <para>
+    /// The one case where JIM is handed a password rather than producing one: the static initial password on a
+    /// Synchronisation Rule. <see cref="Assess"/> cannot answer this, because what a generator would produce
+    /// says nothing about a value somebody typed.
+    /// </para>
+    /// </summary>
+    /// <param name="password">
+    /// The password to examine. Null, empty or whitespace is reported as a problem rather than thrown, because
+    /// the portal calls this while the administrator is still typing.
+    /// </param>
+    /// <param name="targetPolicy">
+    /// What the Connected System demands, where JIM discovered it. Null means nothing was discovered, in which
+    /// case the assessment reports what the password contains and has nothing to check it against. A floor JIM
+    /// could not read is not a failure to report against.
+    /// </param>
+    SuppliedPasswordAssessment AssessSupplied(string? password, ConnectedSystemPasswordPolicy? targetPolicy);
+
+    /// <summary>
     /// Produces a sensible starting configuration for a Connected System, so an administrator does not have to
     /// retype rules the target already published.
     /// <para>
