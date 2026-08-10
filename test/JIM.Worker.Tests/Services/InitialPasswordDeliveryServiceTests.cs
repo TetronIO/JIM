@@ -25,17 +25,45 @@ public class InitialPasswordDeliveryServiceTests
     private Mock<IConnectorPasswordManagement> _connector = null!;
     private InitialPasswordDeliveryService _service = null!;
     private ConnectedSystemObject _target = null!;
+    private TestCredentialProtection _credentialProtection = null!;
 
     [SetUp]
     public void SetUp()
     {
         _connector = new Mock<IConnectorPasswordManagement>();
-        _service = new InitialPasswordDeliveryService(new PasswordGeneratorService());
+        _credentialProtection = new TestCredentialProtection();
+        _service = new InitialPasswordDeliveryService(new PasswordGeneratorService(), _credentialProtection);
         _target = new ConnectedSystemObject { Id = Guid.NewGuid() };
     }
 
     private static SyncRuleInitialPassword EnabledConfiguration() =>
         new() { Enabled = true, Source = InitialPasswordSource.Discovered };
+
+    private SyncRuleInitialPassword StaticConfiguration(string? password) =>
+        new()
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPasswordEncryptedValue = password == null ? null : _credentialProtection.Protect(password),
+            // Deliberately populated, so the tests below prove the static path ignores it rather than merely not
+            // reaching it by accident.
+            CustomPolicy = new PasswordGenerationPolicy { Length = 12 }
+        };
+
+    /// <summary>
+    /// Records every password handed to the Connector, and hands back the list so a test can assert on what was
+    /// sent rather than on what the service says it sent.
+    /// </summary>
+    private List<string> CaptureSentPasswords()
+    {
+        var sent = new List<string>();
+        _connector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
+                It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()))
+            .Callback((ConnectedSystemObject _, string password, PasswordSetOptions _, CancellationToken _) => sent.Add(password))
+            .ReturnsAsync(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
+
+        return sent;
+    }
 
     private void SetPasswordReturns(PasswordSetResult result) =>
         _connector.Setup(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
@@ -298,6 +326,121 @@ public class InitialPasswordDeliveryServiceTests
     }
     #endregion
 
+    #region the static password
+    [Test]
+    public async Task DeliverAsync_WhenTheSourceIsStatic_SetsTheStoredPasswordAsync()
+    {
+        // The whole point of the option: the administrator knows what this password is, because they chose it.
+        var sent = CaptureSentPasswords();
+
+        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("Brown-Chicken-Ladder-47"),
+            null, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Delivered));
+            Assert.That(sent, Is.EqualTo(new[] { "Brown-Chicken-Ladder-47" }),
+                "the stored password is what has to reach the target; anything else and nobody can sign in with what they were told");
+        }
+    }
+
+    [Test]
+    public async Task DeliverAsync_WhenTheSourceIsStatic_SetsTheSamePasswordOnEveryAccountAsync()
+    {
+        // The exact inverse of the generated case, and the reason this option is recommended against: every
+        // account the rule provisions shares one password until each person changes it.
+        var sent = CaptureSentPasswords();
+        var configuration = StaticConfiguration("Brown-Chicken-Ladder-47");
+
+        for (var i = 0; i < 20; i++)
+            await _service.DeliverAsync(_connector.Object, new ConnectedSystemObject { Id = Guid.NewGuid() },
+                configuration, null, CancellationToken.None);
+
+        Assert.That(sent.Distinct(), Has.Exactly(1).Items);
+    }
+
+    [Test]
+    public async Task DeliverAsync_WhenTheSourceIsStatic_IgnoresTheGeneratorSettingsAsync()
+    {
+        // Custom settings are kept while the source is Static so that switching between the two is not
+        // destructive. They must have no bearing on what is delivered while Static is selected.
+        var sent = CaptureSentPasswords();
+
+        await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("Brown-Chicken-Ladder-47"),
+            new ConnectedSystemPasswordPolicy { MinimumLength = 8 }, CancellationToken.None);
+
+        Assert.That(sent.Single(), Has.Length.EqualTo(23), "a 12-character generated password would mean the generator ran");
+    }
+
+    [Test]
+    public async Task DeliverAsync_WhenTheSourceIsStaticButNoPasswordIsStored_ParksWithoutCallingTheTargetAsync()
+    {
+        // Generating something nobody expects would be the worst of both worlds: the account would work, and the
+        // administrator would still be waiting to be told a password that does not exist.
+        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration(null), null, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+        }
+        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
+            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeliverAsync_WhenTheStaticPasswordCannotSatisfyTheTarget_ParksWithoutCallingItAsync()
+    {
+        // The same judgement as an unsatisfiable generator configuration, and it matters more here: one password
+        // is going to every account this rule provisions, so a rejection is not one account's problem.
+        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("short"),
+            new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+            Assert.That(result.Message, Does.Contain("30"), "the administrator needs to know what the target actually requires");
+        }
+        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
+            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeliverAsync_WhenTheStaticPasswordCannotBeDecrypted_ParksAsync()
+    {
+        // An encryption key that has been rotated or lost takes the password with it. Retrying reaches the same
+        // answer for ever, and only an administrator setting the password again resolves it.
+        var configuration = StaticConfiguration("Brown-Chicken-Ladder-47");
+        _credentialProtection.FailToDecrypt = true;
+
+        var result = await _service.DeliverAsync(_connector.Object, _target, configuration, null, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
+            Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+            Assert.That(result.Message, Does.Not.Contain(configuration.StaticPasswordEncryptedValue!),
+                "the stored value must not be repeated into an Activity or a log on its way out");
+        }
+        _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
+            It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeliverAsync_WhenTheStaticPasswordIsParked_TheReasonNeverRepeatsThePasswordAsync()
+    {
+        // Parked reasons are shown in the portal, written onto the outstanding record and logged. This is the one
+        // delivery path holding a password JIM can read back, so it is the one that could leak it.
+        const string password = "short";
+
+        var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration(password),
+            new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
+
+        Assert.That(result.Message, Does.Not.Contain(password));
+    }
+    #endregion
+
     #region the password never comes back
     [Test]
     public void InitialPasswordDeliveryResult_HasNowhereToCarryThePasswordBack()
@@ -316,4 +459,5 @@ public class InitialPasswordDeliveryServiceTests
         Assert.That(offenders, Is.Empty, $"These could carry the generated password out of delivery: {string.Join(", ", offenders)}");
     }
     #endregion
+
 }
