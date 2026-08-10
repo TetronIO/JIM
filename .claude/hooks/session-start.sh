@@ -49,17 +49,31 @@ fi
 # --- 3. Docker daemon ------------------------------------------------------
 # Image layers persist in /var/lib/docker (cached), but the daemon itself
 # must be started in every session.
+#
+# containerd is started first, and dockerd is pointed at it. Left to supervise
+# its own containerd, dockerd gives up with "failed to start containerd:
+# timeout waiting for containerd to start" and shuts itself down; starting
+# containerd separately and waiting for its socket makes this reliable.
 if ! docker info >/dev/null 2>&1; then
   log "Starting Docker daemon..."
-  nohup dockerd > /tmp/dockerd.log 2>&1 &
-  for _ in $(seq 1 30); do
+
+  if [ ! -S /run/containerd/containerd.sock ]; then
+    nohup containerd > /tmp/containerd.log 2>&1 &
+    for _ in $(seq 1 30); do
+      [ -S /run/containerd/containerd.sock ] && break
+      sleep 1
+    done
+  fi
+
+  nohup dockerd --containerd=/run/containerd/containerd.sock > /tmp/dockerd.log 2>&1 &
+  for _ in $(seq 1 60); do
     docker info >/dev/null 2>&1 && break
     sleep 1
   done
   if docker info >/dev/null 2>&1; then
     log "Docker daemon is up."
   else
-    log "WARNING: Docker daemon failed to start; see /tmp/dockerd.log. Container-based verification will be unavailable."
+    log "WARNING: Docker daemon failed to start; see /tmp/dockerd.log and /tmp/containerd.log. Container-based verification will be unavailable."
   fi
 fi
 

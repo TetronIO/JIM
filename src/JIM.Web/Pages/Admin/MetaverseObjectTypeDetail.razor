@@ -822,7 +822,8 @@
             var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(_metaverseObjectType);
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
                     "Metaverse Object Type", _metaverseObjectType.Name,
-                    ConfigurationChangePreviewCounts.ForConfirmation(_preview, DeletionSettingsPreviewIsStale)))
+                    ConfigurationChangePreviewCounts.ForConfirmation(_preview, DeletionSettingsPreviewIsStale),
+                    ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, DeletionSettingsPreviewIsStale)))
             {
                 RollBack();
                 return;

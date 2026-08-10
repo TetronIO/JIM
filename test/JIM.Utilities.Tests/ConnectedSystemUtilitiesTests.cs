@@ -554,6 +554,51 @@ public class ConnectedSystemUtilitiesTests
 
     #region Helper Methods
 
+    /// <summary>
+    /// An exclusion filters what a search returns; it does not change where the search starts (#1255).
+    /// </summary>
+    /// <remarks>
+    /// Deliberate, and the design decision most worth pinning: the alternative is to decompose the parent's search
+    /// into one search per unexcluded child, which would make import scope depend on how recently the hierarchy was
+    /// refreshed. A Container created since the last refresh is absent from the stored hierarchy, so a decomposed
+    /// search would never look in it and its objects would be silently obsoleted. If this test is ever changed to
+    /// expect extra search roots, that trade has been made by accident.
+    /// </remarks>
+    [Test]
+    public void GetTopLevelSelectedContainers_WithAnExcludedDescendant_StillReturnsOnlyTheSelectedAncestor()
+    {
+        var excluded = CreateContainer("Service Accounts", selected: false);
+        excluded.Excluded = true;
+        var partition = CreatePartitionWithContainers(CreateContainer("Corp", true, excluded));
+
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Has.Count.EqualTo(1));
+            Assert.That(result[0].Name, Is.EqualTo("Corp"));
+        }
+    }
+
+    [Test]
+    public void GetTopLevelSelectedContainers_WithAReInclusionBeneathAnExclusion_StillReturnsOnlyTheSelectedAncestor()
+    {
+        // The ancestor's subtree search already returns the re-included Container's objects; which Container decides
+        // their fate is then a question for the membership predicate, not for the search roots.
+        var reIncluded = CreateContainer("App1", true);
+        var excluded = CreateContainer("Service Accounts", selected: false, reIncluded);
+        excluded.Excluded = true;
+        var partition = CreatePartitionWithContainers(CreateContainer("Corp", true, excluded));
+
+        var result = ConnectedSystemUtilities.GetTopLevelSelectedContainers(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Has.Count.EqualTo(1));
+            Assert.That(result[0].Name, Is.EqualTo("Corp"));
+        }
+    }
+
     private static ConnectedSystemPartition CreatePartitionWithContainers(params ConnectedSystemContainer[] rootContainers)
     {
         var partition = new ConnectedSystemPartition

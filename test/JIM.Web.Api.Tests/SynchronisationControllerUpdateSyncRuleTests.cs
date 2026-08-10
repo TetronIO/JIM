@@ -73,6 +73,13 @@ public class SynchronisationControllerUpdateSyncRuleTests
         };
         _mockApiKeyRepo.Setup(r => r.GetByIdAsync(apiKeyId)).ReturnsAsync(apiKey);
 
+        // Every whole-rule save reads the rule's persisted import mapping targets so it can reconcile attribute
+        // priority for whatever the save changed (#1199). These tests change rule properties, never mappings, so the
+        // rule contributes nothing and no priority list is touched.
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>()))
+            .ReturnsAsync(new Dictionary<int, int>());
+
         var claims = new List<Claim>
         {
             new("auth_method", "api_key"),

@@ -36,7 +36,11 @@
 }
 else if (_syncRule != null)
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
+    @* Keyed on which tabs exist, because MudTabs orders its strip by the order panels register themselves rather
+       than by their position in this markup: a panel that appears later (Passwords, when provisioning is
+       switched on) is appended to the end, landing after Attribute Flow instead of before it. Changing the key
+       rebuilds the component, so registration order becomes markup order again. *@
+    <NavigableMudTabs @key="TabSetKey" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
                       @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
@@ -53,6 +57,21 @@ else if (_syncRule != null)
         <MudTabPanel Text="Scope">
             <SyncRuleScopeTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
+
+        @* Only meaningful for an Export rule that provisions, since only a newly created account has never had a
+           password. Absent rather than disabled when provisioning is off: there is nothing to configure, and the
+           switch that brings it back is on the Details tab, which is index 0 either way. *@
+        @if (ShowInitialPasswordTab)
+        {
+            @* Badged with the parked count, which is what the panel's collapsed title used to carry. Accounts
+               waiting on a person must be visible without opening the tab to find out. *@
+            <MudTabPanel Text="Passwords" BadgeColor="Color.Warning"
+                         BadgeData="@(_parkedInitialPasswordCount > 0 ? _parkedInitialPasswordCount.ToString("N0") : null)">
+                <SyncRuleInitialPasswordTab SyncRule="_syncRule"
+                                            OnInitialPasswordIssuesChanged="OnInitialPasswordIssuesChanged"
+                                            OnChanged="OnChildChanged" />
+            </MudTabPanel>
+        }
 
         <MudTabPanel Text="Attribute Flow">
             <SyncRuleAttributeFlowTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
@@ -85,12 +104,15 @@ else if (_syncRule != null)
     @* Save bar - applies to the whole rule from any editing tab, but not the read-only Changes or Danger Zone tabs *@
     @if (!IsReadOnlyTabActive)
     {
+    @* Computed once per render: the same list gates the button below, and calling it twice would let the
+       alert and the button disagree if anything about the rule changed between the two calls. *@
+    var validationIssues = ValidationIssues();
     <div class="mt-6">
-        @if (_syncRule.Validate().Count > 0)
+        @if (validationIssues.Count > 0)
         {
             <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" NoIcon="true" Class="mb-4">
                 <MudText Class="mb-3">There are issues:</MudText>
-                @foreach (var item in _syncRule.Validate())
+                @foreach (var item in validationIssues)
                 {
                     <div class="d-flex align-center mb-2">
                         <MudIcon Class="mr-2" Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
@@ -102,7 +124,7 @@ else if (_syncRule != null)
         }
 
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleCreateOrUpdateSyncRuleAsync"
-            Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Synchronisation Rule
+            Disabled="@(validationIssues.Any(issue => issue.Level > ValidityStatusItemLevel.Warning))" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Synchronisation Rule
         </MudButton>
     </div>
     }
@@ -126,9 +148,32 @@ else if (_syncRule != null)
     private int _activeTabIndex;
     private int _changeCount;
 
-    // Details, Matching, Scope, Attribute Flow occupy indexes 0-3. For an existing rule, Changes (4) and Danger
-    // Zone (5) follow; both are read-only views, so the editing save bar is hidden when either is active.
-    private const int ChangesTabIndex = 4;
+    /// <summary>
+    /// Accounts parked against this rule, for the Passwords tab's badge. Loaded here beside the
+    /// Changes count because a badge belongs to the tab strip, which is the page's, and the tab itself is
+    /// not rendered until it is opened.
+    /// </summary>
+    private int _parkedInitialPasswordCount;
+
+    /// <summary>
+    /// Whether the rule can deliver an initial password at all, and so whether its tab is one of the editing
+    /// tabs. See the comment on the tab itself.
+    /// </summary>
+    private bool ShowInitialPasswordTab =>
+        _syncRule is { Direction: SyncRuleDirection.Export, ProvisionToConnectedSystem: true };
+
+    /// <summary>
+    /// Identifies which tabs exist, so that the strip is rebuilt whenever that set changes and the tabs render
+    /// in the order they are written rather than the order they happened to register in. See the note on the
+    /// component itself.
+    /// </summary>
+    private string TabSetKey => $"{ShowInitialPasswordTab}-{_syncRule is { Id: > 0 }}";
+
+    // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule
+    // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
+    // either is active. Computed rather than a constant because the Passwords tab is conditional, and a
+    // fixed index would put the save bar back on a read-only tab whenever it is present.
+    private int ChangesTabIndex => ShowInitialPasswordTab ? 5 : 4;
     private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
 
     // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
@@ -183,6 +228,10 @@ else if (_syncRule != null)
 
             // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
             _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, _syncRule.Id, 1, 1)).TotalResults;
+
+            // Counts only; the reasons behind them are the Passwords tab's own load.
+            var attention = await _jim.InitialPasswords.GetAttentionBySyncRuleAsync([_syncRule.Id]);
+            _parkedInitialPasswordCount = attention.TryGetValue(_syncRule.Id, out var parked) ? parked.ParkedCount : 0;
         }
         else
         {
@@ -193,6 +242,35 @@ else if (_syncRule != null)
             _connectedSystemHeaders = await _jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
+    }
+
+    /// <summary>
+    /// What is wrong with the rule's initial-password settings, as the Details tab last assessed them. Held here
+    /// rather than derived, because answering it needs the password policy discovered on the Connected System and
+    /// the application layer's own assessment, both of which that tab loads.
+    /// </summary>
+    private IReadOnlyList<string> _initialPasswordIssues = [];
+
+    /// <summary>
+    /// Everything stopping this Synchronisation Rule being saved, or worth warning about: the rule's own model
+    /// validation, plus whatever the tabs have reported that the model cannot see for itself.
+    /// <para>
+    /// Initial-password problems are Errors rather than Warnings because the REST API refuses the same settings
+    /// outright. A configuration the target cannot satisfy parks every account the rule provisions, which is not
+    /// something to let through with a note beside it.
+    /// </para>
+    /// </summary>
+    private List<ValidityStatusItem> ValidationIssues()
+    {
+        var issues = _syncRule!.Validate();
+        issues.AddRange(_initialPasswordIssues.Select(problem => new ValidityStatusItem(ValidityStatusItemLevel.Error, problem)));
+        return issues;
+    }
+
+    private void OnInitialPasswordIssuesChanged(IReadOnlyList<string> issues)
+    {
+        _initialPasswordIssues = issues;
+        StateHasChanged();
     }
 
     private void OnChildChanged()

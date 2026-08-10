@@ -12,8 +12,14 @@ name: changelog-lint
 #      parameter ALIAS instead of its real name - see Lint-DocExamples.ps1 for
 #      the defect this prevents (an -Id alias silently meaning "every Run
 #      Profile on this Connected System", not "Run Profile 42").
+#   4. CSS brace balance: no stylesheet may contain an unclosed rule. One
+#      missing '}' silently kills every rule below it for the rest of the file,
+#      and nothing else in the pipeline notices - CSS is not compiled, bUnit
+#      applies no stylesheet, and the page renders unstyled rather than failing.
+#      See Test-CssBalance.ps1 for the two occurrences in site.css that this
+#      prevents recurring.
 #
-# All three run in this single job so they are enforced via the existing
+# All four run in this single job so they are enforced via the existing
 # required "changelog-lint" status, without registering further required checks
 # in the branch ruleset. A failure in any of them therefore surfaces as the
 # "changelog-lint" check failing.
@@ -55,3 +61,5 @@ jobs:
           pwsh -File ./scripts/Lint-DocsCoupling.ps1
       - name: Lint PowerShell doc examples for parameter alias misuse
         run: pwsh -File ./scripts/Lint-DocExamples.ps1
+      - name: Check every stylesheet closes its rules
+        run: pwsh -File ./scripts/Test-CssBalance.ps1

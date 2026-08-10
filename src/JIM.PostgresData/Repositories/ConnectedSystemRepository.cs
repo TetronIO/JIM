@@ -993,7 +993,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         // Apply search filter - search on display name, external ID, or secondary external ID
-        // Search is case-insensitive for user convenience
+        // Search is case-insensitive for user convenience.
+        // The external ID clauses match against ExternalIdValueText, the same rendering the sort clauses
+        // and the projection below use, so typing an anchor exactly as the External Id column shows it
+        // finds the row whichever typed column that anchor is stored in (#1286). Matching StringValue
+        // alone silently returned nothing for every Active Directory and Samba AD object, whose objectGUID
+        // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
@@ -1004,38 +1009,46 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern)) ||
                 // Search external ID (primary)
-                cso.AttributeValues.Any(av =>
-                    av.AttributeId == cso.ExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern)) ||
                 // Search secondary external ID
                 (cso.SecondaryExternalIdAttributeId != null &&
-                 cso.AttributeValues.Any(av =>
-                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern))));
+                 cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))));
         }
 
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            // Sorts on the rendered external ID, so the ordering matches what the External Id column
+            // shows rather than treating every non-Text anchor as null (#1286).
             "externalid" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()),
             "secondaryexternalid" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()),
             // Sorts on the resolved name, coalescing the naming tiers in preference order so the sort
             // key matches what the Display Name column actually renders.
@@ -1098,9 +1111,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                     ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                     ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
+                // Rendered from whichever typed column the anchor occupies, via the same expression the
+                // search and sort clauses above use (#1286).
                 ExternalIdValue = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault(),
                 ExternalIdAttributeName = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
@@ -1110,7 +1126,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     ? null
                     : cso.AttributeValues
                         .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault(),
                 SecondaryExternalIdAttributeName = cso.SecondaryExternalIdAttributeId == null
                     ? null
@@ -1134,11 +1151,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(avc => allNameAttributeIds.Contains(avc.AttributeId))
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault(),
+                // A Pending Export carries the same typed value columns as a Connected System Object
+                // Attribute Value, so it needs the same rendering (#1286).
                 PendingExternalId = Repository.Database.PendingExports
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .SelectMany(pe => pe.AttributeValueChanges)
                     .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(avc => avc.StringValue)
+                    .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                     .FirstOrDefault(),
                 PendingSecondaryExternalId = cso.SecondaryExternalIdAttributeId == null ||
                                               cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
@@ -1147,7 +1166,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                         .SelectMany(pe => pe.AttributeValueChanges)
                         .Where(avc => avc.Attribute.IsSecondaryExternalId)
-                        .Select(avc => avc.StringValue)
+                        .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                         .FirstOrDefault()
             });
         List<ConnectedSystemObjectHeader> results;
@@ -4600,6 +4619,120 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
+    public async Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        // A flow is a mapping, so the query starts from mappings and reaches up to the owning rule for the direction
+        // and the systems either end. EF projection rather than raw SQL: this is a UI read of a small, configuration-
+        // sized set, not a worker hot path.
+        var mappings = Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => m.SyncRule != null);
+
+        if (query.Direction.HasValue)
+        {
+            var direction = query.Direction.Value;
+            mappings = mappings.Where(m => m.SyncRule!.Direction == direction);
+        }
+
+        if (query.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = query.ConnectedSystemId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (query.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var connectedSystemObjectTypeId = query.ConnectedSystemObjectTypeId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.ConnectedSystemObjectTypeId == connectedSystemObjectTypeId);
+        }
+
+        if (query.MetaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectTypeId = query.MetaverseObjectTypeId.Value;
+            mappings = mappings.Where(m => m.SyncRule!.MetaverseObjectTypeId == metaverseObjectTypeId);
+        }
+
+        // An attribute filter matches whichever side the attribute sits on for the flow's direction: the target on
+        // one side, a source on the other. A flow whose relevant side is an expression cannot match, because an
+        // expression's attribute references live in its text and are not modelled.
+        if (query.ConnectedSystemAttributeId.HasValue)
+        {
+            var connectedSystemAttributeId = query.ConnectedSystemAttributeId.Value;
+            mappings = mappings.Where(m =>
+                m.TargetConnectedSystemAttributeId == connectedSystemAttributeId ||
+                m.Sources.Any(s => s.ConnectedSystemAttributeId == connectedSystemAttributeId));
+        }
+
+        if (query.MetaverseAttributeId.HasValue)
+        {
+            var metaverseAttributeId = query.MetaverseAttributeId.Value;
+            mappings = mappings.Where(m =>
+                m.TargetMetaverseAttributeId == metaverseAttributeId ||
+                m.Sources.Any(s => s.MetaverseAttributeId == metaverseAttributeId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            // Lowered on both sides so the comparison translates to a plain lower(...) LIKE ... in SQL rather than
+            // pulling the rows back to compare in memory.
+            var search = query.Search.Trim().ToLower();
+            mappings = mappings.Where(m =>
+                m.SyncRule!.Name.ToLower().Contains(search) ||
+                m.SyncRule.ConnectedSystem.Name.ToLower().Contains(search) ||
+                m.SyncRule.ConnectedSystemObjectType.Name.ToLower().Contains(search) ||
+                m.SyncRule.MetaverseObjectType.Name.ToLower().Contains(search) ||
+                (m.TargetMetaverseAttribute != null && m.TargetMetaverseAttribute.Name.ToLower().Contains(search)) ||
+                (m.TargetConnectedSystemAttribute != null && m.TargetConnectedSystemAttribute.Name.ToLower().Contains(search)) ||
+                m.Sources.Any(s =>
+                    (s.MetaverseAttribute != null && s.MetaverseAttribute.Name.ToLower().Contains(search)) ||
+                    (s.ConnectedSystemAttribute != null && s.ConnectedSystemAttribute.Name.ToLower().Contains(search)) ||
+                    (s.Expression != null && s.Expression.ToLower().Contains(search))));
+        }
+
+        return await mappings
+            .OrderBy(m => m.SyncRule!.MetaverseObjectType.Name)
+            .ThenBy(m => m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : m.TargetConnectedSystemAttribute!.Name)
+            .ThenBy(m => m.SyncRule!.Direction)
+            .ThenBy(m => m.Priority)
+            .ThenBy(m => m.Id)
+            .Select(m => new DataFlowHeader
+            {
+                SyncRuleMappingId = m.Id,
+                SyncRuleId = m.SyncRuleId!.Value,
+                SyncRuleName = m.SyncRule!.Name,
+                SyncRuleEnabled = m.SyncRule.Enabled,
+                Direction = m.SyncRule.Direction,
+                ConnectedSystemId = m.SyncRule.ConnectedSystemId,
+                ConnectedSystemName = m.SyncRule.ConnectedSystem.Name,
+                ConnectedSystemObjectTypeId = m.SyncRule.ConnectedSystemObjectTypeId,
+                ConnectedSystemObjectTypeName = m.SyncRule.ConnectedSystemObjectType.Name,
+                MetaverseObjectTypeId = m.SyncRule.MetaverseObjectTypeId,
+                MetaverseObjectTypeName = m.SyncRule.MetaverseObjectType.Name,
+                TargetMetaverseAttributeId = m.TargetMetaverseAttributeId,
+                TargetMetaverseAttributeName = m.TargetMetaverseAttribute != null ? m.TargetMetaverseAttribute.Name : null,
+                TargetConnectedSystemAttributeId = m.TargetConnectedSystemAttributeId,
+                TargetConnectedSystemAttributeName = m.TargetConnectedSystemAttribute != null ? m.TargetConnectedSystemAttribute.Name : null,
+                Sources = m.Sources.OrderBy(s => s.Order).Select(s => new DataFlowSource
+                {
+                    Order = s.Order,
+                    MetaverseAttributeId = s.MetaverseAttributeId,
+                    MetaverseAttributeName = s.MetaverseAttribute != null ? s.MetaverseAttribute.Name : null,
+                    ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
+                    ConnectedSystemAttributeName = s.ConnectedSystemAttribute != null ? s.ConnectedSystemAttribute.Name : null,
+                    Expression = s.Expression
+                }).ToList(),
+                // Priority and "Null is a value" are import concerns; leaving them null on an export flow is what
+                // lets the portal and the API render direction-appropriate columns without re-deriving the direction.
+                Priority = m.SyncRule.Direction == SyncRuleDirection.Import ? m.Priority : null,
+                NullIsValue = m.SyncRule.Direction == SyncRuleDirection.Import ? m.NullIsValue : null,
+                EnforceState = m.SyncRule.Direction == SyncRuleDirection.Export ? m.SyncRule.EnforceState : null
+            })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize)
     {
         if (page < 1)
@@ -5056,6 +5189,21 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .OrderBy(m => m.Priority)
             .ThenBy(m => m.Id)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
+    /// database, keyed by mapping id (#1199). AsNoTracking with a scalar projection is load-bearing, not an
+    /// optimisation: the caller is mid-save on a tracked, already-mutated rule graph, and this must report what
+    /// the database holds, not what the graph has been changed to.
+    /// </summary>
+    public async Task<Dictionary<int, int>> GetImportMappingTargetMetaverseAttributesAsync(int syncRuleId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsNoTracking()
+            .Where(m => m.SyncRuleId == syncRuleId && m.TargetMetaverseAttributeId != null)
+            .Select(m => new { m.Id, TargetMetaverseAttributeId = m.TargetMetaverseAttributeId!.Value })
+            .ToDictionaryAsync(m => m.Id, m => m.TargetMetaverseAttributeId);
     }
 
     /// <summary>

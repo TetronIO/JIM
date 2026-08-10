@@ -1629,6 +1629,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Source")
                         .HasColumnType("integer");
 
+                    b.Property<string>("StaticPasswordEncryptedValue")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("StaticPasswordSetAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("SyncRuleId")
                         .HasColumnType("integer");
 
@@ -2633,6 +2639,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<bool>("Excluded")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ExternalId")
                         .IsRequired()

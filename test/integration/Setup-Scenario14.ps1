@@ -430,6 +430,102 @@ foreach ($mapping in $sharedMappings) {
 }
 
 # ============================================================================
+# Step 10b: Create the Secondary Export Synchronisation Rule (Enforce State)
+#
+# Every step up to here is inbound, which is enough to prove which contribution WINS but not
+# what happens to the one that LOSES. Both remaining #1199 test blocks turn on that:
+#
+#   - Fine-grained authority (worked example 2): a direct change in the lower-priority system
+#     must be corrected back, which is purely the outbound path. Inbound resolution just declines
+#     to take the losing value into the Metaverse; correcting the system that supplied it is an
+#     Enforce State export re-asserting the Metaverse value.
+#   - Grace period and next-contributor fallback: the Delete export on grace expiry, and exports
+#     succeeding on a fallback value, are both outbound observations.
+#
+# The rule is created on the SECONDARY suffix deliberately: Secondary is priority 2 for every
+# shared attribute (Step 10), so it is the system whose direct changes lose resolution and are
+# then corrected. Enforce State is what turns "JIM disagrees with this value" into a Pending
+# Export rather than silent divergence.
+#
+# FlowOnly (no -ProvisionToConnectedSystem): the export must only update objects Secondary
+# already holds and is joined to. Provisioning would create Secondary entries for users who
+# exist only in Primary, which no step in this scenario expects and which would change what
+# every existing inbound assertion is reasoning about.
+#
+# Only Description and Job Title are exported. They are the contested scalars the correction
+# legs use, and both are plain writable inetOrgPerson attributes. Manager is deliberately left
+# out: exporting a reference requires the referent to resolve in the target suffix, which is a
+# separate concern from priority correction and would couple these blocks to reference export
+# behaviour.
+# ============================================================================
+Write-TestStep "Step 10b" "Creating the Secondary Export Synchronisation Rule (Enforce State)"
+
+$secondaryExportRuleName = "$secondarySystemName Export Users"
+$secondaryExportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq $secondaryExportRuleName } | Select-Object -First 1
+
+if ($secondaryExportRule) {
+    Write-Host "  '$secondaryExportRuleName' already exists (ID: $($secondaryExportRule.id))" -ForegroundColor Gray
+}
+else {
+    $secondaryExportRule = New-JIMSyncRule `
+        -Name $secondaryExportRuleName `
+        -ConnectedSystemId $secondarySystem.id `
+        -ConnectedSystemObjectTypeId $secondaryUserType.id `
+        -MetaverseObjectTypeId $mvUserType.id `
+        -Direction Export `
+        -PassThru
+
+    Write-Host "  OK Created '$secondaryExportRuleName' (ID: $($secondaryExportRule.id))" -ForegroundColor Green
+}
+
+# Enforce State is not settable at creation (New-JIMSyncRule exposes no -EnforceState), so it is
+# applied here. Set unconditionally rather than only on creation, so a re-run against an existing
+# environment repairs a rule someone left with it off.
+Set-JIMSyncRule -Id $secondaryExportRule.id -EnforceState $true | Out-Null
+
+$exportMappings = @(
+    @{ MvAttr = "Description"; LdapAttr = "description" }
+    @{ MvAttr = "Job Title"; LdapAttr = "title" }
+)
+
+$existingExportMappings = @(Get-JIMSyncRuleMapping -SyncRuleId $secondaryExportRule.id)
+$createdExportMappings = 0
+
+foreach ($mapping in $exportMappings) {
+    $csAttr = $secondaryUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
+    $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
+    if (-not $csAttr -or -not $mvAttr) {
+        throw "Could not map $($mapping.MvAttr) -> $($mapping.LdapAttr) for the Secondary export rule: attribute not found"
+    }
+
+    $existing = $existingExportMappings | Where-Object {
+        $_.targetConnectedSystemAttributeId -eq $csAttr.id -and
+        ($_.sources | Where-Object { $_.metaverseAttributeId -eq $mvAttr.id })
+    }
+    if ($existing) { continue }
+
+    New-JIMSyncRuleMapping -SyncRuleId $secondaryExportRule.id `
+        -TargetConnectedSystemAttributeId $csAttr.id `
+        -SourceMetaverseAttributeId $mvAttr.id | Out-Null
+    $createdExportMappings++
+}
+
+# Read back rather than trusting the writes: Enforce State off, or a missing mapping, would not
+# fail any inbound step but would make every correction assertion in the outbound blocks fail
+# with a misleading "no Pending Export was staged".
+$exportRuleReadBack = Get-JIMSyncRule -Id $secondaryExportRule.id
+if (-not $exportRuleReadBack.enforceState) {
+    throw "'$secondaryExportRuleName' read back with Enforce State off; the export-correction assertions depend on it."
+}
+
+$exportMappingsReadBack = @(Get-JIMSyncRuleMapping -SyncRuleId $secondaryExportRule.id)
+if ($exportMappingsReadBack.Count -ne $exportMappings.Count) {
+    throw "'$secondaryExportRuleName' read back with $($exportMappingsReadBack.Count) mapping(s); expected $($exportMappings.Count) ($($exportMappings.MvAttr -join ', '))."
+}
+
+Write-Host "  OK '$secondaryExportRuleName' configured: Enforce State on, $($exportMappings.Count) mapping(s) ($createdExportMappings new): $($exportMappings.MvAttr -join ', ')" -ForegroundColor Green
+
+# ============================================================================
 # Step 11: Configure Simple Mode matching rules (join on Employee ID)
 #
 # Both systems keep -ProjectToMetaverse; whichever imports+syncs first projects a new
@@ -480,15 +576,22 @@ Set-Scenario14MatchingRule -SystemLabel $secondarySystemName -System $secondaryS
 Write-TestStep "Step 12" "Creating Run Profiles"
 
 function New-Scenario14RunProfiles {
-    param([string]$SystemLabel, $System)
+    param([string]$SystemLabel, $System, [switch]$IncludeExport)
+
+    # Export is created only where there is an export rule to run (Secondary, Step 10b). A profile
+    # on a system with no export rule would run, do nothing, and read as a passing export in a
+    # correction assertion that never actually exported anything.
+    $profileNames = @("Full Import", "Delta Import", "Full Synchronisation", "Delta Synchronisation")
+    if ($IncludeExport) { $profileNames += "Export" }
 
     $existingProfiles = @(Get-JIMRunProfile -ConnectedSystemId $System.id)
-    foreach ($profileName in @("Full Import", "Delta Import", "Full Synchronisation", "Delta Synchronisation")) {
+    foreach ($profileName in $profileNames) {
         $runType = switch ($profileName) {
             "Full Import" { "FullImport" }
             "Delta Import" { "DeltaImport" }
             "Full Synchronisation" { "FullSynchronisation" }
             "Delta Synchronisation" { "DeltaSynchronisation" }
+            "Export" { "Export" }
         }
         $existing = $existingProfiles | Where-Object { $_.name -eq $profileName }
         if (-not $existing) {
@@ -502,7 +605,7 @@ function New-Scenario14RunProfiles {
 }
 
 New-Scenario14RunProfiles -SystemLabel $primarySystemName -System $primarySystem
-New-Scenario14RunProfiles -SystemLabel $secondarySystemName -System $secondarySystem
+New-Scenario14RunProfiles -SystemLabel $secondarySystemName -System $secondarySystem -IncludeExport
 
 # ============================================================================
 # Summary
@@ -512,3 +615,4 @@ Write-Host "  Primary Connected System:   $primarySystemName (ID: $($primarySyst
 Write-Host "  Secondary Connected System: $secondarySystemName (ID: $($secondarySystem.id), BaseDN: $($secondaryConfig.BaseDN))" -ForegroundColor Cyan
 Write-Host "  Shared attributes with priority configured: $($sharedMappings.MvAttr -join ', ')" -ForegroundColor Cyan
 Write-Host "  Priority order: $primarySystemName = 1, $secondarySystemName = 2" -ForegroundColor Cyan
+Write-Host "  Export rule: $secondaryExportRuleName (Enforce State, $($exportMappings.MvAttr -join ' + ')), with an Export Run Profile on $secondarySystemName" -ForegroundColor Cyan

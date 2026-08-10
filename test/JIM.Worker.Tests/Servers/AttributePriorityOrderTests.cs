@@ -594,4 +594,226 @@ public class AttributePriorityOrderTests
         _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
             It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 1 && c.Single().Id == 30)), Times.Once);
     }
+
+    // ─── Whole-rule saves keep the contributor list dense (#1199) ───
+    //
+    // The portal never calls CreateSyncRuleMappingAsync / DeleteSyncRuleMappingAsync: the Attribute Flow dialog
+    // mutates SyncRule.AttributeFlowRules in memory and the page saves the whole rule through
+    // CreateOrUpdateSyncRuleAsync. Until #1199 that path had no attribute priority handling at all, so the
+    // safe-addition default and the dense-list invariant only held for API callers. These cover the whole-rule path.
+
+    private const int OtherAttributeId = 43;
+
+    /// <summary>
+    /// Builds a valid, already-persisted Import rule carrying the Metaverse Object Type that scopes an attribute's
+    /// priority list. Simple Mode is used on the Connected System so the save needs no matching rules.
+    /// </summary>
+    private static SyncRule BuildSaveableImportRule(int id, params SyncRuleMapping[] mappings)
+    {
+        var rule = new SyncRule
+        {
+            Id = id,
+            Name = $"Rule {id}",
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            MetaverseObjectTypeId = ObjectTypeId,
+            MetaverseObjectType = new MetaverseObjectType { Id = ObjectTypeId, Name = "Person" },
+            ConnectedSystemId = id,
+            ConnectedSystem = new ConnectedSystem
+            {
+                Id = id,
+                Name = $"System {id}",
+                ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem
+            },
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = id, Name = "user" }
+        };
+
+        foreach (var mapping in mappings)
+            rule.AttributeFlowRules.Add(mapping);
+
+        return rule;
+    }
+
+    /// <summary>An import mapping as the portal leaves it on the rule graph: target attribute set, priority as given.</summary>
+    private static SyncRuleMapping BuildRuleMapping(int id, int targetAttributeId, int priority) => new()
+    {
+        Id = id,
+        Priority = priority,
+        TargetMetaverseAttributeId = targetAttributeId,
+        TargetMetaverseAttribute = new MetaverseAttribute { Id = targetAttributeId, Name = $"attribute{targetAttributeId}" }
+    };
+
+    // The whole-rule save path is not what these tests are about, so make it a no-op: no initial password, and
+    // configuration change tracking switched off so the capture short-circuits.
+    private void SetupWholeRuleSave()
+    {
+        _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockCsRepo.Setup(r => r.GetSyncRuleInitialPasswordAsync(It.IsAny<int>())).ReturnsAsync((SyncRuleInitialPassword?)null);
+
+        var settingsRepo = new Mock<IServiceSettingsRepository>();
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(settingsRepo.Object);
+        settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled,
+                DisplayName = "Track configuration changes",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "false"
+            });
+    }
+
+    /// <summary>Sets the mapping ids and target attributes the rule's import mappings had in the database before the save.</summary>
+    private void SetupPersistedImportTargets(int syncRuleId, params (int MappingId, int TargetAttributeId)[] targets)
+    {
+        _mockCsRepo
+            .Setup(r => r.GetImportMappingTargetMetaverseAttributesAsync(syncRuleId))
+            .ReturnsAsync(targets.ToDictionary(t => t.MappingId, t => t.TargetAttributeId));
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ImportMappingAdded_DensifiesTheAttributesContributorListAsync()
+    {
+        // The portal's way of adding an Attribute Flow: a new mapping appears on the rule graph and the whole rule is
+        // saved. The attribute already has a contributor from another rule, so the list must densify with the newcomer
+        // last, exactly as the granular create path does. Without this the newcomer keeps the int.MaxValue sentinel.
+        SetupWholeRuleSave();
+        var added = BuildRuleMapping(20, AttributeId, priority: int.MaxValue);
+        var rule = BuildSaveableImportRule(500, added);
+        SetupPersistedImportTargets(500); // nothing targeted this attribute from this rule before the save
+
+        var incumbent = BuildMapping(10, priority: int.MaxValue, nullIsValue: false);
+        SetupContributors(incumbent, added); // what the attribute's list holds after the save
+
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _user);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(incumbent.Priority, Is.EqualTo(1), "the incumbent takes the top, explicit priority");
+            Assert.That(added.Priority, Is.EqualTo(2), "a mapping added in the portal must land at the bottom of the priority list");
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ImportMappingRemoved_ReDensifiesRemainingContributorsAsync()
+    {
+        // The portal's way of deleting an Attribute Flow: the mapping is dropped from the rule graph and the whole rule
+        // is saved. The gap it leaves in the attribute's priority numbers must close.
+        SetupWholeRuleSave();
+        var rule = BuildSaveableImportRule(500); // the mapping that targeted the attribute has been removed
+        SetupPersistedImportTargets(500, (20, AttributeId));
+
+        var m10 = BuildMapping(10, priority: 1, nullIsValue: false);
+        var m30 = BuildMapping(30, priority: 3, nullIsValue: false);
+        SetupContributors(m10, m30);
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _user);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(m10.Priority, Is.EqualTo(1));
+            Assert.That(m30.Priority, Is.EqualTo(2), "removing a contributor in the portal must close the gap it leaves");
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_MappingRetargeted_LandsLastInTheNewAttributesListAsync()
+    {
+        // Retargeting a mapping moves it between two attributes' priority lists. It must not carry its old rank across:
+        // a mapping sitting at priority 1 for one attribute would otherwise be renumbered straight to the top of its new
+        // attribute's list and silently win resolution there. It has to arrive at the safe-addition sentinel, like any
+        // other newly-added contribution, and be promoted deliberately.
+        SetupWholeRuleSave();
+        var retargeted = BuildRuleMapping(20, OtherAttributeId, priority: 1); // was priority 1 for AttributeId
+        var rule = BuildSaveableImportRule(500, retargeted);
+        SetupPersistedImportTargets(500, (20, AttributeId));
+
+        // The attribute it left is down to a sole contributor, so that resets to the sentinel.
+        var leftBehind = BuildMapping(10, priority: 1, nullIsValue: false);
+        SetupContributors(leftBehind);
+
+        // The attribute it joined already has a contributor; ordering is by (Priority asc, Id asc), so the sentinel
+        // reset is what puts the retargeted mapping last.
+        var incumbent = new SyncRuleMapping { Id = 40, Priority = int.MaxValue, TargetMetaverseAttributeId = OtherAttributeId };
+        _mockCsRepo
+            .Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(ObjectTypeId, OtherAttributeId))
+            .ReturnsAsync(() => new List<SyncRuleMapping> { incumbent, retargeted }
+                .OrderBy(m => m.Priority).ThenBy(m => m.Id).ToList());
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _user);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(incumbent.Priority, Is.EqualTo(1), "the attribute's existing contributor keeps the top priority");
+            Assert.That(retargeted.Priority, Is.EqualTo(2), "a retargeted mapping must land last, not inherit its old rank");
+            Assert.That(leftBehind.Priority, Is.EqualTo(int.MaxValue), "the attribute it left is back to a sole contributor");
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_NoMappingChanges_LeavesPriorityUntouchedAsync()
+    {
+        // An unrelated edit (renaming the rule, toggling a setting) must not read or rewrite any priority list.
+        SetupWholeRuleSave();
+        var unchanged = BuildRuleMapping(20, AttributeId, priority: 2);
+        var rule = BuildSaveableImportRule(500, unchanged);
+        SetupPersistedImportTargets(500, (20, AttributeId));
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _user);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(unchanged.Priority, Is.EqualTo(2), "an untouched mapping keeps its priority");
+            _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ExportRule_DoesNotTouchPriorityAsync()
+    {
+        // Priority is an inbound concern: saving an export rule must not read a contributor list at all.
+        SetupWholeRuleSave();
+        var rule = BuildSaveableImportRule(500);
+        rule.Direction = SyncRuleDirection.Export;
+        rule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 20,
+            TargetConnectedSystemAttributeId = 5,
+            TargetConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 5, Name = "displayName" }
+        });
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _user);
+
+        using (Assert.EnterMultipleScope())
+        {
+            _mockCsRepo.Verify(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>()), Times.Never);
+            _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_NewRuleWithImportMappings_DensifiesEachTargetedAttributeAsync()
+    {
+        // A brand-new rule has no persisted "before" state, so every attribute its import mappings target gains a
+        // contributor and must be densified.
+        SetupWholeRuleSave();
+        var mapping = BuildRuleMapping(20, AttributeId, priority: int.MaxValue);
+        var rule = BuildSaveableImportRule(0, mapping);
+
+        var incumbent = BuildMapping(10, priority: int.MaxValue, nullIsValue: false);
+        SetupContributors(incumbent, mapping);
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _user);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(incumbent.Priority, Is.EqualTo(1));
+            Assert.That(mapping.Priority, Is.EqualTo(2), "a new rule's import mapping must land at the bottom of the priority list");
+            // A create has nothing persisted to compare against, so the "before" query must not be issued at all.
+            _mockCsRepo.Verify(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>()), Times.Never);
+        }
+    }
 }

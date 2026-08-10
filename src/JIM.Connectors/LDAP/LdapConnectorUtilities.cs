@@ -540,6 +540,26 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// The name to show for a container whose only identifier is its Distinguished Name: the unescaped value of the
+    /// leaf RDN's first component, so "OU=Sales,OU=Corp,DC=example,DC=com" reads as "Sales".
+    /// </summary>
+    /// <remarks>
+    /// Used both when a directory publishes no name of its own for a discovered container (everything except Active
+    /// Directory) and when the Connector creates a container during an export. Answering it in one place is what
+    /// stops a container acquiring a different name depending on how JIM first met it. An identifier that will not
+    /// parse as a Distinguished Name is returned unchanged: showing something is better than showing an empty row.
+    /// </remarks>
+    internal static string GetContainerDisplayNameFromDn(string? distinguishedName)
+    {
+        if (string.IsNullOrEmpty(distinguishedName))
+            return string.Empty;
+
+        return LdapDistinguishedName.TryParse(distinguishedName, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0
+            ? parsedDn.LeafRdn.Components[0].Value
+            : distinguishedName;
+    }
+
+    /// <summary>
     /// Whether a distinguished name falls within the scope of any of the supplied Containers. An empty
     /// collection means the caller has no Container-level opinion to apply, and every name is admitted.
     /// </summary>
@@ -548,8 +568,23 @@ internal static class LdapConnectorUtilities
         if (connectedSystemContainers.Count == 0)
             return true;
 
-        return connectedSystemContainers.Any(c => IsDnWithinContainerScope(distinguishedName, c));
+        return ResolveMostSpecificContainerScope(distinguishedName, connectedSystemContainers) is not null;
     }
+
+    /// <summary>
+    /// Which of the supplied Containers has the final say over a distinguished name, or null where none covers it.
+    /// </summary>
+    /// <remarks>
+    /// The Containers handed to the import and export scope checks are a flat collection with no hierarchy to walk,
+    /// so specificity is asked in the only terms available here and the only ones that are the Connector's own: a
+    /// Container holding another matching Container is the more general of the two. Deciding this way rather than by
+    /// taking the first match is what will let a Container beneath a selected one overrule it (#1255); until then
+    /// the two agree on every selection, because every Container in a selection says the same thing.
+    /// </remarks>
+    internal static ConnectedSystemContainer? ResolveMostSpecificContainerScope(
+        string? distinguishedName,
+        IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers) =>
+        ContainerSpecificity.ResolveMostSpecific(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
 
     /// <summary>
     /// Removes the optional whitespace some directories emit after each DN separator, leaving a form that can
