@@ -18,17 +18,18 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
-/// Real-PostgreSQL characterisation of the External Id column on the Connector Space list, i.e. the
-/// <c>ExternalIdValue</c> projection in <c>ConnectedSystemRepository.GetConnectedSystemObjectHeadersAsync</c>,
-/// across every anchor data type a Connected System can declare.
+/// Real-PostgreSQL regression coverage for the External Id column on the Connector Space list, i.e. the
+/// <c>ExternalIdValue</c> projection in <c>ConnectedSystemRepository.GetConnectedSystemObjectHeadersAsync</c>
+/// plus the search predicate and sort clauses that must render the anchor the same way, across every anchor
+/// data type a Connected System can declare.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The projection reads <c>ConnectedSystemObjectAttributeValue.StringValue</c> alone, but the import path
-/// stores each imported value in the typed column matching the attribute's declared
+/// The import path stores each imported value in the typed column matching the attribute's declared
 /// <see cref="AttributeDataType"/>: a Guid anchor lands in <c>GuidValue</c>, an Int anchor in <c>IntValue</c>,
-/// and only a Text anchor in <c>StringValue</c>. These tests exist to settle, with evidence rather than
-/// reading, what the projection actually returns per anchor type. Issue #1286.
+/// and only a Text anchor in <c>StringValue</c>. Issue #1286: all three read
+/// <c>ConnectedSystemObjectAttributeValue.StringValue</c> alone, so the column was blank, search returned
+/// nothing and sort saw null for every Active Directory and Samba AD object.
 /// </para>
 /// <para>
 /// Real PostgreSQL matters because the assertion is about which typed column a value physically occupies.
@@ -146,6 +147,55 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
     }
 
     [Test]
+    public async Task GetConnectedSystemObjectHeadersAsync_LongAnchor_ProjectsTheNumberAsTheExternalIdValueAsync()
+    {
+        // Arrange: a 64-bit key, e.g. a SQL bigint identity column. IConnectedSystemRepository's
+        // deletion-detection path treats LongNumber as a supported anchor type alongside Text, Number
+        // and Guid, but nothing exercised it through this projection.
+        const long anchor = 9_007_199_254_740_993L;
+        var systemId = await SeedImportedCsoAsync(
+            AttributeDataType.LongNumber,
+            attribute => attribute.LongValues.Add(anchor),
+            displayName: "Katherine Johnson");
+
+        // Act
+        var header = await GetSingleHeaderAsync(systemId);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.DisplayName, Is.EqualTo("Katherine Johnson"));
+            Assert.That(header.ExternalIdAttributeName, Is.EqualTo(ExternalIdAttributeName));
+            Assert.That(header.ExternalIdValue, Is.EqualTo(anchor.ToString()),
+                "A Long-anchored Connected System Object must surface its anchor in the Connector Space list.");
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectHeadersAsync_DecimalAnchor_ProjectsTheNumberAsTheExternalIdValueAsync()
+    {
+        // Arrange: an Oracle-shaped anchor. A NUMBER primary key maps to AttributeDataType.Decimal, which
+        // SqlAnchorValue calls out as the case that matters most in practice for a SQL Connector.
+        const decimal anchor = 40711.25m;
+        var systemId = await SeedImportedCsoAsync(
+            AttributeDataType.Decimal,
+            attribute => attribute.DecimalValues.Add(anchor),
+            displayName: "Dorothy Vaughan");
+
+        // Act
+        var header = await GetSingleHeaderAsync(systemId);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.DisplayName, Is.EqualTo("Dorothy Vaughan"));
+            Assert.That(header.ExternalIdAttributeName, Is.EqualTo(ExternalIdAttributeName));
+            Assert.That(header.ExternalIdValue, Is.EqualTo("40711.25"),
+                "A Decimal-anchored Connected System Object must surface its anchor in the Connector Space list.");
+        }
+    }
+
+    [Test]
     public async Task GetConnectedSystemObjectHeadersAsync_TextAnchor_ProjectsTheStringAsTheExternalIdValueAsync()
     {
         // Arrange: an OpenLDAP-shaped anchor. Rfc4512SchemaParser types entryUUID as
@@ -166,6 +216,69 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
             Assert.That(header.ExternalIdAttributeName, Is.EqualTo(ExternalIdAttributeName));
             Assert.That(header.ExternalIdValue, Is.EqualTo(anchor),
                 "A Text-anchored Connected System Object must surface its anchor in the Connector Space list.");
+        }
+    }
+
+    /// <summary>
+    /// Searching and sorting run in the database, over the whole Connector Space rather than the page in
+    /// hand, so neither is served by anything the projection does after materialisation. These two tests
+    /// cover the halves a user notices most: typing an objectGUID into the search box, and clicking the
+    /// External Id column header.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectHeadersAsync_SearchByGuidAnchor_FindsTheObjectAsync()
+    {
+        // Arrange
+        var anchor = Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff");
+        var otherAnchor = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var systemId = await SeedImportedCsosAsync(
+            AttributeDataType.Guid,
+            (attribute => attribute.GuidValues.Add(anchor), "Ada Lovelace"),
+            (attribute => attribute.GuidValues.Add(otherAnchor), "Grace Hopper"));
+
+        // Act: the canonical hyphenated form is what the External Id column renders and what an
+        // administrator copies out of it, so it is what must match.
+        var exact = await GetHeadersAsync(systemId, searchQuery: anchor.ToString());
+        var upperCasePartial = await GetHeadersAsync(systemId, searchQuery: "6F9619FF-8B86");
+        var noMatch = await GetHeadersAsync(systemId, searchQuery: "00000000-0000-0000-0000-000000000000");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exact.Select(h => h.DisplayName).ToArray(), Is.EqualTo(new[] { "Ada Lovelace" }),
+                "Searching the Connector Space by a Guid anchor's canonical string form must find the object.");
+            Assert.That(upperCasePartial.Select(h => h.DisplayName).ToArray(), Is.EqualTo(new[] { "Ada Lovelace" }),
+                "External Id search is case-insensitive and matches on a substring, as it does for a Text anchor.");
+            Assert.That(noMatch, Is.Empty,
+                "A Guid that no object carries must match nothing; the predicate must filter, not pass everything through.");
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectHeadersAsync_SortByExternalId_OrdersByTheRenderedGuidAsync()
+    {
+        // Arrange: seeded out of order, so the ordering asserted below can only come from the sort clause.
+        var first = Guid.Parse("1a000000-0000-0000-0000-000000000000");
+        var second = Guid.Parse("5b000000-0000-0000-0000-000000000000");
+        var third = Guid.Parse("c3000000-0000-0000-0000-000000000000");
+        var systemId = await SeedImportedCsosAsync(
+            AttributeDataType.Guid,
+            (attribute => attribute.GuidValues.Add(third), "Third"),
+            (attribute => attribute.GuidValues.Add(first), "First"),
+            (attribute => attribute.GuidValues.Add(second), "Second"));
+
+        // Act
+        var ascending = await GetHeadersAsync(systemId, sortBy: "externalid", sortDescending: false);
+        var descending = await GetHeadersAsync(systemId, sortBy: "externalid", sortDescending: true);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ascending.Select(h => h.ExternalIdValue).ToArray(),
+                Is.EqualTo(new[] { first.ToString(), second.ToString(), third.ToString() }),
+                "Sorting by External Id must order Guid anchors by the value the column renders, not treat them all as null.");
+            Assert.That(descending.Select(h => h.ExternalIdValue).ToArray(),
+                Is.EqualTo(new[] { third.ToString(), second.ToString(), first.ToString() }));
         }
     }
 
@@ -220,10 +333,23 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
     /// and one Connected System Object built by the production import writer.
     /// </summary>
     /// <returns>The Connected System's id.</returns>
-    private async Task<int> SeedImportedCsoAsync(
+    private Task<int> SeedImportedCsoAsync(
         AttributeDataType anchorDataType,
         Action<ConnectedSystemImportObjectAttribute> populateAnchor,
         string displayName)
+    {
+        return SeedImportedCsosAsync(anchorDataType, (populateAnchor, displayName));
+    }
+
+    /// <summary>
+    /// The multi-object form of <see cref="SeedImportedCsoAsync"/>, for the search and sort tests, which need
+    /// several Connected System Objects in one Connected System to have anything to filter or order.
+    /// Objects are persisted in the order supplied.
+    /// </summary>
+    /// <returns>The Connected System's id.</returns>
+    private async Task<int> SeedImportedCsosAsync(
+        AttributeDataType anchorDataType,
+        params (Action<ConnectedSystemImportObjectAttribute> PopulateAnchor, string DisplayName)[] objects)
     {
         await using var seed = NewContext();
 
@@ -250,27 +376,30 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
         seed.AddRange(connectorDefinition, connectedSystem, objectType);
         await seed.SaveChangesAsync();
 
-        var anchorAttribute = new ConnectedSystemImportObjectAttribute { Name = ExternalIdAttributeName };
-        populateAnchor(anchorAttribute);
-
-        var importObject = new ConnectedSystemImportObject
+        foreach (var (populateAnchor, displayName) in objects)
         {
-            ChangeType = ObjectChangeType.NotSet,
-            ObjectType = objectType.Name,
-            Attributes =
-            [
-                anchorAttribute,
-                new ConnectedSystemImportObjectAttribute
-                {
-                    Name = DisplayNameAttributeName,
-                    StringValues = [displayName]
-                }
-            ]
-        };
+            var anchorAttribute = new ConnectedSystemImportObjectAttribute { Name = ExternalIdAttributeName };
+            populateAnchor(anchorAttribute);
 
-        var cso = CreateCsoViaProductionImportWriter(connectedSystem, objectType, importObject);
-        seed.Add(cso);
-        await seed.SaveChangesAsync();
+            var importObject = new ConnectedSystemImportObject
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = objectType.Name,
+                Attributes =
+                [
+                    anchorAttribute,
+                    new ConnectedSystemImportObjectAttribute
+                    {
+                        Name = DisplayNameAttributeName,
+                        StringValues = [displayName]
+                    }
+                ]
+            };
+
+            var cso = CreateCsoViaProductionImportWriter(connectedSystem, objectType, importObject);
+            seed.Add(cso);
+            await seed.SaveChangesAsync();
+        }
 
         return connectedSystem.Id;
     }
@@ -330,14 +459,25 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
 
     private async Task<ConnectedSystemObjectHeader> GetSingleHeaderAsync(int connectedSystemId)
     {
+        var results = await GetHeadersAsync(connectedSystemId);
+
+        Assert.That(results, Has.Count.EqualTo(1), "Expected exactly one seeded Connected System Object.");
+        return results[0];
+    }
+
+    private async Task<List<ConnectedSystemObjectHeader>> GetHeadersAsync(
+        int connectedSystemId,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
         var page = await repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page: 1, pageSize: 10);
+            connectedSystemId, page: 1, pageSize: 10, searchQuery: searchQuery, sortBy: sortBy, sortDescending: sortDescending);
 
-        Assert.That(page.Results, Has.Count.EqualTo(1), "Expected exactly one seeded Connected System Object.");
-        return page.Results[0];
+        return page.Results;
     }
 
     private async Task<ConnectedSystemObjectAttributeValue> GetPersistedAnchorAsync(int connectedSystemId)

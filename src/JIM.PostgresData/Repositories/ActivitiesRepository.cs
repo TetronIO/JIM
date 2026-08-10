@@ -901,12 +901,14 @@ public class ActivityRepository : IActivityRepository
                 // Search display name (snapshot fallback)
                 (item.DisplayNameSnapshot != null &&
                  EF.Functions.ILike(item.DisplayNameSnapshot, searchPattern)) ||
-                // Search external ID (live CSO attribute)
+                // Search external ID (live CSO attribute), rendered by the same shared definition the
+                // projection below uses so a non-Text anchor is matchable as it is displayed (#1286)
                 (item.ConnectedSystemObject != null &&
-                 item.ConnectedSystemObject.AttributeValues.Any(av =>
-                    av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern))) ||
+                 item.ConnectedSystemObject.AttributeValues
+                    .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))) ||
                 // Search external ID (snapshot fallback)
                 (item.ExternalIdSnapshot != null &&
                  EF.Functions.ILike(item.ExternalIdSnapshot, searchPattern)));
@@ -915,17 +917,21 @@ public class ActivityRepository : IActivityRepository
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            // Sorts on the rendered external id, so the sort key matches what the External Id column
+            // shows for every anchor type rather than only for a Text one (#1286).
             "externalid" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot),
             // Sorts on the resolved live name, coalescing the naming tiers in preference order so the
