@@ -197,6 +197,57 @@ public class VirtualisedListUrlStateTests
     }
 
     [Test]
+    public void Read_NoDescParameterOnADescendingByDefaultList_ReadsDescending()
+    {
+        // Lists of time-ordered objects (Activities, Pending Exports) default to newest first; an absent desc
+        // parameter must mean "the list's own default", not "ascending".
+        var state = VirtualisedListUrlState.Read(string.Empty, DefaultSort, defaultSortDescending: true);
+
+        Assert.That(state.SortDescending, Is.True);
+    }
+
+    [Test]
+    public void Read_ExplicitDescZero_OverridesADescendingDefault()
+    {
+        var state = VirtualisedListUrlState.Read("?desc=0", DefaultSort, defaultSortDescending: true);
+
+        Assert.That(state.SortDescending, Is.False);
+    }
+
+    [Test]
+    public void Write_DirectionMatchingTheDefault_OmitsTheDescParameter()
+    {
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort, SortDescending = true };
+
+        var query = state.Write(string.Empty, DefaultSort, defaultSortDescending: true);
+
+        Assert.That(query, Is.Empty);
+    }
+
+    [Test]
+    public void Write_AscendingOnADescendingByDefaultList_EmitsDescZero()
+    {
+        // Without the explicit 0, reading the URL back would fall to the default (descending) and silently
+        // invert the order the sender was looking at.
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort, SortDescending = false };
+
+        var query = state.Write(string.Empty, DefaultSort, defaultSortDescending: true);
+
+        Assert.That(query, Does.Contain("desc=0"));
+    }
+
+    [Test]
+    public void ReadWrite_RoundTripsAscendingSortOnADescendingByDefaultList()
+    {
+        var original = new VirtualisedListUrlState { SortBy = "Name", SortDescending = false };
+
+        var round = VirtualisedListUrlState.Read(
+            original.Write(string.Empty, DefaultSort, defaultSortDescending: true), DefaultSort, defaultSortDescending: true);
+
+        Assert.That(round.SortDescending, Is.False);
+    }
+
+    [Test]
     public void ReadWrite_RoundTripsEveryValue()
     {
         var original = new VirtualisedListUrlState

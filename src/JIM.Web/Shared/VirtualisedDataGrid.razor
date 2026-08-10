@@ -97,6 +97,12 @@
     [Parameter, EditorRequired]
     public string DefaultSortBy { get; set; } = null!;
 
+    /// <summary>The sort direction applied when the URL names none. Time-ordered lists (Activities, Pending
+    /// Exports) open newest first, so their default is descending; an absent desc parameter in the URL means
+    /// this default, never "ascending".</summary>
+    [Parameter]
+    public bool DefaultSortDescending { get; set; }
+
     /// <summary>Singular noun for the toolbar count, e.g. "Pending Export".</summary>
     [Parameter]
     public string? SingularName { get; set; }
@@ -191,7 +197,7 @@
         _appliedStateKey = StateKey;
 
         var urlState = VirtualisedListUrlState.Read(
-            NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix);
+            NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
         SearchText = urlState.SearchText ?? string.Empty;
         SortBy = urlState.SortBy ?? DefaultSortBy;
         SortDescending = urlState.SortDescending;
@@ -317,7 +323,7 @@
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         query.Remove(name);
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(query.ToString(), DefaultSortBy, UrlParameterPrefix));
+        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(query.ToString(), DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
     }
 
     private async Task OnSearchAsync(string text)
@@ -355,7 +361,7 @@
     private async Task WriteUrlStateAsync()
     {
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(uri.Query, DefaultSortBy, UrlParameterPrefix));
+        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", BuildUrlState().Write(uri.Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending));
     }
 
     private VirtualisedListUrlState BuildUrlState() => new()

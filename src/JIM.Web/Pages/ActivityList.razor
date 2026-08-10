@@ -5,14 +5,12 @@
 @using JIM.Models.Activities
 @using JIM.Models.Enums
 @using JIM.Models.Staging
-@using JIM.Models.Utility;
-@using JIM.Utilities;
-@using JIM.Web.Services
+@using JIM.Utilities
+@using JIM.Web.Models
 @using Microsoft.AspNetCore.Components.Authorization
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -25,8 +23,6 @@
     @_pageDescription
 </MudText>
 
-@if (_preferencesLoaded)
-{
 @* ─── Category quick-filter ─── *@
 <MudStack Row="true" Spacing="2" Class="mt-4 flex-wrap" AlignItems="AlignItems.Center">
     <MudText Typo="Typo.button" Class="mud-text-secondary">Category:</MudText>
@@ -46,7 +42,7 @@
         <MudSelect T="ActivityTargetOperationType" Label="Operation" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterOperations"
-                   SelectedValuesChanged="OnOperationFilterChanged"
+                   SelectedValuesChanged="OnOperationFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Create">Create</MudSelectItem>
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Read">Read</MudSelectItem>
@@ -64,7 +60,7 @@
         <MudSelect T="ActivityOutcomeType" Label="Outcomes" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterOutcomes"
-                   SelectedValuesChanged="OnOutcomeFilterChanged"
+                   SelectedValuesChanged="OnOutcomeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Added">Added</MudSelectItem>
             <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Updated">Updated</MudSelectItem>
@@ -86,7 +82,7 @@
         <MudSelect T="ActivityTargetType" Label="Type" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterTypes"
-                   SelectedValuesChanged="OnTypeFilterChanged"
+                   SelectedValuesChanged="OnTypeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystem">Connected System</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">Connected System Run Profile</MudSelectItem>
@@ -108,7 +104,7 @@
         <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterStatuses"
-                   SelectedValuesChanged="OnStatusFilterChanged"
+                   SelectedValuesChanged="OnStatusFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
@@ -122,7 +118,7 @@
         <MudSelect T="ActivityInitiatorType" Label="Initiator" Variant="Variant.Outlined"
                    Dense="true" Clearable="true" MultiSelection="true"
                    SelectedValues="_filterInitiatorTypes"
-                   SelectedValuesChanged="OnInitiatorTypeFilterChanged"
+                   SelectedValuesChanged="OnInitiatorTypeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.User">User</MudSelectItem>
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.ApiKey">API Key</MudSelectItem>
@@ -136,11 +132,11 @@
            which otherwise starves the trailing checkbox and pause button of row
            space and pushes them onto their own line. *@
         <MudDateRangePicker Label="Created between" Variant="Variant.Outlined"
-                            DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChanged"
+                            DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChangedAsync"
                             Clearable="true" AutoClose="true" />
     </MudItem>
     <MudItem Class="d-flex align-end">
-        <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
+        <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChangedAsync"
                      Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
     </MudItem>
     <MudItem Class="d-flex align-end mb-2">
@@ -153,455 +149,452 @@
     </MudItem>
 </MudStack>
 
-<MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-    Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
-    LoadingProgressColor="Color.Primary">
-    <ToolBarContent>
-        @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). No toolbar
-           title precedes it, so the nouns make the count self-describing. The count is the filtered total the
-           server-paged reload already returns; no unfiltered baseline exists without another query, so no Total. *@
-        <TableObjectCount Count="@_totalItems" SingularName="Activity" PluralName="Activities" />
-        <MudSpacer />
-        <SearchField Value="@_searchString" ValueChanged="@(s => OnSearch(s))"
-                     Placeholder="Search target or initiator" Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh>
-            <MudTableSortLabel SortLabel="operation" T="Activity">
-                <MudText Typo="Typo.button">Operation</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortLabel="target" T="Activity">
-                <MudText Typo="Typo.button">Target</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudText Typo="Typo.button">Outcomes</MudText>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortLabel="type" T="Activity">
-                <MudText Typo="Typo.button">Type</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortLabel="initiatedby" T="Activity">
-                <MudText Typo="Typo.button">Initiated By</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortLabel="status" T="Activity">
-                <MudText Typo="Typo.button">Status</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortLabel="created" T="Activity" InitialDirection="SortDirection.Descending">
-                <MudText Typo="Typo.button">Created</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh></MudTh>
-    </HeaderContent>
-    <RowTemplate Context="context">
-        <MudTd DataLabel="Operation">
-            <MudChip T="string" Variant="Variant.Text"
-                Color="Helpers.GetActivityMudBlazorColorForOperation(context.TargetOperationType)">
-                @context.TargetOperationType.ToString().SplitOnCapitalLetters()
-            </MudChip>
-        </MudTd>
-        <MudTd DataLabel="Target">
-            @if (!string.IsNullOrEmpty(context.TargetContext) && !string.IsNullOrEmpty(context.TargetName))
-            {
-                <span><strong>@context.TargetContext</strong> → @context.TargetName</span>
-            }
-            else if (!string.IsNullOrEmpty(context.TargetContext))
-            {
-                <span><strong>@context.TargetContext</strong></span>
-            }
-            else if (!string.IsNullOrEmpty(context.TargetName))
-            {
-                @context.TargetName
-            }
-            else
-            {
-                <EmptyValue />
-            }
-        </MudTd>
-        <MudTd DataLabel="Outcomes">
-            @if (context.TargetType == ActivityTargetType.ConnectedSystemRunProfile
-                 && context.TargetOperationType == ActivityTargetOperationType.Execute
-                 && context.Status != ActivityStatus.InProgress)
-            {
-                @* Run Profile execution stats - run-type-aware display *@
-                @if (HasAnyStats(context))
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the search box and the toolbar
+   count) lives in the shared grid; this page supplies the columns, the window loader, the page-owned filters
+   above and the empty states. *@
+<VirtualisedDataGrid @ref="_grid" T="Activity"
+                     ContainerId="activity-list"
+                     StateKey="@(_isMyActivity ? "/activity/mine" : "/activity")"
+                     DefaultSortBy="created"
+                     DefaultSortDescending="true"
+                     LoadWindow="LoadWindowAsync"
+                     RowClicked="HandleRowClicked"
+                     SingularName="Activity"
+                     PluralName="Activities"
+                     SearchPlaceholder="Search target or initiator">
+    <Columns>
+        <TemplateColumn T="Activity" Title="Operation" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Operation" Name="operation" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudChip T="string" Variant="Variant.Text"
+                         Color="Helpers.GetActivityMudBlazorColorForOperation(context.Item.TargetOperationType)">
+                    @context.Item.TargetOperationType.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Target" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Target" Name="target" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (!string.IsNullOrEmpty(context.Item.TargetContext) && !string.IsNullOrEmpty(context.Item.TargetName))
                 {
-                    var effectiveRunType = GetEffectiveRunType(context.ConnectedSystemRunType, context.TargetName);
-                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                        @if (effectiveRunType == "Import")
-                        {
-                            @if (context.TotalAdded > 0)
-                            {
-                                <MudTooltip Text="CSOs Added" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="jim-stat-chip">
-                                        @context.TotalAdded.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalUpdated > 0)
-                            {
-                                <MudTooltip Text="CSOs Updated" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="jim-stat-chip">
-                                        @context.TotalUpdated.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalDeleted > 0)
-                            {
-                                <MudTooltip Text="CSO Deletions Detected" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
-                                        @context.TotalDeleted.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                        }
-                        else if (effectiveRunType == "Sync")
-                        {
-                            @if (context.TotalProjected > 0)
-                            {
-                                <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="jim-stat-chip">
-                                        @context.TotalProjected.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalJoined > 0)
-                            {
-                                <MudTooltip Text="CSOs Joined" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="jim-stat-chip">
-                                        @context.TotalJoined.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalAttributeFlows > 0)
-                            {
-                                <MudTooltip Text="MVOs with Attribute Flow" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="jim-stat-chip">
-                                        @context.TotalAttributeFlows.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalDisconnected > 0)
-                            {
-                                <MudTooltip Text="CSOs Disconnected" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="jim-stat-chip">
-                                        @context.TotalDisconnected.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalDisconnectedOutOfScope > 0)
-                            {
-                                <MudTooltip Text="CSOs Disconnected (Out of Scope)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" Class="jim-stat-chip">
-                                        @context.TotalDisconnectedOutOfScope.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalOutOfScopeRetainJoin > 0)
-                            {
-                                <MudTooltip Text="CSOs Out of Scope (Join Retained)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" Class="jim-stat-chip">
-                                        @context.TotalOutOfScopeRetainJoin.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalDeleted > 0)
-                            {
-                                <MudTooltip Text="CSOs Deleted" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
-                                        @context.TotalDeleted.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalDriftCorrections > 0)
-                            {
-                                <MudTooltip Text="CSOs Drift Corrected" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="jim-stat-chip">
-                                        @context.TotalDriftCorrections.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalProvisioned > 0)
-                            {
-                                <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="jim-stat-chip">
-                                        @context.TotalProvisioned.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalPendingExports > 0)
-                            {
-                                <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="jim-stat-chip">
-                                        @context.TotalPendingExports.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                        }
-                        else if (effectiveRunType == "Export")
-                        {
-                            @if (context.TotalExported > 0)
-                            {
-                                <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="jim-stat-chip">
-                                        @context.TotalExported.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.TotalDeprovisioned > 0)
-                            {
-                                <MudTooltip Text="CSOs Deprovisioned" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                             Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="jim-stat-chip">
-                                        @context.TotalDeprovisioned.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                        }
-                        @* Errors shown for all run types *@
-                        @if (context.TotalErrors > 0)
-                        {
-                            <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
-                                         Icon="@Icons.Material.Filled.Error" Class="jim-stat-chip">
-                                    @context.TotalErrors.ToString("N0")
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                    </MudStack>
+                    <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetName</span>
                 }
-                else
+                else if (!string.IsNullOrEmpty(context.Item.TargetContext))
                 {
-                    @* Run Profile execution completed with no changes *@
-                    <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
-                            0
-                        </MudChip>
-                    </MudTooltip>
+                    <span><strong>@context.Item.TargetContext</strong></span>
                 }
-            }
-            else if (context.TargetType == ActivityTargetType.DataGeneration
-                     && context.TargetOperationType == ActivityTargetOperationType.Execute
-                     && context.Status != ActivityStatus.InProgress)
-            {
-                @* Data generation stats - only shows creates *@
-                <MudTooltip Text="Objects Generated" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                             Icon="@Icons.Material.Filled.Add" Class="jim-stat-chip">
-                        @context.TotalCreated.ToString("N0")
-                    </MudChip>
-                </MudTooltip>
-            }
-            else if (context.TargetType == ActivityTargetType.HistoryRetentionCleanup
-                     && context.Status != ActivityStatus.InProgress)
-            {
-                @* History retention cleanup stats *@
-                var totalDeleted = (context.DeletedCsoChangeCount ?? 0) + (context.DeletedMvoChangeCount ?? 0) + (context.DeletedActivityCount ?? 0);
-                @if (totalDeleted > 0)
+                else if (!string.IsNullOrEmpty(context.Item.TargetName))
                 {
-                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                        @if (context.DeletedCsoChangeCount > 0)
-                        {
-                            <MudTooltip Text="CSO Changes Deleted" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                         Icon="@Icons.Material.Filled.DeleteSweep" Class="jim-stat-chip">
-                                    @context.DeletedCsoChangeCount.Value.ToString("N0")
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                        @if (context.DeletedMvoChangeCount > 0)
-                        {
-                            <MudTooltip Text="MVO Changes Deleted" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                         Icon="@Icons.Material.Filled.DeleteSweep" Class="jim-stat-chip">
-                                    @context.DeletedMvoChangeCount.Value.ToString("N0")
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                        @if (context.DeletedActivityCount > 0)
-                        {
-                            <MudTooltip Text="Activities Deleted" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                         Icon="@Icons.Material.Filled.CleaningServices" Class="jim-stat-chip">
-                                    @context.DeletedActivityCount.Value.ToString("N0")
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                    </MudStack>
-                }
-                else
-                {
-                    <MudTooltip Text="No records to clean up" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
-                            0
-                        </MudChip>
-                    </MudTooltip>
-                }
-            }
-            else if (context.TargetType == ActivityTargetType.Authentication)
-            {
-                @* Aggregated failure events carry an attempt count; sign-in success events do not aggregate *@
-                @if (context.AttemptCount is > 0)
-                {
-                    var attemptCount = context.AttemptCount.Value;
-                    <MudTooltip Text="Failed Attempts" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Filled.Report" Class="jim-stat-chip">
-                            @attemptCount.ToString("N0")
-                        </MudChip>
-                    </MudTooltip>
+                    @context.Item.TargetName
                 }
                 else
                 {
                     <EmptyValue />
                 }
-            }
-            else
-            {
-                @* Stats not applicable for this activity type *@
-                <EmptyValue />
-            }
-        </MudTd>
-        <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Initiated By">
-            @{
-                if (context.InitiatedByType == ActivityInitiatorType.User)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@context.InitiatedByName</span>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Outcomes</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{
+                    var activity = context.Item;
                 }
-                else if (context.InitiatedByType == ActivityInitiatorType.ApiKey)
+                @if (activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                     && activity.TargetOperationType == ActivityTargetOperationType.Execute
+                     && activity.Status != ActivityStatus.InProgress)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@context.InitiatedByName</span>
+                    @* Run Profile execution stats - run-type-aware display *@
+                    @if (HasAnyStats(activity))
+                    {
+                        var effectiveRunType = GetEffectiveRunType(activity.ConnectedSystemRunType, activity.TargetName);
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            @if (effectiveRunType == "Import")
+                            {
+                                @if (activity.TotalAdded > 0)
+                                {
+                                    <MudTooltip Text="CSOs Added" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="jim-stat-chip">
+                                            @activity.TotalAdded.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalUpdated > 0)
+                                {
+                                    <MudTooltip Text="CSOs Updated" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="jim-stat-chip">
+                                            @activity.TotalUpdated.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalDeleted > 0)
+                                {
+                                    <MudTooltip Text="CSO Deletions Detected" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
+                                            @activity.TotalDeleted.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                            }
+                            else if (effectiveRunType == "Sync")
+                            {
+                                @if (activity.TotalProjected > 0)
+                                {
+                                    <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="jim-stat-chip">
+                                            @activity.TotalProjected.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalJoined > 0)
+                                {
+                                    <MudTooltip Text="CSOs Joined" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="jim-stat-chip">
+                                            @activity.TotalJoined.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalAttributeFlows > 0)
+                                {
+                                    <MudTooltip Text="MVOs with Attribute Flow" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="jim-stat-chip">
+                                            @activity.TotalAttributeFlows.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalDisconnected > 0)
+                                {
+                                    <MudTooltip Text="CSOs Disconnected" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="jim-stat-chip">
+                                            @activity.TotalDisconnected.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalDisconnectedOutOfScope > 0)
+                                {
+                                    <MudTooltip Text="CSOs Disconnected (Out of Scope)" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" Class="jim-stat-chip">
+                                            @activity.TotalDisconnectedOutOfScope.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalOutOfScopeRetainJoin > 0)
+                                {
+                                    <MudTooltip Text="CSOs Out of Scope (Join Retained)" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" Class="jim-stat-chip">
+                                            @activity.TotalOutOfScopeRetainJoin.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalDeleted > 0)
+                                {
+                                    <MudTooltip Text="CSOs Deleted" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
+                                            @activity.TotalDeleted.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalDriftCorrections > 0)
+                                {
+                                    <MudTooltip Text="CSOs Drift Corrected" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="jim-stat-chip">
+                                            @activity.TotalDriftCorrections.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalProvisioned > 0)
+                                {
+                                    <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="jim-stat-chip">
+                                            @activity.TotalProvisioned.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalPendingExports > 0)
+                                {
+                                    <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="jim-stat-chip">
+                                            @activity.TotalPendingExports.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                            }
+                            else if (effectiveRunType == "Export")
+                            {
+                                @if (activity.TotalExported > 0)
+                                {
+                                    <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="jim-stat-chip">
+                                            @activity.TotalExported.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (activity.TotalDeprovisioned > 0)
+                                {
+                                    <MudTooltip Text="CSOs Deprovisioned" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="jim-stat-chip">
+                                            @activity.TotalDeprovisioned.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                            }
+                            @* Errors shown for all run types *@
+                            @if (activity.TotalErrors > 0)
+                            {
+                                <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
+                                             Icon="@Icons.Material.Filled.Error" Class="jim-stat-chip">
+                                        @activity.TotalErrors.ToString("N0")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        @* Run Profile execution completed with no changes *@
+                        <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
+                                0
+                            </MudChip>
+                        </MudTooltip>
+                    }
                 }
-                else if (context.InitiatedByType == ActivityInitiatorType.System)
+                else if (activity.TargetType == ActivityTargetType.DataGeneration
+                         && activity.TargetOperationType == ActivityTargetOperationType.Execute
+                         && activity.Status != ActivityStatus.InProgress)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@(context.InitiatedByName ?? "System")</span>
+                    @* Data generation stats - only shows creates *@
+                    <MudTooltip Text="Objects Generated" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
+                                 Icon="@Icons.Material.Filled.Add" Class="jim-stat-chip">
+                            @activity.TotalCreated.ToString("N0")
+                        </MudChip>
+                    </MudTooltip>
                 }
-                else if (context.InitiatedByType == ActivityInitiatorType.Anonymous)
+                else if (activity.TargetType == ActivityTargetType.HistoryRetentionCleanup
+                         && activity.Status != ActivityStatus.InProgress)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>Anonymous</span>
+                    @* History retention cleanup stats *@
+                    var totalDeleted = (activity.DeletedCsoChangeCount ?? 0) + (activity.DeletedMvoChangeCount ?? 0) + (activity.DeletedActivityCount ?? 0);
+                    @if (totalDeleted > 0)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            @if (activity.DeletedCsoChangeCount > 0)
+                            {
+                                var deletedCsoChangeCount = activity.DeletedCsoChangeCount!.Value;
+                                <MudTooltip Text="CSO Changes Deleted" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.DeleteSweep" Class="jim-stat-chip">
+                                        @deletedCsoChangeCount.ToString("N0")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                            @if (activity.DeletedMvoChangeCount > 0)
+                            {
+                                var deletedMvoChangeCount = activity.DeletedMvoChangeCount!.Value;
+                                <MudTooltip Text="MVO Changes Deleted" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.DeleteSweep" Class="jim-stat-chip">
+                                        @deletedMvoChangeCount.ToString("N0")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                            @if (activity.DeletedActivityCount > 0)
+                            {
+                                var deletedActivityCount = activity.DeletedActivityCount!.Value;
+                                <MudTooltip Text="Activities Deleted" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.CleaningServices" Class="jim-stat-chip">
+                                        @deletedActivityCount.ToString("N0")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="No records to clean up" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Outlined.CheckCircle" Class="jim-stat-chip">
+                                0
+                            </MudChip>
+                        </MudTooltip>
+                    }
                 }
-                else if (!string.IsNullOrEmpty(context.InitiatedByName))
+                else if (activity.TargetType == ActivityTargetType.Authentication)
                 {
-                    <span>@context.InitiatedByName</span>
+                    @* Aggregated failure events carry an attempt count; sign-in success events do not aggregate *@
+                    @if (activity.AttemptCount is > 0)
+                    {
+                        var attemptCount = activity.AttemptCount.Value;
+                        <MudTooltip Text="Failed Attempts" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Filled.Report" Class="jim-stat-chip">
+                                @attemptCount.ToString("N0")
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
                 }
-            }
-        </MudTd>
-        <MudTd DataLabel="Status">
-            <MudChip T="string" Variant="Variant.Text"
-                Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
-                @context.Status.ToString().SplitOnCapitalLetters()
-            </MudChip>
-        </MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-        <MudTd>
-            @if (_childActivityCounts.TryGetValue(context.Id, out var childCount) && childCount > 0)
-            {
-                <MudTooltip Text="@($"{childCount} child {(childCount == 1 ? "activity" : "activities")}")" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.AccountTree" Class="jim-stat-chip">@childCount</MudChip>
+                else
+                {
+                    @* Stats not applicable for this activity type *@
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Type" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Type" Name="type" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.TargetType.ToString().SplitOnCapitalLetters()
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{
+                    var activity = context.Item;
+                    if (activity.InitiatedByType == ActivityInitiatorType.User)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
+                        <span>@activity.InitiatedByName</span>
+                    }
+                    else if (activity.InitiatedByType == ActivityInitiatorType.ApiKey)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
+                        <span>@activity.InitiatedByName</span>
+                    }
+                    else if (activity.InitiatedByType == ActivityInitiatorType.System)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
+                        <span>@(activity.InitiatedByName ?? "System")</span>
+                    }
+                    else if (activity.InitiatedByType == ActivityInitiatorType.Anonymous)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
+                        <span>Anonymous</span>
+                    }
+                    else if (!string.IsNullOrEmpty(activity.InitiatedByName))
+                    {
+                        <span>@activity.InitiatedByName</span>
+                    }
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudChip T="string" Variant="Variant.Text"
+                         Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)">
+                    @context.Item.Status.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Created" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Created" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Item.Created.ToLocalTime().ToRelativeTime()
                 </MudTooltip>
-            }
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        @* Only speak once the result set is known to be empty. _totalItems is null until the first load completes
-           and zero only when the query genuinely matched nothing, so the empty state cannot flash while data is in
-           flight, including across the auto-refresh polling reloads (which retain the last known total). *@
-        @if (_totalItems == 0)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Sortable="false">
+            <HeaderTemplate></HeaderTemplate>
+            <CellTemplate>
+                @if (_childActivityCounts.TryGetValue(context.Item.Id, out var childCount) && childCount > 0)
+                {
+                    <MudTooltip Text="@($"{childCount} child {(childCount == 1 ? "activity" : "activities")}")" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.AccountTree" Class="jim-stat-chip">@childCount</MudChip>
+                    </MudTooltip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @* An empty list means one of four different things, and the message says which: a search that matched
+           nothing (with the way out as the action), filters nothing satisfies (likewise), or no Activities at
+           all yet, phrased for whichever of the two views is showing. *@
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
-            @* An empty list means one of three different things, and the message says which: a search that matched
-               nothing (with the way out as the action), filters nothing satisfies (likewise), or no Activities at
-               all yet. *@
-            @if (!string.IsNullOrWhiteSpace(_searchString))
-            {
-                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No Activities match \"{_searchString}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
-                                 OnAction="@(() => OnSearch(string.Empty))" />
-            }
-            else if (HasActiveFilters)
-            {
-                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                 PrimaryText="No Activities match the current filters"
-                                 SecondaryText="Adjust or clear the filters above to see more Activities."
-                                 ActionText="Clear Filters"
-                                 OnAction="ClearFiltersAsync" />
-            }
-            else if (_isMyActivity)
-            {
-                <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
-                                 PrimaryText="No Activities yet"
-                                 SecondaryText="Activities appear here as you initiate operations in JIM, such as synchronisations and configuration changes." />
-            }
-            else
-            {
-                <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
-                                 PrimaryText="No Activities yet"
-                                 SecondaryText="Activities appear here as operations run in JIM, whether initiated by users, automated processes, or the API." />
-            }
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Activities match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
         }
-    </NoRecordsContent>
-    <PagerContent>
-        <MudTablePager />
-    </PagerContent>
-</MudTable>
-}
+        else if (HasActiveFilters)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No Activities match the current filters"
+                             SecondaryText="Adjust or clear the filters above to see more Activities."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else if (_isMyActivity)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                             PrimaryText="No Activities yet"
+                             SecondaryText="Activities appear here as you initiate operations in JIM, such as synchronisations and configuration changes." />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                             PrimaryText="No Activities yet"
+                             SecondaryText="Activities appear here as operations run in JIM, whether initiated by users, automated processes, or the API." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
-    private MudTable<Activity>? _table;
-    private string _searchString = "";
-    private bool _loading;
+    private VirtualisedDataGrid<Activity>? _grid;
     private bool _isMyActivity;
     private Dictionary<Guid, int> _childActivityCounts = new();
     private Guid? _currentUserId;
     private string _pageTitle = "Activity";
     private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
     private List<BreadcrumbItem> _breadcrumbs = new();
-    private string _currentPath = "";
-    private int _currentPage;
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private bool _pollingPaused;
 
-    // Filtered total from the last completed server reload. Null until the first load completes, deliberately:
-    // the toolbar count renders nothing for null, and the empty state only speaks once this is a known zero.
-    private int? _totalItems;
+    // How many of the newest Activities each polling tick fingerprints for change detection: a screen's worth,
+    // matching what a reader parked at the top of the list can actually see change.
+    private const int FingerprintWindowSize = 20;
 
-    // Snapshot of last-displayed data for change detection during polling
+    // Snapshot of the newest Activities for change detection during polling. Written by top-of-list window loads
+    // and by the polling loop itself when it triggers a refresh, so an unchanged list never reloads.
     private string? _lastDataFingerprint;
 
     // Filter state. The default Type selection shows everything except NotSet and Run Profile executions (which
@@ -621,21 +614,33 @@
     private bool IsAllCategorySelected => _selectedCategory == null && _filterTypes.Count == DefaultTypeFilter.Count &&
                                           !_filterTypes.Except(DefaultTypeFilter).Any();
 
-    // Whether any filter has been narrowed from its default. The search box is judged separately, so the empty
-    // state can offer the more specific "Clear Search" way out when a search term is what matched nothing.
+    // Whether any filter has been narrowed from its default. The grid's search box is judged separately, so the
+    // empty state can offer the more specific "Clear Search" way out when a search term is what matched nothing.
     private bool HasActiveFilters => !IsAllCategorySelected
         || _filterOperations.Any() || _filterOutcomes.Any() || _filterStatuses.Any()
         || _filterInitiatorTypes.Any() || _filterDateRange != null || _filterHasChildren;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        NavManager.LocationChanged += OnLocationChanged;
-        _currentPath = GetPathWithoutQuery(NavManager.Uri);
-        _currentPage = GetPageFromUrl() - 1; // MudTable uses 0-indexed pages
         ApplyFiltersFromUrl();
-        await UpdatePageStateAsync();
+        StartPolling();
+    }
 
-        // Setup polling for auto-refresh, only reloading when data has actually changed
+    protected override async Task OnParametersSetAsync()
+    {
+        // Runs on first load and again on every SPA navigation between /activity and /activity/mine (and after
+        // this page's own replace navigations, where both calls are cheap no-ops).
+        await UpdatePageStateAsync();
+    }
+
+    /// <summary>
+    /// Polls for new or changed Activities every five seconds, fingerprinting the newest window under the current
+    /// filters and reloading the grid only when something actually changed. The reload re-fetches the windows in
+    /// view in place, so it never moves the reader's scroll position, and it invalidates the totals so the
+    /// toolbar count stays honest as Activities arrive.
+    /// </summary>
+    private void StartPolling()
+    {
         var token = _pollingCancellationTokenSource.Token;
         _ = Task.Run(async () =>
         {
@@ -645,119 +650,59 @@
                 {
                     await Task.Delay(TimeSpan.FromSeconds(5), token);
 
-                    // Only auto-refresh when on page 1 and not paused to avoid jarring UX
-                    if (_table == null || _currentPage != 0 || _pollingPaused)
+                    if (_grid == null || _pollingPaused)
                         continue;
 
-                    // Fetch current data and compare with what's displayed
-                    var operations = _filterOperations.Any() ? _filterOperations : null;
-                    var outcomes = _filterOutcomes.Any() ? _filterOutcomes : null;
-                    var types = _filterTypes.Any() ? _filterTypes : null;
-                    var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-                    var initiatorTypes = _filterInitiatorTypes.Any() ? _filterInitiatorTypes : null;
                     var (createdFrom, createdTo) = GetCreatedRangeUtc();
-
                     using var pollJim = JimFactory.Create();
-                    var result = await pollJim.Activities.GetActivitiesAsync(
-                        1, _rowsPerPage,
-                        string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                    var result = await pollJim.Activities.GetActivitiesRangeAsync(
+                        0, FingerprintWindowSize,
+                        string.IsNullOrWhiteSpace(_grid.SearchText) ? null : _grid.SearchText,
                         "created", true,
                         _currentUserId,
-                        operations,
-                        outcomes,
-                        types,
-                        statuses,
+                        _filterOperations.Any() ? _filterOperations : null,
+                        _filterOutcomes.Any() ? _filterOutcomes : null,
+                        _filterTypes.Any() ? _filterTypes : null,
+                        _filterStatuses.Any() ? _filterStatuses : null,
                         _filterHasChildren ? true : null,
-                        initiatorTypes,
+                        _filterInitiatorTypes.Any() ? _filterInitiatorTypes : null,
                         createdFrom,
-                        createdTo);
+                        createdTo,
+                        includeTotalCount: false);
 
                     var fingerprint = BuildFingerprint(result.Results);
                     if (fingerprint != _lastDataFingerprint)
                     {
-                        await InvokeAsync(() => _table!.ReloadServerData());
+                        // Advance the baseline before refreshing: a reader scrolled deep in the list never
+                        // re-fetches the top window, so without this the same change would trigger a reload on
+                        // every subsequent tick.
+                        _lastDataFingerprint = fingerprint;
+                        await InvokeAsync(async () =>
+                        {
+                            if (_grid != null)
+                                await _grid.RefreshAsync(invalidateTotals: true);
+                        });
                     }
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
                     break;
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // Ignore errors during polling, will retry on next interval
+                    // Transient failures (a database hiccup, a disposing circuit racing the tick) must not kill
+                    // the polling loop; the next tick retries.
                 }
             }
         }, token);
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _preferencesLoaded = true;
-                StateHasChanged(); // Re-render to show the table now that preference is loaded
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
-
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private int GetPageFromUrl()
-    {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var pageStr = query["p"];
-        if (int.TryParse(pageStr, out var page) && page > 0)
-            return page;
-        return 1; // Default to page 1
-    }
-
-    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-    {
-        var newPath = GetPathWithoutQuery(e.Location);
-
-        // Check if this is just a query string change (e.g., pagination update)
-        // If so, don't reload the table as it's already being handled by ServerReload
-        if (newPath == _currentPath)
-            return;
-
-        // Check if we're navigating away from the activity list pages entirely
-        // If so, don't do any work - the component is being disposed
-        var isActivityListPage = newPath.EndsWith("/activity", StringComparison.OrdinalIgnoreCase) ||
-                                 newPath.EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
-        if (!isActivityListPage)
-            return;
-
-        _currentPath = newPath;
-        await UpdatePageStateAsync();
-        await InvokeAsync(StateHasChanged);
-
-        // Reload the table data when the actual path changes (e.g., /activity to /activity/mine)
-        if (_table != null)
-            await _table.ReloadServerData();
-    }
-
-    private static string GetPathWithoutQuery(string uri)
-    {
-        var questionMarkIndex = uri.IndexOf('?');
-        return questionMarkIndex >= 0 ? uri[..questionMarkIndex] : uri;
-    }
-
     private async Task UpdatePageStateAsync()
     {
-        _isMyActivity = NavManager.Uri.EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
+        // Judge the path, not the whole URI: the grid's and this page's own URL writes append query strings to
+        // both routes, and a suffix test against the full URI would misread /activity/mine?desc=1 as /activity.
+        _isMyActivity = NavManager.ToAbsoluteUri(NavManager.Uri).AbsolutePath
+            .EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
 
         if (_isMyActivity)
         {
@@ -784,115 +729,119 @@
     public void Dispose()
     {
         _pollingCancellationTokenSource.Cancel();
-        NavManager.LocationChanged -= OnLocationChanged;
+        _pollingCancellationTokenSource.Dispose();
     }
 
-    private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
+    /// <summary>
+    /// Loads one window of Activities for the grid, honouring the request's skip-the-count contract, and fetches
+    /// the child-activity counts for the window's rows.
+    /// </summary>
+    private async Task<VirtualisedWindow<Activity>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken cancellationToken)
     {
-        _loading = true;
-        StateHasChanged();
+        var (createdFrom, createdTo) = GetCreatedRangeUtc();
 
-        try
+        using var jim = JimFactory.Create();
+        var result = await jim.Activities.GetActivitiesRangeAsync(
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            _currentUserId,
+            _filterOperations.Any() ? _filterOperations : null,
+            _filterOutcomes.Any() ? _filterOutcomes : null,
+            _filterTypes.Any() ? _filterTypes : null,
+            _filterStatuses.Any() ? _filterStatuses : null,
+            _filterHasChildren ? true : null,
+            _filterInitiatorTypes.Any() ? _filterInitiatorTypes : null,
+            createdFrom,
+            createdTo,
+            includeTotalCount: request.IncludeTotalCount);
+
+        // Child-count chips for this window's rows, merged rather than replaced: several windows are on screen
+        // at once in a virtualised list, and rows from earlier windows must keep their chips.
+        var childCounts = await jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
+        foreach (var (activityId, childCount) in childCounts)
+            _childActivityCounts[activityId] = childCount;
+
+        // A newest-first read of the top of the list is exactly what the polling loop fingerprints, so refresh
+        // its baseline here and the poll only fires for changes the reader has not already been shown.
+        if (request.StartIndex == 0 && request.SortBy == "created" && request.SortDescending)
+            _lastDataFingerprint = BuildFingerprint(result.Results.Take(FingerprintWindowSize));
+
+        return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
+    }
+
+    private void HandleRowClicked(Activity item)
+    {
+        // Navigate using absolute path to ensure no query params are carried over
+        var uri = NavManager.ToAbsoluteUri($"/activity/{item.Id}");
+        NavManager.NavigateTo(uri.AbsolutePath);
+    }
+
+    /// <summary>
+    /// Applies a page-owned filter change: writes the filters into the URL (so a filtered view stays shareable
+    /// and bookmarkable), then re-counts and reloads the grid from the top. The old total describes a match set
+    /// that no longer exists, and so does the reader's scroll position.
+    /// </summary>
+    private async Task ApplyFilterChangeAsync()
+    {
+        WriteFiltersToUrl();
+        if (_grid != null)
         {
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
-
-            // Update URL with current page (without triggering navigation/reload)
-            UpdateUrlWithPage(page);
-
-            var operations = _filterOperations.Any() ? _filterOperations : null;
-            var outcomes = _filterOutcomes.Any() ? _filterOutcomes : null;
-            var types = _filterTypes.Any() ? _filterTypes : null;
-            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-            var initiatorTypes = _filterInitiatorTypes.Any() ? _filterInitiatorTypes : null;
-            var (createdFrom, createdTo) = GetCreatedRangeUtc();
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Activities.GetActivitiesAsync(
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending,
-                _currentUserId,
-                operations,
-                outcomes,
-                types,
-                statuses,
-                _filterHasChildren ? true : null,
-                initiatorTypes,
-                createdFrom,
-                createdTo);
-
-            _childActivityCounts = await jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
-            _lastDataFingerprint = BuildFingerprint(result.Results);
-            _totalItems = result.TotalResults;
-
-            return new TableData<Activity>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
         }
     }
 
     /// <summary>
-    /// Writes the page number and every non-default filter into the URL query string (replacing the current history
-    /// entry), so a filtered view is shareable and bookmarkable. Defaults write nothing, keeping the URL clean.
+    /// Writes every non-default filter into the URL query string, replacing the current history entry. Defaults
+    /// write nothing, keeping the URL clean, and parameters this page does not own (the grid's q/sort/desc/row)
+    /// are preserved untouched. A replace navigation rather than a JS rewrite, because the grid builds its own
+    /// URL writes from NavigationManager's view of the query string, which only a navigation updates.
     /// </summary>
-    private void UpdateUrlWithPage(int page)
+    private void WriteFiltersToUrl()
     {
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var baseUrl = uri.GetLeftPart(UriPartial.Path);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
 
-        var queryParams = new List<string>();
-        if (page > 1)
-            queryParams.Add($"p={page}");
-        if (!string.IsNullOrWhiteSpace(_searchString))
-            queryParams.Add($"q={Uri.EscapeDataString(_searchString)}");
-        if (_selectedCategory != null)
-            queryParams.Add($"cat={_selectedCategory}");
-        else if (!IsAllCategorySelected && _filterTypes.Any())
-            queryParams.Add($"type={string.Join(',', _filterTypes)}");
-        if (_filterOperations.Any())
-            queryParams.Add($"op={string.Join(',', _filterOperations)}");
-        if (_filterOutcomes.Any())
-            queryParams.Add($"outcome={string.Join(',', _filterOutcomes)}");
-        if (_filterStatuses.Any())
-            queryParams.Add($"status={string.Join(',', _filterStatuses)}");
-        if (_filterInitiatorTypes.Any())
-            queryParams.Add($"init={string.Join(',', _filterInitiatorTypes)}");
-        if (_filterDateRange?.Start != null)
-            queryParams.Add($"from={_filterDateRange.Start:yyyy-MM-dd}");
-        if (_filterDateRange?.End != null)
-            queryParams.Add($"to={_filterDateRange.End:yyyy-MM-dd}");
-        if (_filterHasChildren)
-            queryParams.Add("kids=1");
+        SetOrRemove(query, "cat", _selectedCategory?.ToString());
+        SetOrRemove(query, "type", _selectedCategory == null && !IsAllCategorySelected && _filterTypes.Any()
+            ? string.Join(',', _filterTypes) : null);
+        SetOrRemove(query, "op", _filterOperations.Any() ? string.Join(',', _filterOperations) : null);
+        SetOrRemove(query, "outcome", _filterOutcomes.Any() ? string.Join(',', _filterOutcomes) : null);
+        SetOrRemove(query, "status", _filterStatuses.Any() ? string.Join(',', _filterStatuses) : null);
+        SetOrRemove(query, "init", _filterInitiatorTypes.Any() ? string.Join(',', _filterInitiatorTypes) : null);
+        SetOrRemove(query, "from", _filterDateRange?.Start?.ToString("yyyy-MM-dd"));
+        SetOrRemove(query, "to", _filterDateRange?.End?.ToString("yyyy-MM-dd"));
+        SetOrRemove(query, "kids", _filterHasChildren ? "1" : null);
 
-        var newUrl = queryParams.Count > 0 ? $"{baseUrl}?{string.Join('&', queryParams)}" : baseUrl;
-
-        // Update URL without navigation (replace current history entry)
+        var newQuery = query.ToString();
+        var newUrl = string.IsNullOrEmpty(newQuery) ? uri.AbsolutePath : $"{uri.AbsolutePath}?{newQuery}";
         NavManager.NavigateTo(newUrl, replace: true);
     }
 
     /// <summary>
+    /// Sets a query parameter, or removes it when the value is null, so a filter returned to its default
+    /// disappears from the URL rather than lingering as an explicit restatement of the default.
+    /// </summary>
+    private static void SetOrRemove(System.Collections.Specialized.NameValueCollection query, string name, string? value)
+    {
+        if (value == null)
+            query.Remove(name);
+        else
+            query[name] = value;
+    }
+
+    /// <summary>
     /// Seeds the filter state from the URL query string on first load, so a shared or bookmarked filtered view
-    /// reproduces exactly. An explicit type list takes precedence over a category.
+    /// reproduces exactly. An explicit type list takes precedence over a category. The grid reads its own
+    /// q/sort/desc/row parameters itself.
     /// </summary>
     private void ApplyFiltersFromUrl()
     {
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-
-        var search = query["q"];
-        if (!string.IsNullOrWhiteSpace(search))
-            _searchString = search;
 
         var types = ParseEnumList<ActivityTargetType>(query["type"]);
         if (types.Count > 0)
@@ -952,23 +901,6 @@
         return (from, to);
     }
 
-    private void OnSearch(string text)
-    {
-        _searchString = text;
-        _table?.ReloadServerData();
-    }
-
-    private void HandleRowClick(TableRowClickEventArgs<Activity> args)
-    {
-        // Prevent navigation while data is loading to avoid concurrent EF operations
-        if (_loading || args.Item == null)
-            return;
-
-        // Navigate using absolute path to ensure no query params are carried over
-        var uri = NavManager.ToAbsoluteUri($"/activity/{args.Item.Id}");
-        NavManager.NavigateTo(uri.AbsolutePath);
-    }
-
     /// <summary>
     /// Checks whether an activity has any granular stats to display.
     /// </summary>
@@ -992,44 +924,44 @@
             || activity.TotalErrors > 0;
     }
 
-    private void OnOperationFilterChanged(IReadOnlyCollection<ActivityTargetOperationType> values)
+    private async Task OnOperationFilterChangedAsync(IReadOnlyCollection<ActivityTargetOperationType> values)
     {
         _filterOperations = values;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
-    private void OnOutcomeFilterChanged(IReadOnlyCollection<ActivityOutcomeType> values)
+    private async Task OnOutcomeFilterChangedAsync(IReadOnlyCollection<ActivityOutcomeType> values)
     {
         _filterOutcomes = values;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
-    private void OnTypeFilterChanged(IReadOnlyCollection<ActivityTargetType> values)
+    private async Task OnTypeFilterChangedAsync(IReadOnlyCollection<ActivityTargetType> values)
     {
         // A manual type selection overrides any category quick-filter choice.
         _selectedCategory = null;
         _filterTypes = values;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
-    private Task OnCategorySelectedAsync(ActivityTargetCategory? category)
+    private async Task OnCategorySelectedAsync(ActivityTargetCategory? category)
     {
         _selectedCategory = category;
         _filterTypes = category == null ? DefaultTypeFilter : ActivityTargetTypeCategories.GetTargetTypes(category.Value);
-        return _table?.ReloadServerData() ?? Task.CompletedTask;
+        await ApplyFilterChangeAsync();
     }
 
-    private void OnInitiatorTypeFilterChanged(IReadOnlyCollection<ActivityInitiatorType> values)
+    private async Task OnInitiatorTypeFilterChangedAsync(IReadOnlyCollection<ActivityInitiatorType> values)
     {
         _filterInitiatorTypes = values;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
-    private void OnDateRangeChanged(DateRange? range)
+    private async Task OnDateRangeChangedAsync(DateRange? range)
     {
         // Treat a cleared or empty range as no date filter.
         _filterDateRange = range == null || (range.Start == null && range.End == null) ? null : range;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
     private static string GetCategoryLabel(ActivityTargetCategory category) => category switch
@@ -1042,23 +974,23 @@
         _ => category.ToString()
     };
 
-    private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
+    private async Task OnStatusFilterChangedAsync(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
-    private void OnHasChildrenFilterChanged(bool value)
+    private async Task OnHasChildrenFilterChangedAsync(bool value)
     {
         _filterHasChildren = value;
-        _table?.ReloadServerData();
+        await ApplyFilterChangeAsync();
     }
 
     /// <summary>
     /// Resets every filter to its default, offered as the way out by the empty state when the current filters
-    /// matched nothing. The reload rewrites the URL, so the cleared state is what a bookmark now captures.
+    /// matched nothing. The URL is rewritten too, so the cleared state is what a bookmark now captures.
     /// </summary>
-    private Task ClearFiltersAsync()
+    private async Task ClearFiltersAsync()
     {
         _selectedCategory = null;
         _filterOperations = [];
@@ -1068,7 +1000,7 @@
         _filterInitiatorTypes = [];
         _filterDateRange = null;
         _filterHasChildren = false;
-        return _table?.ReloadServerData() ?? Task.CompletedTask;
+        await ApplyFilterChangeAsync();
     }
 
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
@@ -1082,7 +1014,7 @@
     }
 
     /// <summary>
-    /// Builds a lightweight fingerprint of the current result set for change detection.
+    /// Builds a lightweight fingerprint of a result set for change detection.
     /// Captures identity, status, and a representative subset of granular stats so polling
     /// only triggers a reload when data actually changed.
     /// </summary>

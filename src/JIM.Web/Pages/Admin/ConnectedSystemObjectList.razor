@@ -5,7 +5,6 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
-@using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Models
 @using JIM.Web.Services
@@ -13,7 +12,6 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -28,7 +26,7 @@
     </MudAlert>
 }
 
-@if (_connectedSystemHeader != null && _preferencesLoaded)
+@if (_connectedSystemHeader != null)
 {
     @* Filter Chips *@
     <MudStack Row="true" Spacing="6" Class="mt-4 mb-3 flex-wrap" AlignItems="AlignItems.Start">
@@ -101,191 +99,174 @@
         </MudButton>
     </MudStack>
 
-    <MudTable @ref="_table"
-              T="ConnectedSystemObjectHeader"
-              ServerData="ServerReload"
-              RowsPerPage="@_rowsPerPage"
-              RowsPerPageChanged="OnRowsPerPageChanged"
-              Hover="true"
-              Dense="true"
-              Breakpoint="Breakpoint.Sm"
-              Class="mt-5 mb-5"
-              Outlined="true"
-              Elevation="0"
-              OnRowClick="HandleRowClick"
-              RowClass="cursor-pointer"
-              Loading="@_loading"
-              LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). The page holds
-               no unfiltered baseline, so the count reads alone rather than as "x of y". *@
-            <TableObjectCount Count="@_totalItems"
-                              SingularName="Connected System Object" PluralName="Connected System Objects" />
-            <MudSpacer />
-            @* Value is bound so the empty state's Clear Search action empties the visible box too. *@
-            <SearchField Value="@_searchString"
-                         ValueChanged="@(s => OnSearch(s))"
-                         Placeholder="Search external ID, secondary ID, or display name"
-                         Class="mt-0"
-                         Style="min-width: 350px;" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh Style="width: 1px;"></MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="externalid" T="ConnectedSystemObjectHeader">
-                    <MudText Typo="Typo.button">@_externalIdColumnHeader</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            @if (_hasSecondaryExternalId)
-            {
-                <MudTh>
-                    <MudTableSortLabel SortLabel="secondaryexternalid" T="ConnectedSystemObjectHeader">
-                        <MudText Typo="Typo.button">@_secondaryExternalIdColumnHeader</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-            }
-            <MudTh>
-                <MudTableSortLabel SortLabel="displayname" T="ConnectedSystemObjectHeader">
-                    <MudText Typo="Typo.button">Display Name</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="type" T="ConnectedSystemObjectHeader">
-                    <MudText Typo="Typo.button">Type</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="created" T="ConnectedSystemObjectHeader" InitialDirection="SortDirection.Descending">
-                    <MudText Typo="Typo.button">Created</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="datejoined" T="ConnectedSystemObjectHeader">
-                    <MudText Typo="Typo.button">Date Joined</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="status" T="ConnectedSystemObjectHeader">
-                    <MudText Typo="Typo.button">Status</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="jointype" T="ConnectedSystemObjectHeader">
-                    <MudText Typo="Typo.button">Join Type</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd>
-                <MudButton Variant="Variant.Outlined"
-                           Size="Size.Small"
-                           Color="Color.Primary"
-                           Href="@(Utilities.GetConnectedSystemObjectHref(context))">
-                    View
-                </MudButton>
-            </MudTd>
-            <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">
-                @if (!string.IsNullOrEmpty(context.PendingExternalId))
-                {
-                    <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                        <MudText Color="Color.Info">@context.PendingExternalId</MudText>
-                    </MudTooltip>
-                }
-                else
-                {
-                    @context.ExternalIdValue
-                }
-            </MudTd>
-            @if (_hasSecondaryExternalId)
-            {
-                <MudTd DataLabel="Secondary External Id" Class="jim-text-code mud-text-secondary">
-                    @if (!string.IsNullOrEmpty(context.SecondaryExternalIdValue))
-                    {
-                        @context.SecondaryExternalIdValue
-                    }
-                    else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
+    @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, density, the
+       search box) lives in the shared grid; this page supplies the columns, the window loader, the chip filters
+       above and the empty states. *@
+    <VirtualisedDataGrid @ref="_grid" T="ConnectedSystemObjectHeader"
+                         ContainerId="connector-space-list"
+                         DefaultSortBy="created"
+                         DefaultSortDescending="true"
+                         LoadWindow="LoadWindowAsync"
+                         RowClicked="HandleRowClicked"
+                         SingularName="Connected System Object"
+                         PluralName="Connected System Objects"
+                         SearchPlaceholder="Search external ID, secondary ID, or display name">
+        <Columns>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate></HeaderTemplate>
+                <CellTemplate>
+                    @* The row navigates on click and so does this button, so without stopping the click here a
+                       reader who clicks View gets two identical navigations. The button is what offers middle-click
+                       and open-in-new-tab, which a row-click handler cannot. *@
+                    <span @onclick:stopPropagation="true">
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   Href="@(Utilities.GetConnectedSystemObjectHref(context.Item))">
+                            View
+                        </MudButton>
+                    </span>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false" CellClass="jim-text-code mud-text-secondary">
+                <HeaderTemplate>
+                    @* The header names the Connected System's own anchor attribute once the first window reveals
+                       it, e.g. "External Id (objectGUID)". *@
+                    <VirtualisedSortHeader Title="@_externalIdColumnHeader" Name="externalid" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (!string.IsNullOrEmpty(context.Item.PendingExternalId))
                     {
                         <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                            <MudText Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
+                            <MudText Color="Color.Info">@context.Item.PendingExternalId</MudText>
                         </MudTooltip>
                     }
-                </MudTd>
-            }
-            <MudTd DataLabel="Display Name">
-                @if (!string.IsNullOrEmpty(context.DisplayName))
-                {
-                    @context.DisplayName
-                }
-                else if (!string.IsNullOrEmpty(context.PendingDisplayName))
-                {
-                    <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                        <MudText Color="Color.Info">@context.PendingDisplayName</MudText>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </MudTd>
-            <MudTd DataLabel="Type">
-                <MudChip T="string" Text="@context.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.TypeName)" />
-            </MudTd>
-            <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                    <MudText>@context.Created.ToLocalTime().ToRelativeTime()</MudText>
-                </MudTooltip>
-            </MudTd>
-            <MudTd DataLabel="Date Joined">
-                @if (context.DateJoined != null)
-                {
-                    <MudTooltip Text="@context.DateJoined.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <MudText>@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <MudText>-</MudText>
-                }
-            </MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Text="@context.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" />
-            </MudTd>
-            <MudTd DataLabel="Join Type">@context.JoinType.ToString().SplitOnCapitalLetters()</MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            @* Only speak once the result set is known to be empty: _totalItems is null until the first server load
-               returns, and an unguarded message would flash over data still in flight. *@
-            @if (_totalItems == 0)
+                    else
+                    {
+                        @context.Item.ExternalIdValue
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            @if (_hasSecondaryExternalId)
             {
-                @* An empty list means one of three different things, and the message says which: a search that
-                   matched nothing (with the way out as the action), filter chips nothing satisfies (the chips above
-                   offer their own clear), or a Connector Space no import has populated yet. *@
-                @if (!string.IsNullOrWhiteSpace(_searchString))
-                {
-                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No Connected System Objects match \"{_searchString}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
-                                     OnAction="@(() => OnSearch(string.Empty))" />
-                }
-                else if (HasActiveChipFilters)
-                {
-                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                     PrimaryText="No Connected System Objects match the selected filters"
-                                     SecondaryText="Clear the filter chips above to browse the whole Connector Space." />
-                }
-                else
-                {
-                    <TableEmptyState Icon="@Icons.Material.Filled.Cable"
-                                     PrimaryText="No Connected System Objects yet"
-                                     SecondaryText="Objects appear here once an import brings them in from the Connected System." />
-                }
+                <TemplateColumn Sortable="false" CellClass="jim-text-code mud-text-secondary">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="@_secondaryExternalIdColumnHeader" Name="secondaryexternalid" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
+                        {
+                            @context.Item.SecondaryExternalIdValue
+                        }
+                        else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
+                        {
+                            <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                                <MudText Color="Color.Info">@context.Item.PendingSecondaryExternalId</MudText>
+                            </MudTooltip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
             }
-        </NoRecordsContent>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Display Name" Name="displayname" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (!string.IsNullOrEmpty(context.Item.DisplayName))
+                    {
+                        @context.Item.DisplayName
+                    }
+                    else if (!string.IsNullOrEmpty(context.Item.PendingDisplayName))
+                    {
+                        <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                            <MudText Color="Color.Info">@context.Item.PendingDisplayName</MudText>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Type" Name="type" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Created" Name="created" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <MudText>@context.Item.Created.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudTooltip>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Date Joined" Name="datejoined" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.DateJoined.HasValue)
+                    {
+                        var dateJoined = context.Item.DateJoined.Value;
+                        <MudTooltip Text="@dateJoined.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <MudText>@dateJoined.ToLocalTime().ToRelativeTime()</MudText>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Status" Name="status" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <MudChip T="string" Text="@context.Item.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Join Type" Name="jointype" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.JoinType.ToString().SplitOnCapitalLetters()
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @* An empty list means one of three different things, and the message says which: a search that matched
+               nothing (with the way out as the action), filter chips nothing satisfies (the chips above offer their
+               own clear), or a Connector Space no import has populated yet. *@
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No Connected System Objects match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else if (HasActiveChipFilters)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                 PrimaryText="No Connected System Objects match the selected filters"
+                                 SecondaryText="Clear the filter chips above to browse the whole Connector Space." />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.Cable"
+                                 PrimaryText="No Connected System Objects yet"
+                                 SecondaryText="Objects appear here once an import brings them in from the Connected System." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 
     <MudDialog @bind-Visible="_clearDialogVisible" Options="_clearDialogOptions">
         <TitleContent>
@@ -338,27 +319,22 @@ else
     [CascadingParameter]
     private MainLayout? Layout { get; set; }
 
-    private MudTable<ConnectedSystemObjectHeader>? _table;
+    private VirtualisedDataGrid<ConnectedSystemObjectHeader>? _grid;
     private ConnectedSystemHeader? _connectedSystemHeader;
-    private string _searchString = "";
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _showIntro = true;
-    private bool _loading;
     private bool _clearDialogVisible;
     private bool _clearDeleteChangeHistory = true; // Default to true (recommended for re-import)
     private readonly DialogOptions _clearDialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
 
     private readonly TypeChipColorAssigner _typeChipColors = new();
 
+    // Column headers derived from the rows in hand: the External Id headers name the Connected System's own anchor
+    // attributes, and the Secondary External Id column only exists when any row carries (or is about to carry) a
+    // secondary external id. Recomputed per window by UpdateColumnHeaders.
     private bool _hasSecondaryExternalId;
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
-
-    // Total matching the current search/filters, from the last server load. Null until the first load returns,
-    // so the toolbar count and the empty state stay silent while the answer is still unknown.
-    private int? _totalItems;
 
     // Filter state
     private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>();
@@ -396,74 +372,32 @@ else
             .ToList();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task<VirtualisedWindow<ConnectedSystemObjectHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _preferencesLoaded = true;
-                StateHasChanged(); // Re-render to show the table now that preference is loaded
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
+        using var jim = JimFactory.Create();
 
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
+        // Build filters - null means show all
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = _selectedStatuses.Count > 0 ? _selectedStatuses : null;
+        IEnumerable<int>? objectTypeFilter = _selectedObjectTypeIds.Count > 0 ? _selectedObjectTypeIds : null;
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = _selectedJoinTypes.Count > 0 ? _selectedJoinTypes : null;
 
-    private async Task<TableData<ConnectedSystemObjectHeader>> ServerReload(TableState state, CancellationToken token)
-    {
-        _loading = true;
-        StateHasChanged();
+        var result = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+            Id,
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            statusFilter,
+            objectTypeFilter,
+            joinTypeFilter,
+            includeTotalCount: request.IncludeTotalCount);
 
-        try
-        {
-            using var jim = JimFactory.Create();
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
+        // Update column headers based on the window in hand; the grid re-renders its header templates when the
+        // window arrives, so the new values paint without an explicit StateHasChanged.
+        UpdateColumnHeaders(result.Results);
 
-            // Build filters - null means show all
-            IEnumerable<ConnectedSystemObjectStatus>? statusFilter = _selectedStatuses.Count > 0 ? _selectedStatuses : null;
-            IEnumerable<int>? objectTypeFilter = _selectedObjectTypeIds.Count > 0 ? _selectedObjectTypeIds : null;
-            IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = _selectedJoinTypes.Count > 0 ? _selectedJoinTypes : null;
-
-            var result = await jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-                Id,
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending,
-                statusFilter,
-                objectTypeFilter,
-                joinTypeFilter);
-
-            // Update column headers based on first result
-            UpdateColumnHeaders(result.Results);
-
-            _totalItems = result.TotalResults;
-
-            return new TableData<ConnectedSystemObjectHeader>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
+        return new VirtualisedWindow<ConnectedSystemObjectHeader>(result.Results, result.TotalResults);
     }
 
     private void UpdateColumnHeaders(List<ConnectedSystemObjectHeader> results)
@@ -494,18 +428,9 @@ else
         }
     }
 
-    private void OnSearch(string text)
+    private void HandleRowClicked(ConnectedSystemObjectHeader item)
     {
-        _searchString = text;
-        _table?.ReloadServerData();
-    }
-
-    private void HandleRowClick(TableRowClickEventArgs<ConnectedSystemObjectHeader> args)
-    {
-        if (_loading || args.Item == null)
-            return;
-
-        NavManager.NavigateTo(Utilities.GetConnectedSystemObjectHref(args.Item));
+        NavManager.NavigateTo(Utilities.GetConnectedSystemObjectHref(item));
     }
 
     private void HandleDeleteAllObjectsClickAsync()
@@ -562,22 +487,36 @@ else
         };
     }
 
-    private void OnStatusFilterChanged(IReadOnlyCollection<ConnectedSystemObjectStatus> selected)
+    private async Task OnStatusFilterChanged(IReadOnlyCollection<ConnectedSystemObjectStatus> selected)
     {
         _selectedStatuses = selected;
-        _table?.ReloadServerData();
+        await RefreshGridForFilterChangeAsync();
     }
 
-    private void OnObjectTypeFilterChanged(IReadOnlyCollection<int> selected)
+    private async Task OnObjectTypeFilterChanged(IReadOnlyCollection<int> selected)
     {
         _selectedObjectTypeIds = selected;
-        _table?.ReloadServerData();
+        await RefreshGridForFilterChangeAsync();
     }
 
-    private void OnJoinTypeFilterChanged(IReadOnlyCollection<ConnectedSystemObjectJoinType> selected)
+    private async Task OnJoinTypeFilterChanged(IReadOnlyCollection<ConnectedSystemObjectJoinType> selected)
     {
         _selectedJoinTypes = selected;
-        _table?.ReloadServerData();
+        await RefreshGridForFilterChangeAsync();
+    }
+
+    /// <summary>
+    /// Reloads the grid after a chip filter change. The filters change which objects match, so the total (and the
+    /// unfiltered baseline it anchors) must be re-counted, and the reader's scroll position describes a match set
+    /// that no longer exists, so they are returned to the top.
+    /// </summary>
+    private async Task RefreshGridForFilterChangeAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
     }
 
     public void Dispose()

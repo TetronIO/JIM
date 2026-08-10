@@ -195,6 +195,124 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var query = BuildTopLevelActivitiesQuery(
+            searchQuery, sortBy, sortDescending, initiatedById, operationFilter, outcomeFilter, typeFilter,
+            statusFilter, hasChildActivities, initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter);
+
+        // Get total count for pagination
+        var grossCount = await query.CountAsync();
+        var offset = (page - 1) * pageSize;
+        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<Activity>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetActivitiesRangeAsync"/> will return, bounding the latency of a single
+    /// read. It is deliberately five times the paged reader's page-size cap, because the two caps protect against
+    /// different things: a page size is a number a person picked from a fixed list and never approaches 100,
+    /// whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach
+    /// truncates the window silently, rendering the shortfall as blank rows rather than raising anything.
+    /// 500 puts it out of a viewport's reach; the derivation from the list grid's height and row-height
+    /// arithmetic lives on <c>MetaverseRepository.MaxHeaderWindowSize</c>, which this cap mirrors.
+    /// </summary>
+    private const int MaxActivityWindowSize = 500;
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<Activity>> GetActivitiesRangeAsync(
+        int startIndex,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (startIndex < 0)
+            startIndex = 0;
+
+        if (count > MaxActivityWindowSize)
+            count = MaxActivityWindowSize;
+
+        var query = BuildTopLevelActivitiesQuery(
+            searchQuery, sortBy, sortDescending, initiatedById, operationFilter, outcomeFilter, typeFilter,
+            statusFilter, hasChildActivities, initiatorTypeFilter, createdFrom, createdTo,
+            connectedSystemFilter, runProfileFilter, initiatedByFilter, initiatedBySchedule, scheduleFilter);
+
+        // Counting scans every matching Activity rather than a window of them, so it is the expensive half of
+        // this method at scale and is skipped entirely when the caller already holds the total. Sorting cannot
+        // change how many Activities match, so a caller only has to re-count when the filters change.
+        int? grossCount = null;
+        if (includeTotalCount)
+            grossCount = await query.CountAsync();
+
+        var results = await query.Skip(startIndex).Take(count).ToListAsync();
+
+        return new RangeResultSet<Activity>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared query core for the paged and range Activity list reads: applies every filter and the sort to the
+    /// top-level (parentless) Activities and returns the composed query for the caller to count and window.
+    /// Shared so the two reads can never disagree on which Activities match; callers own input validation.
+    /// </summary>
+    private IQueryable<Activity> BuildTopLevelActivitiesQuery(
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        Guid? initiatedById,
+        IEnumerable<ActivityTargetOperationType>? operationFilter,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter,
+        IEnumerable<ActivityTargetType>? typeFilter,
+        IEnumerable<ActivityStatus>? statusFilter,
+        bool? hasChildActivities,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter,
+        DateTime? createdFrom,
+        DateTime? createdTo,
+        IEnumerable<string>? connectedSystemFilter,
+        IEnumerable<string>? runProfileFilter,
+        string? initiatedByFilter,
+        bool? initiatedBySchedule,
+        IEnumerable<Guid>? scheduleFilter)
+    {
         var query = Repository.Database.Activities
 
             .Where(a => a.ParentActivityId == null)
@@ -358,29 +476,7 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(a => a.Created) // Default: sort by Created
         };
 
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
-
-        var pagedResultSet = new PagedResultSet<Activity>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return query;
     }
 
     public async Task<Activity?> GetActivityAsync(Guid id)

@@ -27,7 +27,10 @@ public sealed record VirtualisedListUrlState
     /// <summary>The attribute name the list is sorted by.</summary>
     public const string SortByParameter = "sort";
 
-    /// <summary>Present as <c>1</c> when the sort is descending; absent when ascending.</summary>
+    /// <summary>Present as <c>1</c> (descending) or <c>0</c> (ascending) when the direction differs from the
+    /// list's own default; absent when it matches. The explicit <c>0</c> exists because a list may default to
+    /// descending (time-ordered lists open newest first), and an absent parameter must mean "the default",
+    /// never "ascending".</summary>
     public const string SortDescendingParameter = "desc";
 
     /// <summary>The zero-based index of the first row in view.</summary>
@@ -62,7 +65,8 @@ public sealed record VirtualisedListUrlState
     /// <param name="parameterPrefix">Prefix applied to every parameter this state owns, so two virtualised lists
     /// on one page (each with its own prefix) can share a URL without overwriting each other. Null for a page
     /// with a single list.</param>
-    public static VirtualisedListUrlState Read(string? query, string defaultSortBy, string? parameterPrefix = null)
+    /// <param name="defaultSortDescending">The direction the list sorts in when the URL says nothing.</param>
+    public static VirtualisedListUrlState Read(string? query, string defaultSortBy, string? parameterPrefix = null, bool defaultSortDescending = false)
     {
         var parameters = HttpUtility.ParseQueryString(query ?? string.Empty);
 
@@ -76,7 +80,12 @@ public sealed record VirtualisedListUrlState
         {
             SearchText = string.IsNullOrWhiteSpace(searchText) ? null : searchText,
             SortBy = string.IsNullOrWhiteSpace(sortBy) ? defaultSortBy : sortBy,
-            SortDescending = parameters[parameterPrefix + SortDescendingParameter] == "1",
+            SortDescending = parameters[parameterPrefix + SortDescendingParameter] switch
+            {
+                "1" => true,
+                "0" => false,
+                _ => defaultSortDescending
+            },
             FirstVisibleRow = row
         };
     }
@@ -89,15 +98,16 @@ public sealed record VirtualisedListUrlState
     /// <param name="query">The current query string, with or without its leading '?'.</param>
     /// <param name="defaultSortBy">The attribute the list sorts by when the URL says nothing.</param>
     /// <param name="parameterPrefix">Prefix applied to every parameter this state owns; see
-    /// <see cref="Read(string?, string, string?)"/>. Parameters carrying a different prefix belong to another
-    /// list and are preserved untouched, exactly like any other unrelated parameter.</param>
-    public string Write(string? query, string defaultSortBy, string? parameterPrefix = null)
+    /// <see cref="Read(string?, string, string?, bool)"/>. Parameters carrying a different prefix belong to
+    /// another list and are preserved untouched, exactly like any other unrelated parameter.</param>
+    /// <param name="defaultSortDescending">The direction the list sorts in when the URL says nothing.</param>
+    public string Write(string? query, string defaultSortBy, string? parameterPrefix = null, bool defaultSortDescending = false)
     {
         var parameters = HttpUtility.ParseQueryString(query ?? string.Empty);
 
         Set(parameters, parameterPrefix + SearchTextParameter, string.IsNullOrWhiteSpace(SearchText) ? null : SearchText);
         Set(parameters, parameterPrefix + SortByParameter, string.Equals(SortBy, defaultSortBy, StringComparison.Ordinal) ? null : SortBy);
-        Set(parameters, parameterPrefix + SortDescendingParameter, SortDescending ? "1" : null);
+        Set(parameters, parameterPrefix + SortDescendingParameter, SortDescending == defaultSortDescending ? null : SortDescending ? "1" : "0");
         Set(parameters, parameterPrefix + FirstVisibleRowParameter, FirstVisibleRow > 0 ? FirstVisibleRow.ToString(CultureInfo.InvariantCulture) : null);
 
         return parameters.ToString() ?? string.Empty;

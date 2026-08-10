@@ -336,6 +336,31 @@ public interface IConnectedSystemRepository
         bool sortDescending = true);
 
     /// <summary>
+    /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetPendingExportHeadersAsync"/>. The window is clamped to a documented cap that a viewport
+    /// cannot reach. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match set when
+    /// the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="statusFilters">Optional filter by one or more statuses.</param>
+    /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
+    /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Retrieves a single Pending Export by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
@@ -640,6 +665,30 @@ public interface IConnectedSystemRepository
         int pageSize = 50);
 
     /// <summary>
+    /// Gets a window of deleted Connected System Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters and includes with
+    /// <see cref="GetDeletedCsoChangesAsync"/>, and keeps the same fixed ordering: deletion time, newest first.
+    /// The window is clamped to a documented cap that a viewport cannot reach. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional case-insensitive search over the preserved External ID.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Gets the full change history for a deleted CSO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
@@ -751,6 +800,35 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
+
+    /// <summary>
+    /// Retrieves a window of Connected System Object headers addressed by absolute offset and count, for
+    /// virtualised (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. The window is clamped to a documented cap that a
+    /// viewport cannot reach. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match
+    /// set when the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return Connected System Objects for.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="searchQuery">Optional search over display name, external id and secondary external id.</param>
+    /// <param name="sortBy">Optional column key to sort by (e.g. "externalid", "displayname", "created").</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="statusFilter">Optional filter by one or more statuses.</param>
+    /// <param name="objectTypeFilter">Optional filter by one or more object type ids.</param>
+    /// <param name="joinTypeFilter">Optional filter by one or more join types.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>

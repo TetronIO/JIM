@@ -411,6 +411,30 @@ public interface IMetaverseRepository
         int pageSize = 50);
 
     /// <summary>
+    /// Gets a window of deleted Metaverse Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters and includes with
+    /// <see cref="GetDeletedMvoChangesAsync"/>, and keeps the same fixed ordering: deletion time, newest first.
+    /// The window is clamped to a documented cap that a viewport cannot reach. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="objectTypeId">Optional filter by object type ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="displayNameSearch">Optional case-insensitive search over the preserved display name.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    Task<RangeResultSet<MetaverseObjectChange>> GetDeletedMvoChangesRangeAsync(
+        int offset,
+        int count,
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Gets the full change history for a deleted MVO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the MVO change record.</param>
@@ -469,6 +493,32 @@ public interface IMetaverseRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false);
+
+    /// <summary>
+    /// Gets a window of Metaverse Attribute Headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its filtering, sorting and projection with the paged
+    /// <see cref="GetMetaverseAttributeHeadersAsync(int, int, string?, string?, bool)"/> read; the only difference
+    /// is the caller supplies an absolute <paramref name="offset"/> rather than a page number, so arbitrary scroll
+    /// windows can be fetched directly.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first item to return (clamped to zero if negative).</param>
+    /// <param name="count">The number of items to return; clamped to 500, which no realistic viewport reaches.</param>
+    /// <param name="searchQuery">Optional case-insensitive search filter over the attribute name.</param>
+    /// <param name="sortBy">Optional column key to sort by (name, type, plurality, builtin, created).</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="includeTotalCount">
+    /// Whether to count the whole match set alongside the window. Counting is a second query over every matching
+    /// attribute, so a scroller that already knows the total (the filters have not changed since it last asked)
+    /// should pass false and reuse it. When false, <see cref="RangeResultSet{T}.TotalResults"/> comes back null
+    /// rather than zero.
+    /// </param>
+    public Task<RangeResultSet<MetaverseAttributeHeader>> GetMetaverseAttributeHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        bool includeTotalCount = true);
 
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false);
 

@@ -5,11 +5,10 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -19,9 +18,12 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes.</MudText>
 
-<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-5" Class="mt-5">
+@* TabPanelsClass is pa-0 rather than pt-5 because the virtualised grid on the Attributes tab supplies its own
+   mt-5; the Object Types table carries the matching margin itself so both tabs keep the same gap (see the tab
+   content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content margin). *@
+<NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0" Class="mt-5">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
-        <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0">
+        <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0" Class="mt-5">
             <ToolBarContent>
                 <MudText Typo="Typo.h6">Object Types</MudText>
                 @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md);
@@ -97,55 +99,56 @@
         </MudTable>
     </MudTabPanel>
     <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
-        @if (_preferencesLoaded)
-        {
-            <MudTable @ref="_attributeTable"
-                      T="MetaverseAttributeHeader"
-                      ServerData="ServerReload"
-                      RowsPerPage="@_rowsPerPage"
-                      RowsPerPageChanged="OnRowsPerPageChanged"
-                      Hover="true"
-                      Dense="true"
-                      Breakpoint="Breakpoint.Sm"
-                      Class="mb-5"
-                      Outlined="true"
-                      Elevation="0"
-                      Loading="@_loading"
-                      LoadingProgressColor="Color.Primary">
-                <ToolBarContent>
-                    <MudText Typo="Typo.h6">Attributes</MudText>
-                    @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md);
-                       reads "x of y" against the unfiltered baseline while a search narrows the list. *@
-                    <TableObjectCount Count="@_attributeTotalItems" Total="@_attributeUnfilteredTotal" Class="ml-2" />
-                    <MudSpacer />
-                    @* Value is bound so the empty state's Clear Search action empties the box as well as the filter. *@
-                    <SearchField Value="@_searchString" ValueChanged="@(s => OnSearch(s))" Class="mt-0" />
-                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                               DropShadow="false" Class="ml-3" OnClick="OpenCreateAttributeDialogAsync">New Attribute</MudButton>
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh><MudTableSortLabel SortLabel="name" T="MetaverseAttributeHeader" InitialDirection="SortDirection.Ascending"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortLabel="type" T="MetaverseAttributeHeader"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortLabel="plurality" T="MetaverseAttributeHeader"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortLabel="builtin" T="MetaverseAttributeHeader"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortLabel="created" T="MetaverseAttributeHeader"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Object Types</MudText></MudTh>
-                    <MudTh></MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                    <MudTd DataLabel="Type">
-                        <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
-                            @context.Type.ToString().SplitOnCapitalLetters()
+        @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
+           shared grid; this tab supplies the columns, the window loader and the empty states. The tab itself already
+           says "Attributes", so there is no toolbar title and the count carries the nouns. *@
+        <VirtualisedDataGrid @ref="_attributeGrid" T="MetaverseAttributeHeader"
+                             ContainerId="metaverse-attribute-list"
+                             DefaultSortBy="name"
+                             LoadWindow="LoadAttributeWindowAsync"
+                             SingularName="Metaverse Attribute"
+                             PluralName="Metaverse Attributes"
+                             SearchPlaceholder="Search"
+                             Height="calc(100vh - 370px)">
+            <ToolBarExtras>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           DropShadow="false" Class="mr-3" OnClick="OpenCreateAttributeDialogAsync">New Attribute</MudButton>
+            </ToolBarExtras>
+            <Columns>
+                <TemplateColumn Title="Name" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Name" Name="name" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.Name
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Type" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Type" Name="type" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                            @context.Item.Type.ToString().SplitOnCapitalLetters()
                         </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Plurality">
-                        <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
-                            @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Plurality" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.Item.AttributePlurality)" Variant="Variant.Text">
+                            @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                         </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Built-in?">
-                        @if (context.BuiltIn)
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Built-in?" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.BuiltIn)
                         {
                             <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
                                 <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
@@ -155,15 +158,25 @@
                         {
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
                         }
-                    </MudTd>
-                    <MudTd DataLabel="Created">
-                        <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            @context.Created.ToLocalTime().ToRelativeTime()
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Created" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Created" Name="created" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            @context.Item.Created.ToLocalTime().ToRelativeTime()
                         </MudTooltip>
-                    </MudTd>
-                    <MudTd DataLabel="Object Types">
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Object Types" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Object Types</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
                         @{
-                            var boundTypes = context.MetaverseObjectTypes?.ToList() ?? new List<KeyValuePair<int, string>>();
+                            var boundTypes = context.Item.MetaverseObjectTypes?.ToList() ?? new List<KeyValuePair<int, string>>();
                         }
                         @if (boundTypes.Count == 0)
                         {
@@ -179,77 +192,58 @@
                                 <MudChip T="string" Color="Color.Default" Variant="Variant.Filled" Href="@attributeUrl">@stub.Value</MudChip>
                             }
                         }
-                    </MudTd>
-                    <MudTd DataLabel="">
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Sortable="false">
+                    <HeaderTemplate></HeaderTemplate>
+                    <CellTemplate>
                         <div class="d-flex justify-end">
-                            @if (!context.BuiltIn)
+                            @if (!context.Item.BuiltIn)
                             {
                                 <MudTooltip Text="Edit attribute" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditAttributeDialogAsync(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                                 <MudTooltip Text="Delete attribute" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" OnClick="@(() => OpenDeleteAttributeDialogAsync(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" OnClick="@(() => OpenDeleteAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             else
                             {
                                 <MudTooltip Text="View attribute and Standard Mappings" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Visibility" OnClick="@(() => OpenViewAttributeDialogAsync(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Visibility" OnClick="@(() => OpenViewAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context.Item))" />
                             </MudTooltip>
                         </div>
-                    </MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    @* Only speak once the match set is known to be empty: _attributeTotalItems is null until the
-                       first server page returns, so an unguarded message would flash while data is in flight. *@
-                    @if (_attributeTotalItems == 0)
-                    {
-                        @if (!string.IsNullOrWhiteSpace(_searchString))
-                        {
-                            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                             PrimaryText="@($"No Metaverse Attributes match \"{_searchString}\"")"
-                                             SecondaryText="Try a different search term, or clear the search."
-                                             ActionText="Clear Search"
-                                             OnAction="@(() => OnSearch(string.Empty))" />
-                        }
-                        else
-                        {
-                            <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                             PrimaryText="No Metaverse Attributes yet"
-                                             SecondaryText="Use the New Attribute button to create one." />
-                        }
-                    }
-                </NoRecordsContent>
-                <PagerContent>
-                    <MudTablePager />
-                </PagerContent>
-            </MudTable>
-        }
-        else
-        {
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
-        }
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Metaverse Attributes match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                     PrimaryText="No Metaverse Attributes yet"
+                                     SecondaryText="Use the New Attribute button to create one." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
     </MudTabPanel>
 </NavigableMudTabs>
 
 @code {
     private int _activeTabIndex;
     private IList<MetaverseObjectTypeHeader>? _metaverseObjectTypeHeaders;
-    private MudTable<MetaverseAttributeHeader>? _attributeTable;
-    private string _searchString = "";
-    private bool _loading;
-
-    // Toolbar count state: null until the first server page returns (TableObjectCount renders nothing for null).
-    // _attributeUnfilteredTotal is the baseline for the "x of y" reading; only an unfiltered reload refreshes it.
-    private int? _attributeTotalItems;
-    private int? _attributeUnfilteredTotal;
-
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
+    private VirtualisedDataGrid<MetaverseAttributeHeader>? _attributeGrid;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -264,69 +258,28 @@
         _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task<VirtualisedWindow<MetaverseAttributeHeader>> LoadAttributeWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _preferencesLoaded = true;
-                StateHasChanged();
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
+        using var jim = JimFactory.Create();
+        var result = await jim.Metaverse.GetMetaverseAttributeHeadersRangeAsync(
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            includeTotalCount: request.IncludeTotalCount);
+
+        return new VirtualisedWindow<MetaverseAttributeHeader>(result.Results, result.TotalResults);
     }
 
-    private async Task OnRowsPerPageChanged(int newSize)
+    /// <summary>
+    /// Reloads the Attributes grid after a dialog creates, edits or deletes a Metaverse Attribute. The totals are
+    /// invalidated because the change may have altered how many attributes exist or match the current search.
+    /// </summary>
+    private async Task ReloadAttributeGridAsync()
     {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private async Task<TableData<MetaverseAttributeHeader>> ServerReload(TableState state, CancellationToken token)
-    {
-        _loading = true;
-        StateHasChanged();
-
-        try
-        {
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Metaverse.GetMetaverseAttributeHeadersAsync(
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending);
-
-            _attributeTotalItems = result.TotalResults;
-            if (string.IsNullOrWhiteSpace(_searchString))
-                _attributeUnfilteredTotal = result.TotalResults;
-
-            return new TableData<MetaverseAttributeHeader>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
-    }
-
-    private void OnSearch(string text)
-    {
-        _searchString = text;
-        _attributeTable?.ReloadServerData();
+        if (_attributeGrid != null)
+            await _attributeGrid.RefreshAsync(invalidateTotals: true);
     }
 
     private async Task ShowAttributeHistoryDialogAsync(MetaverseAttributeHeader attribute)
@@ -337,10 +290,8 @@
 
     private async Task OpenCreateAttributeDialogAsync()
     {
-        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService) && _attributeTable != null)
-        {
-            await _attributeTable.ReloadServerData();
-        }
+        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService))
+            await ReloadAttributeGridAsync();
     }
 
     private async Task OpenEditAttributeDialogAsync(MetaverseAttributeHeader header)
@@ -350,10 +301,8 @@
         if (attribute == null)
             return;
 
-        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService, attribute) && _attributeTable != null)
-        {
-            await _attributeTable.ReloadServerData();
-        }
+        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService, attribute))
+            await ReloadAttributeGridAsync();
     }
 
     private async Task OpenViewAttributeDialogAsync(MetaverseAttributeHeader header)
@@ -373,10 +322,8 @@
         if (attribute == null)
             return;
 
-        if (await DeleteMetaverseAttributeDialog.ShowAsync(DialogService, attribute) && _attributeTable != null)
-        {
-            await _attributeTable.ReloadServerData();
-        }
+        if (await DeleteMetaverseAttributeDialog.ShowAsync(DialogService, attribute))
+            await ReloadAttributeGridAsync();
     }
 
     private async Task OpenCreateObjectTypeDialogAsync()

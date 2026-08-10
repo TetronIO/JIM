@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using JIM.Models.Core;
@@ -137,6 +138,78 @@ public class LogReaderService
         int limit = 500,
         int offset = 0)
     {
+        var filtered = await GetFilteredLogEntriesAsync(service, date, levels, search);
+        return filtered
+            .Skip(offset)
+            .Take(limit)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetLogEntriesRangeAsync"/> will return, bounding the cost of a single read.
+    /// It matches the Metaverse Object header range read's cap and the same derivation: the virtualised Logs grid
+    /// asks for however many rows its viewport needs plus overscan, and a cap it can actually reach truncates the
+    /// window silently, rendering the shortfall as blank rows. 500 puts it out of reach of any real viewport (about
+    /// 474 rows at Chrome's minimum 25% zoom on a 4320px-tall display at the grid's 36px dense row height); see
+    /// MetaverseRepository.MaxHeaderWindowSize for the full arithmetic.
+    /// </summary>
+    public const int MaximumLogEntryWindowSize = 500;
+
+    /// <summary>
+    /// Gets one window of log entries matching the specified criteria, addressed by absolute offset and count, for
+    /// the virtualised (infinite-scroll) Logs list. Entries are ordered newest first, matching
+    /// <see cref="GetLogEntriesAsync"/>.
+    /// </summary>
+    /// <param name="service">Filter by service name (web, worker, scheduler, database). Null for all.</param>
+    /// <param name="date">The date to retrieve logs for. Null for today.</param>
+    /// <param name="levels">Specific log levels to include. Null or empty for all.</param>
+    /// <param name="search">Text to search for in messages and exceptions. Null for no filter.</param>
+    /// <param name="startIndex">The zero-based index of the first entry wanted; negative values are read as zero.</param>
+    /// <param name="count">How many entries are wanted; clamped to <see cref="MaximumLogEntryWindowSize"/>.</param>
+    /// <param name="includeTotalCount">Whether to report the total match count alongside the window. Unlike a
+    /// database-backed range read the count costs nothing extra here (the match set is already in memory), but the
+    /// null contract is honoured so the caller's null-versus-zero semantics hold: null means "not counted", never
+    /// "no matches".</param>
+    /// <returns>The requested window and, when asked for, the total match count.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="count"/> is less than one.</exception>
+    public async Task<RangeResultSet<LogEntry>> GetLogEntriesRangeAsync(
+        string? service = null,
+        DateTime? date = null,
+        IEnumerable<string>? levels = null,
+        string? search = null,
+        int startIndex = 0,
+        int count = MaximumLogEntryWindowSize,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (startIndex < 0)
+            startIndex = 0;
+
+        if (count > MaximumLogEntryWindowSize)
+            count = MaximumLogEntryWindowSize;
+
+        var filtered = await GetFilteredLogEntriesAsync(service, date, levels, search);
+
+        return new RangeResultSet<LogEntry>
+        {
+            Results = filtered.Skip(startIndex).Take(count).ToList(),
+            TotalResults = includeTotalCount ? filtered.Count : null
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the limit/offset and range reads: parses the target date's log files (reusing prior parses
+    /// where a file has not changed), applies the service, level and search filters, and returns the match set
+    /// sorted newest first. Callers own input validation and windowing; this method assumes sane values.
+    /// </summary>
+    private async Task<List<LogEntry>> GetFilteredLogEntriesAsync(
+        string? service,
+        DateTime? date,
+        IEnumerable<string>? levels,
+        string? search)
+    {
         var targetDate = date?.Date ?? DateTime.UtcNow.Date;
         var entries = new List<LogEntry>();
 
@@ -149,9 +222,13 @@ public class LogReaderService
 
         foreach (var file in relevantFiles)
         {
-            var fileEntries = await ReadLogFileAsync(file.FilePath, file.Service);
+            var fileEntries = await ReadLogFileCachedAsync(file, targetDate);
             entries.AddRange(fileEntries);
         }
+
+        // A virtualised scroll issues one read per window, so parses for other dates must not accumulate in this
+        // singleton for the 31-day retention span; keep only the date being read.
+        EvictCachedParsesForOtherDates(targetDate);
 
         // Apply filters
         var filtered = entries.AsEnumerable();
@@ -170,12 +247,64 @@ public class LogReaderService
                 (e.Exception?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
-        // Sort by timestamp descending (newest first) and apply pagination
+        // Sort by timestamp descending (newest first)
         return filtered
             .OrderByDescending(e => e.Timestamp)
-            .Skip(offset)
-            .Take(limit)
             .ToList();
+    }
+
+    /// <summary>
+    /// A log file's parsed entries alongside the size and write time they were parsed at, so an unchanged file's
+    /// parse can be reused across the many window reads a virtualised scroll issues. Log files are append-only, so
+    /// a changed length or write time means new content and forces a fresh parse; the entry list is never mutated
+    /// after creation, making the cached instance safe to share across concurrent readers.
+    /// </summary>
+    private sealed record CachedLogFileParse(long Length, DateTime LastWriteTimeUtc, DateTime FileDate, List<LogEntry> Entries);
+
+    private readonly ConcurrentDictionary<string, CachedLogFileParse> _parsedFileCache = new();
+
+    /// <summary>
+    /// Reads a log file's entries, reusing the previous parse when the file has not changed since. Without this,
+    /// every scroll window of the virtualised Logs list would re-parse the whole day's files; with it, only the
+    /// file actively being written to (whose size changes) is ever re-parsed.
+    /// </summary>
+    private async Task<List<LogEntry>> ReadLogFileCachedAsync(LogFileInfo file, DateTime fileDate)
+    {
+        long length;
+        DateTime lastWriteTimeUtc;
+        try
+        {
+            var fileInfo = new FileInfo(file.FilePath);
+            length = fileInfo.Length;
+            lastWriteTimeUtc = fileInfo.LastWriteTimeUtc;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The file vanished or became unreadable between listing and reading (log rotation, permissions);
+            // fall through to the uncached read, which handles and logs its own failures.
+            return await ReadLogFileAsync(file.FilePath, file.Service);
+        }
+
+        if (_parsedFileCache.TryGetValue(file.FilePath, out var cached) &&
+            cached.Length == length &&
+            cached.LastWriteTimeUtc == lastWriteTimeUtc)
+        {
+            return cached.Entries;
+        }
+
+        var parsed = await ReadLogFileAsync(file.FilePath, file.Service);
+        _parsedFileCache[file.FilePath] = new CachedLogFileParse(length, lastWriteTimeUtc, fileDate, parsed);
+        return parsed;
+    }
+
+    /// <summary>
+    /// Drops cached parses for every date other than the one just read, bounding the cache to roughly one day's
+    /// entries. Readers alternating between dates fall back to re-parsing, which is the pre-cache behaviour.
+    /// </summary>
+    private void EvictCachedParsesForOtherDates(DateTime targetDate)
+    {
+        foreach (var stale in _parsedFileCache.Where(kvp => kvp.Value.FileDate != targetDate).Select(kvp => kvp.Key).ToList())
+            _parsedFileCache.TryRemove(stale, out _);
     }
 
     /// <summary>
