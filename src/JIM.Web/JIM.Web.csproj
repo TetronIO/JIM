@@ -8,7 +8,17 @@
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>..\..\..</DockerfileContext>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591;1587</NoWarn>
+    <!-- AV0029 / AV0030 are Asp.Versioning analyser rules (shipped transitively from 10.2.0) that
+         steer applications onto the library's own OpenAPI integration:
+         AddApiVersioning().AddOpenApi() plus MapOpenApi().WithDocumentPerVersion(). JIM deliberately
+         drives the native ASP.NET Core OpenAPI pipeline instead, because it needs document
+         transformers for the OAuth2 and API key security schemes, a raised serialiser MaxDepth for
+         the DTO graph, static document serving in production and response caching in development;
+         none of which the per-version integration exposes. The API serves a single version, so the
+         per-version document generation those rules ask for would add no documents. Revisit if JIM
+         ever publishes a second API version. AV0029 also fires inside generated source, so it can
+         only be suppressed at project level, not with a pragma. -->
+    <NoWarn>$(NoWarn);1591;1587;AV0029;AV0030</NoWarn>
 
     <!-- Pin the ASP.NET Core shared framework version explicitly. Without this,
          Microsoft.NET.Sdk.Web + RestorePackagesWithLockFile resolves the implicit
