@@ -588,8 +588,23 @@ internal static class LdapConnectorUtilities
         if (connectedSystemContainers.Count == 0)
             return true;
 
-        return connectedSystemContainers.Any(c => IsDnWithinContainerScope(distinguishedName, c));
+        return ResolveMostSpecificContainerScope(distinguishedName, connectedSystemContainers) is not null;
     }
+
+    /// <summary>
+    /// Which of the supplied Containers has the final say over a distinguished name, or null where none covers it.
+    /// </summary>
+    /// <remarks>
+    /// The Containers handed to the import and export scope checks are a flat collection with no hierarchy to walk,
+    /// so specificity is asked in the only terms available here and the only ones that are the Connector's own: a
+    /// Container holding another matching Container is the more general of the two. Deciding this way rather than by
+    /// taking the first match is what will let a Container beneath a selected one overrule it (#1255); until then
+    /// the two agree on every selection, because every Container in a selection says the same thing.
+    /// </remarks>
+    internal static ConnectedSystemContainer? ResolveMostSpecificContainerScope(
+        string? distinguishedName,
+        IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers) =>
+        ContainerSpecificity.ResolveMostSpecific(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
 
     /// <summary>
     /// Removes the optional whitespace some directories emit after each DN separator, leaving a form that can
