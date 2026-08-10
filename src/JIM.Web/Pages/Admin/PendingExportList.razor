@@ -53,8 +53,13 @@
               LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" />
+            @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). The nouns
+               carry the meaning because the table has no toolbar title; the page header names the list. *@
+            <TableObjectCount Count="@_totalItems" SingularName="Pending Export" PluralName="Pending Exports"
+                              ShowSeparator="true" />
             <MudSpacer />
-            <SearchField ValueChanged="@(s => OnSearch(s))"
+            @* Value is bound so the empty state's Clear Search action empties the box, not just the term. *@
+            <SearchField Value="@_searchString" ValueChanged="@(s => OnSearch(s))"
                          Placeholder="Search target, source MVO, or errors"
                          Class="mt-0" />
         </ToolBarContent>
@@ -165,7 +170,37 @@
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText>There are no Pending Exports for this Connected System.</MudText>
+            @* Only speak once the result set is known to be empty. _totalItems is null until a server reload
+               completes (and is reset when a filter changes), so the empty state never flashes over data in
+               flight or claims the wrong reason while a new filter's results are still loading. *@
+            @if (_totalItems == 0)
+            {
+                @* An empty list means one of three different things, and the message says which: a search that
+                   matched nothing, a Status filter that matched nothing (each with the way out as the action),
+                   or genuinely no Pending Exports, which is the good state: everything has been exported. *@
+                @if (!string.IsNullOrWhiteSpace(_searchString))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Pending Exports match \"{_searchString}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => OnSearch(string.Empty))" />
+                }
+                else if (_statusFilters.Any())
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                     PrimaryText="No Pending Exports match the Status filter"
+                                     SecondaryText="Try different statuses, or clear the filter."
+                                     ActionText="Clear Filter"
+                                     OnAction="@(() => OnStatusFiltersChanged(new HashSet<PendingExportStatus>()))" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.TaskAlt"
+                                     PrimaryText="No Pending Exports"
+                                     SecondaryText="Changes waiting to be written to this Connected System appear here." />
+                }
+            }
         </NoRecordsContent>
         <PagerContent>
             <MudTablePager />
@@ -188,6 +223,11 @@ else
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _loading;
     private int _rowsPerPage = 10;
+
+    // The total result count for the current filters, from the last server reload. Null means "not counted yet"
+    // (initial load, or a filter just changed): the toolbar count renders nothing and the empty state stays
+    // silent, rather than either claiming an empty list while data is in flight.
+    private int? _totalItems;
     private bool _preferencesLoaded;
     private bool _dense;
 
@@ -257,6 +297,8 @@ else
                 state.SortLabel,
                 sortDescending);
 
+            _totalItems = result.TotalResults;
+
             return new TableData<PendingExportHeader>
             {
                 TotalItems = result.TotalResults,
@@ -273,6 +315,7 @@ else
     private void OnSearch(string text)
     {
         _searchString = text;
+        _totalItems = null; // Not counted yet under the new term; keeps the empty state from claiming the wrong reason
         _table?.ReloadServerData();
     }
 
@@ -290,6 +333,7 @@ else
     private void OnStatusFiltersChanged(IReadOnlyCollection<PendingExportStatus> newFilters)
     {
         _statusFilters = newFilters;
+        _totalItems = null; // Not counted yet under the new filters; keeps the empty state from claiming the wrong reason
         _table?.ReloadServerData();
     }
 

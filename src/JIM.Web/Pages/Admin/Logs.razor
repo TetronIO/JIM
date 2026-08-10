@@ -61,23 +61,22 @@
             @(_loading ? "Loading" : "Refresh")
         </MudButton>
         <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="Auto-refresh (5s)" />
-        <MudSpacer />
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            @if (_logEntries != null)
-            {
-                @($"{_logEntries.Count} entries")
-                @if (_logEntries.Count >= 500)
-                {
-                    @(" (limit reached)")
-                }
-            }
-        </MudText>
     </div>
 </MudPaper>
 
 <MudTable Items="@_pagedLogEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
     FixedHeader="true" Height="calc(100vh - 500px)" Outlined="true" Elevation="0" Loading="@_loading"
     OnRowClick="@OnRowClick" T="LogEntry" RowStyle="cursor: pointer;">
+    <ToolBarContent>
+        @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). A null count
+           (first query still in flight) renders nothing rather than a misleading zero. *@
+        <TableObjectCount Count="@_logEntries?.Count" SingularName="log entry" PluralName="log entries" />
+        @if (_logEntries is { Count: >= 500 })
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary ml-1">(limit reached)</MudText>
+        }
+        <MudSpacer />
+    </ToolBarContent>
     <HeaderContent>
         <MudTh Style="width: 100px;">
             <MudText Typo="Typo.button">Time</MudText>
@@ -126,7 +125,29 @@
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText>No log entries found for the selected criteria.</MudText>
+        @* Only speak once a query has completed with zero results: _logEntries is null until the first load
+           returns, and while a query is in flight MudTable shows LoadingContent rather than this fragment,
+           so the guard keeps the empty state from flashing over data that is merely being fetched. *@
+        @if (!_loading && _logEntries is { Count: 0 })
+        {
+            @* An empty list means one of two things, and the message says which: the filters in effect for
+               the last query matched nothing, or there are simply no log entries to show. The filter state
+               is snapshotted at query time, because the form only applies on Refresh. *@
+            @if (_lastQueryHadFilters)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                 PrimaryText="No log entries match your filters"
+                                 SecondaryText="Adjust the filters above and select Refresh, or clear them to view the latest log entries."
+                                 ActionText="Clear Filters"
+                                 OnAction="ClearFiltersAsync" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Custom.FileFormats.FileDocument"
+                                 PrimaryText="No log entries found"
+                                 SecondaryText="Log entries appear here as JIM services write to their logs." />
+            }
+        }
     </NoRecordsContent>
     <LoadingContent>
         <MudText>Loading logs...</MudText>
@@ -264,6 +285,7 @@
     private bool _preferencesLoaded;
     private bool _drawerOpen;
     private LogEntry? _selectedEntry;
+    private bool _lastQueryHadFilters;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -364,6 +386,9 @@
     {
         _loading = true;
         _currentPage = 0;
+        // Snapshot the filter state the query is about to use, so the empty state describes the query that
+        // actually ran rather than form values the user has changed but not yet applied via Refresh.
+        _lastQueryHadFilters = HasFilterCriteria;
         StateHasChanged();
 
         try
@@ -385,6 +410,21 @@
         {
             _loading = false;
         }
+    }
+
+    private bool HasFilterCriteria =>
+        !string.IsNullOrEmpty(_selectedService) ||
+        _selectedDate.HasValue ||
+        _selectedLevels.Count > 0 ||
+        !string.IsNullOrWhiteSpace(_searchText);
+
+    private async Task ClearFiltersAsync()
+    {
+        _selectedService = null;
+        _selectedDate = null;
+        _selectedLevels = [];
+        _searchText = null;
+        await LoadLogsAsync();
     }
 
     private void GoToPage(int page)

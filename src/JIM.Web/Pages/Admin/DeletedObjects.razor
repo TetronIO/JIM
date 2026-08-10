@@ -113,7 +113,29 @@
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
-                <MudText>No deleted CSOs found matching your criteria.</MudText>
+                @* Only speak once a search has completed and its result is known to be empty. The fragment
+                   renders while a search is in flight too, so an unguarded message would flash over rows
+                   that are merely being replaced. The page searches on load, so results being null only
+                   means the first search has not yet returned. *@
+                @if (!_csoLoading && _deletedCsoChanges != null)
+                {
+                    @* An empty list means one of two things, and the message says which: a query that
+                       matched nothing (with the way out as the action), or no deletions recorded at all. *@
+                    @if (_csoLastSearchHadCriteria)
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="No deleted Connected System Objects match your query"
+                                         SecondaryText="Adjust the criteria above and search again, or clear them to see all deletions."
+                                         ActionText="Clear Criteria"
+                                         OnAction="ClearCsoCriteriaAsync" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.AutoDelete"
+                                         PrimaryText="No Connected System Object deletions recorded yet"
+                                         SecondaryText="When Connected System Objects are deleted, their change history is preserved here." />
+                    }
+                }
             </NoRecordsContent>
             <PagerContent>
                 <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
@@ -225,7 +247,25 @@
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
-                <MudText>No deleted MVOs found matching your criteria.</MudText>
+                @* Guarded as per the Connected System Object table above: only speak once the search has
+                   completed and the result is known to be empty. *@
+                @if (!_mvoLoading && _deletedMvoChanges != null)
+                {
+                    @if (_mvoLastSearchHadCriteria)
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="No deleted Metaverse Objects match your query"
+                                         SecondaryText="Adjust the criteria above and search again, or clear them to see all deletions."
+                                         ActionText="Clear Criteria"
+                                         OnAction="ClearMvoCriteriaAsync" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.AutoDelete"
+                                         PrimaryText="No Metaverse Object deletions recorded yet"
+                                         SecondaryText="When Metaverse Objects are deleted, their change history is preserved here." />
+                    }
+                }
             </NoRecordsContent>
             <PagerContent>
                 <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
@@ -253,7 +293,10 @@
         }
         else
         {
-            <MudText Class="mud-text-secondary">No change history available.</MudText>
+            @* Only reachable once the history load has completed and returned nothing. *@
+            <TableEmptyState Icon="@Icons.Material.Filled.HistoryToggleOff"
+                             PrimaryText="No change history available"
+                             SecondaryText="No changes were recorded for this Connected System Object before it was deleted." />
         }
     </DialogContent>
     <DialogActions>
@@ -281,7 +324,10 @@
         }
         else
         {
-            <MudText Class="mud-text-secondary">No change history available.</MudText>
+            @* Only reachable once the history load has completed and returned nothing. *@
+            <TableEmptyState Icon="@Icons.Material.Filled.HistoryToggleOff"
+                             PrimaryText="No change history available"
+                             SecondaryText="No changes were recorded for this Metaverse Object before it was deleted." />
         }
     </DialogContent>
     <DialogActions>
@@ -333,6 +379,9 @@
     private List<ConnectedSystemObjectChange>? _deletedCsoChanges;
     private int _csoPage = 1;
     private bool _csoLoading;
+    // Whether the last executed search carried any criteria; captured at search time so the empty state's
+    // message cannot flip when the user edits the form without pressing Search.
+    private bool _csoLastSearchHadCriteria;
 
     // MVO tab state
     private int? _mvoFilterObjectTypeId;
@@ -342,6 +391,8 @@
     private List<MetaverseObjectChange>? _deletedMvoChanges;
     private int _mvoPage = 1;
     private bool _mvoLoading;
+    // See _csoLastSearchHadCriteria.
+    private bool _mvoLastSearchHadCriteria;
 
     // CSO History dialog
     private bool _csoHistoryDialogVisible;
@@ -459,6 +510,10 @@
     {
         _csoLoading = true;
         _csoPage = 1;
+        _csoLastSearchHadCriteria = _csoFilterConnectedSystemId.HasValue
+            || !string.IsNullOrWhiteSpace(_csoSearchExternalId)
+            || _csoFromDate.HasValue
+            || _csoToDate.HasValue;
         StateHasChanged();
 
         try
@@ -484,6 +539,10 @@
     {
         _mvoLoading = true;
         _mvoPage = 1;
+        _mvoLastSearchHadCriteria = _mvoFilterObjectTypeId.HasValue
+            || !string.IsNullOrWhiteSpace(_mvoSearchDisplayName)
+            || _mvoFromDate.HasValue
+            || _mvoToDate.HasValue;
         StateHasChanged();
 
         try
@@ -503,6 +562,31 @@
         {
             _mvoLoading = false;
         }
+    }
+
+    /// <summary>
+    /// The empty state's way out when a query matched nothing: resets the Connected System Object
+    /// criteria and re-runs the search, returning the table to the unfiltered list of deletions.
+    /// </summary>
+    private async Task ClearCsoCriteriaAsync()
+    {
+        _csoFilterConnectedSystemId = null;
+        _csoSearchExternalId = "";
+        _csoFromDate = null;
+        _csoToDate = null;
+        await SearchCsosAsync();
+    }
+
+    /// <summary>
+    /// The Metaverse Object counterpart of <see cref="ClearCsoCriteriaAsync"/>.
+    /// </summary>
+    private async Task ClearMvoCriteriaAsync()
+    {
+        _mvoFilterObjectTypeId = null;
+        _mvoSearchDisplayName = "";
+        _mvoFromDate = null;
+        _mvoToDate = null;
+        await SearchMvosAsync();
     }
 
     private async Task ViewCsoHistoryAsync(ConnectedSystemObjectChange change)

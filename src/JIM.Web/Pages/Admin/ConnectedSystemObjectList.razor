@@ -117,8 +117,14 @@
               Loading="@_loading"
               LoadingProgressColor="Color.Primary">
         <ToolBarContent>
+            @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). The page holds
+               no unfiltered baseline, so the count reads alone rather than as "x of y". *@
+            <TableObjectCount Count="@_totalItems"
+                              SingularName="Connected System Object" PluralName="Connected System Objects" />
             <MudSpacer />
-            <SearchField ValueChanged="@(s => OnSearch(s))"
+            @* Value is bound so the empty state's Clear Search action empties the visible box too. *@
+            <SearchField Value="@_searchString"
+                         ValueChanged="@(s => OnSearch(s))"
                          Placeholder="Search external ID, secondary ID, or display name"
                          Class="mt-0"
                          Style="min-width: 350px;" />
@@ -247,13 +253,33 @@
             <MudTd DataLabel="Join Type">@context.JoinType.ToString().SplitOnCapitalLetters()</MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            @if (string.IsNullOrWhiteSpace(_searchString))
+            @* Only speak once the result set is known to be empty: _totalItems is null until the first server load
+               returns, and an unguarded message would flash over data still in flight. *@
+            @if (_totalItems == 0)
             {
-                <MudText>There are no objects for this Connected System. Have you performed a full import?</MudText>
-            }
-            else
-            {
-                <MudText>No objects found matching "@_searchString".</MudText>
+                @* An empty list means one of three different things, and the message says which: a search that
+                   matched nothing (with the way out as the action), filter chips nothing satisfies (the chips above
+                   offer their own clear), or a Connector Space no import has populated yet. *@
+                @if (!string.IsNullOrWhiteSpace(_searchString))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Connected System Objects match \"{_searchString}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => OnSearch(string.Empty))" />
+                }
+                else if (HasActiveChipFilters)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                     PrimaryText="No Connected System Objects match the selected filters"
+                                     SecondaryText="Clear the filter chips above to browse the whole Connector Space." />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.Cable"
+                                     PrimaryText="No Connected System Objects yet"
+                                     SecondaryText="Objects appear here once an import brings them in from the Connected System." />
+                }
             }
         </NoRecordsContent>
         <PagerContent>
@@ -330,11 +356,19 @@ else
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
 
+    // Total matching the current search/filters, from the last server load. Null until the first load returns,
+    // so the toolbar count and the empty state stay silent while the answer is still unknown.
+    private int? _totalItems;
+
     // Filter state
     private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>();
     private IReadOnlyCollection<int> _selectedObjectTypeIds = new List<int>();
     private IReadOnlyCollection<ConnectedSystemObjectJoinType> _selectedJoinTypes = new List<ConnectedSystemObjectJoinType>();
     private List<ConnectedSystemObjectType> _objectTypes = new();
+
+    // True when any status, object type or join type chip narrows the list; the empty state uses this to tell
+    // "the filters matched nothing" apart from "no import has populated the Connector Space yet".
+    private bool HasActiveChipFilters => _selectedStatuses.Count > 0 || _selectedObjectTypeIds.Count > 0 || _selectedJoinTypes.Count > 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -416,6 +450,8 @@ else
 
             // Update column headers based on first result
             UpdateColumnHeaders(result.Results);
+
+            _totalItems = result.TotalResults;
 
             return new TableData<ConnectedSystemObjectHeader>
             {

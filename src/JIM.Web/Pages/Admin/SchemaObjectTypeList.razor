@@ -24,6 +24,9 @@
         <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0">
             <ToolBarContent>
                 <MudText Typo="Typo.h6">Object Types</MudText>
+                @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md);
+                   a bare number beside the title, which already names the objects. *@
+                <TableObjectCount Count="@_metaverseObjectTypeHeaders?.Count" Class="ml-2" />
                 <MudSpacer />
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
                            DropShadow="false" Class="ml-3" OnClick="OpenCreateObjectTypeDialogAsync">New Object Type</MudButton>
@@ -81,6 +84,16 @@
                     </div>
                 </MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                @* Only speak once the load has completed: _metaverseObjectTypeHeaders is null until
+                   OnInitializedAsync returns, and an unguarded message would flash while data is in flight. *@
+                @if (_metaverseObjectTypeHeaders is { Count: 0 })
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.Category"
+                                     PrimaryText="No Metaverse Object Types yet"
+                                     SecondaryText="Use the New Object Type button to create one." />
+                }
+            </NoRecordsContent>
         </MudTable>
     </MudTabPanel>
     <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
@@ -101,8 +114,12 @@
                       LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
                     <MudText Typo="Typo.h6">Attributes</MudText>
+                    @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md);
+                       reads "x of y" against the unfiltered baseline while a search narrows the list. *@
+                    <TableObjectCount Count="@_attributeTotalItems" Total="@_attributeUnfilteredTotal" Class="ml-2" />
                     <MudSpacer />
-                    <SearchField ValueChanged="@(s => OnSearch(s))" Class="mt-0" />
+                    @* Value is bound so the empty state's Clear Search action empties the box as well as the filter. *@
+                    <SearchField Value="@_searchString" ValueChanged="@(s => OnSearch(s))" Class="mt-0" />
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
                                DropShadow="false" Class="ml-3" OnClick="OpenCreateAttributeDialogAsync">New Attribute</MudButton>
                 </ToolBarContent>
@@ -187,7 +204,25 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <MudText>No attributes found.</MudText>
+                    @* Only speak once the match set is known to be empty: _attributeTotalItems is null until the
+                       first server page returns, so an unguarded message would flash while data is in flight. *@
+                    @if (_attributeTotalItems == 0)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(_searchString))
+                        {
+                            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                             PrimaryText="@($"No Metaverse Attributes match \"{_searchString}\"")"
+                                             SecondaryText="Try a different search term, or clear the search."
+                                             ActionText="Clear Search"
+                                             OnAction="@(() => OnSearch(string.Empty))" />
+                        }
+                        else
+                        {
+                            <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                             PrimaryText="No Metaverse Attributes yet"
+                                             SecondaryText="Use the New Attribute button to create one." />
+                        }
+                    }
                 </NoRecordsContent>
                 <PagerContent>
                     <MudTablePager />
@@ -207,6 +242,12 @@
     private MudTable<MetaverseAttributeHeader>? _attributeTable;
     private string _searchString = "";
     private bool _loading;
+
+    // Toolbar count state: null until the first server page returns (TableObjectCount renders nothing for null).
+    // _attributeUnfilteredTotal is the baseline for the "x of y" reading; only an unfiltered reload refreshes it.
+    private int? _attributeTotalItems;
+    private int? _attributeUnfilteredTotal;
+
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
 
@@ -264,6 +305,10 @@
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
                 sortDescending);
+
+            _attributeTotalItems = result.TotalResults;
+            if (string.IsNullOrWhiteSpace(_searchString))
+                _attributeUnfilteredTotal = result.TotalResults;
 
             return new TableData<MetaverseAttributeHeader>
             {

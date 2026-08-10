@@ -157,6 +157,10 @@
     Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
     LoadingProgressColor="Color.Primary">
     <ToolBarContent>
+        @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). No toolbar
+           title precedes it, so the nouns make the count self-describing. The count is the filtered total the
+           server-paged reload already returns; no unfiltered baseline exists without another query, so no Total. *@
+        <TableObjectCount Count="@_totalItems" SingularName="Activity" PluralName="Activities" />
         <MudSpacer />
         <SearchField Value="@_searchString" ValueChanged="@(s => OnSearch(s))"
                      Placeholder="Search target or initiator" Class="mt-0" />
@@ -532,7 +536,43 @@
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        There is no activity to show yet.
+        @* Only speak once the result set is known to be empty. _totalItems is null until the first load completes
+           and zero only when the query genuinely matched nothing, so the empty state cannot flash while data is in
+           flight, including across the auto-refresh polling reloads (which retain the last known total). *@
+        @if (_totalItems == 0)
+        {
+            @* An empty list means one of three different things, and the message says which: a search that matched
+               nothing (with the way out as the action), filters nothing satisfies (likewise), or no Activities at
+               all yet. *@
+            @if (!string.IsNullOrWhiteSpace(_searchString))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No Activities match \"{_searchString}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => OnSearch(string.Empty))" />
+            }
+            else if (HasActiveFilters)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                 PrimaryText="No Activities match the current filters"
+                                 SecondaryText="Adjust or clear the filters above to see more Activities."
+                                 ActionText="Clear Filters"
+                                 OnAction="ClearFiltersAsync" />
+            }
+            else if (_isMyActivity)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                 PrimaryText="No Activities yet"
+                                 SecondaryText="Activities appear here as you initiate operations in JIM, such as synchronisations and configuration changes." />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                 PrimaryText="No Activities yet"
+                                 SecondaryText="Activities appear here as operations run in JIM, whether initiated by users, automated processes, or the API." />
+            }
+        }
     </NoRecordsContent>
     <PagerContent>
         <MudTablePager />
@@ -557,6 +597,10 @@
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private bool _pollingPaused;
 
+    // Filtered total from the last completed server reload. Null until the first load completes, deliberately:
+    // the toolbar count renders nothing for null, and the empty state only speaks once this is a known zero.
+    private int? _totalItems;
+
     // Snapshot of last-displayed data for change detection during polling
     private string? _lastDataFingerprint;
 
@@ -576,6 +620,12 @@
 
     private bool IsAllCategorySelected => _selectedCategory == null && _filterTypes.Count == DefaultTypeFilter.Count &&
                                           !_filterTypes.Except(DefaultTypeFilter).Any();
+
+    // Whether any filter has been narrowed from its default. The search box is judged separately, so the empty
+    // state can offer the more specific "Clear Search" way out when a search term is what matched nothing.
+    private bool HasActiveFilters => !IsAllCategorySelected
+        || _filterOperations.Any() || _filterOutcomes.Any() || _filterStatuses.Any()
+        || _filterInitiatorTypes.Any() || _filterDateRange != null || _filterHasChildren;
 
     protected override async Task OnInitializedAsync()
     {
@@ -777,6 +827,7 @@
 
             _childActivityCounts = await jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
             _lastDataFingerprint = BuildFingerprint(result.Results);
+            _totalItems = result.TotalResults;
 
             return new TableData<Activity>
             {
@@ -1001,6 +1052,23 @@
     {
         _filterHasChildren = value;
         _table?.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Resets every filter to its default, offered as the way out by the empty state when the current filters
+    /// matched nothing. The reload rewrites the URL, so the cleared state is what a bookmark now captures.
+    /// </summary>
+    private Task ClearFiltersAsync()
+    {
+        _selectedCategory = null;
+        _filterOperations = [];
+        _filterOutcomes = [];
+        _filterTypes = DefaultTypeFilter;
+        _filterStatuses = [];
+        _filterInitiatorTypes = [];
+        _filterDateRange = null;
+        _filterHasChildren = false;
+        return _table?.ReloadServerData() ?? Task.CompletedTask;
     }
 
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
