@@ -149,9 +149,8 @@ internal static class Rfc4512SchemaParser
     {
         var index = new Rfc4512ObjectClassIndex();
 
-        foreach (var definition in definitions)
+        foreach (var parsed in definitions.Select(ParseObjectClassDescription))
         {
-            var parsed = ParseObjectClassDescription(definition);
             if (parsed?.Name == null)
                 continue;
 
@@ -181,9 +180,8 @@ internal static class Rfc4512SchemaParser
     {
         var result = new Dictionary<string, Rfc4512DitContentRuleDescription>(StringComparer.Ordinal);
 
-        foreach (var definition in definitions)
+        foreach (var parsed in definitions.Select(ParseDitContentRuleDescription))
         {
-            var parsed = ParseDitContentRuleDescription(definition);
             if (parsed?.Oid != null)
                 result.TryAdd(parsed.Oid, parsed);
         }

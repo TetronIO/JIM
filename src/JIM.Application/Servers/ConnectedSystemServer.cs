@@ -3414,16 +3414,11 @@ public class ConnectedSystemServer
                               ?? throw new InvalidDataException($"Connected System {workerTask.ConnectedSystemId} does not exist.");
 
         var connector = CreateConnector(connectedSystem);
-        try
-        {
-            var runner = new AuxiliaryClassDiscoveryRunner(Application, Log.Logger);
-            return await runner.RunAsync(connectedSystem, workerTask.Scope, workerTask.SampleSizePerObjectType,
-                activity, connector, progress, cancellationToken);
-        }
-        finally
-        {
-            (connector as IDisposable)?.Dispose();
-        }
+        using var connectorDisposable = connector as IDisposable;
+
+        var runner = new AuxiliaryClassDiscoveryRunner(Application, Log.Logger);
+        return await runner.RunAsync(connectedSystem, workerTask.Scope, workerTask.SampleSizePerObjectType,
+            activity, connector, progress, cancellationToken);
     }
 
     /// <summary>
