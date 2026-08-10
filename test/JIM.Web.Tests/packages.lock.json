@@ -703,8 +703,8 @@
       },
       "MudBlazor": {
         "type": "Transitive",
-        "resolved": "9.7.0",
-        "contentHash": "uWOgNn9B556J/TL8KFoSqpA3YD2heqOpK5etcofwlj1RiEX1IDy0NmwYE9urlTUQ8zProEK5GqwTBnoObFPN3g==",
+        "resolved": "9.8.0",
+        "contentHash": "JLJ81j6cn5RUTbgpYAtjRfB3bTNweX0q8lkMS6B9v1oGzZsjVTxDDnWahD+rOtzJWPU6D9svsymiETe4G8bSLw==",
         "dependencies": {
           "Microsoft.AspNetCore.Components": "10.0.1",
           "Microsoft.AspNetCore.Components.Web": "10.0.1",
@@ -971,7 +971,7 @@
           "Microsoft.AspNetCore.OpenApi": "[10.0.10, )",
           "Microsoft.OpenApi": "[2.11.0, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",
-          "MudBlazor": "[9.7.0, )",
+          "MudBlazor": "[9.8.0, )",
           "Scalar.AspNetCore": "[2.16.18, )",
           "Serilog.AspNetCore": "[10.0.0, )"
         }
