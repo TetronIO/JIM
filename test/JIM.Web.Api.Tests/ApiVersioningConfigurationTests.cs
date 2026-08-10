@@ -9,7 +9,10 @@ using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using JIM.Web.Extensions.Api;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 
@@ -111,6 +114,48 @@ public class ApiVersioningConfigurationTests
         }
     }
 
+    /// <summary>
+    /// Builds the real API description collection and asserts every endpoint resolves under <c>api/v1/</c>.
+    /// <para>
+    /// This is the closest thing to booting the application that a unit test can reach, and it is here because
+    /// the versioning wiring's failure modes are runtime ones. Enumerating the descriptions forces every
+    /// controller's route template to be parsed, so a duplicate route parameter (the trap
+    /// <see cref="ApiRouteTemplateTests"/> guards statically) fails here too, and it forces the API explorer to
+    /// substitute the <c>{version}</c> token. A regression in the versioning registration shows up as templates
+    /// that keep the literal token, which is what the published OpenAPI document would then advertise.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void EveryApiEndpoint_ResolvesUnderTheVersionedUrl()
+    {
+        var services = BuildServices();
+        services.AddSingleton<IHostEnvironment>(new StubHostEnvironment());
+        services.AddControllers()
+            .AddApplicationPart(typeof(JIM.Web.Controllers.Api.SynchronisationController).Assembly);
+
+        var descriptions = services.BuildServiceProvider()
+            .GetRequiredService<IApiDescriptionGroupCollectionProvider>();
+
+        var paths = descriptions.ApiDescriptionGroups.Items
+            .SelectMany(group => group.Items)
+            .Select(description => description.RelativePath)
+            .Where(path => path is not null)
+            .Select(path => path!)
+            .Distinct()
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paths, Is.Not.Empty,
+                "No endpoints were discovered at all, which means this test is asserting nothing.");
+            Assert.That(paths.Where(path => path.Contains("{version}", StringComparison.Ordinal)), Is.Empty,
+                "SubstituteApiVersionInUrl should replace the {version} route token with the literal version. " +
+                "A path that keeps the token is what the OpenAPI document would advertise to clients.");
+            Assert.That(paths.Where(path => !path.StartsWith("api/v1/", StringComparison.Ordinal)), Is.Empty,
+                "Every API endpoint is expected to resolve under the versioned URL prefix.");
+        }
+    }
+
     private static ApiVersioningOptions BuildVersioningOptions() =>
         BuildServices().BuildServiceProvider().GetRequiredService<IOptions<ApiVersioningOptions>>().Value;
 
@@ -131,4 +176,19 @@ public class ApiVersioningConfigurationTests
         typeof(JIM.Web.Controllers.Api.SynchronisationController).Assembly
             .GetTypes()
             .Where(type => type is { IsAbstract: false, IsClass: true } && typeof(ControllerBase).IsAssignableFrom(type));
+
+    /// <summary>
+    /// The API explorer's endpoint metadata provider requires an <see cref="IHostEnvironment"/>. Nothing here
+    /// reads from it; it only has to exist for the description collection to be built outside a host.
+    /// </summary>
+    private sealed class StubHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Development";
+
+        public string ApplicationName { get; set; } = "JIM.Web";
+
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
 }
