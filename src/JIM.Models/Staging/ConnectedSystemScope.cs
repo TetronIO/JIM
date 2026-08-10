@@ -124,7 +124,10 @@ public sealed class ConnectedSystemScope
         if (_containment is null || string.IsNullOrEmpty(containerIdentifier))
             return null;
 
-        return SelectedContainers.Any(container => _containment.IsWithinContainer(containerIdentifier, container));
+        // The most specific selected container decides, rather than any of them being enough
+        // (<see cref="ContainerSpecificity"/>). While every container says the same thing the two are the same
+        // answer; they part company once a container can contradict the branch it sits in (#1255).
+        return ContainerSpecificity.ResolveMostSpecific(containerIdentifier, SelectedContainers, _containment.IsWithinContainer) is not null;
     }
 
     private static void CollectSelectedContainers(
