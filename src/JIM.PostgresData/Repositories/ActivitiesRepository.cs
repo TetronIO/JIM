@@ -901,12 +901,14 @@ public class ActivityRepository : IActivityRepository
                 // Search display name (snapshot fallback)
                 (item.DisplayNameSnapshot != null &&
                  EF.Functions.ILike(item.DisplayNameSnapshot, searchPattern)) ||
-                // Search external ID (live CSO attribute)
+                // Search external ID (live CSO attribute), rendered by the same shared definition the
+                // projection below uses so a non-Text anchor is matchable as it is displayed (#1286)
                 (item.ConnectedSystemObject != null &&
-                 item.ConnectedSystemObject.AttributeValues.Any(av =>
-                    av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern))) ||
+                 item.ConnectedSystemObject.AttributeValues
+                    .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))) ||
                 // Search external ID (snapshot fallback)
                 (item.ExternalIdSnapshot != null &&
                  EF.Functions.ILike(item.ExternalIdSnapshot, searchPattern)));
@@ -915,17 +917,21 @@ public class ActivityRepository : IActivityRepository
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            // Sorts on the rendered external id, so the sort key matches what the External Id column
+            // shows for every anchor type rather than only for a Text one (#1286).
             "externalid" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault() ?? item.ExternalIdSnapshot
                     : item.ExternalIdSnapshot),
             // Sorts on the resolved live name, coalescing the naming tiers in preference order so the
@@ -984,29 +990,16 @@ public class ActivityRepository : IActivityRepository
                     ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
                     ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault(),
                 TypeLive = i.ConnectedSystemObject!.Type!.Name,
-                // External id resolved as per-column scalar subqueries. A single multi-column
-                // projection here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
+                // External id rendered by ExternalIdValueText, the shared definition the Connector Space
+                // list uses too. Keep the projection single-column: selecting an anonymous type of the raw
+                // columns here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
                 // ROW_NUMBER() window over the WHOLE AttributeValues table instead of a correlated
-                // subquery, which is catastrophic at scale; separate single-column subqueries each
-                // translate to a cheap correlated scalar subquery run only for the page's rows.
-                ExtIdString = i.ConnectedSystemObject!.AttributeValues
+                // subquery, which is catastrophic at scale.
+                ExtIdText = i.ConnectedSystemObject!.AttributeValues
                     .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.StringValue).FirstOrDefault(),
-                ExtIdDateTime = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.DateTimeValue).FirstOrDefault(),
-                ExtIdInt = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.IntValue).FirstOrDefault(),
-                ExtIdLong = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.LongValue).FirstOrDefault(),
-                ExtIdGuid = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.GuidValue).FirstOrDefault(),
-                ExtIdBool = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
-                    .Select(av => av.BoolValue).FirstOrDefault()
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .FirstOrDefault()
             })
             .ToListAsync();
 
@@ -1015,9 +1008,7 @@ public class ActivityRepository : IActivityRepository
         var results = projected.Select(p => new ActivityRunProfileExecutionItemHeader
         {
             Id = p.Id,
-            ExternalIdValue = FormatExternalIdValue(
-                p.ExtIdString, p.ExtIdDateTime, p.ExtIdInt,
-                p.ExtIdLong, p.ExtIdGuid, p.ExtIdBool) ?? p.ExternalIdSnapshot,
+            ExternalIdValue = p.ExtIdText ?? p.ExternalIdSnapshot,
             DisplayName = p.DisplayNameLive ?? p.DisplayNameSnapshot,
             ConnectedSystemObjectType = p.TypeLive ?? p.ObjectTypeSnapshot,
             ErrorType = p.ErrorType,
@@ -1044,30 +1035,6 @@ public class ActivityRepository : IActivityRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
-    }
-
-    /// <summary>
-    /// Formats an external-id attribute value from its raw value columns, mirroring
-    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ToStringNoName"/> for the
-    /// scalar column set an external id can use (string, date, int, long, guid, bool; reference and
-    /// binary do not apply to an external id). Returns null when no value column is populated, so the
-    /// caller can fall back to the RPEI external-id snapshot column.
-    /// </summary>
-    private static string? FormatExternalIdValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
-    {
-        if (!string.IsNullOrEmpty(stringValue))
-            return stringValue;
-        if (dateTimeValue != null)
-            return dateTimeValue.ToString();
-        if (intValue != null)
-            return intValue.ToString();
-        if (longValue != null)
-            return longValue.ToString();
-        if (guidValue != null)
-            return guidValue.ToString();
-        if (boolValue != null)
-            return boolValue.ToString();
-        return null;
     }
 
     /// <summary>

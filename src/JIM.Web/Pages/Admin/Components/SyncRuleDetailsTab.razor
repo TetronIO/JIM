@@ -141,8 +141,10 @@
 
     @if (SyncRule.Direction == SyncRuleDirection.Export)
     {
+        @* The label pluralises the Object Type's name, never the stand-in used before one is chosen: that is
+           already plural, and pluralising it again read "Provision objectses to the Connected System?". *@
         <MudSwitch Class="mt-5" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                   Label="@($"Provision {(SyncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
+                   Label="@($"Provision {SyncRule.ConnectedSystemObjectType?.Name.Pluralise() ?? "objects"} to the Connected System?")" />
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse Objects scoped to
             this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable
@@ -166,20 +168,6 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
         this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.</MudText>
 </MudPaper>
-
-@* Initial Password - Only meaningful for Export rules that provision, since only a newly created account has
-   never had a password. Hidden rather than disabled when provisioning is off: there is nothing to configure. *@
-@if (SyncRule.Direction == SyncRuleDirection.Export && SyncRule.ProvisionToConnectedSystem == true)
-{
-    <SyncRuleInitialPasswordSection Configuration="@InitialPasswordConfiguration"
-                                    DiscoveredPolicy="@DiscoveredPasswordPolicy"
-                                    SupportedExpiryBehaviours="@SupportedExpiryBehaviours"
-                                    Assessment="@InitialPasswordAssessment"
-                                    ConnectorName="@PasswordConnectorName"
-                                    ParkedReasons="@InitialPasswordParkedReasons"
-                                    WillReleaseParkedOnSave="@WillReleaseParkedInitialPasswordsOnSave"
-                                    OnChanged="HandleInitialPasswordChangedAsync" />
-}
 
 @* Advanced Options - Only show for Export rules *@
 @if (SyncRule.Direction == SyncRuleDirection.Export)
@@ -218,151 +206,6 @@
 
     [Parameter]
     public EventCallback OnChanged { get; set; }
-
-    /// <summary>
-    /// The password policy JIM discovered on the Connected System, loaded once per Connected System selection.
-    /// </summary>
-    private ConnectedSystemPasswordPolicy? DiscoveredPasswordPolicy { get; set; }
-
-    private IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours { get; set; } = [];
-
-    /// <summary>
-    /// The Connector's name, for the section's prose. Resolved from the Connected System loaded here rather
-    /// than from SyncRule.ConnectedSystem.ConnectorDefinition, which a Synchronisation Rule's include chain
-    /// does not load: dereferencing it threw and took the whole tab down with it.
-    /// </summary>
-    private string PasswordConnectorName { get; set; } = "Connected System's";
-
-    private PasswordGenerationAssessment? InitialPasswordAssessment { get; set; }
-
-    private int _passwordContextLoadedForConnectedSystemId;
-
-    private SyncRule? _initialPasswordEditorBoundTo;
-    private SyncRuleInitialPassword? _initialPasswordEditor;
-
-    /// <summary>
-    /// What the rule's initial-password settings were when this tab bound to it, so an edit can be recognised as
-    /// one. The editor mutates its instance in place, so without a copy taken up front there is nothing left to
-    /// compare against.
-    /// </summary>
-    private SyncRuleInitialPassword? _initialPasswordAsSaved;
-
-    /// <summary>
-    /// What the target said about the accounts parked against this rule. Loaded once with the rest of the
-    /// password context, not per keystroke: the answer only changes when a run attempts a delivery.
-    /// </summary>
-    private IReadOnlyList<InitialPasswordRejection>? InitialPasswordParkedReasons { get; set; }
-
-    /// <summary>
-    /// Whether saving would release the parked accounts, decided by the same comparison the save path itself
-    /// uses, so the panel cannot promise a release that saving will not perform.
-    /// </summary>
-    private bool WillReleaseParkedInitialPasswordsOnSave =>
-        InitialPasswordParkedReasons is { Count: > 0 } &&
-        !SyncRuleInitialPassword.WouldDeliverTheSameAs(_initialPasswordAsSaved, SyncRule.InitialPassword);
-
-    /// <summary>
-    /// What the initial-password editor binds to: the rule's own configuration where it has one, otherwise a
-    /// fresh one held aside.
-    /// <para>
-    /// Deliberately NOT attached to the Synchronisation Rule here. Attaching on read would give every
-    /// provisioning rule an initial-password row, and a configuration change in its history, merely because
-    /// somebody opened this tab. It is attached in <see cref="HandleInitialPasswordChangedAsync"/>, which only
-    /// runs on a real edit.
-    /// </para>
-    /// </summary>
-    private SyncRuleInitialPassword InitialPasswordConfiguration
-    {
-        get
-        {
-            if (!ReferenceEquals(_initialPasswordEditorBoundTo, SyncRule))
-            {
-                _initialPasswordEditorBoundTo = SyncRule;
-                _initialPasswordEditor = SyncRule.InitialPassword ?? new SyncRuleInitialPassword { SyncRuleId = SyncRule.Id };
-
-                // Taken from the rule's own configuration, not the editor's: a rule that has none is saved as
-                // having none, and the editor's held-aside instance would wrongly read as the saved state.
-                _initialPasswordAsSaved = SyncRule.InitialPassword?.SnapshotDeliverySettings();
-            }
-
-            return _initialPasswordEditor!;
-        }
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        await LoadPasswordContextAsync();
-    }
-
-    /// <summary>
-    /// Loads what the initial-password editor needs from the Connected System: the policy JIM discovered there,
-    /// and what its Connector is able to apply once a password is set.
-    /// <para>
-    /// Keyed on the Connected System so that switching it on a new rule reloads, and so that ordinary edits to
-    /// other fields do not re-query on every keystroke.
-    /// </para>
-    /// </summary>
-    private async Task LoadPasswordContextAsync()
-    {
-        if (SyncRule.Direction != SyncRuleDirection.Export || SyncRule.ConnectedSystem == null)
-            return;
-
-        if (_passwordContextLoadedForConnectedSystemId == SyncRule.ConnectedSystem.Id)
-            return;
-
-        _passwordContextLoadedForConnectedSystemId = SyncRule.ConnectedSystem.Id;
-
-        using var jim = JimFactory.Create();
-        // Read explicitly rather than off SyncRule.ConnectedSystem.PasswordPolicy: the rule's include chain does
-        // not carry it, and an unloaded navigation would look exactly like a target with no policy at all.
-        DiscoveredPasswordPolicy = await jim.ConnectedSystems.GetPasswordPolicyAsync(SyncRule.ConnectedSystem.Id);
-        SupportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(SyncRule.ConnectedSystem.Id);
-
-        var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemCoreAsync(SyncRule.ConnectedSystem.Id);
-        PasswordConnectorName = connectedSystem?.ConnectorDefinition?.Name ?? "Connected System's";
-
-        // A rule being created has no id and therefore nothing parked against it yet.
-        if (SyncRule.Id > 0)
-            InitialPasswordParkedReasons = await jim.InitialPasswords.GetParkedReasonsAsync(SyncRule.Id);
-
-        AssessInitialPassword(jim);
-    }
-
-    /// <summary>
-    /// Works out what the current settings would produce, so an administrator sees a configuration the target
-    /// would reject before it is saved rather than one account at a time afterwards.
-    /// </summary>
-    private void AssessInitialPassword(JimApplication jim)
-    {
-        // The editor's instance, not the rule's navigation: they are the same object once anything has been
-        // edited, and before that the rule has none while the editor still has settings worth assessing.
-        var configuration = InitialPasswordConfiguration;
-        if (!configuration.Enabled)
-        {
-            InitialPasswordAssessment = null;
-            return;
-        }
-
-        var policy = configuration.Source == InitialPasswordSource.Custom
-            ? configuration.CustomPolicy
-            : jim.PasswordGenerator.DeriveFrom(DiscoveredPasswordPolicy);
-
-        InitialPasswordAssessment = jim.PasswordGenerator.Assess(policy, DiscoveredPasswordPolicy);
-    }
-
-    private async Task HandleInitialPasswordChangedAsync()
-    {
-        // Attached on the first real edit, so it becomes part of the graph the save persists. See the note on
-        // InitialPasswordConfiguration for why this does not happen when the tab is merely opened.
-        SyncRule.InitialPassword ??= InitialPasswordConfiguration;
-
-        using (var jim = JimFactory.Create())
-        {
-            AssessInitialPassword(jim);
-        }
-
-        await OnChanged.InvokeAsync();
-    }
 
     private async Task NotifyChangedAsync()
     {
