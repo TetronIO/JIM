@@ -134,7 +134,12 @@ public class JimApplication : IDisposable
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
         PasswordGenerator = new PasswordGeneratorService();
-        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator);
+        // Credential protection is reached through a delegate because the hosts assign CredentialProtection after
+        // constructing this facade, so a value read here would always be the null that precedes it. The fallback
+        // is the same one ExportExecutionServer uses, and reads the same shared key directory, so a caller that
+        // never had one set still decrypts what the portal encrypted.
+        InitialPasswords = new InitialPasswordDeliveryServer(SyncRepo, PasswordGenerator,
+            () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);
