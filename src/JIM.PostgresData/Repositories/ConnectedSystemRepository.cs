@@ -993,7 +993,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         // Apply search filter - search on display name, external ID, or secondary external ID
-        // Search is case-insensitive for user convenience
+        // Search is case-insensitive for user convenience.
+        // The external ID clauses match against ExternalIdValueText, the same rendering the sort clauses
+        // and the projection below use, so typing an anchor exactly as the External Id column shows it
+        // finds the row whichever typed column that anchor is stored in (#1286). Matching StringValue
+        // alone silently returned nothing for every Active Directory and Samba AD object, whose objectGUID
+        // anchor lives in GuidValue.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
@@ -1004,38 +1009,46 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern)) ||
                 // Search external ID (primary)
-                cso.AttributeValues.Any(av =>
-                    av.AttributeId == cso.ExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern)) ||
+                cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern)) ||
                 // Search secondary external ID
                 (cso.SecondaryExternalIdAttributeId != null &&
-                 cso.AttributeValues.Any(av =>
-                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
-                    av.StringValue != null &&
-                    EF.Functions.ILike(av.StringValue, searchPattern))));
+                 cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
+                    .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))));
         }
 
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
+            // Sorts on the rendered external ID, so the ordering matches what the External Id column
+            // shows rather than treating every non-Text anchor as null (#1286).
             "externalid" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()),
             "secondaryexternalid" => sortDescending
                 ? query.OrderByDescending(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault())
                 : query.OrderBy(cso => cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()),
             // Sorts on the resolved name, coalescing the naming tiers in preference order so the sort
             // key matches what the Display Name column actually renders.
@@ -1098,9 +1111,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                     ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                     ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
+                // Rendered from whichever typed column the anchor occupies, via the same expression the
+                // search and sort clauses above use (#1286).
                 ExternalIdValue = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(av => av.StringValue)
+                    .AsQueryable()
+                    .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault(),
                 ExternalIdAttributeName = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
@@ -1110,7 +1126,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     ? null
                     : cso.AttributeValues
                         .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
-                        .Select(av => av.StringValue)
+                        .AsQueryable()
+                        .Select(ExternalIdValueText.FromAttributeValue)
                         .FirstOrDefault(),
                 SecondaryExternalIdAttributeName = cso.SecondaryExternalIdAttributeId == null
                     ? null
@@ -1134,11 +1151,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(avc => allNameAttributeIds.Contains(avc.AttributeId))
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault(),
+                // A Pending Export carries the same typed value columns as a Connected System Object
+                // Attribute Value, so it needs the same rendering (#1286).
                 PendingExternalId = Repository.Database.PendingExports
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .SelectMany(pe => pe.AttributeValueChanges)
                     .Where(avc => avc.AttributeId == cso.ExternalIdAttributeId)
-                    .Select(avc => avc.StringValue)
+                    .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                     .FirstOrDefault(),
                 PendingSecondaryExternalId = cso.SecondaryExternalIdAttributeId == null ||
                                               cso.AttributeValues.Any(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
@@ -1147,7 +1166,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                         .SelectMany(pe => pe.AttributeValueChanges)
                         .Where(avc => avc.Attribute.IsSecondaryExternalId)
-                        .Select(avc => avc.StringValue)
+                        .Select(ExternalIdValueText.FromPendingExportAttributeValueChange)
                         .FirstOrDefault()
             });
         List<ConnectedSystemObjectHeader> results;
