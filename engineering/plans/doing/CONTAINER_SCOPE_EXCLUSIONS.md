@@ -1,10 +1,10 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete; model and persistence next)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
-- **Related Plans**: [`doing/CONFIGURATION_CHANGE_PREVIEW.md`](doing/CONFIGURATION_CHANGE_PREVIEW.md)
-- **Last Updated**: 2026-08-09
+- **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
+- **Last Updated**: 2026-08-10
 
 ## Overview
 
@@ -46,11 +46,13 @@ Service Account, mailbox-archive and staging OUs sitting inside an otherwise who
 
 Add `bool Excluded` to `ConnectedSystemContainer`, mutually exclusive with `Selected`. Containers are already rows in the hierarchy, and they already carry `StableId` (objectGUID / entryUUID), which is what lets a selection survive a rename or a move. An exclusion list keyed on Distinguished Name text would reintroduce exactly the bug `StableId` was added to fix: rename the excluded OU and the exclusion silently evaporates, exposing every object in it to import on the next run.
 
-**2. Membership resolves by nearest ancestor, with specificity measured in JIM's own Container tree.**
+**2. Membership resolves by nearest ancestor, with specificity asked in the Connector's own terms.**
 
-For a given object identifier, collect every Container whose containment test admits it, then let the **deepest** one decide, where depth is the length of the `ParentContainer` chain in JIM's model. `Excluded` wins where it is deepest; `Selected` wins where it is deepest. Most-specific-match is the rule administrators already hold from file-system ACLs and firewall rules, and it composes without further machinery: exclude `OU=Service Accounts`, then re-include `OU=App1` beneath it, to any depth.
+For a given object identifier, collect every Container whose containment test admits it, then let the **most specific** one decide. `Excluded` wins where it is most specific; `Selected` wins where it is most specific. Most-specific-match is the rule administrators already hold from file-system ACLs and firewall rules, and it composes without further machinery: exclude `OU=Service Accounts`, then re-include `OU=App1` beneath it, to any depth.
 
-Measuring specificity in JIM's tree rather than in the Connector's naming means **`IConnectorContainment` does not change**. The Connector keeps answering the one question it is qualified to answer ("is this identifier within this Container?"); JIM ranks the answers using the hierarchy it already stores. Undiscovered Containers simply do not participate in ranking, which is correct: the deepest *known* Container containing the object is the most specific opinion anyone has expressed.
+Specificity is decided by asking the *same* containment question with a Container's own identifier as the subject: a Container that holds another matching Container is, by definition, the more general of the two. So **`IConnectorContainment` does not change** and no Container hierarchy has to be loaded or walked. That second property is load-bearing rather than incidental: the import and export scope checks receive a flat `IReadOnlyCollection<ConnectedSystemContainer>` with no parent chain populated, so any rule needing `ParentContainer` would work in the preview and silently mis-rank everywhere else.
+
+*(Implemented in `ContainerSpecificity` (JIM.Models). An earlier draft of this plan ranked by depth in JIM's own Container tree; that was wrong for the reason just given, and is superseded.)*
 
 **3. Exclusion filters entries; it does not decompose searches.**
 
@@ -92,8 +94,10 @@ An exclusion beneath a `OneLevel` parent is inert, and falls out of the design f
 
 ## Implementation Phases
 
-**Phase 1: Nearest-ancestor resolution (no behaviour change).**
-Replace the `Any(...)` OR in `ConnectedSystemScope.Contains` and in `LdapConnectorUtilities.IsDnWithinAnyContainerScope` with a deepest-match walk. With no exclusions in the model the deepest match is still a match, so results are identical; tests pin that equivalence explicitly, including the undetermined (`null`) cases, before anything else moves.
+**Phase 1: Nearest-ancestor resolution (no behaviour change).** ✅
+Replace the `Any(...)` OR in `ConnectedSystemScope.Contains` and in `LdapConnectorUtilities.IsDnWithinAnyContainerScope` with a most-specific-match resolution. With no exclusions in the model the most specific match is still a match, so results are identical; tests pin that equivalence explicitly, including the undetermined (`null`) cases, before anything else moves.
+
+*Landed as `ContainerSpecificity` (JIM.Models), with `ConnectedSystemScope.Contains` and `LdapConnectorUtilities.ResolveMostSpecificContainerScope` resolving through it. `ContainerSpecificityTests` pins the ranking rule, `ConnectedSystemScopeTests` the membership answers including the undetermined ones, and `LdapConnectorUtilitiesTests` the ranking running on this Connector's own predicate.*
 
 **Phase 2: Model and persistence.**
 `Excluded` on `ConnectedSystemContainer` + migration; mutual exclusivity with `Selected` enforced in `ContainerSelectionEditor` and rejected at the API boundary; `ApplyContainerInclusion` extended so coverage recalculation understands an excluded branch; hierarchy refresh merge keyed on `StableId` carries exclusions through renames and moves, with a `RequiresPostgres` round-trip test.
@@ -139,7 +143,8 @@ Parser and canonical text projection, wildcard support, resolution against the h
 - **Decompose subtree searches to avoid excluded branches.** Makes import scope depend on how recently the hierarchy was refreshed; a new OU under a selected parent would be silently skipped and its objects obsoleted. Rejected on synchronisation integrity.
 - **An exclusion list of Distinguished Names, separate from the Container rows.** Breaks on rename and move, which is the defect `StableId` exists to prevent.
 - **An `Excluded` member on `ConnectedSystemContainerScope`.** Conflates two orthogonal facts (how far a selection reaches; whether a branch is carved out) into one enum, and leaves "excluded" needing a scope of its own.
-- **Widening `IConnectorContainment` to report containment depth.** Unnecessary: specificity is measurable in JIM's own Container tree, and asking every Connector to rank its own containment is work with no second beneficiary.
+- **Widening `IConnectorContainment` to report containment depth.** Unnecessary: the existing predicate already ranks two Containers when one of them is made the subject, so every Connector gets ranking for free from the method it has already implemented.
+- **Ranking by depth in JIM's own Container tree.** Needs `ParentContainer` populated, which the import and export scope checks cannot rely on; it would rank correctly in the preview and silently mis-rank in the two paths that actually move data.
 
 ## Dependencies
 
