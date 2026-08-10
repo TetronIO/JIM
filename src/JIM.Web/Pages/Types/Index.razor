@@ -54,6 +54,16 @@
                  RowClass="cursor-pointer" RowClick="HandleRowClick" Class="mt-5">
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
+            @* The total match count, in the toolbar's title slot. The old pager's "1-25 of 3,868" was the only
+               place the list said how big it was, and virtualisation removed the pager; this is where that figure
+               returns to. While a search narrows the list it reads "x of y" against the unfiltered baseline. *@
+            @* The noun is the Predefined Search's name, not the type's plural: on /t/users/s/service-principals the
+               reader is looking at Service Principals, and the baseline being counted is that search's match set.
+               A singular form only exists when the default search is active (its name is the type's own plural). *@
+            <TableObjectCount Count="@_totalItems" Total="@_unfilteredTotalItems"
+                              SingularName="@(PredefinedSearch?.IsDefaultForMetaverseObjectType == true ? MetaverseObjectType?.Name : null)"
+                              PluralName="@PageTitle"
+                              ShowSeparator="true" />
             <MudSpacer />
             @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
                filtered by a term the reader cannot see. *@
@@ -112,7 +122,31 @@
                when the search genuinely matched nothing. *@
             @if (_totalItems == 0)
             {
-                <text>No results</text>
+                @* An empty list means one of three different things, and the message says which: a search that
+                   matched nothing (with the way out as the action), a presence filter nothing satisfies (the chip
+                   above already offers its own clear), or a type with no objects at all. *@
+                @* The noun is the Predefined Search's name (PageTitle), not the type's plural: a search's page
+                   (/t/users/s/service-principals) must say "No Service Principals ...", never "No Users ...". *@
+                @if (!string.IsNullOrWhiteSpace(_searchString))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No {PageTitle} match \"{_searchString}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => OnSearchAsync(string.Empty))" />
+                }
+                else if (_hasAttributeName != null)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                     PrimaryText="@($"No {PageTitle} have a value for {_hasAttributeName}")"
+                                     SecondaryText="@($"Clear the filter above to browse all {PageTitle}.")" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)"
+                                     PrimaryText="@($"No {PageTitle} yet")"
+                                     SecondaryText="Objects appear here once a synchronisation imports them." />
+                }
             }
         </NoRecordsContent>
     </MudDataGrid>
@@ -185,6 +219,14 @@ else if (_isInitialised)
     // created by a sync in the meantime appear on the next navigation, as they did under paging.
     private int? _totalItems;
 
+    // The match count with no search text, held so the toolbar count can read "12 of 3,868" while a search is
+    // active. Captured opportunistically: whenever a count comes back and no search is narrowing the list, that
+    // count IS the baseline. It resets wherever the baseline itself changes (a different type or presence filter),
+    // and deliberately not on a search change, which is the very thing it exists to be compared against. A deep
+    // link straight into a search has no baseline until the search is cleared; the count then shows the filtered
+    // figure alone, which is truthful rather than a guess.
+    private int? _unfilteredTotalItems;
+
     // Attribute-presence filter (the ?search=hasAttribute:{name} deep link). _hasAttributeName is the parsed token
     // (null when no presence filter is active); _hasAttributeId is its resolved attribute id; _hasAttributeUnknown is
     // true when a name was supplied but no such attribute exists, in which case no object can match.
@@ -206,6 +248,7 @@ else if (_isInitialised)
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
         _totalItems = null;
+        _unfilteredTotalItems = null;
 
         // Adopt the search, sort and scroll position the URL asks for, before anything queries the database, so the
         // first window read is already the one the reader is being sent to rather than the top of an unsorted list.
@@ -408,6 +451,10 @@ else if (_isInitialised)
         // matched; a genuine zero comes back as zero and is kept.
         _totalItems = result.TotalResults ?? _totalItems;
 
+        // With no search narrowing the list, the count just taken is the unfiltered baseline (see the field).
+        if (string.IsNullOrWhiteSpace(_searchString))
+            _unfilteredTotalItems = _totalItems;
+
         return new GridData<MetaverseObjectHeader>
         {
             TotalItems = _totalItems ?? 0,
@@ -452,6 +499,9 @@ else if (_isInitialised)
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
         _totalItems = null;
+        // The presence filter is part of the baseline the toolbar count compares a search against, so removing it
+        // invalidates that baseline too; the next window read re-counts and re-captures it.
+        _unfilteredTotalItems = null;
 
         // Drop the presence filter from the URL while keeping the search, sort and (reset) position this page owns.
         // Rewriting in place rather than navigating keeps OnParametersSetAsync, and so the page's whole load, out of

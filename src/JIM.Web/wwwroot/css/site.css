@@ -3484,3 +3484,25 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
 .jim-scope-pending-clean {
     color: var(--mud-palette-text-secondary);
 }
+
+/* ─── Table empty state (see <TableEmptyState>) ───
+   Rendered inside a table or data grid's no-rows fragment. The min-height fills most of a fixed-height,
+   viewport-filling grid body (the virtualised Metaverse Object list) so the message sits near the visual
+   centre rather than pinned under the header, while staying shallow enough not to stretch a small table. */
+.jim-table-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 3rem 1.5rem;
+    min-height: 40vh;
+}
+
+/* Qualified with .mud-icon-root because MudBlazor's own size rule loads after site.css and wins ties. */
+.jim-table-empty-state-icon.mud-icon-root {
+    font-size: 3rem;
+    width: 3rem;
+    height: 3rem;
+    opacity: 0.4;
+}

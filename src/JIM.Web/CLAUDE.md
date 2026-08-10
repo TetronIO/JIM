@@ -26,6 +26,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
+| `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
+| `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 
 ## Choosing Containers
 
@@ -106,6 +108,32 @@ All data tables should let users switch between normal and compact row spacing, 
   Inject `IUserPreferenceService PreferenceService`. No `try`/`catch` is needed here: `GetTableDenseAsync` swallows the "JS interop not ready" `InvalidOperationException` internally. Pages that gate their whole render on a `_preferencesLoaded` flag should load `_dense` alongside their other preferences inside that same gate (so there is no flash of normal-then-dense).
 - `<TableDensityToggle>` owns the toolbar button and persists the toggle; do **not** add an `OnToggleDense` method or build the tooltip/icon button by hand.
 - Default to normal spacing (`_dense = false`).
+
+## Object counts in table toolbars
+
+The toolbar's left side is one slot with a fixed order: **density toggle | title (if the table has one) | count**. The count is always a `<TableObjectCount />`; the convention exists because two hand-rolled treatments had already diverged (a count baked into a title's parentheses on `PendingExportDetail`, a right-aligned "Showing x of y" on `PendingDeletionList`) before it was extracted.
+
+```razor
+@* No toolbar title (the page header already names the list): the count carries the nouns *@
+<TableObjectCount Count="@_totalItems" Total="@_unfilteredTotalItems"
+                  SingularName="@type?.Name" PluralName="@type?.PluralName" ShowSeparator="true" />
+
+@* Beside a title: bare number, because the title already names the objects *@
+<MudText Typo="Typo.h6">Attribute Changes</MudText>
+<TableObjectCount Count="@_changeCount" Class="ml-2" />
+```
+
+- Pass the nouns **only when there is no title**; beside one, the bare number avoids restating it.
+- Pass `Total` when the caller holds an unfiltered baseline; the text becomes "12 of 3,868 ..." while a filter narrows the list and collapses to the plain count when nothing is filtered.
+- A null `Count` renders nothing (including the separator, which the component owns so it cannot dangle): null is "not counted yet", and a zero in its place would read as an empty list.
+
+## Table empty states
+
+A table's no-rows fragment renders a `<TableEmptyState />`, never a bare "No results" string: the message must say **why** the list is empty, because the situations mean different things and have different ways out. The Metaverse Object list (`Types/Index.razor`) is the worked example, distinguishing a search that matched nothing (with a "Clear Search" action button), a presence filter nothing satisfies, and a type with no objects at all.
+
+- Only pass `ActionText` when the caller wires `OnAction`; a button with nothing behind it is a dead affordance.
+- Inside a virtualised `MudDataGrid`, guard the fragment on a known-empty total (see the `NoRecordsContent` comment in `Types/Index.razor`): the grid renders the fragment between windows too, and an unguarded empty state flashes over data in flight.
+- The block's centring and icon treatment live in `site.css` (`jim-table-empty-state`, `jim-table-empty-state-icon`); do not restyle per call site.
 
 ## Empty values
 

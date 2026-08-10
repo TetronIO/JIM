@@ -85,10 +85,10 @@
           Loading="@_loading"
           LoadingProgressColor="Color.Primary">
     <ToolBarContent>
+        @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md). *@
+        <TableObjectCount Count="@_table?.GetFilteredItemsCount()" Total="@_totalCount"
+                          SingularName="pending deletion" PluralName="pending deletions" />
         <MudSpacer />
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            Showing @_table?.GetFilteredItemsCount() of @_totalCount pending deletions
-        </MudText>
     </ToolBarContent>
     <HeaderContent>
         <MudTh>
