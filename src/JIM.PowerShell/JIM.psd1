@@ -61,6 +61,9 @@
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 
+        # Data Flow
+        'Get-JIMDataFlow',
+
         # Synchronisation Rules
         'Get-JIMSyncRule',
         'New-JIMSyncRule',
