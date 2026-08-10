@@ -210,6 +210,13 @@ else if (_isInitialised)
         _firstVisibleRow = urlState.FirstVisibleRow;
         _scrollRestored = _firstVisibleRow == 0;
 
+        // Every Metaverse Object Type shares this route, so moving between two lists reuses this component: the same
+        // instance is handed new parameters and renders a new grid, while the scroll listener stays bound to the
+        // element that has just been discarded. Forgetting that it was ever attached is what makes OnAfterRenderAsync
+        // attach it to the new one; observe() releases the old listener itself. Without this the second list a reader
+        // visits silently stops reporting its position, while a typed URL or a refresh works perfectly.
+        _scrollObserved = false;
+
         using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
