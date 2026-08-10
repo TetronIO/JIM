@@ -3499,6 +3499,14 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
     min-height: 40vh;
 }
 
+/* The virtualised Metaverse Object list sizes its grid body to the viewport (Height="calc(100vh - 320px)"),
+   so a viewport-fraction floor leaves the message floating high on a tall window: the gap between 40vh and
+   the body's real height grows with every pixel of screen. Fill the body's own space instead; the constant
+   is the page chrome (320px) plus the grid's toolbar and header rows, tuned against the rendered page. */
+#metaverse-object-list .jim-table-empty-state {
+    min-height: calc(100vh - 440px);
+}
+
 /* Qualified with .mud-icon-root because MudBlazor's own size rule loads after site.css and wins ties. */
 .jim-table-empty-state-icon.mud-icon-root {
     font-size: 3rem;
