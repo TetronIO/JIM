@@ -18,7 +18,7 @@
         <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
     </div>
 }
-else if (_contributors.Count == 0)
+else if (_contributors.Count == 0 && string.IsNullOrEmpty(PendingContributorSystemName))
 {
     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
         This attribute has no import contributors, so it has no priority to manage.
@@ -48,7 +48,8 @@ else
             @for (var i = 0; i < _contributors.Count; i++)
             {
                 var contributor = _contributors[i];
-                <div class="apt-row d-flex align-center px-2 py-2 @(contributor.SyncRuleEnabled ? null : "mud-text-disabled")">
+                var isThisMapping = HighlightMappingId.HasValue && contributor.MappingId == HighlightMappingId.Value;
+                <div class="apt-row d-flex align-center px-2 py-2 @(contributor.SyncRuleEnabled ? null : "mud-text-disabled") @(isThisMapping ? "apt-row-current" : null)">
                     <div style="width: 64px;">@(i + 1)</div>
                     <div style="flex: 1 1 0;">
                         @if (string.IsNullOrEmpty(contributor.ConnectedSystemName))
@@ -62,6 +63,10 @@ else
                     </div>
                     <div style="flex: 1 1 0;">
                         @contributor.SyncRuleName
+                        @if (isThisMapping)
+                        {
+                            <span class="mud-text-secondary ml-1">(this mapping)</span>
+                        }
                         @if (!contributor.SyncRuleEnabled)
                         {
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">Disabled</MudChip>
@@ -69,6 +74,21 @@ else
                     </div>
                     <div style="width: 150px;">
                         <MudIcon Icon="@(contributor.NullIsValue ? Icons.Material.Filled.CheckBox : Icons.Material.Filled.CheckBoxOutlineBlank)"
+                                 Class="mud-text-secondary" />
+                    </div>
+                </div>
+            }
+
+            @* The mapping being created does not exist yet, so it is drawn as a synthetic bottom row: new import *@
+            @* mappings persist at the safe-addition default, which is the bottom of the attribute's list. *@
+            @if (!string.IsNullOrEmpty(PendingContributorSystemName))
+            {
+                <div class="apt-row apt-row-current d-flex align-center px-2 py-2">
+                    <div style="width: 64px;">@(_contributors.Count + 1)</div>
+                    <div style="flex: 1 1 0;">@PendingContributorSystemName</div>
+                    <div style="flex: 1 1 0;" class="mud-text-secondary">this mapping, once saved</div>
+                    <div style="width: 150px;">
+                        <MudIcon Icon="@(PendingContributorNullIsValue ? Icons.Material.Filled.CheckBox : Icons.Material.Filled.CheckBoxOutlineBlank)"
                                  Class="mud-text-secondary" />
                     </div>
                 </div>
@@ -147,6 +167,22 @@ else
     /// <summary>Render the list read-only (Surface 1). No reordering, no "Null is a value" editing, no Save.</summary>
     [Parameter] public bool ReadOnly { get; set; }
 
+    /// <summary>
+    /// The Connected System of a mapping that is being created but is not yet persisted (Surface 1). When set, a
+    /// synthetic row is drawn at the bottom of the list showing where the mapping will land once saved. Read-only
+    /// mode only; there is nothing to reorder until it exists.
+    /// </summary>
+    [Parameter] public string? PendingContributorSystemName { get; set; }
+
+    /// <summary>"Null is a value" as currently set on the unsaved mapping, shown on its synthetic row.</summary>
+    [Parameter] public bool PendingContributorNullIsValue { get; set; }
+
+    /// <summary>
+    /// An existing mapping to mark as "this mapping" in the list (Surface 1, editing a mapping that is already a
+    /// contributor). Distinct from <see cref="PendingContributorSystemName"/>, which is for one that does not exist yet.
+    /// </summary>
+    [Parameter] public int? HighlightMappingId { get; set; }
+
     /// <summary>Raised after a successful save, so a host can refresh dependent state (e.g. a contributor badge).</summary>
     [Parameter] public EventCallback OnSaved { get; set; }
 
@@ -161,8 +197,22 @@ else
     private bool _saving;
     private bool _dirty;
 
+    // Which (object type, attribute) pair the loaded list belongs to, so a re-render does not re-fetch it.
+    private int _loadedMetaverseObjectTypeId;
+    private int _loadedMetaverseAttributeId;
+    private bool _hasLoaded;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Reload only when the list's subject actually changes. Surface 1 hosts this inside a mapping dialog that
+        // re-renders as the administrator types, and reloading on every render would both re-query needlessly and,
+        // on Surface 2, discard a reorder in progress.
+        if (_hasLoaded && _loadedMetaverseObjectTypeId == MetaverseObjectTypeId && _loadedMetaverseAttributeId == MetaverseAttributeId)
+            return;
+
+        _loadedMetaverseObjectTypeId = MetaverseObjectTypeId;
+        _loadedMetaverseAttributeId = MetaverseAttributeId;
+        _hasLoaded = true;
         await LoadAsync();
     }
 

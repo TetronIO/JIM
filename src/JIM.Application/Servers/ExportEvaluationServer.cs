@@ -2078,7 +2078,18 @@ public class ExportEvaluationServer
                 var mergedCount = 0;
                 var addedCount = 0;
 
-                // Build a lookup of existing drift changes for deduplication.
+                // Drop the staged changes this evaluation supersedes wholesale before the value-level merge
+                // below (#1199): an incoming Update or RemoveAll sets the attribute's entire value set, so any
+                // staged change for that attribute is void whatever its own value or change type, and the
+                // value-level keys cannot see that. See GetWholeAttributeReplacementAttributeIds.
+                var wholeAttributeReplacementIds = GetWholeAttributeReplacementAttributeIds(attributeChanges);
+                var supersededChanges = existingPendingExport.AttributeValueChanges
+                    .Where(avc => wholeAttributeReplacementIds.Contains(avc.AttributeId))
+                    .ToList();
+                foreach (var superseded in supersededChanges)
+                    existingPendingExport.AttributeValueChanges.Remove(superseded);
+
+                // Build a lookup of the remaining staged changes for deduplication.
                 // Uses merge keys: single-valued attributes key by attribute ID only (newest wins),
                 // multi-valued attributes key by attribute ID + value (each distinct value preserved).
                 var existingChangeKeys = new HashSet<string>();
@@ -2169,15 +2180,11 @@ public class ExportEvaluationServer
                 }
 
                 // Build merged attribute changes: start with export eval changes (takes precedence),
-                // then add any drift-only changes not covered by export eval.
-                // Uses merge keys: single-valued attributes key by attribute ID only (so the new
-                // export eval change always replaces the old value), multi-valued attributes key by
-                // attribute ID + value (each distinct value preserved).
+                // then add any drift-only changes not superseded by export eval (see
+                // SelectSurvivingDriftChanges).
                 // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
                 // child entities, making the tracked instances unusable for a new PE.
-                var exportEvalChangeKeys = attributeChanges.Select(GetAttributeChangeMergeKey).ToHashSet();
-                var driftOnlyChanges = dbPendingExport.AttributeValueChanges
-                    .Where(avc => !exportEvalChangeKeys.Contains(GetAttributeChangeMergeKey(avc)))
+                var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges)
                     .Select(avc => new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
@@ -3178,6 +3185,56 @@ public class ExportEvaluationServer
 
         // Multi-valued attributes: include value identity so each distinct value is preserved.
         return GetAttributeChangeKey(change);
+    }
+
+    /// <summary>
+    /// Selects the changes on an existing (stale, typically drift-staged) Pending Export that survive a merge with a
+    /// newly evaluated set of export changes. Export evaluation always wins on a collision, because it derives from
+    /// the latest Metaverse Object state.
+    /// </summary>
+    /// <param name="incomingChanges">The newly evaluated export changes, which take precedence.</param>
+    /// <param name="existingChanges">The changes already staged on the Pending Export being merged into.</param>
+    /// <returns>The existing changes that are not superseded, in their original order.</returns>
+    internal static List<PendingExportAttributeValueChange> SelectSurvivingDriftChanges(
+        IReadOnlyCollection<PendingExportAttributeValueChange> incomingChanges,
+        IEnumerable<PendingExportAttributeValueChange> existingChanges)
+    {
+        ArgumentNullException.ThrowIfNull(incomingChanges);
+        ArgumentNullException.ThrowIfNull(existingChanges);
+
+        var incomingKeys = incomingChanges.Select(GetAttributeChangeMergeKey).ToHashSet();
+        var wholeAttributeReplacementIds = GetWholeAttributeReplacementAttributeIds(incomingChanges);
+
+        return existingChanges
+            .Where(existing => !incomingKeys.Contains(GetAttributeChangeMergeKey(existing)))
+            .Where(existing => !wholeAttributeReplacementIds.Contains(existing.AttributeId))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The attribute ids among a set of changes whose change type sets the attribute's ENTIRE value set rather than
+    /// one value within it (#1199). <see cref="PendingExportAttributeChangeType.Update"/> and
+    /// <see cref="PendingExportAttributeChangeType.RemoveAll"/> both export as a replace, so every other staged change
+    /// for the same attribute is superseded, whatever its value or change type.
+    /// </summary>
+    /// <remarks>
+    /// The merge key alone is not enough to catch this. It keys multi-valued attributes by value, which is right for
+    /// genuine per-value adds and removals, but a change's type follows the Metaverse attribute's plurality while the
+    /// key follows the Connected System attribute's: a single-valued Metaverse attribute flowing to a multi-valued
+    /// Connected System attribute (a Metaverse "Job Title" flowing to LDAP's multi-valued <c>title</c>) therefore
+    /// produces an Update whose key still carries a value. A stale per-value Remove for the same attribute then
+    /// survives the merge, and the connector emits the replace followed by a delete of a value the replace has already
+    /// removed. LDAP rejects that modify atomically ("modify/delete: title: no such value"), so the export never
+    /// applies and retries until it exhausts its attempts.
+    /// </remarks>
+    internal static HashSet<int> GetWholeAttributeReplacementAttributeIds(IEnumerable<PendingExportAttributeValueChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+
+        return changes
+            .Where(c => c.ChangeType is PendingExportAttributeChangeType.Update or PendingExportAttributeChangeType.RemoveAll)
+            .Select(c => c.AttributeId)
+            .ToHashSet();
     }
 
     /// <summary>

@@ -136,6 +136,47 @@ Describe 'New-JIMSyncRuleMapping' {
         }
     }
 
+    Context 'Null is a value (#91)' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMSyncRuleMapping
+        }
+
+        It 'NullIsValue should be available only on import parameter sets' {
+            $setNames = $command.Parameters['NullIsValue'].ParameterSets.Keys
+            $setNames | Should -Contain 'ImportAttribute'
+            $setNames | Should -Contain 'ImportExpression'
+            $setNames | Should -Not -Contain 'ExportAttribute'
+            $setNames | Should -Not -Contain 'ExportExpression'
+        }
+
+        It 'Sends nullIsValue when the switch is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -NullIsValue -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.nullIsValue -eq $true
+                }
+            }
+        }
+
+        It 'Omits nullIsValue when the switch is not supplied, leaving the server default' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('nullIsValue')
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -144,6 +185,10 @@ Describe 'New-JIMSyncRuleMapping' {
 
         It 'Should document the CaseNormalisation parameter' {
             ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'CaseNormalisation' }) | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should document the NullIsValue parameter' {
+            ($help.Parameters.Parameter | Where-Object { $_.Name -eq 'NullIsValue' }) | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have examples' {
