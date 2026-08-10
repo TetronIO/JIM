@@ -331,6 +331,31 @@ public class Rfc4512SchemaParserTests
         Assert.That(index.ByOid["2.5.6.6"].Name, Is.EqualTo("person"));
     }
 
+    /// <summary>
+    /// The name index is the complete one and the OID index is best-effort, so a class that declares no OID must
+    /// still be resolvable by name. Entries and class definitions refer to classes by descriptor, so dropping such
+    /// a class would make it invisible to auxiliary class discovery and to every classification that follows.
+    /// </summary>
+    /// <remarks>
+    /// Guards a simplification that looks harmless and is not: filtering the shared pipeline on a non-null OID
+    /// removes the class from both indexes rather than only from the OID one.
+    /// </remarks>
+    [Test]
+    public void IndexObjectClasses_ForAClassWithNoOid_StillIndexesItByName()
+    {
+        var index = Rfc4512SchemaParser.IndexObjectClasses(
+        [
+            "( NAME 'oidlessClass' SUP top STRUCTURAL MUST cn )",
+            "( 2.5.6.6 NAME 'person' SUP top STRUCTURAL MUST sn )"
+        ]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(index.ByName.Keys, Is.EquivalentTo(new[] { "oidlessClass", "person" }));
+            Assert.That(index.ByOid.Keys, Is.EquivalentTo(new[] { "2.5.6.6" }));
+        }
+    }
+
     [Test]
     public void IndexObjectClasses_WithAnUnparseableDefinition_SkipsItRatherThanFailing()
     {

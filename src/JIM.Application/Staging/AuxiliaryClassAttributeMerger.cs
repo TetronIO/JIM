@@ -121,7 +121,9 @@ internal static class AuxiliaryClassAttributeMerger
                 // The structural class's own attribute wins, and so does the first auxiliary class to declare one
                 // two of them share: an Object Type carrying the same attribute name twice would be ambiguous
                 // everywhere downstream, and the surviving row is the one Synchronisation Rules already reference.
-                if (!present.Add(attribute.Name))
+                var isFirstClaimToTheName = present.Add(attribute.Name);
+
+                if (!isFirstClaimToTheName)
                     continue;
 
                 baseType.Attributes.Add(new ConnectedSystemObjectTypeAttribute

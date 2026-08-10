@@ -157,9 +157,12 @@ internal static class Rfc4512SchemaParser
         foreach (var parsed in namedClasses)
         {
             // A parsed class always has a name (the parser discards it otherwise) but not necessarily an OID, so the
-            // name index is the complete one and the OID index is best-effort. Index the OID only for a class the
-            // name index accepted, so a lookup by either key can never hand back a class the other one rejected.
-            if (index.ByName.TryAdd(parsed.Name!, parsed) && parsed.Oid != null)
+            // name index is the complete one and the OID index is best-effort. Every named class is offered to the
+            // name index; only the ones it accepted, and that carry an OID, reach the OID index, so a lookup by
+            // either key can never hand back a class the other one rejected.
+            var acceptedByName = index.ByName.TryAdd(parsed.Name!, parsed);
+
+            if (acceptedByName && parsed.Oid != null)
                 index.ByOid.TryAdd(parsed.Oid, parsed);
         }
 
