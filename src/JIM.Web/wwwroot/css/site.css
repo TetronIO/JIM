@@ -3514,3 +3514,16 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
     height: 3rem;
     opacity: 0.4;
 }
+
+/* ─── Virtualised list (see <VirtualisedDataGrid>) ───
+   The grid's outer paper rounds and clips its own corners, while MudBlazor also gives the first and last
+   sticky header cells a 4px corner radius of their own. Sticky cells paint above the rows scrolling beneath
+   them, so that radius opens a small transparent arc at the table's top corners through which a row's cell
+   styling (the Logs severity stripe) peeks as a curved sliver once the list is scrolled. Square the inner
+   cells off; rounding the outside is the paper's job. The selector chain matters: MudBlazor's own rule
+   (.mud-table-sticky-header * .mud-table-root .mud-table-head * .mud-table-cell:first-child) weighs in at
+   five class-level selectors, so this one carries .mud-table-root plus the html[lang] qualifier to outrank
+   it; anything shorter loses the cascade and the radius silently survives. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell {
+    border-radius: 0;
+}

@@ -26,7 +26,7 @@
     @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
        inside the grid, so it is reached as a descendant of something this component names rather than by a global
        selector that another table on the page could match. *@
-    <div id="@ContainerId">
+    <div id="@ContainerId" class="jim-virtualised-list">
     @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
        SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
        Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,

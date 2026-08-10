@@ -254,6 +254,19 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // The /admin/schema/attributes route predates the tabs' ?t= slug sync and never actually selected the
+        // Attributes tab: it rendered the page on its first tab, silently. Normalise it onto the slug mechanism
+        // (preserving any other query parameters, such as the attribute grid's own state) so the deep link lands
+        // where its name promises.
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        if (uri.AbsolutePath.EndsWith("/attributes", StringComparison.OrdinalIgnoreCase))
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            query["t"] = "attributes";
+            NavigationManager.NavigateTo($"/admin/schema?{query}", replace: true);
+            return;
+        }
+
         using var jim = JimFactory.Create();
         _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
     }
