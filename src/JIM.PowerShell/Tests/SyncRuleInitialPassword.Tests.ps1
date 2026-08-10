@@ -78,7 +78,7 @@ Describe 'Set-JIMSyncRuleInitialPassword' {
         }
 
         It 'Should constrain <Parameter> to the values the API accepts' -ForEach @(
-            @{ Parameter = 'Source'; Expected = @('Discovered', 'Custom') }
+            @{ Parameter = 'Source'; Expected = @('Discovered', 'Custom', 'Static') }
             @{ Parameter = 'Style'; Expected = @('RandomCharacters', 'Words', 'Pronounceable') }
             @{ Parameter = 'WordSeparator'; Expected = @('None', 'Hyphen', 'FullStop', 'Underscore', 'Digit', 'RandomSymbol') }
             @{ Parameter = 'WordCapitalisation'; Expected = @('Lowercase', 'EachWord', 'Uppercase', 'FirstWordOnly', 'RandomWord') }
@@ -131,6 +131,59 @@ Describe 'Set-JIMSyncRuleInitialPassword' {
 
                 Should -Invoke Write-Warning -Times 1
                 Should -Invoke Invoke-JIMApi -Times 0
+            }
+        }
+
+        It 'Should take the static password as a SecureString' {
+            # A plain [string] parameter puts the password into the session's command history in clear text, and
+            # into any transcript of it. This is the one parameter on this cmdlet that must not do that.
+            $parameter = (Get-Command Set-JIMSyncRuleInitialPassword).Parameters['StaticPassword']
+            $parameter.ParameterType | Should -Be ([securestring])
+        }
+
+        It 'Should send the static password for the API to encrypt' {
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi { @{ enabled = $true } }
+
+                $password = ConvertTo-SecureString -String 'Brown-Chicken-Ladder-47' -AsPlainText -Force
+                Set-JIMSyncRuleInitialPassword -Id 5 -Source Static -StaticPassword $password -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -ParameterFilter {
+                    $Method -eq 'PUT' -and
+                    $Body.source -eq 'Static' -and
+                    $Body.staticPassword -eq 'Brown-Chicken-Ladder-47'
+                }
+            }
+        }
+
+        It 'Should count a static password on its own as a change' {
+            # Otherwise rotating the shared password without touching anything else would be refused as "nothing
+            # to change", which is exactly the operation this option needs most.
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi { @{ enabled = $true } }
+                Mock Write-Warning { }
+
+                $password = ConvertTo-SecureString -String 'Brown-Chicken-Ladder-47' -AsPlainText -Force
+                Set-JIMSyncRuleInitialPassword -Id 5 -StaticPassword $password -Confirm:$false
+
+                Should -Invoke Write-Warning -Times 0
+                Should -Invoke Invoke-JIMApi -Times 1
+            }
+        }
+
+        It 'Should send no static password when none was supplied' {
+            # An absent field means "leave the stored password alone"; sending an empty one would be a change.
+            InModuleScope JIM {
+                $script:JIMConnection = @{ Url = 'https://jim.example.test' }
+                Mock Invoke-JIMApi { @{ enabled = $true } }
+
+                Set-JIMSyncRuleInitialPassword -Id 5 -ExpiryBehaviour NeverExpires -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -ParameterFilter {
+                    $Method -eq 'PUT' -and -not $Body.ContainsKey('staticPassword')
+                }
             }
         }
 
