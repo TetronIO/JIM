@@ -590,6 +590,18 @@ public interface IConnectedSystemRepository
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null);
 
     /// <summary>
+    /// Retrieves every attribute data flow, in both directions, for the system-wide Data Flow view (#1199). One flow
+    /// per Synchronisation Rule mapping, filtered by the supplied query.
+    /// </summary>
+    /// <remarks>
+    /// Returns the whole filtered set rather than a page. A flow exists per configured mapping, so the population is
+    /// bounded by how much an administrator has configured (hundreds at most), not by how many objects are
+    /// synchronised, and the view's value is in seeing and sorting the whole map at once.
+    /// </remarks>
+    /// <param name="query">The filters to apply. All are optional and combine with AND.</param>
+    public Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query);
+
+    /// <summary>
     /// Gets the change history for a Connected System Object.
     /// Includes all attribute changes and value changes for displaying in the UI.
     /// </summary>
@@ -697,6 +709,17 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the mappings.</param>
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Gets the Metaverse attribute each of a Synchronisation Rule's import mappings currently targets in the
+    /// database, keyed by mapping id (#1199). Deliberately a scalar projection rather than an entity load: a
+    /// whole-rule save mutates the tracked rule graph in memory before persisting it, and this is the "before"
+    /// state that identifies which mappings the save adds, removes or retargets. Materialising entities would
+    /// resolve to those already-mutated instances and report the new state as the old one. Export mappings are
+    /// excluded (priority is an inbound concern).
+    /// </summary>
+    /// <param name="syncRuleId">The Synchronisation Rule whose import mappings are read.</param>
+    Task<Dictionary<int, int>> GetImportMappingTargetMetaverseAttributesAsync(int syncRuleId);
 
     /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (one

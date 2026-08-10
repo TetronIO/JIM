@@ -397,6 +397,91 @@ public class PasswordGeneratorService : IPasswordGeneratorService
     /// </summary>
     private static double Log2OrZero(int poolSize) => poolSize > 0 ? Math.Log2(poolSize) : 0d;
 
+    /// <inheritdoc />
+    public SuppliedPasswordAssessment AssessSupplied(string? password, ConnectedSystemPasswordPolicy? targetPolicy)
+    {
+        var problems = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            // Reported rather than thrown: the portal asks this question on every keystroke, and an empty field
+            // is the state it starts in. Nothing else is worth checking about a password that does not exist.
+            problems.Add("Enter a password.");
+            return new SuppliedPasswordAssessment
+            {
+                Length = 0,
+                CharacterClasses = PasswordCharacterClasses.None,
+                Problems = problems
+            };
+        }
+
+        var classes = ClassesIn(password);
+
+        if (password.Length < MinimumLength)
+            problems.Add($"A password of fewer than {MinimumLength} characters is not worth setting.");
+
+        if (password.Length > MaximumLength)
+            problems.Add($"A password of more than {MaximumLength} characters is longer than systems generally accept.");
+
+        if (targetPolicy?.MinimumLength is { } minimumLength && password.Length < minimumLength)
+            problems.Add($"This Connected System requires at least {minimumLength} characters, and this password has {password.Length}.");
+
+        if (targetPolicy is { ComplexityRequired: true, RequiredCharacterClassCount: { } requiredClasses })
+        {
+            var satisfied = System.Numerics.BitOperations.PopCount((uint)CountedClasses(targetPolicy, classes));
+            if (satisfied < requiredClasses)
+                problems.Add($"This Connected System requires characters from at least {requiredClasses} categories, and this password has {satisfied}. Adding a digit or a symbol is the usual way to close the gap.");
+        }
+
+        return new SuppliedPasswordAssessment
+        {
+            Length = password.Length,
+            CharacterClasses = classes,
+            Problems = problems
+        };
+    }
+
+    /// <summary>
+    /// The categories present in a password, in the terms a target counts them.
+    /// <para>
+    /// Anything that is neither a letter nor a base 10 digit is a symbol, which is how systems expressing
+    /// complexity as "non-alphanumeric" read it. Letters with no case of their own are their own category rather
+    /// than being folded into one of the cased ones, matching how Active Directory counts them.
+    /// </para>
+    /// </summary>
+    private static PasswordCharacterClasses ClassesIn(string password)
+    {
+        var classes = PasswordCharacterClasses.None;
+
+        foreach (var character in password)
+        {
+            if (char.IsUpper(character))
+                classes |= PasswordCharacterClasses.Uppercase;
+            else if (char.IsLower(character))
+                classes |= PasswordCharacterClasses.Lowercase;
+            else if (char.IsAsciiDigit(character))
+                classes |= PasswordCharacterClasses.Digit;
+            else if (char.IsLetter(character))
+                classes |= PasswordCharacterClasses.OtherUnicodeLetter;
+            else
+                classes |= PasswordCharacterClasses.Symbol;
+        }
+
+        return classes;
+    }
+
+    /// <summary>
+    /// The categories that count towards a target's complexity rule.
+    /// <para>
+    /// Where JIM did not discover which categories a system counts, every category is counted rather than none:
+    /// refusing a password on the strength of something undiscovered would be reading a silence as a denial.
+    /// </para>
+    /// </summary>
+    private static PasswordCharacterClasses CountedClasses(ConnectedSystemPasswordPolicy targetPolicy, PasswordCharacterClasses classes) =>
+        targetPolicy.RecognisedCharacterClasses == PasswordCharacterClasses.None
+            ? classes
+            : classes & targetPolicy.RecognisedCharacterClasses;
+
     private static void CheckAgainstTarget(
         ConnectedSystemPasswordPolicy? targetPolicy,
         int guaranteedLength,
@@ -412,14 +497,9 @@ public class PasswordGeneratorService : IPasswordGeneratorService
         if (targetPolicy.ComplexityRequired != true || targetPolicy.RequiredCharacterClassCount is not { } requiredClasses)
             return;
 
-        // Only categories the target actually counts are worth anything. Where JIM did not discover which those
-        // are, every category is counted rather than none: refusing a configuration on the strength of something
-        // undiscovered would be the same mistake as reading a silence as a denial.
-        var countedClasses = targetPolicy.RecognisedCharacterClasses == PasswordCharacterClasses.None
-            ? guaranteedClasses
-            : guaranteedClasses & targetPolicy.RecognisedCharacterClasses;
-
-        var satisfied = System.Numerics.BitOperations.PopCount((uint)countedClasses);
+        // Only categories the target actually counts are worth anything; see CountedClasses for why an
+        // undiscovered set counts everything rather than nothing.
+        var satisfied = System.Numerics.BitOperations.PopCount((uint)CountedClasses(targetPolicy, guaranteedClasses));
         if (satisfied < requiredClasses)
             problems.Add($"This Connected System requires characters from at least {requiredClasses} categories, and this configuration guarantees only {satisfied}. Appending digits or a symbol is the usual way to close the gap.");
     }

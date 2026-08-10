@@ -53,6 +53,12 @@ public class InitialPasswordReleaseOnSaveTests
         mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        // Saving a Synchronisation Rule reconciles its target attributes' priority order (#1199), which reads the
+        // mappings' persisted targets. A loose mock returns null for the dictionary and the reconcile throws;
+        // production code is deliberately not null-guarded, because a null there would be a repository contract
+        // violation that should fail loudly rather than be swallowed.
+        _mockCsRepo.Setup(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>()))
+            .ReturnsAsync(new Dictionary<int, int>());
         _mockSyncRepo.Setup(r => r.ReleaseParkedInitialPasswordsAsync(It.IsAny<int>())).ReturnsAsync(0);
 
         _initiatedBy = TestUtilities.GetInitiatedBy();
@@ -76,16 +82,19 @@ public class InitialPasswordReleaseOnSaveTests
         CustomPolicy = new PasswordGenerationPolicy { Length = length }
     };
 
-    private static SyncRule Rule(SyncRuleInitialPassword? initialPassword) => new()
+    private static SyncRule Rule(
+        SyncRuleInitialPassword? initialPassword,
+        SyncRuleDirection direction = SyncRuleDirection.Export,
+        bool? provisions = true) => new()
     {
         Id = SyncRuleId,
         Name = "Provision Users",
-        Direction = SyncRuleDirection.Export,
+        Direction = direction,
         ConnectedSystemId = 1,
         ConnectedSystem = new ConnectedSystem { Id = 1, Name = "Yellowstone Directory" },
         MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
         ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
-        ProvisionToConnectedSystem = true,
+        ProvisionToConnectedSystem = provisions,
         InitialPassword = initialPassword
     };
 
@@ -146,4 +155,78 @@ public class InitialPasswordReleaseOnSaveTests
 
         _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(It.IsAny<int>()), Times.Never);
     }
+
+    #region an initial password only survives on a rule that can deliver one
+
+    /// <summary>
+    /// Only a newly created account has never had a password, so an initial password is meaningless on a rule
+    /// that creates none. Switching provisioning off therefore switches the initial password off with it,
+    /// rather than leaving a setting that reads as configured and can never run.
+    /// <para>
+    /// This is the save path's half of the rule the REST API states by refusing an enabled initial-password
+    /// configuration on such a Synchronisation Rule outright. It cannot refuse here: the administrator is
+    /// saving a whole rule and has not asked about passwords at all, and the portal removes the tab the moment
+    /// provisioning goes off, so there would be nothing on screen to correct.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenTheRuleNoLongerProvisions_SwitchesTheInitialPasswordOffAsync()
+    {
+        var configuration = Configuration();
+        var rule = Rule(configuration, provisions: false);
+
+        var saved = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(saved, Is.True, "the rest of the rule is perfectly savable");
+            Assert.That(configuration.Enabled, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// The same for an Import rule, which provisions nothing into the Connected System by definition. An
+    /// initial password could only ever have arrived here by the rule's direction being changed after it was
+    /// configured.
+    /// </summary>
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenTheRuleImports_SwitchesTheInitialPasswordOffAsync()
+    {
+        var configuration = Configuration();
+        var rule = Rule(configuration, direction: SyncRuleDirection.Import, provisions: null);
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy);
+
+        Assert.That(configuration.Enabled, Is.False);
+    }
+
+    /// <summary>
+    /// The guard against over-reach: the rule that can deliver an initial password keeps the one it was given.
+    /// </summary>
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenTheRuleProvisions_LeavesTheInitialPasswordOnAsync()
+    {
+        var configuration = Configuration();
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(Rule(configuration), _initiatedBy);
+
+        Assert.That(configuration.Enabled, Is.True);
+    }
+
+    /// <summary>
+    /// Switching it off is a change to what the rule delivers, so the accounts parked waiting on these settings
+    /// stop waiting. The delivery pass finds the rule no longer asks for a password and retires their records,
+    /// rather than leaving them holding a needs-attention marker over work nobody is going to do.
+    /// </summary>
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_WhenTheRuleNoLongerProvisions_ReleasesTheParkedAccountsAsync()
+    {
+        _mockCsRepo.Setup(r => r.GetSyncRuleInitialPasswordAsync(SyncRuleId)).ReturnsAsync(Configuration());
+
+        await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(Rule(Configuration(), provisions: false), _initiatedBy);
+
+        _mockSyncRepo.Verify(r => r.ReleaseParkedInitialPasswordsAsync(SyncRuleId), Times.Once);
+    }
+
+    #endregion
 }
