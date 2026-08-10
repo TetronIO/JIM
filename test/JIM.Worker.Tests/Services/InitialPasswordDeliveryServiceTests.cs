@@ -336,12 +336,12 @@ public class InitialPasswordDeliveryServiceTests
         var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("Brown-Chicken-Ladder-47"),
             null, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Delivered));
             Assert.That(sent, Is.EqualTo(new[] { "Brown-Chicken-Ladder-47" }),
                 "the stored password is what has to reach the target; anything else and nobody can sign in with what they were told");
-        });
+        }
     }
 
     [Test]
@@ -379,11 +379,11 @@ public class InitialPasswordDeliveryServiceTests
         // administrator would still be waiting to be told a password that does not exist.
         var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration(null), null, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
-        });
+        }
         _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
             It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -396,12 +396,12 @@ public class InitialPasswordDeliveryServiceTests
         var result = await _service.DeliverAsync(_connector.Object, _target, StaticConfiguration("short"),
             new ConnectedSystemPasswordPolicy { MinimumLength = 30 }, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
             Assert.That(result.Message, Does.Contain("30"), "the administrator needs to know what the target actually requires");
-        });
+        }
         _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
             It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -416,13 +416,13 @@ public class InitialPasswordDeliveryServiceTests
 
         var result = await _service.DeliverAsync(_connector.Object, _target, configuration, null, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(InitialPasswordDeliveryOutcome.Parked));
             Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
             Assert.That(result.Message, Does.Not.Contain(configuration.StaticPasswordEncryptedValue!),
                 "the stored value must not be repeated into an Activity or a log on its way out");
-        });
+        }
         _connector.Verify(c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(),
             It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }

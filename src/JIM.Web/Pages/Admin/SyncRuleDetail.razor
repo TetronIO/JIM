@@ -36,7 +36,11 @@
 }
 else if (_syncRule != null)
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
+    @* Keyed on which tabs exist, because MudTabs orders its strip by the order panels register themselves rather
+       than by their position in this markup: a panel that appears later (Initial Password, when provisioning is
+       switched on) is appended to the end, landing after Attribute Flow instead of before it. Changing the key
+       rebuilds the component, so registration order becomes markup order again. *@
+    <NavigableMudTabs @key="TabSetKey" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
                       @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
@@ -157,6 +161,13 @@ else if (_syncRule != null)
     /// </summary>
     private bool ShowInitialPasswordTab =>
         _syncRule is { Direction: SyncRuleDirection.Export, ProvisionToConnectedSystem: true };
+
+    /// <summary>
+    /// Identifies which tabs exist, so that the strip is rebuilt whenever that set changes and the tabs render
+    /// in the order they are written rather than the order they happened to register in. See the note on the
+    /// component itself.
+    /// </summary>
+    private string TabSetKey => $"{ShowInitialPasswordTab}-{_syncRule is { Id: > 0 }}";
 
     // Details, Matching, Scope, [Initial Password], Attribute Flow are the editing tabs; for an existing rule
     // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when

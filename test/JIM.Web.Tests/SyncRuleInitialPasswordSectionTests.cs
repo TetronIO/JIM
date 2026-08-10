@@ -263,11 +263,11 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
         // knew it leaves, and nothing else in JIM can date it.
         var cut = RenderStatic();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("A password is set"));
             Assert.That(cut.Markup, Does.Contain("ago"), "how long it has been in use is the actionable part");
-        });
+        }
     }
 
     [Test]
@@ -306,11 +306,11 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
             Problems = []
         });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("23 characters"));
             Assert.That(cut.Markup, Does.Not.Contain("entropy"));
-        });
+        }
     }
 
     [Test]
@@ -339,11 +339,11 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
         cut.Find("[data-testid=initial-password-static]").Input("Brown-Chicken-Ladder-47");
         cut.Find("[data-testid=initial-password-static-confirm]").Input("Brown-Chicken-Ladder-48");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(raised, Has.All.Null);
             Assert.That(cut.Markup, Does.Contain("do not match"));
-        });
+        }
     }
 
     [Test]
@@ -353,12 +353,12 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
         // the right length, would say something about a password that is never shown.
         var cut = RenderStatic();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // Null where no value attribute is rendered at all, which is the same "blank" from the reader's side.
             Assert.That(cut.Find("[data-testid=initial-password-static]").GetAttribute("value"), Is.Null.Or.Empty);
             Assert.That(cut.Find("[data-testid=initial-password-static-confirm]").GetAttribute("value"), Is.Null.Or.Empty);
-        });
+        }
     }
     #endregion
 }

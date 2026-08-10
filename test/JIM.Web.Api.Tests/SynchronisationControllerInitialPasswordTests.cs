@@ -380,12 +380,12 @@ public class SynchronisationControllerInitialPasswordTests
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         var stored = syncRule.InitialPassword!.StaticPasswordEncryptedValue;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored, Is.Not.Null.And.Not.EqualTo(password), "the plaintext must never be what is stored");
             Assert.That(_credentialProtection.Unprotect(stored), Is.EqualTo(password), "and it must round-trip");
             Assert.That(syncRule.InitialPassword!.StaticPasswordSetAt, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -403,12 +403,12 @@ public class SynchronisationControllerInitialPasswordTests
         });
 
         var json = System.Text.Json.JsonSerializer.Serialize(((OkObjectResult)result).Value);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(json, Does.Not.Contain(password));
             Assert.That(json, Does.Not.Contain(syncRule.InitialPassword!.StaticPasswordEncryptedValue!),
                 "nor the ciphertext, which is the password to anyone holding the encryption key");
-        });
+        }
     }
 
     /// <summary>
@@ -438,11 +438,11 @@ public class SynchronisationControllerInitialPasswordTests
         });
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(syncRule.InitialPassword!.StaticPasswordEncryptedValue, Is.EqualTo(alreadyStored));
             Assert.That(syncRule.InitialPassword!.StaticPasswordSetAt, Is.EqualTo(setAt), "unchanged means unchanged, including when it changed");
-        });
+        }
     }
 
     /// <summary>
@@ -526,11 +526,11 @@ public class SynchronisationControllerInitialPasswordTests
         var result = await _controller.GetSyncRuleInitialPasswordAsync(16);
         var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.StaticPasswordSet, Is.True);
             Assert.That(response.StaticPasswordSetAt, Is.EqualTo(setAt));
-        });
+        }
     }
 
     [Test]
@@ -541,11 +541,11 @@ public class SynchronisationControllerInitialPasswordTests
         var result = await _controller.GetSyncRuleInitialPasswordAsync(17);
         var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.StaticPasswordSet, Is.False);
             Assert.That(response.StaticPasswordSetAt, Is.Null);
-        });
+        }
     }
 
     #endregion

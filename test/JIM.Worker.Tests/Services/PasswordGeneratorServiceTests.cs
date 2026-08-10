@@ -687,14 +687,14 @@ public class PasswordGeneratorServiceTests
         // of the password alone and are what the administrator is looking at.
         var assessment = _generator.AssessSupplied("Brown-Chicken-Ladder-47", null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.True, string.Join(" ", assessment.Problems));
             Assert.That(assessment.Length, Is.EqualTo(23));
             Assert.That(assessment.CharacterClasses, Is.EqualTo(
                 PasswordCharacterClasses.Uppercase | PasswordCharacterClasses.Lowercase |
                 PasswordCharacterClasses.Digit | PasswordCharacterClasses.Symbol));
-        });
+        }
     }
 
     [Test]
@@ -704,11 +704,11 @@ public class PasswordGeneratorServiceTests
 
         var assessment = _generator.AssessSupplied("Sh0rt-One!", target);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.False);
             Assert.That(assessment.Length, Is.EqualTo(10));
-        });
+        }
     }
 
     [Test]
@@ -718,11 +718,11 @@ public class PasswordGeneratorServiceTests
         // looks perfectly reasonable and that a stock Active Directory domain refuses on every account.
         var assessment = _generator.AssessSupplied("brownchickenladder", ActiveDirectoryDefaultPolicy());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.False);
             Assert.That(assessment.CharacterClassCount, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -730,11 +730,11 @@ public class PasswordGeneratorServiceTests
     {
         var assessment = _generator.AssessSupplied("Brown-Chicken-Ladder-47", ActiveDirectoryDefaultPolicy());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.True, string.Join(" ", assessment.Problems));
             Assert.That(assessment.CharacterClassCount, Is.GreaterThanOrEqualTo(3));
-        });
+        }
     }
 
     [Test]

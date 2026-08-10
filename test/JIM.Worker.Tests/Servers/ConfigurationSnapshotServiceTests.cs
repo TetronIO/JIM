@@ -179,14 +179,14 @@ public class ConfigurationSnapshotServiceTests
         var json = ConfigurationSnapshotService.Serialise(snapshot);
 
         var node = Child(Child(snapshot.Root, "initialPassword")!, "staticPassword")!;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(node.IsSecret, Is.True, "a password must be recorded as a secret, never as a value");
             Assert.That(node.Value, Is.Not.Empty);
             Assert.That(json, Does.Not.Contain(password), "the password itself must never reach a snapshot");
             Assert.That(json, Does.Not.Contain(rule.InitialPassword.StaticPasswordEncryptedValue!),
                 "nor may the stored ciphertext, which is the password to anyone holding the encryption key");
-        });
+        }
     }
 
     [Test]
@@ -210,11 +210,11 @@ public class ConfigurationSnapshotServiceTests
         var secondHash = Child(Child(second.Root, "initialPassword")!, "staticPassword")!.Value;
         var noneHash = Child(Child(none.Root, "initialPassword")!, "staticPassword")!.Value;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(secondHash, Is.Not.EqualTo(firstHash));
             Assert.That(noneHash, Is.Empty, "no password set is its own state, and diffs against one that is");
-        });
+        }
     }
 
     [Test]
