@@ -37,7 +37,7 @@
 else if (_syncRule != null)
 {
     @* Keyed on which tabs exist, because MudTabs orders its strip by the order panels register themselves rather
-       than by their position in this markup: a panel that appears later (Initial Password, when provisioning is
+       than by their position in this markup: a panel that appears later (Passwords, when provisioning is
        switched on) is appended to the end, landing after Attribute Flow instead of before it. Changing the key
        rebuilds the component, so registration order becomes markup order again. *@
     <NavigableMudTabs @key="TabSetKey" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
@@ -65,7 +65,7 @@ else if (_syncRule != null)
         {
             @* Badged with the parked count, which is what the panel's collapsed title used to carry. Accounts
                waiting on a person must be visible without opening the tab to find out. *@
-            <MudTabPanel Text="Initial Password" BadgeColor="Color.Warning"
+            <MudTabPanel Text="Passwords" BadgeColor="Color.Warning"
                          BadgeData="@(_parkedInitialPasswordCount > 0 ? _parkedInitialPasswordCount.ToString("N0") : null)">
                 <SyncRuleInitialPasswordTab SyncRule="_syncRule"
                                             OnInitialPasswordIssuesChanged="OnInitialPasswordIssuesChanged"
@@ -149,7 +149,7 @@ else if (_syncRule != null)
     private int _changeCount;
 
     /// <summary>
-    /// Accounts parked against this rule, for the Initial Password tab's badge. Loaded here beside the
+    /// Accounts parked against this rule, for the Passwords tab's badge. Loaded here beside the
     /// Changes count because a badge belongs to the tab strip, which is the page's, and the tab itself is
     /// not rendered until it is opened.
     /// </summary>
@@ -169,9 +169,9 @@ else if (_syncRule != null)
     /// </summary>
     private string TabSetKey => $"{ShowInitialPasswordTab}-{_syncRule is { Id: > 0 }}";
 
-    // Details, Matching, Scope, [Initial Password], Attribute Flow are the editing tabs; for an existing rule
+    // Details, Matching, Scope, [Passwords], Attribute Flow are the editing tabs; for an existing rule
     // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
-    // either is active. Computed rather than a constant because the Initial Password tab is conditional, and a
+    // either is active. Computed rather than a constant because the Passwords tab is conditional, and a
     // fixed index would put the save bar back on a read-only tab whenever it is present.
     private int ChangesTabIndex => ShowInitialPasswordTab ? 5 : 4;
     private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
@@ -229,7 +229,7 @@ else if (_syncRule != null)
             // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
             _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, _syncRule.Id, 1, 1)).TotalResults;
 
-            // Counts only; the reasons behind them are the Initial Password tab's own load.
+            // Counts only; the reasons behind them are the Passwords tab's own load.
             var attention = await _jim.InitialPasswords.GetAttentionBySyncRuleAsync([_syncRule.Id]);
             _parkedInitialPasswordCount = attention.TryGetValue(_syncRule.Id, out var parked) ? parked.ParkedCount : 0;
         }
