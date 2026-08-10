@@ -560,6 +560,26 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// The name to show for a container whose only identifier is its Distinguished Name: the unescaped value of the
+    /// leaf RDN's first component, so "OU=Sales,OU=Corp,DC=example,DC=com" reads as "Sales".
+    /// </summary>
+    /// <remarks>
+    /// Used both when a directory publishes no name of its own for a discovered container (everything except Active
+    /// Directory) and when the Connector creates a container during an export. Answering it in one place is what
+    /// stops a container acquiring a different name depending on how JIM first met it. An identifier that will not
+    /// parse as a Distinguished Name is returned unchanged: showing something is better than showing an empty row.
+    /// </remarks>
+    internal static string GetContainerDisplayNameFromDn(string? distinguishedName)
+    {
+        if (string.IsNullOrEmpty(distinguishedName))
+            return string.Empty;
+
+        return LdapDistinguishedName.TryParse(distinguishedName, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0
+            ? parsedDn.LeafRdn.Components[0].Value
+            : distinguishedName;
+    }
+
+    /// <summary>
     /// Whether a distinguished name falls within the scope of any of the supplied Containers. An empty
     /// collection means the caller has no Container-level opinion to apply, and every name is admitted.
     /// </summary>

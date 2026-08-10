@@ -1144,6 +1144,21 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets the plain-language display name for a sync outcome type (e.g. "Identity created"). Delegates to
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
+    /// </summary>
+    /// <remarks>
+    /// The sibling of <see cref="GetOutcomeTypeDisplayName"/>, and the right one for a Configuration Change
+    /// Preview (#827): an operator reading a completed run's outcomes wants the exact outcome name, whereas an
+    /// administrator deciding whether to save a configuration change wants written English. Having both named
+    /// makes a surface state which audience it is writing for, rather than picking a label by accident.
+    /// </remarks>
+    public static string GetOutcomeTypePlainName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return OutcomeDisplayMap.Get(outcomeType).PlainLabel;
+    }
+
+    /// <summary>
     /// Gets a Material icon string for a sync outcome type. Delegates to
     /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
     /// </summary>

@@ -747,4 +747,38 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+
+    #region GetContainerDisplayNameFromDn Tests
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithANestedDn_ReturnsTheLeafRdnValue()
+    {
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn("OU=Sales,OU=Corp,DC=example,DC=com"), Is.EqualTo("Sales"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithAnEscapedComma_ReturnsTheUnescapedValue()
+    {
+        // A naive split on ',' would answer "Sales\".
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(@"OU=Sales\, EMEA,DC=example,DC=com"), Is.EqualTo("Sales, EMEA"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithAnUnparseableIdentifier_ReturnsItUnchanged()
+    {
+        // Showing something is better than showing an empty row.
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn("not-a-distinguished-name"), Is.EqualTo("not-a-distinguished-name"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithNoIdentifier_ReturnsEmpty()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(null), Is.Empty);
+            Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(string.Empty), Is.Empty);
+        }
+    }
+
+    #endregion
 }

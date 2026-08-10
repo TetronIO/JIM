@@ -187,6 +187,26 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_SummaryRow_SaysItCoversObjectsOfTheType()
+    {
+        // A summary row is about many objects, so "User in Yellowstone Verify" described one of them. The type name
+        // itself stays exactly as its system spells it, because it is a schema identifier and not JIM's to inflect;
+        // "objects" after it is what carries the plurality (#1275).
+        GivenPreview(Complete);
+        GivenGroups(Group(4_812));
+
+        var panel = RenderPanel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.Markup, Does.Contain("User"));
+            Assert.That(panel.Markup, Does.Contain("objects"));
+            Assert.That(panel.Markup, Does.Not.Contain("Users"),
+                "pluralising the type name would have JIM inventing a name the system it came from does not use");
+        }
+    }
+
+    [Test]
     public void Panel_GroupNamingAValuePair_ShowsBothValues()
     {
         GivenPreview(Complete);

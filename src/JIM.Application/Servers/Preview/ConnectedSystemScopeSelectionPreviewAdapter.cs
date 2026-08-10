@@ -8,6 +8,7 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Utilities;
 using System.Runtime.CompilerServices;
 
 namespace JIM.Application.Servers.Preview;
@@ -328,7 +329,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
 
     private static string DescribeDeletionOutcome(MvoDeletionDecision decision) =>
         decision is { Fate: MvoDeletionFate.DeletionScheduled, GracePeriod: { } grace }
-            ? $"{DeletionEligible} after {grace:g}"
+            ? $"{DeletionEligible} after {grace.ToFriendlyDuration()}"
             : $"{DeletionEligible} immediately";
 
     private static PreviewDelta ScopeDelta(
