@@ -80,7 +80,14 @@
                     <CellTemplate>
                         @if (isDisplayName)
                         {
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(context.Item)">@Utilities.GetMetaverseObjectHrefText(context.Item)</MudLink>
+                            @* The row navigates on click and so does this link, so without stopping the click here a
+                               reader who clicks the name gets two identical history entries and has to press Back
+                               twice to leave the object. Keeping both affordances and silencing one is the right way
+                               round: the link is what offers middle-click and open-in-new-tab, which a row-click
+                               handler cannot, while the row click is what makes the rest of the row a target. *@
+                            <span @onclick:stopPropagation="true">
+                                <MudLink Href="@Utilities.GetMetaverseObjectHref(context.Item)">@Utilities.GetMetaverseObjectHrefText(context.Item)</MudLink>
+                            </span>
                         }
                         else
                         {
