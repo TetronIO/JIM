@@ -211,7 +211,7 @@ internal class LdapConnectorPartitions
         var entries = response.Entries.Cast<SearchResultEntry>()
             .Select(e => new ContainerEntry(
                 e.DistinguishedName,
-                LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name") ?? e.DistinguishedName,
+                LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name"),
                 ReadStableId(e, stableIdAttribute)))
             .ToList();
 
@@ -253,7 +253,10 @@ internal class LdapConnectorPartitions
 
         // Step 3: Create all ConnectorContainer objects upfront (O(n))
         var containerByDn = entries
-            .ToDictionary(e => e.DistinguishedName, e => new ConnectorContainer(e.DistinguishedName, e.Name) { StableId = e.StableId }, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                e => e.DistinguishedName,
+                e => new ConnectorContainer(e.DistinguishedName, ResolveContainerDisplayName(e)) { StableId = e.StableId },
+                StringComparer.OrdinalIgnoreCase);
 
         // Step 4: Build hierarchy using dictionary lookups (O(n))
         var topLevelContainers = new List<ConnectorContainer>();
@@ -309,7 +312,31 @@ internal class LdapConnectorPartitions
     /// identity on because the Distinguished Name changes on every rename and move. Null where the directory did
     /// not return one.
     /// </summary>
-    internal record ContainerEntry(string DistinguishedName, string Name, string? StableId = null);
+    /// <summary>
+    /// The name to show for a container: the directory's own, where it publishes one, and otherwise the value of the
+    /// Distinguished Name's leaf RDN ("Sales" from "OU=Sales,OU=Corp,DC=example,DC=com").
+    /// </summary>
+    /// <remarks>
+    /// The fallback used to be the whole Distinguished Name, which is not a name: it restates in every row the
+    /// ancestry the container tree already draws, and buries the one component that distinguishes the container.
+    /// Deriving it through <see cref="LdapConnectorUtilities.GetContainerDisplayNameFromDn"/> keeps this in step with
+    /// the name given to containers the Connector creates during an export, which have always been named this way.
+    /// </remarks>
+    private static string ResolveContainerDisplayName(ContainerEntry entry) =>
+        string.IsNullOrWhiteSpace(entry.Name)
+            ? LdapConnectorUtilities.GetContainerDisplayNameFromDn(entry.DistinguishedName)
+            : entry.Name;
+
+    /// <summary>
+    /// A container as the directory returned it, before its display name has been decided.
+    /// </summary>
+    /// <param name="Name">
+    /// The directory's own name for the container, or null where it publishes none. Only Active Directory supplies
+    /// the 'name' operational attribute; everywhere else this is null and the display name is derived from the
+    /// Distinguished Name. Resolved in <see cref="BuildContainerHierarchy"/> rather than at the call site, so the
+    /// rule is one place and can be tested without a directory connection.
+    /// </param>
+    internal record ContainerEntry(string DistinguishedName, string? Name, string? StableId = null);
 
     /// <summary>
     /// Retrieves the namingContexts attribute from the rootDSE (RFC 4512).

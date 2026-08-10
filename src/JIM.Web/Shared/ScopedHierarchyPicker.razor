@@ -1,0 +1,290 @@
+@using JIM.Models.Staging
+@using JIM.Utilities
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+<div class="jim-picker" data-testid="jim-scoped-hierarchy-picker">
+
+    @* ─── Toolbar: what is selected, and how to find a Container in a large hierarchy ─── *@
+    <div class="jim-picker-toolbar">
+        @* Value/ValueChanged rather than @bind-Value: binding alone would set the field and re-render, but a
+           self-re-render does not run OnParametersSet, so the row list would never be rebuilt and the box would
+           appear to do nothing. *@
+        <SearchField Value="@_filter" ValueChanged="FilterChanged" Class="jim-picker-filter" Margin="Margin.None" />
+        <span class="jim-picker-count" data-testid="jim-picker-count">
+            <strong>@_selectedCount</strong> of <strong>@_totalCount</strong> selected
+        </span>
+        <MudButton Variant="Variant.Text" Size="Size.Small" Disabled="@(_selectedCount == 0)"
+                   OnClick="ClearSelectionAsync" data-testid="jim-picker-clear">
+            Clear
+        </MudButton>
+    </div>
+
+    @* ─── The Containers ─── *@
+    @if (_visibleRows.Count == 0)
+    {
+        <div class="jim-picker-empty">
+            @if (string.IsNullOrWhiteSpace(_filter))
+            {
+                <MudText Typo="Typo.body2">This partition holds no Containers.</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">No Container matches &ldquo;@_filter&rdquo;.</MudText>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="jim-picker-rows" role="tree">
+            @foreach (var row in _visibleRows)
+            {
+                var container = row.Container;
+                var isOneLevel = container.Scope == ConnectedSystemContainerScope.OneLevel;
+
+                <div class="@RowClass(container)" role="treeitem" style="@($"--jim-picker-depth: {row.Depth};")"
+                     data-testid="jim-picker-row" data-container-name="@container.Name" @key="container.Id">
+
+                    @* Expander: only Containers with children get one, so the column stays aligned either way *@
+                    <span class="jim-picker-expander">
+                        @if (container.ChildContainers.Count > 0)
+                        {
+                            <MudIconButton Icon="@(IsExpanded(container) ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                                           Size="Size.Small" OnClick="@(() => ToggleExpanded(container))"
+                                           aria-label="@(IsExpanded(container) ? $"Collapse {container.Name}" : $"Expand {container.Name}")" />
+                        }
+                    </span>
+
+                    <MudCheckBox T="bool" Value="@container.Selected" Dense="true" Disabled="@container.Included"
+                                 ValueChanged="@(_ => ToggleSelectedAsync(container))"
+                                 aria-label="@($"Manage {container.Name}")" />
+
+                    @* The Container's own name leads; its Distinguished Name is one hover away rather than printed
+                       on every row, where it restates the ancestry the indentation already draws. A Connector that
+                       names its Containers by full path rather than by leaf name (#1275) has the partition's own
+                       suffix trimmed off, so those rows read the same way; for a Connector that already supplies a
+                       leaf name, nothing matches and nothing is trimmed. *@
+                    <MudTooltip Arrow="true" Placement="Placement.Top" Text="@container.ExternalId">
+                        <span class="jim-picker-name">@ContainerDisplayName.RelativeTo(container.Name, Partition.Name)</span>
+                    </MudTooltip>
+
+                    @* Scope only means anything on a selected Container, so the control only appears on one. Both
+                       states are visible rather than one being hidden behind a hover, because scope decides what
+                       the next import returns. *@
+                    <span class="jim-picker-scope">
+                        @if (container.Selected)
+                        {
+                            <MudTooltip Arrow="true" Placement="Placement.Top">
+                                <TooltipContent>
+                                    <TooltipText Text="@(isOneLevel
+                                                           ? "Only the objects held directly in this Container are imported. Choose Whole subtree to import everything beneath it as well."
+                                                           : "This Container and every Container beneath it are imported. Choose This level to import only the objects held directly in it.")" />
+                                </TooltipContent>
+                                <ChildContent>
+                                    <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="jim-picker-seg">
+                                        <MudButton Class="@SegmentClass(!isOneLevel)" data-testid="jim-picker-scope-subtree"
+                                                   OnClick="@(() => SetScopeAsync(container, ConnectedSystemContainerScope.Subtree))">
+                                            Whole subtree
+                                        </MudButton>
+                                        <MudButton Class="@SegmentClass(isOneLevel)" data-testid="jim-picker-scope-onelevel"
+                                                   OnClick="@(() => SetScopeAsync(container, ConnectedSystemContainerScope.OneLevel))">
+                                            This level
+                                        </MudButton>
+                                    </MudButtonGroup>
+                                </ChildContent>
+                            </MudTooltip>
+                        }
+                    </span>
+
+                    @* Why a Container cannot be ticked, rather than leaving it greyed out with no explanation *@
+                    <span class="jim-picker-meta">
+                        @if (container.Included)
+                        {
+                            var coveringName = CoveringContainerName(container);
+                            <span data-testid="jim-picker-covered">Covered by @coveringName</span>
+                        }
+                        else if (container.ChildContainers.Count > 0)
+                        {
+                            @* Says whether narrowing this Container to This level would release one Container or
+                               thirty, which is the decision the row is asking about. *@
+                            <span>@container.ChildContainers.Count @(container.ChildContainers.Count == 1 ? "Container" : "Containers")</span>
+                        }
+                    </span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The partition whose Containers are being picked. Its Containers' <c>Selected</c> and <c>Scope</c> flags are
+    /// edited in place, so the caller's graph is what gets saved.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ConnectedSystemPartition Partition { get; set; } = null!;
+
+    /// <summary>
+    /// Raised after any edit, so the host can refresh whatever depends on the selection (a summary, a pending-changes
+    /// bar, a stale-preview notice).
+    /// </summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private string _filter = string.Empty;
+    private string _appliedFilter = string.Empty;
+    private List<Row> _visibleRows = [];
+    private int _selectedCount;
+    private int _totalCount;
+    private bool _expansionSeeded;
+
+    /// <summary>A Container and how deep it sits, flattened for rendering.</summary>
+    private sealed record Row(ConnectedSystemContainer Container, int Depth);
+
+    protected override void OnParametersSet() => Rebuild();
+
+    private void FilterChanged(string filter)
+    {
+        _filter = filter;
+        Rebuild();
+    }
+
+    private async Task ToggleSelectedAsync(ConnectedSystemContainer container)
+    {
+        ContainerSelectionEditor.ToggleSelected(container);
+        await EditedAsync();
+    }
+
+    private async Task SetScopeAsync(ConnectedSystemContainer container, ConnectedSystemContainerScope scope)
+    {
+        if (container.Scope == scope)
+            return;
+
+        ContainerSelectionEditor.ToggleScope(container);
+        await EditedAsync();
+    }
+
+    private async Task ClearSelectionAsync()
+    {
+        ContainerSelectionEditor.ClearSelection(Partition);
+        await EditedAsync();
+    }
+
+    private async Task EditedAsync()
+    {
+        Rebuild();
+        await OnChanged.InvokeAsync();
+    }
+
+    private void ToggleExpanded(ConnectedSystemContainer container)
+    {
+        container.Expanded = !container.Expanded;
+        Rebuild();
+    }
+
+    /// <summary>
+    /// Whether a Container's children are showing. A filter expands everything it matched through, so the
+    /// administrator sees the match rather than a collapsed ancestor of it.
+    /// </summary>
+    private bool IsExpanded(ConnectedSystemContainer container) =>
+        container.Expanded || !string.IsNullOrWhiteSpace(_appliedFilter);
+
+    private void Rebuild()
+    {
+        _appliedFilter = _filter?.Trim() ?? string.Empty;
+        _selectedCount = ContainerSelectionEditor.CountSelected(Partition);
+        _totalCount = ContainerSelectionEditor.CountAll(Partition);
+
+        SeedExpansionOnce();
+
+        _visibleRows = [];
+        AddRows(Partition.Containers ?? [], depth: 0);
+    }
+
+    /// <summary>
+    /// A hierarchy no larger than this opens fully; a larger one opens only as far as its selections.
+    /// </summary>
+    /// <remarks>
+    /// A handful of Containers read better all at once, and that is what a small directory has always done. Past
+    /// this the same behaviour buries the tree: a directory with a couple of hundred OUs expanded on arrival is a
+    /// wall to scroll rather than a control to use, and the filter is the way through it.
+    /// </remarks>
+    private const int AutoExpandThreshold = 25;
+
+    /// <summary>
+    /// Opens the tree far enough that the current import scope is visible on arrival.
+    /// </summary>
+    /// <remarks>
+    /// Done once rather than on every render. Re-deriving it every time would fight the administrator: a branch they
+    /// deliberately collapsed would spring open again on the next edit.
+    /// </remarks>
+    private void SeedExpansionOnce()
+    {
+        if (_expansionSeeded)
+            return;
+
+        _expansionSeeded = true;
+
+        if (_totalCount <= AutoExpandThreshold)
+        {
+            foreach (var container in ContainerSelectionEditor.Flatten(Partition))
+                container.Expanded = true;
+
+            return;
+        }
+
+        // Large hierarchy: open only the branches holding a selection, so what is in scope is still visible.
+        foreach (var container in ContainerSelectionEditor.Flatten(Partition).Where(c => c.Selected))
+        {
+            for (var ancestor = container.ParentContainer; ancestor != null; ancestor = ancestor.ParentContainer)
+                ancestor.Expanded = true;
+        }
+    }
+
+    private void AddRows(IEnumerable<ConnectedSystemContainer> containers, int depth)
+    {
+        // A Container is shown when it matches the filter or when something beneath it does, so a match is never
+        // orphaned from the branch that explains where it sits. Ordered by name so the tree reads predictably; the
+        // hierarchy's own order is an artefact of discovery.
+        foreach (var container in containers
+                     .Where(c => ContainerSelectionEditor.MatchesFilter(c, _appliedFilter))
+                     .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            _visibleRows.Add(new Row(container, depth));
+
+            if (container.ChildContainers.Count > 0 && IsExpanded(container))
+                AddRows(container.ChildContainers, depth + 1);
+        }
+    }
+
+    /// <summary>
+    /// The nearest ancestor whose search already returns this Container's objects, for the row to name.
+    /// </summary>
+    private static string CoveringContainerName(ConnectedSystemContainer container)
+    {
+        for (var ancestor = container.ParentContainer; ancestor != null; ancestor = ancestor.ParentContainer)
+        {
+            if (ancestor.Selected && ancestor.Scope == ConnectedSystemContainerScope.Subtree)
+                return ancestor.Name;
+        }
+
+        return "a Container above";
+    }
+
+    private static string RowClass(ConnectedSystemContainer container)
+    {
+        var classes = "jim-picker-row";
+
+        if (container.Selected)
+            classes += " jim-picker-row-selected";
+
+        if (container.Included)
+            classes += " jim-picker-row-covered";
+
+        return classes;
+    }
+
+    private static string SegmentClass(bool isOn) => isOn ? "jim-picker-seg-on" : "jim-picker-seg-off";
+}

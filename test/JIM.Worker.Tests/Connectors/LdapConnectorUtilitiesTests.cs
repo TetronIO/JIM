@@ -731,6 +731,85 @@ public class LdapConnectorUtilitiesTests
         Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", []), Is.True);
     }
 
+    [Test]
+    public void IsDnWithinAnyContainerScope_DnInsideNestedSelectedContainers_ReturnsTrue()
+    {
+        // Two Containers admit this object, one nested inside the other. The answer is the same either way; that it
+        // stays the same is the point, because what decides it is now the deeper Container rather than whichever
+        // matched first.
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree),
+            CreateContainer("OU=Sales,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.True);
+    }
+
+    #endregion
+
+    #region ResolveMostSpecificContainerScope tests
+
+    // Ranking one Container against another asks the same containment question with a Container's own Distinguished
+    // Name as the subject, so the normalisation and boundary rules above have to hold for it too. The ranking rule
+    // itself is pinned in ContainerSpecificityTests; these cover it running on this Connector's predicate.
+
+    [Test]
+    public void ResolveMostSpecificContainerScope_NestedSubtreeContainers_ReturnsTheDeeperOne()
+    {
+        var corp = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        var sales = CreateContainer("OU=Sales,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+
+        var result = LdapConnectorUtilities.ResolveMostSpecificContainerScope(
+            "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", [corp, sales]);
+
+        Assert.That(result, Is.SameAs(sales));
+    }
+
+    [Test]
+    public void ResolveMostSpecificContainerScope_ContainersDifferingInCasingAndSpacing_ReturnsTheDeeperOne()
+    {
+        var corp = CreateContainer("ou=corp, dc=example, dc=local", ConnectedSystemContainerScope.Subtree);
+        var sales = CreateContainer("OU=Sales,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+
+        var result = LdapConnectorUtilities.ResolveMostSpecificContainerScope(
+            "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", [corp, sales]);
+
+        Assert.That(result, Is.SameAs(sales));
+    }
+
+    [Test]
+    public void ResolveMostSpecificContainerScope_DnHeldDirectlyInTheAncestor_ReturnsTheAncestor()
+    {
+        var corp = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        var sales = CreateContainer("OU=Sales,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+
+        var result = LdapConnectorUtilities.ResolveMostSpecificContainerScope(
+            "CN=Alice,OU=Corp,DC=example,DC=local", [corp, sales]);
+
+        Assert.That(result, Is.SameAs(corp));
+    }
+
+    [Test]
+    public void ResolveMostSpecificContainerScope_DnOutsideEveryContainer_ReturnsNull()
+    {
+        var corp = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        var partners = CreateContainer("OU=Partners,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+
+        var result = LdapConnectorUtilities.ResolveMostSpecificContainerScope(
+            "CN=Alice,OU=Contractors,DC=example,DC=local", [corp, partners]);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ResolveMostSpecificContainerScope_NoContainers_ReturnsNull()
+    {
+        // No Containers is no opinion, which IsDnWithinAnyContainerScope reads as "admit everything". There is no
+        // Container to name as the one that decided, so this says so rather than inventing one.
+        Assert.That(LdapConnectorUtilities.ResolveMostSpecificContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", []), Is.Null);
+    }
+
     #endregion
 
     #region Helper Methods
@@ -744,6 +823,40 @@ public class LdapConnectorUtilitiesTests
             Selected = true,
             Scope = scope
         };
+    }
+
+    #endregion
+
+    #region GetContainerDisplayNameFromDn Tests
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithANestedDn_ReturnsTheLeafRdnValue()
+    {
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn("OU=Sales,OU=Corp,DC=example,DC=com"), Is.EqualTo("Sales"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithAnEscapedComma_ReturnsTheUnescapedValue()
+    {
+        // A naive split on ',' would answer "Sales\".
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(@"OU=Sales\, EMEA,DC=example,DC=com"), Is.EqualTo("Sales, EMEA"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithAnUnparseableIdentifier_ReturnsItUnchanged()
+    {
+        // Showing something is better than showing an empty row.
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn("not-a-distinguished-name"), Is.EqualTo("not-a-distinguished-name"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithNoIdentifier_ReturnsEmpty()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(null), Is.Empty);
+            Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(string.Empty), Is.Empty);
+        }
     }
 
     #endregion

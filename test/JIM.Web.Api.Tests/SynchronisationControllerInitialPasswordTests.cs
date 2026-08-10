@@ -42,6 +42,7 @@ public class SynchronisationControllerInitialPasswordTests
     private Mock<ISyncRepository> _mockSyncRepo = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
+    private RoundTripCredentialProtection _credentialProtection = null!;
 
     [SetUp]
     public void SetUp()
@@ -66,7 +67,14 @@ public class SynchronisationControllerInitialPasswordTests
         _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
-        _application = new JimApplication(_mockRepository.Object, syncRepository: _mockSyncRepo.Object);
+        // Set on the facade, not just handed to the controller: the static password is encrypted through the
+        // application layer, and without this the fallback would build a real Data Protection provider and touch
+        // the filesystem from a unit test.
+        _credentialProtection = new RoundTripCredentialProtection();
+        _application = new JimApplication(_mockRepository.Object, syncRepository: _mockSyncRepo.Object)
+        {
+            CredentialProtection = _credentialProtection
+        };
         _controller = new SynchronisationController(
             new Mock<ILogger<SynchronisationController>>().Object,
             _application,
@@ -343,11 +351,226 @@ public class SynchronisationControllerInitialPasswordTests
         Assert.That(typeof(SyncRuleInitialPasswordResponse).GetProperties(),
             Has.None.Matches<System.Reflection.PropertyInfo>(p => p.Name.Contains("Password", StringComparison.OrdinalIgnoreCase)
                                                                   && p.PropertyType == typeof(string)),
-            "no string property on this response may be a password; there is nothing stored to return");
+            "no string property on this response may be a password: a generated one is never stored, and the static " +
+            "one (#1273) is stored but write-only on every surface");
         Assert.That(response.ParkedReasons, Has.Count.EqualTo(1));
     }
 
     #endregion
+
+    #region The static password (#1273)
+
+    /// <summary>
+    /// The one password JIM stores goes in encrypted and never comes back out. A caller can learn that one is
+    /// set and when it last changed, which is what a shared password's rotation actually needs.
+    /// </summary>
+    [Test]
+    public async Task UpdateSyncRuleInitialPasswordAsync_WithAStaticPassword_StoresItEncryptedAsync()
+    {
+        const string password = "Brown-Chicken-Ladder-47";
+        var syncRule = BuildProvisioningRule(10);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(10)).ReturnsAsync(syncRule);
+
+        var result = await _controller.UpdateSyncRuleInitialPasswordAsync(10, new UpdateSyncRuleInitialPasswordRequest
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPassword = password
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var stored = syncRule.InitialPassword!.StaticPasswordEncryptedValue;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored, Is.Not.Null.And.Not.EqualTo(password), "the plaintext must never be what is stored");
+            Assert.That(_credentialProtection.Unprotect(stored), Is.EqualTo(password), "and it must round-trip");
+            Assert.That(syncRule.InitialPassword!.StaticPasswordSetAt, Is.Not.Null);
+        }
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleInitialPasswordAsync_WithAStaticPassword_DoesNotReturnItAsync()
+    {
+        const string password = "Brown-Chicken-Ladder-47";
+        var syncRule = BuildProvisioningRule(11);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(11)).ReturnsAsync(syncRule);
+
+        var result = await _controller.UpdateSyncRuleInitialPasswordAsync(11, new UpdateSyncRuleInitialPasswordRequest
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPassword = password
+        });
+
+        var json = System.Text.Json.JsonSerializer.Serialize(((OkObjectResult)result).Value);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(json, Does.Not.Contain(password));
+            Assert.That(json, Does.Not.Contain(syncRule.InitialPassword!.StaticPasswordEncryptedValue!),
+                "nor the ciphertext, which is the password to anyone holding the encryption key");
+        }
+    }
+
+    /// <summary>
+    /// An omitted password means "leave the stored one alone", which is what makes the field write-only without a
+    /// special case anywhere. Re-encrypting an unchanged password would also read as a change and release every
+    /// account parked against this rule for nothing.
+    /// </summary>
+    [Test]
+    public async Task UpdateSyncRuleInitialPasswordAsync_WithoutAStaticPassword_LeavesTheStoredOneUnchangedAsync()
+    {
+        var syncRule = BuildProvisioningRule(12);
+        var alreadyStored = _credentialProtection.Protect("Brown-Chicken-Ladder-47");
+        var setAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        syncRule.InitialPassword = new SyncRuleInitialPassword
+        {
+            SyncRuleId = 12,
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPasswordEncryptedValue = alreadyStored,
+            StaticPasswordSetAt = setAt
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(12)).ReturnsAsync(syncRule);
+
+        var result = await _controller.UpdateSyncRuleInitialPasswordAsync(12, new UpdateSyncRuleInitialPasswordRequest
+        {
+            ExpiryBehaviour = PasswordExpiryBehaviour.NeverExpires
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(syncRule.InitialPassword!.StaticPasswordEncryptedValue, Is.EqualTo(alreadyStored));
+            Assert.That(syncRule.InitialPassword!.StaticPasswordSetAt, Is.EqualTo(setAt), "unchanged means unchanged, including when it changed");
+        }
+    }
+
+    /// <summary>
+    /// Refused at the point of saving for the same reason an unsatisfiable generator configuration is: one static
+    /// password goes to every account this rule provisions, so a rejection is not one account's problem.
+    /// </summary>
+    [Test]
+    public async Task UpdateSyncRuleInitialPasswordAsync_WithAStaticPasswordTheTargetWouldRefuse_IsRefusedAsync()
+    {
+        var syncRule = BuildProvisioningRule(13);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(13)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(100))
+            .ReturnsAsync(new ConnectedSystemPasswordPolicy { MinimumLength = 30 });
+
+        var result = await _controller.UpdateSyncRuleInitialPasswordAsync(13, new UpdateSyncRuleInitialPasswordRequest
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPassword = "short"
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleInitialPasswordAsync_RefusingAStaticPassword_DoesNotRepeatItAsync()
+    {
+        const string password = "short";
+        var syncRule = BuildProvisioningRule(14);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(14)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetPasswordPolicyAsync(100))
+            .ReturnsAsync(new ConnectedSystemPasswordPolicy { MinimumLength = 30 });
+
+        var result = await _controller.UpdateSyncRuleInitialPasswordAsync(14, new UpdateSyncRuleInitialPasswordRequest
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPassword = password
+        });
+
+        var json = System.Text.Json.JsonSerializer.Serialize(((BadRequestObjectResult)result).Value);
+        Assert.That(json, Does.Not.Contain(password), "an error body is logged and displayed like any other");
+    }
+
+    /// <summary>
+    /// A rule that will use one static password but has none is refused rather than saved: delivery would park
+    /// every account it provisions, and the administrator saving it is the person who can fix it.
+    /// </summary>
+    [Test]
+    public async Task UpdateSyncRuleInitialPasswordAsync_SelectingTheStaticSourceWithNoPassword_IsRefusedAsync()
+    {
+        var syncRule = BuildProvisioningRule(15);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(15)).ReturnsAsync(syncRule);
+
+        var result = await _controller.UpdateSyncRuleInitialPasswordAsync(15, new UpdateSyncRuleInitialPasswordRequest
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetSyncRuleInitialPasswordAsync_WithAStaticPassword_ReportsThatOneIsSetAndWhenAsync()
+    {
+        var setAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var syncRule = BuildProvisioningRule(16);
+        syncRule.InitialPassword = new SyncRuleInitialPassword
+        {
+            SyncRuleId = 16,
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPasswordEncryptedValue = _credentialProtection.Protect("Brown-Chicken-Ladder-47"),
+            StaticPasswordSetAt = setAt
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(16)).ReturnsAsync(syncRule);
+
+        var result = await _controller.GetSyncRuleInitialPasswordAsync(16);
+        var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.StaticPasswordSet, Is.True);
+            Assert.That(response.StaticPasswordSetAt, Is.EqualTo(setAt));
+        }
+    }
+
+    [Test]
+    public async Task GetSyncRuleInitialPasswordAsync_WithNoStaticPassword_ReportsThatNoneIsSetAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(17)).ReturnsAsync(BuildProvisioningRule(17));
+
+        var result = await _controller.GetSyncRuleInitialPasswordAsync(17);
+        var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.StaticPasswordSet, Is.False);
+            Assert.That(response.StaticPasswordSetAt, Is.Null);
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Credential protection that round-trips through a recognisable prefix and base64, so the ciphertext never
+    /// literally contains the plaintext and a test can assert that neither reached a response.
+    /// </summary>
+    private sealed class RoundTripCredentialProtection : ICredentialProtectionService
+    {
+        private const string Prefix = "$JIM$v1$";
+
+        public string? Protect(string? plainText) =>
+            string.IsNullOrEmpty(plainText) || IsProtected(plainText)
+                ? plainText
+                : Prefix + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(plainText));
+
+        public bool IsProtected(string? value) =>
+            !string.IsNullOrEmpty(value) && value.StartsWith(Prefix, StringComparison.Ordinal);
+
+        public string? Unprotect(string? protectedData) =>
+            IsProtected(protectedData)
+                ? System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(protectedData![Prefix.Length..]))
+                : protectedData;
+    }
 
     private static SyncRule BuildProvisioningRule(int id) =>
         new()
