@@ -78,7 +78,7 @@ public class PreviewsControllerTests
 
         var response = await GetPreviewResponseAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.ActivityId, Is.EqualTo(ActivityId));
             Assert.That(response.IsComplete, Is.True);
@@ -93,7 +93,7 @@ public class PreviewsControllerTests
             Assert.That(response.Groups[0].DeltasSampled, Is.True,
                 "An unlabelled sample read as a complete list is the failure this flag exists to prevent.");
             Assert.That(response.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
-        });
+        }
     }
 
     [Test]
@@ -111,7 +111,7 @@ public class PreviewsControllerTests
 
         var response = await GetPreviewResponseAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.HasFailed, Is.True);
             Assert.That(response.IsComplete, Is.False);
@@ -119,7 +119,7 @@ public class PreviewsControllerTests
             Assert.That(response.ErrorMessage, Is.EqualTo("the count query failed"));
             Assert.That(response.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotStarted),
                 "A stage that never ran is not a stage that succeeded.");
-        });
+        }
     }
 
     [Test]
@@ -132,11 +132,11 @@ public class PreviewsControllerTests
 
         var response = await GetPreviewResponseAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.ValidationFindings, Is.Empty);
             Assert.That(response.Groups, Has.Count.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -172,13 +172,13 @@ public class PreviewsControllerTests
             as OkObjectResult;
         var page = result!.Value as PaginatedResponse<ConfigurationChangePreviewDeltaResponse>;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(page!.TotalCount, Is.EqualTo(40));
             Assert.That(page.Page, Is.EqualTo(2));
             Assert.That(page.Items.Single().ObjectDisplayName, Is.EqualTo("Ada Lovelace"));
             Assert.That(page.Items.Single().GroupId, Is.EqualTo(groupId));
-        });
+        }
     }
 
     [Test]
@@ -201,11 +201,11 @@ public class PreviewsControllerTests
             search: "lovelace") as OkObjectResult;
         var page = result!.Value as PaginatedResponse<ConfigurationChangePreviewDeltaResponse>;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(page!.TotalCount, Is.EqualTo(1), "the total must count the matches, not the whole group");
             Assert.That(page.Items.Single().ObjectDisplayName, Is.EqualTo("Ada Lovelace"));
-        });
+        }
     }
 
     [Test]

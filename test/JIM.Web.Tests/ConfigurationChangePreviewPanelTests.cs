@@ -85,13 +85,13 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("the evaluation query timed out"),
                 "the administrator needs to know why, not just that");
             Assert.That(panel.Markup, Does.Not.Contain("4,812"),
                 "a count drawn from a partial evaluation must not be presented as what the change would do");
-        });
+        }
     }
 
     [Test]
@@ -111,12 +111,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("Evaluating what the change would do"));
             Assert.That(panel.Markup, Does.Not.Contain("would not change anything"),
                 "an evaluation in progress has not concluded that nothing would change");
-        });
+        }
     }
 
     [Test]
@@ -147,11 +147,11 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("4,812"), "the counts it did produce are the answer it has");
             Assert.That(panel.Markup, Does.Not.Contain("would not change anything"));
-        });
+        }
     }
 
     [Test]
@@ -166,12 +166,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("40,000"), "the count is exact whether or not the rows were capped");
             Assert.That(panel.Markup, Does.Contain("sample").IgnoreCase,
                 "an unlabelled sample read as a complete list is the failure this label exists to prevent");
-        });
+        }
     }
 
     [Test]
@@ -187,6 +187,26 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
+    public void Panel_SummaryRow_SaysItCoversObjectsOfTheType()
+    {
+        // A summary row is about many objects, so "User in Yellowstone Verify" described one of them. The type name
+        // itself stays exactly as its system spells it, because it is a schema identifier and not JIM's to inflect;
+        // "objects" after it is what carries the plurality (#1275).
+        GivenPreview(Complete);
+        GivenGroups(Group(4_812));
+
+        var panel = RenderPanel();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(panel.Markup, Does.Contain("User"));
+            Assert.That(panel.Markup, Does.Contain("objects"));
+            Assert.That(panel.Markup, Does.Not.Contain("Users"),
+                "pluralising the type name would have JIM inventing a name the system it came from does not use");
+        }
+    }
+
+    [Test]
     public void Panel_GroupNamingAValuePair_ShowsBothValues()
     {
         GivenPreview(Complete);
@@ -194,14 +214,14 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // "38,900 would have Email changed" is a summary of the wrong thing; the values are what makes it
             // reviewable without opening the drill-down at all.
             Assert.That(panel.Markup, Does.Contain("@contoso.com"));
             Assert.That(panel.Markup, Does.Contain("@fabrikam.com"));
             Assert.That(panel.Markup, Does.Contain("Email"));
-        });
+        }
     }
 
     [Test]
@@ -268,12 +288,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         panel.FindAll("tbody tr").Last().Click();
 
         var heading = panel.Find("[data-testid='jim-preview-drilldown-heading']").TextContent;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(heading, Does.Contain("@contoso.co.uk"));
             Assert.That(heading, Does.Contain("@fabrikam.co.uk"));
             Assert.That(heading, Does.Contain("Email"));
-        });
+        }
     }
 
     [Test]
@@ -308,12 +328,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("No deletion triggers are selected."));
             Assert.That(panel.Markup, Does.Contain("cannot be applied"),
                 "a blocking finding stops the change, and the panel has to say that rather than only listing it");
-        });
+        }
     }
 
     [Test]
@@ -403,12 +423,12 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             .Add(x => x.ShowProgress, false));
         panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Not.Contain("Evaluating what the change would do"));
             Assert.That(panel.FindAll("[data-testid='jim-preview-cancel']"), Is.Not.Empty);
             Assert.That(panel.Markup, Does.Contain("Summary"), "the stages are the panel's own and stay either way");
-        });
+        }
     }
 
     [Test]
@@ -420,11 +440,11 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
 
         var panel = RenderPanel();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(panel.Markup, Does.Contain("no longer available").IgnoreCase);
             Assert.That(panel.Markup, Does.Not.Contain("would not change anything"));
-        });
+        }
     }
 
     [Test]

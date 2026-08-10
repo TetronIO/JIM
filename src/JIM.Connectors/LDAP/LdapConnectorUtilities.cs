@@ -7,6 +7,7 @@ using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
+using System.Text;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
@@ -495,6 +496,126 @@ internal static class LdapConnectorUtilities
     internal static string GetPaginationTokenName(ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType)
     {
         return $"{connectedSystemContainer.ExternalId}|{connectedSystemObjectType.Id}";
+    }
+
+    /// <summary>
+    /// Translates a Container's scope into the LDAP search scope to use when searching from it as a base.
+    /// </summary>
+    internal static SearchScope GetSearchScope(ConnectedSystemContainer connectedSystemContainer) =>
+        connectedSystemContainer.Scope == ConnectedSystemContainerScope.OneLevel
+            ? SearchScope.OneLevel
+            : SearchScope.Subtree;
+
+    /// <summary>
+    /// Whether a distinguished name would be returned by a search based on the given Container, using that
+    /// Container's scope. Answers in code what the directory answers server-side during a full import, for the
+    /// delta paths that read a directory-wide change log rather than searching per Container.
+    /// </summary>
+    internal static bool IsDnWithinContainerScope(string? distinguishedName, ConnectedSystemContainer connectedSystemContainer)
+    {
+        if (string.IsNullOrWhiteSpace(distinguishedName) || string.IsNullOrWhiteSpace(connectedSystemContainer.ExternalId))
+            return false;
+
+        var dn = NormaliseDn(distinguishedName);
+        var baseDn = NormaliseDn(connectedSystemContainer.ExternalId);
+
+        if (dn.Equals(baseDn, StringComparison.OrdinalIgnoreCase))
+        {
+            // A subtree search returns its base entry; a one-level search does not.
+            return connectedSystemContainer.Scope != ConnectedSystemContainerScope.OneLevel;
+        }
+
+        // Compare on the ",<base>" boundary so that OU=NotCorp,DC=x is not mistaken for a descendant of OU=Corp,DC=x.
+        var suffix = "," + baseDn;
+        if (!dn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (connectedSystemContainer.Scope != ConnectedSystemContainerScope.OneLevel)
+            return true;
+
+        // One level: what remains once the base is removed must be a single RDN, i.e. hold no further
+        // unescaped separator. An escaped comma is part of an RDN's value rather than a separator.
+        var relative = dn[..^suffix.Length];
+        return !ContainsUnescapedComma(relative);
+    }
+
+    /// <summary>
+    /// The name to show for a container whose only identifier is its Distinguished Name: the unescaped value of the
+    /// leaf RDN's first component, so "OU=Sales,OU=Corp,DC=example,DC=com" reads as "Sales".
+    /// </summary>
+    /// <remarks>
+    /// Used both when a directory publishes no name of its own for a discovered container (everything except Active
+    /// Directory) and when the Connector creates a container during an export. Answering it in one place is what
+    /// stops a container acquiring a different name depending on how JIM first met it. An identifier that will not
+    /// parse as a Distinguished Name is returned unchanged: showing something is better than showing an empty row.
+    /// </remarks>
+    internal static string GetContainerDisplayNameFromDn(string? distinguishedName)
+    {
+        if (string.IsNullOrEmpty(distinguishedName))
+            return string.Empty;
+
+        return LdapDistinguishedName.TryParse(distinguishedName, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0
+            ? parsedDn.LeafRdn.Components[0].Value
+            : distinguishedName;
+    }
+
+    /// <summary>
+    /// Whether a distinguished name falls within the scope of any of the supplied Containers. An empty
+    /// collection means the caller has no Container-level opinion to apply, and every name is admitted.
+    /// </summary>
+    internal static bool IsDnWithinAnyContainerScope(string? distinguishedName, IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers)
+    {
+        if (connectedSystemContainers.Count == 0)
+            return true;
+
+        return connectedSystemContainers.Any(c => IsDnWithinContainerScope(distinguishedName, c));
+    }
+
+    /// <summary>
+    /// Removes the optional whitespace some directories emit after each DN separator, leaving a form that can
+    /// be compared component by component. Escaped separators are left alone.
+    /// </summary>
+    private static string NormaliseDn(string distinguishedName)
+    {
+        var normalised = new StringBuilder(distinguishedName.Length);
+        for (var i = 0; i < distinguishedName.Length; i++)
+        {
+            var character = distinguishedName[i];
+            normalised.Append(character);
+
+            if (character != ',' || IsEscaped(distinguishedName, i))
+                continue;
+
+            // Skip the whitespace that follows this separator.
+            while (i + 1 < distinguishedName.Length && distinguishedName[i + 1] == ' ')
+                i++;
+        }
+
+        return normalised.ToString().Trim();
+    }
+
+    private static bool ContainsUnescapedComma(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (value[i] == ',' && !IsEscaped(value, i))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether the character at the given index is escaped, counting the run of backslashes before it: an odd
+    /// run escapes the character, an even run is itself a run of escaped backslashes.
+    /// </summary>
+    private static bool IsEscaped(string value, int index)
+    {
+        var backslashes = 0;
+        for (var i = index - 1; i >= 0 && value[i] == '\\'; i--)
+            backslashes++;
+
+        return backslashes % 2 == 1;
     }
 
     /// <summary>

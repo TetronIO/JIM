@@ -549,6 +549,54 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Returns administrator-facing wording for an attribute's writability. The enum names are not shown:
+    /// an administrator needs to know what they can do with the attribute, not what JIM calls the state.
+    /// </summary>
+    public static string GetAttributeWritabilityLabel(AttributeWritability writability)
+    {
+        return writability switch
+        {
+            AttributeWritability.Writable => "Writable",
+            AttributeWritability.ReadOnly => "Read-Only",
+            AttributeWritability.WritableOnCreate => "Set on creation only",
+            _ => writability.ToString().SplitOnCapitalLetters()
+        };
+    }
+
+    /// <summary>
+    /// Returns a one-sentence explanation of what an attribute's writability means for Attribute Flow,
+    /// for use as tooltip text alongside the label.
+    /// </summary>
+    public static string GetAttributeWritabilityDescription(AttributeWritability writability)
+    {
+        return writability switch
+        {
+            AttributeWritability.Writable =>
+                "The Connected System accepts writes to this attribute, so an export Attribute Flow can keep it up to date.",
+            AttributeWritability.ReadOnly =>
+                "The Connected System will not accept writes to this attribute. It can be imported, but no export Attribute Flow may target it.",
+            AttributeWritability.WritableOnCreate =>
+                "The Connected System accepts a value for this attribute only when the object is created. An export Attribute Flow may target it: the value is sent with the Create Pending Export, and JIM never sends it again, because changing it would break the link to the object.",
+            _ => string.Empty
+        };
+    }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for an attribute's writability chip. Each state gets its own colour so
+    /// the constraint is visible at a glance in a long schema table.
+    /// </summary>
+    public static Color GetAttributeWritabilityChipColour(AttributeWritability writability)
+    {
+        return writability switch
+        {
+            AttributeWritability.Writable => Color.Success,
+            AttributeWritability.ReadOnly => Color.Warning,
+            AttributeWritability.WritableOnCreate => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
     /// Returns a MudBlazor colour for Attribute Flow mapping type chips.
     /// </summary>
     public static Color GetMappingTypeChipColour(SyncRuleMappingSourcesType sourceType)
@@ -1093,6 +1141,21 @@ public static class Helpers
     public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return OutcomeDisplayMap.Get(outcomeType).TechnicalLabel;
+    }
+
+    /// <summary>
+    /// Gets the plain-language display name for a sync outcome type (e.g. "Identity created"). Delegates to
+    /// <see cref="OutcomeDisplayMap"/>, the single source of truth for outcome display mappings.
+    /// </summary>
+    /// <remarks>
+    /// The sibling of <see cref="GetOutcomeTypeDisplayName"/>, and the right one for a Configuration Change
+    /// Preview (#827): an operator reading a completed run's outcomes wants the exact outcome name, whereas an
+    /// administrator deciding whether to save a configuration change wants written English. Having both named
+    /// makes a surface state which audience it is writing for, rather than picking a label by accident.
+    /// </remarks>
+    public static string GetOutcomeTypePlainName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return OutcomeDisplayMap.Get(outcomeType).PlainLabel;
     }
 
     /// <summary>

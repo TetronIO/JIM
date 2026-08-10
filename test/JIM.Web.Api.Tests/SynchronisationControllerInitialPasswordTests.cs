@@ -118,12 +118,12 @@ public class SynchronisationControllerInitialPasswordTests
 
         var response = ((OkObjectResult)result).Value as SyncRuleInitialPasswordResponse;
         Assert.That(response, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response!.Enabled, Is.False);
             Assert.That(response!.Source, Is.EqualTo(InitialPasswordSource.Discovered));
             Assert.That(response!.CustomPolicy.Length, Is.EqualTo(new PasswordGenerationPolicy().Length));
-        });
+        }
     }
 
     [Test]
@@ -166,7 +166,7 @@ public class SynchronisationControllerInitialPasswordTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         var stored = syncRule.InitialPassword;
         Assert.That(stored, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored!.Enabled, Is.True);
             Assert.That(stored!.Source, Is.EqualTo(InitialPasswordSource.Custom));
@@ -175,7 +175,7 @@ public class SynchronisationControllerInitialPasswordTests
             Assert.That(stored!.CustomPolicy.Style, Is.EqualTo(PasswordGenerationStyle.Words));
             Assert.That(stored!.CustomPolicy.WordCount, Is.EqualTo(5));
             Assert.That(stored!.CustomPolicy.AppendSymbol, Is.True);
-        });
+        }
     }
 
     /// <summary>
@@ -201,12 +201,12 @@ public class SynchronisationControllerInitialPasswordTests
         });
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(syncRule.InitialPassword!.EnableAccount, Is.True);
             Assert.That(syncRule.InitialPassword!.Source, Is.EqualTo(InitialPasswordSource.Custom), "an omitted field must not be reset to its default");
             Assert.That(syncRule.InitialPassword!.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires));
-        });
+        }
     }
 
     /// <summary>
@@ -304,7 +304,7 @@ public class SynchronisationControllerInitialPasswordTests
         var result = await _controller.GetSyncRuleInitialPasswordAsync(5);
         var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.ParkedAccountCount, Is.EqualTo(14));
             Assert.That(response.ExpiredAccountCount, Is.EqualTo(2),
@@ -315,7 +315,7 @@ public class SynchronisationControllerInitialPasswordTests
             Assert.That(response.ParkedReasons[0].AccountCount, Is.EqualTo(11));
             Assert.That(response.ParkedReasons[0].FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
             Assert.That(response.ParkedReasons[0].FirstSeenAt, Is.EqualTo(new DateTime(2026, 3, 1, 9, 0, 0, DateTimeKind.Utc)));
-        });
+        }
     }
 
     [Test]
@@ -326,12 +326,12 @@ public class SynchronisationControllerInitialPasswordTests
         var result = await _controller.GetSyncRuleInitialPasswordAsync(5);
         var response = (SyncRuleInitialPasswordResponse)((OkObjectResult)result).Value!;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(response.ParkedReasons, Is.Empty);
             Assert.That(response.ParkedAccountCount, Is.Zero);
             Assert.That(response.ExpiredAccountCount, Is.Zero);
-        });
+        }
     }
 
     /// <summary>

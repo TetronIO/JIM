@@ -141,7 +141,7 @@ public class ConfigurationChangePreviewServerTests
 
         var result = await NewServer().StartPreviewAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_activity, Is.Not.Null);
             Assert.That(result.ActivityId, Is.EqualTo(_activity!.Id));
@@ -158,7 +158,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.EstimatedAffectedObjects, Is.EqualTo(1_200));
             Assert.That(_preview!.EstimatedDeltaRows, Is.EqualTo(2_400));
             Assert.That(result.IsBlocked, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -169,12 +169,12 @@ public class ConfigurationChangePreviewServerTests
         await NewServer().StartPreviewAsync(NewRequest());
 
         var stored = JsonSerializer.Deserialize<List<PreviewValidationFinding>>(_preview!.ValidationFindings!);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored, Has.Count.EqualTo(1));
             Assert.That(stored![0].Message, Is.EqualTo("No trigger systems are selected."));
             Assert.That(stored![0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
-        });
+        }
     }
 
     [Test]
@@ -184,7 +184,7 @@ public class ConfigurationChangePreviewServerTests
 
         var result = await NewServer().StartPreviewAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsBlocked, Is.True);
             Assert.That(_adapter.EstimateCalls, Is.Zero,
@@ -195,7 +195,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
             Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
-        });
+        }
     }
 
     [Test]
@@ -205,14 +205,14 @@ public class ConfigurationChangePreviewServerTests
 
         var result = await NewServer().StartPreviewAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Failed, Is.True);
             Assert.That(_preview!.ValidationStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
             Assert.That(_preview!.HasFailed, Is.True);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
             Assert.That(_activity!.ErrorMessage, Does.Contain("could not read the current configuration"));
-        });
+        }
     }
 
     #endregion
@@ -231,7 +231,7 @@ public class ConfigurationChangePreviewServerTests
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
         var counts = JsonSerializer.Deserialize<List<PreviewImpactCount>>(_preview!.ImpactCounts!);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(counts, Has.Count.EqualTo(1));
             Assert.That(counts![0].ObjectCount, Is.EqualTo(4_812));
@@ -242,7 +242,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.NotApplicable));
             Assert.That(_preview!.IsComplete, Is.True);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
-        });
+        }
     }
 
     [Test]
@@ -255,14 +255,14 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_preview!.ImpactCountsStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
             Assert.That(_adapter.EvaluateCalls, Is.Zero);
             Assert.That(_preview!.HasFailed, Is.True);
             Assert.That(_preview!.IsComplete, Is.False);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
-        });
+        }
     }
 
     #endregion
@@ -288,7 +288,7 @@ public class ConfigurationChangePreviewServerTests
         Assert.That(_persistedGroups, Has.Count.EqualTo(3));
         var scope = _persistedGroups.Single(g => g.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope);
         var flow = _persistedGroups.Where(g => g.AttributeName == "Email").ToList();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(scope.ObjectCount, Is.EqualTo(3));
             Assert.That(scope.Deltas, Has.Count.EqualTo(3));
@@ -303,7 +303,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
-        });
+        }
     }
 
     [Test]
@@ -319,14 +319,14 @@ public class ConfigurationChangePreviewServerTests
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
         var group = _persistedGroups.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(group.ObjectCount, Is.EqualTo(overCap),
                 "Capping decides what can be drilled into, never what the administrator is told the change would do.");
             Assert.That(group.Deltas, Has.Count.EqualTo(ConfigurationChangePreviewServer.MaximumDeltasPerGroup));
             Assert.That(group.DeltasSampled, Is.True);
             Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
-        });
+        }
     }
 
     [Test]
@@ -345,13 +345,13 @@ public class ConfigurationChangePreviewServerTests
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
         var group = _persistedGroups.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(group.ObjectCount, Is.EqualTo(overCap));
             Assert.That(group.Deltas, Has.Count.EqualTo(overCap), "nothing was capped, so nothing may be missing");
             Assert.That(group.DeltasSampled, Is.False);
             Assert.That(_preview!.DeltaPersistence, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Full));
-        });
+        }
     }
 
     [Test]
@@ -380,12 +380,12 @@ public class ConfigurationChangePreviewServerTests
 
         var estimate = await NewServer().EstimatePreviewCostAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(estimate.EstimatedDeltaRows, Is.EqualTo(240_000L));
             Assert.That(_activity, Is.Null, "asking what a preview would cost is not asking for a preview");
             Assert.That(_preview, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -399,14 +399,14 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_activity!.ObjectsToProcess, Is.EqualTo(2));
             Assert.That(_activity!.ObjectsProcessed, Is.EqualTo(2),
                 "Progress lives on the Activity because that is the only thing the notification trigger watches; " +
                 "a preview that recorded progress only on its own row would leave the panel silent.");
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
-        });
+        }
     }
 
     [Test]
@@ -421,7 +421,7 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_persistedGroups, Is.Empty,
                 "Groups built from a partial stream would under-count without saying so, which is worse than no answer.");
@@ -430,7 +430,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Failed));
             Assert.That(_preview!.IsComplete, Is.False);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
-        });
+        }
     }
 
     [Test]
@@ -451,7 +451,7 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, cancellation.Token);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_adapter.DeltasYielded, Is.LessThan(50), "A cancelled preview must stop evaluating, not merely stop reporting.");
             Assert.That(_persistedGroups, Is.Empty);
@@ -459,7 +459,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Cancelled));
             Assert.That(_preview!.HasFailed, Is.False, "Nothing went wrong; the administrator changed their mind.");
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Cancelled));
-        });
+        }
     }
 
     [Test]
@@ -470,7 +470,7 @@ public class ConfigurationChangePreviewServerTests
         var start = await server.StartPreviewAsync(request);
         await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_adapter.EvaluateCalls, Is.EqualTo(1));
             Assert.That(_preview!.SummaryStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete),
@@ -478,7 +478,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(_preview!.DeltasStatus, Is.EqualTo(ConfigurationChangePreviewStageStatus.Complete));
             Assert.That(_preview!.IsComplete, Is.True);
             Assert.That(_activity!.Status, Is.EqualTo(ActivityStatus.Complete));
-        });
+        }
     }
 
     #endregion
@@ -528,13 +528,13 @@ public class ConfigurationChangePreviewServerTests
 
         var result = await NewServer().StartAndDispatchPreviewAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runner.Enqueued.Select(e => e.ActivityId), Is.EqualTo(new[] { result.ActivityId }));
             Assert.That(_queuedWorkerTasks, Is.Empty,
                 "A preview of ten objects finishes in the time it takes the worker to notice it exists.");
             Assert.That(_preview!.DispatchedToWorker, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -545,7 +545,7 @@ public class ConfigurationChangePreviewServerTests
         var result = await NewServer().StartAndDispatchPreviewAsync(NewRequest());
 
         var queued = _queuedWorkerTasks.OfType<ConfigurationChangePreviewWorkerTask>().Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runner.Enqueued, Is.Empty);
             Assert.That(queued.Surface, Is.EqualTo(ConfigurationChangePreviewSurface.MetaverseObjectType));
@@ -555,7 +555,7 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(queued.Activity?.Id, Is.EqualTo(result.ActivityId),
                 "The task must attach to the Activity validation already ran under, not create a second one.");
             Assert.That(_preview!.DispatchedToWorker, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -595,12 +595,12 @@ public class ConfigurationChangePreviewServerTests
 
         await NewServer().StartAndDispatchPreviewAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runner.Enqueued, Has.Count.EqualTo(1),
                 "The threshold is a service setting so it can be tuned; a dispatch that ignored it would make that a lie.");
             Assert.That(_queuedWorkerTasks, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -610,12 +610,12 @@ public class ConfigurationChangePreviewServerTests
 
         await NewServer().StartAndDispatchPreviewAsync(NewRequest());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_runner.Enqueued, Is.Empty);
             Assert.That(_queuedWorkerTasks, Is.Empty,
                 "There is nothing to evaluate about a change that cannot be applied.");
-        });
+        }
     }
 
     #endregion

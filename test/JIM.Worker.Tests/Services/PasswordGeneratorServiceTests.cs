@@ -57,13 +57,13 @@ public class PasswordGeneratorServiceTests
         for (var i = 0; i < Iterations; i++)
         {
             var password = _generator.Generate(policy);
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(password.Count(char.IsUpper), Is.GreaterThanOrEqualTo(3), password);
                 Assert.That(password.Count(char.IsLower), Is.GreaterThanOrEqualTo(4), password);
                 Assert.That(password.Count(char.IsDigit), Is.GreaterThanOrEqualTo(2), password);
                 Assert.That(password.Count(c => policy.PermittedSymbols.Contains(c)), Is.GreaterThanOrEqualTo(2), password);
-            });
+            }
         }
     }
 
@@ -189,11 +189,11 @@ public class PasswordGeneratorServiceTests
         var expected = counts.Values.Sum() / 26d;
         var worst = counts.MinBy(kvp => kvp.Value);
         var best = counts.MaxBy(kvp => kvp.Value);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(worst.Value, Is.GreaterThan(expected * 0.7), $"'{worst.Key}' drawn far less often than expected.");
             Assert.That(best.Value, Is.LessThan(expected * 1.3), $"'{best.Key}' drawn far more often than expected.");
-        });
+        }
     }
 
     [Test]
@@ -281,11 +281,11 @@ public class PasswordGeneratorServiceTests
         for (var i = 0; i < Iterations; i++)
         {
             var words = _generator.Generate(policy).Split('-');
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(char.IsUpper(words[0][0]), Is.True, words[0]);
                 Assert.That(words.Skip(1).All(w => w.All(char.IsLower)), Is.True, string.Join('-', words));
-            });
+            }
         }
     }
 
@@ -358,11 +358,11 @@ public class PasswordGeneratorServiceTests
         {
             var password = _generator.Generate(policy);
             var symbols = password.Where(c => !char.IsLetterOrDigit(c)).ToList();
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(symbols, Has.Count.EqualTo(2), password);
                 Assert.That(symbols.All(c => c is '@' or '#'), Is.True, password);
-            });
+            }
         }
     }
 
@@ -375,11 +375,11 @@ public class PasswordGeneratorServiceTests
         for (var i = 0; i < Iterations; i++)
         {
             var password = _generator.Generate(policy);
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(password.Count(char.IsDigit), Is.EqualTo(3), password);
                 Assert.That(password[^3..].All(char.IsDigit), Is.True, password);
-            });
+            }
         }
     }
 
@@ -529,12 +529,12 @@ public class PasswordGeneratorServiceTests
 
         var assessment = _generator.Assess(policy, ActiveDirectoryDefaultPolicy());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.False);
             Assert.That(assessment.GuaranteedCharacterClassCount, Is.EqualTo(2));
             Assert.That(assessment.Problems, Is.Not.Empty);
-        });
+        }
     }
 
     [Test]
@@ -547,11 +547,11 @@ public class PasswordGeneratorServiceTests
 
         var assessment = _generator.Assess(policy, ActiveDirectoryDefaultPolicy());
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.True, string.Join(" ", assessment.Problems));
             Assert.That(assessment.GuaranteedCharacterClassCount, Is.GreaterThanOrEqualTo(3));
-        });
+        }
     }
 
     [Test]
@@ -562,11 +562,11 @@ public class PasswordGeneratorServiceTests
 
         var assessment = _generator.Assess(policy, target);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.False);
             Assert.That(assessment.GuaranteedMinimumLength, Is.EqualTo(8));
-        });
+        }
     }
 
     [Test]
@@ -594,12 +594,12 @@ public class PasswordGeneratorServiceTests
         // of the configuration alone, and are the numbers the administrator is looking at.
         var assessment = _generator.Assess(new PasswordGenerationPolicy(), null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.True, string.Join(" ", assessment.Problems));
             Assert.That(assessment.GuaranteedMinimumLength, Is.EqualTo(16));
             Assert.That(assessment.EntropyBits, Is.GreaterThan(80d));
-        });
+        }
     }
 
     [Test]
@@ -822,11 +822,11 @@ public class PasswordGeneratorServiceTests
 
         var derived = _generator.DeriveFrom(target);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(derived.Length, Is.GreaterThanOrEqualTo(24));
             Assert.That(_generator.Assess(derived, target).IsUsable, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -846,11 +846,11 @@ public class PasswordGeneratorServiceTests
         var derived = _generator.DeriveFrom(target);
         var assessment = _generator.Assess(derived, target);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(assessment.IsUsable, Is.True, string.Join(" ", assessment.Problems));
             Assert.That(assessment.GuaranteedCharacterClassCount, Is.GreaterThanOrEqualTo(3));
-        });
+        }
     }
     #endregion
 

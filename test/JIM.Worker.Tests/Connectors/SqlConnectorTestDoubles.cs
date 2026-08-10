@@ -7,6 +7,8 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using NUnit.Framework;
+using Serilog.Core;
+using Serilog.Events;
 using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
@@ -54,10 +56,75 @@ internal sealed class FakeSqlProvider : SqlProviderBase
     internal List<string> ExecutedCommandTexts { get; } = [];
 
     /// <summary>
+    /// Every command this stand-in was asked to run, with the values bound to it and the transaction it
+    /// was enlisted in, so an export test can assert what was written, that it was written as bound
+    /// parameters, and that it was written inside the object's own transaction.
+    /// </summary>
+    internal List<FakeExecutedCommand> ExecutedCommands { get; } = [];
+
+    /// <summary>
+    /// Every command that was not a schema-catalogue query, which for an export is exactly the
+    /// statements it wrote. An export reads the column catalogue before it writes anything, so a test
+    /// asserting on what was written filters those reads out rather than counting them as writes.
+    /// </summary>
+    internal IReadOnlyList<FakeExecutedCommand> ExecutedStatements =>
+        [.. ExecutedCommands.Where(command => !IsCatalogueQuery(command.CommandText))];
+
+    /// <summary>
+    /// The text of every command that was not a schema-catalogue query, in order.
+    /// </summary>
+    internal IReadOnlyList<string> ExecutedStatementTexts =>
+        [.. ExecutedCommandTexts.Where(commandText => !IsCatalogueQuery(commandText))];
+
+    /// <summary>
+    /// How many times the column catalogue was read, which is what tells a plan resolved once per
+    /// Object Type from one resolved per object.
+    /// </summary>
+    internal int ColumnCatalogueReadCount => ExecutedCommandTexts.Count(commandText => commandText == ColumnsCommandText);
+
+    private bool IsCatalogueQuery(string commandText) =>
+        commandText == TablesCommandText ||
+        commandText == ViewsCommandText ||
+        commandText == ColumnsCommandText ||
+        commandText == PrimaryKeyColumnsCommandText ||
+        commandText == ForeignKeyColumnsCommandText;
+
+    /// <summary>
+    /// Every transaction this stand-in handed out, so a test can assert that one was committed on
+    /// success and rolled back on failure.
+    /// </summary>
+    internal List<FakeDbTransaction> Transactions { get; } = [];
+
+    /// <summary>
     /// When set, every command beyond this many fails, which is how a database that goes away part way
     /// through a run is expressed here.
     /// </summary>
     internal int? FailAfterCommandCount { get; set; }
+
+    /// <summary>
+    /// When set, any command whose text contains this fails, which is how one object's write failing
+    /// while its neighbours succeed is expressed here.
+    /// </summary>
+    internal string? FailWhenCommandTextContains { get; set; }
+
+    /// <summary>
+    /// When set, any command whose text contains this reports that it affected no row, without raising.
+    /// That is how a statement the database accepted but applied to nothing is expressed here: a row an
+    /// UPDATE or a DELETE keys on that is no longer there, or an INSERT a trigger silently discards.
+    /// </summary>
+    internal string? AffectsNoRowsWhenCommandTextContains { get; set; }
+
+    /// <summary>
+    /// The key this stand-in database generates for an inserted row, handed back through whichever
+    /// mechanism <see cref="GeneratedKeyRetrievalMode"/> declares.
+    /// </summary>
+    internal object? GeneratedKey { get; set; }
+
+    /// <summary>
+    /// How this stand-in hands a generated key back. Settable so both dialects' mechanisms are
+    /// exercisable without a database server.
+    /// </summary>
+    internal SqlGeneratedKeyRetrieval GeneratedKeyRetrievalMode { get; init; } = SqlGeneratedKeyRetrieval.ResultSet;
 
     /// <summary>
     /// Every connection string built through this provider, so a test can assert what the Connector
@@ -97,7 +164,7 @@ internal sealed class FakeSqlProvider : SqlProviderBase
 
     public override string ConnectivityTestCommandText => "SELECT 1";
 
-    public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => SqlGeneratedKeyRetrieval.ResultSet;
+    public override SqlGeneratedKeyRetrieval GeneratedKeyRetrieval => GeneratedKeyRetrievalMode;
 
     public override bool SupportsPinnedServerCertificate => CanPinServerCertificate;
 
@@ -113,7 +180,18 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         return new FakeDbParameter { ParameterName = parameterName, Value = value ?? DBNull.Value };
     }
 
-    public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType) => throw new NotSupportedException();
+    /// <summary>
+    /// Nothing to bind where the key comes back as a result set, and an output parameter where it comes
+    /// back through one; exactly the split the two real dialects make.
+    /// </summary>
+    public override DbParameter? CreateGeneratedKeyParameter(string parameterName, AttributeDataType keyType)
+    {
+        SqlIdentifier.ValidateParameterName(parameterName, nameof(parameterName));
+
+        return GeneratedKeyRetrievalMode == SqlGeneratedKeyRetrieval.ResultSet
+            ? null
+            : new FakeDbParameter { ParameterName = parameterName, Direction = ParameterDirection.Output };
+    }
 
     public override string BuildConnectionString(SqlConnectionSettings settings)
     {
@@ -152,20 +230,41 @@ internal sealed class FakeSqlProvider : SqlProviderBase
         return $"{select} {from}{where} {orderBy}";
     }
 
-    public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command) => throw new NotSupportedException();
-
-    public override Guid ConvertToGuid(object value)
+    /// <summary>
+    /// The Microsoft SQL Server shape, or the Oracle one, according to which mechanism this stand-in is
+    /// declaring. The real dialects' generation is asserted in their own tests; what matters here is
+    /// that the Connector asks the provider for the statement rather than writing SQL of its own.
+    /// </summary>
+    public override string BuildInsertReturningGeneratedKeyCommandText(SqlInsertCommand command)
     {
-        return value switch
-        {
-            Guid guid => guid,
-            byte[] bytes => IdentifierParser.FromMicrosoftBytes(bytes),
-            string text => IdentifierParser.FromString(text),
-            _ => throw new ArgumentException($"Unexpected GUID value of type {value.GetType().Name}.", nameof(value))
-        };
+        ValidateInsertReturningGeneratedKeyCommand(command);
+
+        return GeneratedKeyRetrievalMode == SqlGeneratedKeyRetrieval.ResultSet
+            ? $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+              $"({BuildInsertColumnList(command.Columns)}) " +
+              $"OUTPUT INSERTED.{QuoteIdentifier(command.GeneratedKeyColumn!)} " +
+              $"VALUES ({BuildInsertValueList(command.Columns)})"
+            : $"INSERT INTO {QualifyObjectName(command.SchemaName, command.ObjectName)} " +
+              $"({BuildInsertColumnList(command.Columns)}) " +
+              $"VALUES ({BuildInsertValueList(command.Columns)}) " +
+              $"RETURNING {QuoteIdentifier(command.GeneratedKeyColumn!)} INTO {GetParameterPlaceholder(command.GeneratedKeyParameterName!)}";
     }
 
-    public override object ConvertFromGuid(Guid value) => value;
+    /// <summary>
+    /// The byte order of the dialect this stand-in is speaking, delegated to that dialect's own
+    /// provider rather than reimplemented here. GUID byte order is the one value conversion a database
+    /// server genuinely differs on, and a stand-in that passed bytes through unchanged would let a test
+    /// assert a round trip that no real driver performs.
+    /// </summary>
+    private static readonly SqlServerProvider SqlServerByteOrder = new();
+
+    private static readonly OracleProvider OracleByteOrder = new();
+
+    private ISqlProvider ByteOrder => DialectUnderTest == SqlDatabaseType.Oracle ? OracleByteOrder : SqlServerByteOrder;
+
+    public override Guid ConvertToGuid(object value) => ByteOrder.ConvertToGuid(value);
+
+    public override object ConvertFromGuid(Guid value) => ByteOrder.ConvertFromGuid(value);
 
     // Catalogue queries are the real providers' own SQL, which no stand-in database could answer. These
     // stand in for them as recognisable tokens, so a test can still assert that discovery asked the
@@ -418,7 +517,16 @@ internal sealed class FakeDbConnection : DbConnection
         _state = ConnectionState.Open;
     }
 
-    protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
+    /// <summary>
+    /// Hands out a transaction that records what became of it, which is how an export test tells a
+    /// committed object from a rolled-back one.
+    /// </summary>
+    protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+    {
+        var transaction = new FakeDbTransaction(this, isolationLevel);
+        _provider.Transactions.Add(transaction);
+        return transaction;
+    }
 
     protected override DbCommand CreateDbCommand() => new FakeDbCommand(_provider);
 
@@ -472,12 +580,32 @@ internal sealed class FakeDbCommand : DbCommand
     public override int ExecuteNonQuery()
     {
         Record();
-        return 0;
+
+        // Oracle's mechanism: the generated key arrives in a bound output parameter rather than a
+        // result set, so the stand-in database fills it in exactly where the driver would.
+        var generatedKey = FindGeneratedKeyOutputParameter();
+        if (generatedKey != null)
+            generatedKey.Value = _provider.GeneratedKey;
+
+        return AffectsNoRows ? 0 : 1;
     }
+
+    /// <summary>
+    /// Whether this stand-in database has been told that this statement matches nothing. A statement
+    /// that affected no row is the one failure a driver never raises, which is exactly why the Connector
+    /// has to read the count back.
+    /// </summary>
+    private bool AffectsNoRows =>
+        _provider.AffectsNoRowsWhenCommandTextContains is { } marker && CommandText.Contains(marker, StringComparison.Ordinal);
 
     public override object? ExecuteScalar()
     {
         Record();
+
+        // Microsoft SQL Server's mechanism: the insert returns the generated key as a single-row
+        // result set, which ADO.NET reads with a scalar execute.
+        if (CommandText.StartsWith("INSERT ", StringComparison.OrdinalIgnoreCase))
+            return _provider.GeneratedKey;
 
         var dataTable = ResolveDataTable();
 
@@ -503,15 +631,34 @@ internal sealed class FakeDbCommand : DbCommand
     }
 
     /// <summary>
-    /// Records what this command was asked to run, and fails where the stand-in database has been told
-    /// to stop answering.
+    /// Records what this command was asked to run, with the values bound to it and the transaction it
+    /// was enlisted in, and fails where the stand-in database has been told to stop answering.
     /// </summary>
     private void Record()
     {
         _provider.ExecutedCommandTexts.Add(CommandText);
 
+        var parameters = Enumerable.Range(0, DbParameterCollection.Count)
+            .Select(index => DbParameterCollection[index])
+            .ToDictionary(parameter => parameter.ParameterName, parameter => parameter.Value == DBNull.Value ? null : parameter.Value, StringComparer.OrdinalIgnoreCase);
+
+        _provider.ExecutedCommands.Add(new FakeExecutedCommand(CommandText, parameters, Transaction as FakeDbTransaction));
+
+        if (_provider.FailWhenCommandTextContains is { } failureMarker && CommandText.Contains(failureMarker, StringComparison.Ordinal))
+            throw new FakeDbException($"The stand-in database refused: {CommandText}");
+
         if (_provider.FailAfterCommandCount is { } limit && _provider.ExecutedCommandTexts.Count > limit)
             throw new FakeDbException("The connection to the stand-in database was lost.");
+    }
+
+    /// <summary>
+    /// The output parameter a generated key comes back through, or null where this command has none.
+    /// </summary>
+    private DbParameter? FindGeneratedKeyOutputParameter()
+    {
+        return Enumerable.Range(0, DbParameterCollection.Count)
+            .Select(index => DbParameterCollection[index])
+            .FirstOrDefault(parameter => parameter.Direction == ParameterDirection.Output);
     }
 
     public override void Prepare()
@@ -730,6 +877,11 @@ internal sealed class FakeDbCommand : DbCommand
         if (IsNumeric(left) && IsNumeric(right))
             return Convert.ToDecimal(left, CultureInfo.InvariantCulture).CompareTo(Convert.ToDecimal(right, CultureInfo.InvariantCulture));
 
+        // A binary anchor (an Oracle RAW(16) key is the one that matters) orders by its bytes, as both
+        // dialects do. No byte array implements IComparable, so the default comparer would throw.
+        if (left is byte[] leftBytes && right is byte[] rightBytes)
+            return leftBytes.AsSpan().SequenceCompareTo(rightBytes);
+
         return Comparer<object>.Default.Compare(left, right);
     }
 
@@ -858,6 +1010,45 @@ internal sealed class FakeRelatedChangePredicate
     internal string? WatermarkColumn { get; set; }
 
     internal object? Watermark { get; set; }
+}
+
+/// <summary>
+/// One statement a <see cref="FakeDbCommand"/> was asked to run, with the values bound to it and the
+/// transaction it was enlisted in.
+/// </summary>
+/// <param name="CommandText">The statement, exactly as the Connector generated it.</param>
+/// <param name="Parameters">The bound values, by parameter name. A value that reached the database any other way is a value interpolated into the statement.</param>
+/// <param name="Transaction">The transaction the statement ran in, or null where it ran outside one.</param>
+internal sealed record FakeExecutedCommand(
+    string CommandText,
+    IReadOnlyDictionary<string, object?> Parameters,
+    FakeDbTransaction? Transaction);
+
+/// <summary>
+/// A transaction that records what became of it, so an export test can tell a committed object from a
+/// rolled-back one without a database server.
+/// </summary>
+internal sealed class FakeDbTransaction : DbTransaction
+{
+    private readonly DbConnection _connection;
+
+    internal FakeDbTransaction(DbConnection connection, IsolationLevel isolationLevel)
+    {
+        _connection = connection;
+        IsolationLevel = isolationLevel;
+    }
+
+    internal bool Committed { get; private set; }
+
+    internal bool RolledBack { get; private set; }
+
+    public override IsolationLevel IsolationLevel { get; }
+
+    protected override DbConnection DbConnection => _connection;
+
+    public override void Commit() => Committed = true;
+
+    public override void Rollback() => RolledBack = true;
 }
 
 /// <summary>
@@ -1111,6 +1302,38 @@ internal sealed class FakeDbColumn : DbColumn
         NumericScale = column.Scale;
         ColumnSize = column.MaxLength;
         AllowDBNull = column.IsNullable;
+    }
+}
+
+/// <summary>
+/// Holds on to what the Connector logged, so a test can assert on the one outcome that is reported to
+/// the administrator rather than returned: a write the database accepted but applied to nothing, which
+/// the Connector deliberately succeeds and warns about.
+/// </summary>
+internal sealed class CapturedLogSink : ILogEventSink
+{
+    private readonly List<LogEvent> _logEvents = [];
+
+    public void Emit(LogEvent logEvent)
+    {
+        ArgumentNullException.ThrowIfNull(logEvent);
+
+        lock (_logEvents)
+            _logEvents.Add(logEvent);
+    }
+
+    /// <summary>
+    /// Every warning logged so far, rendered as the administrator would read it.
+    /// </summary>
+    internal IReadOnlyList<string> Warnings
+    {
+        get
+        {
+            lock (_logEvents)
+                return [.. _logEvents
+                    .Where(logEvent => logEvent.Level == LogEventLevel.Warning)
+                    .Select(logEvent => logEvent.RenderMessage(CultureInfo.InvariantCulture))];
+        }
     }
 }
 

@@ -59,7 +59,7 @@ public class SqlConnectorTests
     {
         // The declaration the PRD's requirement 19 fixes. These are mirrored to the database by
         // reflection, so what is written here is what an administrator is offered in the portal.
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_connector.SupportsFullImport, Is.True, nameof(_connector.SupportsFullImport));
             Assert.That(_connector.SupportsDeltaImport, Is.True, nameof(_connector.SupportsDeltaImport));
@@ -76,7 +76,7 @@ public class SqlConnectorTests
             Assert.That(_connector.SupportsUserSelectedAttributeTypes, Is.False, nameof(_connector.SupportsUserSelectedAttributeTypes));
             Assert.That(_connector.SupportsPasswordSet, Is.False, nameof(_connector.SupportsPasswordSet));
             Assert.That(_connector.SupportsPasswordPolicyDiscovery, Is.False, nameof(_connector.SupportsPasswordPolicyDiscovery));
-        });
+        }
     }
 
     #endregion
@@ -104,7 +104,7 @@ public class SqlConnectorTests
     {
         var setting = GetSetting(SqlConnectorConstants.SettingDatabaseType);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Required, Is.True);
             Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Connectivity));
@@ -114,7 +114,7 @@ public class SqlConnectorTests
                 SqlConnectorConstants.DatabaseTypeSqlServer,
                 SqlConnectorConstants.DatabaseTypeOracle
             }));
-        });
+        }
     }
 
     [Test]
@@ -122,13 +122,13 @@ public class SqlConnectorTests
     {
         var setting = GetSetting(SqlConnectorConstants.SettingPassword);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.StringEncrypted),
                 "The password must be encrypted at rest through the existing credential protection mechanism.");
             Assert.That(setting.Required, Is.True);
             Assert.That(setting.DefaultStringValue, Is.Null, "Defaults are never applied to encrypted settings, so declaring one would mislead.");
-        });
+        }
     }
 
     [Test]
@@ -136,14 +136,14 @@ public class SqlConnectorTests
     {
         var setting = GetSetting(SqlConnectorConstants.SettingDatabaseTimeZone);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Required, Is.True, "Zoneless date and time columns are ambiguous, so the interpretation is never left unstated.");
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.String),
                 "A String setting is what carries its default value through to the administrator; a Text setting would show empty.");
             Assert.That(setting.DefaultStringValue, Is.EqualTo(SqlConnectorConstants.DefaultDatabaseTimeZone));
             Assert.That(setting.DefaultStringValue, Is.EqualTo("UTC"));
-        });
+        }
     }
 
     [Test]
@@ -151,11 +151,11 @@ public class SqlConnectorTests
     {
         var setting = GetSetting(SqlConnectorConstants.SettingConnectionTimeout);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.Integer));
             Assert.That(setting.DefaultIntValue, Is.EqualTo(SqlConnectorConstants.DefaultConnectionTimeoutSeconds));
-        });
+        }
     }
 
     [Test]
@@ -167,13 +167,13 @@ public class SqlConnectorTests
         // with a broken certificate estate has to be able to proceed deliberately.
         var setting = GetSetting(SqlConnectorConstants.SettingSqlServerEncryptConnection);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox));
             Assert.That(setting.DefaultCheckboxValue, Is.True, "Encryption is on unless an administrator turns it off.");
             Assert.That(setting.RequiredWhenSetting, Is.EqualTo(SqlConnectorConstants.SettingDatabaseType));
             Assert.That(setting.RequiredWhenValue, Is.EqualTo(SqlConnectorConstants.DatabaseTypeSqlServer));
-        });
+        }
     }
 
     [Test]
@@ -184,7 +184,7 @@ public class SqlConnectorTests
         // traffic, so offering only TCPS would push administrators towards the harder configuration.
         var setting = GetSetting(SqlConnectorConstants.SettingOracleEncryption);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
             Assert.That(setting.DropDownValues, Is.EquivalentTo(new[]
@@ -196,7 +196,7 @@ public class SqlConnectorTests
             Assert.That(setting.DefaultStringValue, Is.EqualTo(SqlConnectorConstants.OracleEncryptionNativeNetworkEncryption));
             Assert.That(setting.RequiredWhenSetting, Is.EqualTo(SqlConnectorConstants.SettingDatabaseType));
             Assert.That(setting.RequiredWhenValue, Is.EqualTo(SqlConnectorConstants.DatabaseTypeOracle));
-        });
+        }
     }
 
     [Test]
@@ -210,14 +210,14 @@ public class SqlConnectorTests
         var oracleValues = CreateSettingValues();
         SetString(oracleValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(IsRelevant(sqlServerValues, SqlConnectorConstants.SettingSqlServerEncryptConnection), Is.True);
             Assert.That(IsRelevant(sqlServerValues, SqlConnectorConstants.SettingOracleEncryption), Is.False);
 
             Assert.That(IsRelevant(oracleValues, SqlConnectorConstants.SettingOracleEncryption), Is.True);
             Assert.That(IsRelevant(oracleValues, SqlConnectorConstants.SettingSqlServerEncryptConnection), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -229,13 +229,13 @@ public class SqlConnectorTests
         {
             var setting = GetSetting(name);
 
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox), name);
                 Assert.That(setting.DefaultCheckboxValue, Is.False, name);
                 Assert.That(setting.RequiredWhenSetting, Is.EqualTo(SqlConnectorConstants.SettingDatabaseType), name);
                 Assert.That(setting.RequiredWhenValue, Is.EqualTo(SqlConnectorConstants.DatabaseTypeOracle), name);
-            });
+            }
         }
     }
 
@@ -248,12 +248,12 @@ public class SqlConnectorTests
         {
             var controller = settings.SingleOrDefault(s => s.Name == setting.RequiredWhenSetting);
 
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(controller, Is.Not.Null,
                     $"'{setting.Name}' is conditional on '{setting.RequiredWhenSetting}', which is not a setting this Connector declares; the condition could never be met.");
                 Assert.That(setting.RequiredWhenValue, Is.Not.Null.And.Not.Empty, $"'{setting.Name}' declares a condition with no value to compare against.");
-            });
+            }
 
             if (controller!.Type == ConnectedSystemSettingType.DropDown)
                 Assert.That(controller.DropDownValues, Has.Member(setting.RequiredWhenValue),
@@ -297,13 +297,13 @@ public class SqlConnectorTests
         var settingValues = CreateSettingValues();
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeSqlServer);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(IsRequired(settingValues, SqlConnectorConstants.SettingDatabaseName), Is.True);
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleDatabaseIdentifiedBy), Is.False);
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleServiceName), Is.False);
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleSid), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -312,7 +312,7 @@ public class SqlConnectorTests
         var settingValues = CreateSettingValues();
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingDatabaseName), Is.False);
             Assert.That(IsRequired(settingValues, SqlConnectorConstants.SettingOracleDatabaseIdentifiedBy), Is.True);
@@ -321,7 +321,7 @@ public class SqlConnectorTests
             // either/or choice expressible: only ever one of them is required.
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleServiceName), Is.False);
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleSid), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -331,11 +331,11 @@ public class SqlConnectorTests
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
         SetString(settingValues, SqlConnectorConstants.SettingOracleDatabaseIdentifiedBy, SqlConnectorConstants.OracleIdentifiedByServiceName);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(IsRequired(settingValues, SqlConnectorConstants.SettingOracleServiceName), Is.True);
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleSid), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -345,11 +345,11 @@ public class SqlConnectorTests
         SetString(settingValues, SqlConnectorConstants.SettingDatabaseType, SqlConnectorConstants.DatabaseTypeOracle);
         SetString(settingValues, SqlConnectorConstants.SettingOracleDatabaseIdentifiedBy, SqlConnectorConstants.OracleIdentifiedBySid);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(IsRequired(settingValues, SqlConnectorConstants.SettingOracleSid), Is.True);
             Assert.That(IsRelevant(settingValues, SqlConnectorConstants.SettingOracleServiceName), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -357,14 +357,14 @@ public class SqlConnectorTests
     {
         var setting = GetSetting(SqlConnectorConstants.SettingObjectTypes);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(setting.Required, Is.True, "A Connected System with no object types can do nothing at all.");
             Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Schema));
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.Text), "The document is multi-line, so it needs a Text setting rather than a String one.");
             Assert.That(setting.Description, Does.Contain("objectTypes"), "The Description is where an administrator finds the shape and an example to copy.");
             Assert.That(setting.Description, Does.Contain("anchorColumns"));
-        });
+        }
     }
 
     #endregion
@@ -391,14 +391,14 @@ public class SqlConnectorTests
         var endpoint = _connector.ResolveSecureEndpoint(settingValues);
 
         Assert.That(endpoint, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(endpoint!.Host, Is.EqualTo("db.example.com"));
             Assert.That(endpoint.Port, Is.EqualTo(14330));
             Assert.That(endpoint.Timeout, Is.EqualTo(TimeSpan.FromSeconds(45)));
             Assert.That(endpoint.ServerDescription, Is.Not.Null.And.Not.Empty);
             Assert.That(endpoint.SecureTransportName, Is.EqualTo("TLS"));
-        });
+        }
     }
 
     [Test]
@@ -453,11 +453,11 @@ public class SqlConnectorTests
         var endpoint = _connector.ResolveSecureEndpoint(settingValues);
 
         Assert.That(endpoint, Is.Not.Null, "TCPS is genuinely TLS, so there is a server certificate to look at.");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(endpoint!.Port, Is.EqualTo(2484));
             Assert.That(endpoint.SecureTransportName, Is.EqualTo("TCPS"), "TCPS is what an Oracle administrator calls the encrypted transport.");
-        });
+        }
     }
 
     [Test]
@@ -515,12 +515,12 @@ public class SqlConnectorTests
         var results = connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].IsValid, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("network-related"));
             Assert.That(results[0].Exception, Is.SameAs(failure), "The administrator needs the driver's own account, not a summary of it.");
-        });
+        }
     }
 
     [Test]
@@ -533,12 +533,12 @@ public class SqlConnectorTests
         var results = connector.ValidateSettingValues(settingValues, _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].IsValid, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("Login failed"));
             Assert.That(results[0].ErrorMessage, Does.Not.Contain("sup3rs3cret"), "Credentials never travel into a message an administrator or a log can see.");
-        });
+        }
     }
 
     [Test]
@@ -564,12 +564,12 @@ public class SqlConnectorTests
         var results = connector.ValidateSettingValues(settingValues, _logger);
 
         Assert.That(results, Is.Not.Empty);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].IsValid, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain(SqlConnectorConstants.SettingDatabaseTimeZone));
             Assert.That(results[0].SettingValue?.Setting.Name, Is.EqualTo(SqlConnectorConstants.SettingDatabaseTimeZone));
-        });
+        }
     }
 
     [Test]
@@ -591,11 +591,11 @@ public class SqlConnectorTests
         connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: false), _logger);
 
         Assert.That(provider.BuiltConnectionSettings, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.BuiltConnectionSettings[0].Encryption, Is.EqualTo(SqlConnectionEncryption.None));
             Assert.That(provider.BuiltConnectionSettings[0].PinnedServerCertificatePath, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -658,13 +658,13 @@ public class SqlConnectorTests
         connector.ValidateSettingValues(settingValues, _logger);
 
         var built = provider.BuiltConnectionSettings.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(built.Username, Is.EqualTo("jim_sync"));
             Assert.That(built.Password, Is.EqualTo("sup3rs3cret"));
             Assert.That(built.ToString(), Does.Not.Contain("sup3rs3cret"),
                 "The settings a provider is handed are the sort of thing that ends up in a log line, so the password stays redacted.");
-        });
+        }
     }
 
     [Test]
@@ -680,11 +680,11 @@ public class SqlConnectorTests
 
         Assert.That(results, Is.Not.Empty);
         var result = results.Single(r => r.SettingValue?.Setting.Name == SqlConnectorConstants.SettingObjectTypes);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Person"), "The message names the object type at fault, not just the document.");
-        });
+        }
     }
 
     [Test]

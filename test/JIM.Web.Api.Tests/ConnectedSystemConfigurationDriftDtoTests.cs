@@ -51,7 +51,7 @@ public class ConnectedSystemConfigurationDriftDtoTests
 
         Assert.That(dto.ConfigurationDrift, Is.Not.Null);
         var drift = dto.ConfigurationDrift!;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(drift.HasPendingChanges, Is.True);
             Assert.That(drift.IsDeterminable, Is.True);
@@ -59,7 +59,7 @@ public class ConnectedSystemConfigurationDriftDtoTests
             Assert.That(drift.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.SyncAffecting));
             Assert.That(drift.LastFullSynchronisation, Is.EqualTo(lastSync));
             Assert.That(drift.MostRecentChange, Is.EqualTo(mostRecent));
-        });
+        }
     }
 
     [Test]
@@ -88,13 +88,13 @@ public class ConnectedSystemConfigurationDriftDtoTests
         var dto = ConnectedSystemDetailDto.FromEntity(CreateConnectedSystemEntity(), configurationDrift: status);
 
         var drift = dto.ConfigurationDrift!;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(drift.NeverFullySynchronised, Is.True);
             Assert.That(drift.HasPendingChanges, Is.False);
             Assert.That(drift.IsDeterminable, Is.False, "a caller must be able to tell this apart from a settled configuration");
             Assert.That(drift.LastFullSynchronisation, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -105,12 +105,12 @@ public class ConnectedSystemConfigurationDriftDtoTests
         var dto = ConnectedSystemDetailDto.FromEntity(CreateConnectedSystemEntity(), configurationDrift: status);
 
         var drift = dto.ConfigurationDrift!;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(drift.TrackingDisabled, Is.True);
             Assert.That(drift.HasPendingChanges, Is.False);
             Assert.That(drift.IsDeterminable, Is.False, "a caller must be able to tell this apart from a settled configuration");
-        });
+        }
     }
 
     [Test]
@@ -125,13 +125,13 @@ public class ConnectedSystemConfigurationDriftDtoTests
         var dto = ConnectedSystemDetailDto.FromEntity(CreateConnectedSystemEntity(), configurationDrift: status);
 
         var drift = dto.ConfigurationDrift!;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(drift.HasPendingChanges, Is.False);
             Assert.That(drift.IsDeterminable, Is.True);
             Assert.That(drift.ChangeCount, Is.EqualTo(0));
             Assert.That(drift.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.NotClassified));
-        });
+        }
     }
 
     private static ConnectedSystem CreateConnectedSystemEntity()

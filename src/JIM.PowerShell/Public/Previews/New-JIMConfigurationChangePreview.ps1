@@ -10,9 +10,16 @@ function New-JIMConfigurationChangePreview {
         Starts a Configuration Change Preview: JIM evaluates a proposed change against the objects
         already in the metaverse and reports what would happen to them, changing nothing.
 
-        The field semantics match Set-JIMMetaverseObjectType exactly, so an omitted parameter previews
-        the stored value. Pass the same parameters to this cmdlet and then to Set-JIMMetaverseObjectType
-        and the preview describes precisely what the change will do.
+        Two surfaces can be previewed, selected by which identifier you pass:
+
+        - -MetaverseObjectTypeId previews a change to that type's deletion settings. The field semantics
+          match Set-JIMMetaverseObjectType exactly, so an omitted parameter previews the stored value.
+          Pass the same parameters to this cmdlet and then to Set-JIMMetaverseObjectType and the preview
+          describes precisely what the change will do.
+        - -ConnectedSystemId previews a change to that system's partition and container selection. Pass
+          the whole selection rather than one flag: what a deselection costs depends on the rest of the
+          selection, because an object leaves import scope only when nothing else still covers it. Apply
+          the previewed change with Set-JIMConnectedSystemPartition and Set-JIMConnectedSystemContainer.
 
         Evaluation is asynchronous. Without -Wait this returns as soon as the proposal itself has been
         validated, carrying the ActivityId to poll with Get-JIMConfigurationChangePreview. With -Wait it
@@ -27,6 +34,21 @@ function New-JIMConfigurationChangePreview {
     .PARAMETER MetaverseObjectTypeId
         The Metaverse Object Type whose deletion settings are being proposed. Selects the deletion
         settings surface; other surfaces gain their own parameters as their adapters ship.
+
+    .PARAMETER ConnectedSystemId
+        The Connected System whose partition and container selection is being proposed. Selects the scope
+        selection surface.
+
+    .PARAMETER SelectedPartitionIds
+        The partitions that would be managed. Omitted previews the partitions currently selected, so a
+        proposal changing only containers need not restate them.
+
+    .PARAMETER SelectedContainerIds
+        The containers that would be managed. Omitted previews the containers currently selected.
+
+        Selecting a container selects its whole subtree, so a descendant does not need listing to be in
+        scope; pass the containers that would carry a tick. Read the current selection with
+        Get-JIMConnectedSystemPartition.
 
     .PARAMETER DeletionRule
         The proposed deletion rule. Omitted previews the stored rule.
@@ -88,11 +110,29 @@ function New-JIMConfigurationChangePreview {
         Applies the change only when the preview found nothing would happen to existing objects, and
         records the preview against the change.
 
+    .EXAMPLE
+        $current = Get-JIMConnectedSystemPartition -ConnectedSystemId 2
+        $keep = $current.containers | Where-Object { $_.selected -and $_.name -ne 'Contractors' }
+        New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedContainerIds $keep.id -Wait
+
+        Reports what deselecting the Contractors container would do: how many Connected System Objects
+        leave import scope, how many of those are joined and would disconnect from their Metaverse
+        Object, and how many Metaverse Objects would then become eligible for automatic deletion.
+
+    .EXAMPLE
+        $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedPartitionIds 5 -Wait
+        $preview.ImpactCounts | Where-Object transitionType -eq 'WouldBecomeDeletionEligible'
+
+        Narrows the managed partitions to one and reads how many Metaverse Objects the resulting
+        disconnections would put on course for deletion.
+
     .LINK
         Get-JIMConfigurationChangePreview
         Get-JIMConfigurationChangePreviewDelta
         Stop-JIMConfigurationChangePreview
         Set-JIMMetaverseObjectType
+        Set-JIMConnectedSystemPartition
+        Set-JIMConnectedSystemContainer
     #>
     [CmdletBinding(DefaultParameterSetName = 'MetaverseObjectTypeDeletionSettings')]
     [OutputType([PSCustomObject])]
@@ -114,6 +154,15 @@ function New-JIMConfigurationChangePreview {
         [ValidateSet('AllSourcesDisconnect', 'SpecificSourcesDisconnect')]
         [string]$DeletionTriggerMode,
 
+        [Parameter(Mandatory, ParameterSetName = 'ConnectedSystemScopeSelection', ValueFromPipelineByPropertyName)]
+        [int]$ConnectedSystemId,
+
+        [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
+        [int[]]$SelectedPartitionIds,
+
+        [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
+        [int[]]$SelectedContainerIds,
+
         [Parameter()]
         [switch]$FullDataSet,
 
@@ -133,6 +182,17 @@ function New-JIMConfigurationChangePreview {
         }
 
         $body = @{}
+
+        if ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemScopeSelection') {
+            if ($PSBoundParameters.ContainsKey('SelectedPartitionIds')) {
+                # Wrapped in @() so a single id serialises as a JSON array rather than a bare number.
+                $body.selectedPartitionIds = @($SelectedPartitionIds)
+            }
+
+            if ($PSBoundParameters.ContainsKey('SelectedContainerIds')) {
+                $body.selectedContainerIds = @($SelectedContainerIds)
+            }
+        }
 
         if ($DeletionRule) {
             # Enum sent as its string name; the API rejects numeric ordinals
@@ -156,11 +216,20 @@ function New-JIMConfigurationChangePreview {
             $body.deltaPersistence = 'Full'
         }
 
+        if ($PSCmdlet.ParameterSetName -eq 'ConnectedSystemScopeSelection') {
+            $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/scope-selection/preview"
+            $subject = "Connected System $ConnectedSystemId"
+        }
+        else {
+            $endpoint = "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview"
+            $subject = "Metaverse Object Type $MetaverseObjectTypeId"
+        }
+
         try {
-            $start = Invoke-JIMApi -Endpoint "/api/v1/metaverse/object-types/$MetaverseObjectTypeId/deletion-settings/preview" -Method 'POST' -Body $body
+            $start = Invoke-JIMApi -Endpoint $endpoint -Method 'POST' -Body $body
         }
         catch {
-            Write-Error "Failed to start a preview for Metaverse Object Type ${MetaverseObjectTypeId}: $_"
+            Write-Error "Failed to start a preview for ${subject}: $_"
             return
         }
 

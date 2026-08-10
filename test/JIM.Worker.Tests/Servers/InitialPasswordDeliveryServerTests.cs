@@ -75,12 +75,12 @@ public class InitialPasswordDeliveryServerTests
 
         var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.AttemptedCount, Is.EqualTo(1));
             Assert.That(result.DeliveredCount, Is.EqualTo(1));
             Assert.That(_syncRepo.PendingInitialPasswords, Is.Empty);
-        });
+        }
         connector.As<IConnectorPasswordManagement>().Verify(
             c => c.SetPasswordAsync(cso, It.IsAny<string>(), It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -124,7 +124,7 @@ public class InitialPasswordDeliveryServerTests
         var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
         var stored = _syncRepo.PendingInitialPasswords.Values.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ParkedCount, Is.EqualTo(1));
             Assert.That(result.DeliveredCount, Is.Zero);
@@ -133,7 +133,7 @@ public class InitialPasswordDeliveryServerTests
             Assert.That(stored.TargetMessage, Is.EqualTo(reason));
             Assert.That(stored.AttemptCount, Is.EqualTo(1));
             Assert.That(stored.LastAttemptedAt, Is.Not.Null);
-        });
+        }
     }
 
     /// <summary>
@@ -167,13 +167,13 @@ public class InitialPasswordDeliveryServerTests
         var first = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
         var second = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(first.RetryingCount, Is.EqualTo(1));
             Assert.That(second.AttemptedCount, Is.EqualTo(1), "a retryable record is attempted again on the next pass");
             Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().AttemptCount, Is.EqualTo(2));
             Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
-        });
+        }
     }
 
     /// <summary>
@@ -189,12 +189,12 @@ public class InitialPasswordDeliveryServerTests
 
         var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.NoLongerApplicableCount, Is.EqualTo(1));
             Assert.That(result.AttemptedCount, Is.Zero);
             Assert.That(_syncRepo.PendingInitialPasswords, Is.Empty);
-        });
+        }
         connector.As<IConnectorPasswordManagement>().Verify(
             c => c.SetPasswordAsync(It.IsAny<ConnectedSystemObject>(), It.IsAny<string>(), It.IsAny<PasswordSetOptions>(), It.IsAny<CancellationToken>()),
             Times.Never, "a rule that no longer asks for a password must not produce a round trip to the target");
@@ -214,14 +214,14 @@ public class InitialPasswordDeliveryServerTests
 
         var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ConnectorCannotSetPasswords, Is.True);
             Assert.That(result.AttemptedCount, Is.Zero);
             Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().AttemptCount, Is.Zero,
                 "nothing was attempted, so nothing should be recorded as attempted");
             Assert.That(_syncRepo.PendingInitialPasswords.Values.Single().Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
-        });
+        }
     }
 
     /// <summary>
@@ -243,13 +243,13 @@ public class InitialPasswordDeliveryServerTests
 
         var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.CouldNotOpenPasswordConnection, Is.True);
             Assert.That(result.PasswordConnectionErrorMessage, Is.EqualTo("The directory refused the connection."));
             Assert.That(result.AttemptedCount, Is.Zero);
             Assert.That(_syncRepo.PendingInitialPasswords.Values.Select(p => p.AttemptCount), Has.All.Zero);
-        });
+        }
     }
 
     /// <summary>
@@ -319,12 +319,12 @@ public class InitialPasswordDeliveryServerTests
         var result = await _server.DeliverOutstandingAsync(_connectedSystem, connector.Object, CancellationToken.None);
 
         var stored = _syncRepo.PendingInitialPasswords.Values.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ExpiredCount, Is.EqualTo(1));
             Assert.That(result.AttemptedCount, Is.Zero, "an expired record must not be attempted");
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Expired));
-        });
+        }
     }
 
     /// <summary>
@@ -416,12 +416,12 @@ public class InitialPasswordDeliveryServerTests
         var accepting = MockConnector(PasswordSetResult.Succeeded(PasswordExpiryBehaviour.RequireChangeAtNextSignIn));
         var retry = await _server.DeliverOutstandingAsync(_connectedSystem, accepting.Object, CancellationToken.None);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(released, Is.EqualTo(1));
             Assert.That(retry.AttemptedCount, Is.EqualTo(1), "the released record must be attempted again");
             Assert.That(retry.DeliveredCount, Is.EqualTo(1));
-        });
+        }
     }
 
     /// <summary>
@@ -439,14 +439,14 @@ public class InitialPasswordDeliveryServerTests
         await _server.ReleaseParkedForSyncRuleAsync(SyncRuleId);
 
         var stored = _syncRepo.PendingInitialPasswords.Values.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
             Assert.That(stored.FailureReason, Is.Null);
             Assert.That(stored.TargetMessage, Is.Null);
             Assert.That(stored.AttemptCount, Is.EqualTo(1),
                 "the release is not a new attempt, so the count of real attempts must survive it");
-        });
+        }
     }
 
     /// <summary>
@@ -481,14 +481,14 @@ public class InitialPasswordDeliveryServerTests
         var released = await _server.ReleaseParkedForSyncRuleAsync(SyncRuleId);
 
         var stored = _syncRepo.PendingInitialPasswords.Values.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(released, Is.Zero, "nothing was parked, so nothing was released");
             Assert.That(stored.Status, Is.EqualTo(PendingInitialPasswordStatus.Pending));
             Assert.That(stored.TargetMessage, Is.EqualTo("Unreachable."),
                 "the reason for a record still awaiting retry is current, not stale, and must survive");
             Assert.That(stored.AttemptCount, Is.EqualTo(1));
-        });
+        }
     }
 
     #endregion

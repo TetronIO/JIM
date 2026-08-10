@@ -44,11 +44,11 @@ public class ConfigurationChangePreflightConsequencesTests
         var group = ConfigurationChangePreflightConsequences.For(Preflight(
             Item("Deprovisioning Action", ConfigurationChangeClass.Destructive, consequence: "Objects will be deleted.")));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(group!.Headline, Is.EqualTo("This property decides whether objects are removed"));
             Assert.That(group.Items.Single().Text, Does.StartWith("Deprovisioning Action: "));
-        });
+        }
     }
 
     [Test]
@@ -95,6 +95,33 @@ public class ConfigurationChangePreflightConsequencesTests
                 changeType: ConfigurationDiffChangeType.Removed, isCollectionItem: true)));
 
         Assert.That(group!.Headline, Is.EqualTo("These changes decide whether objects are removed"));
+    }
+
+    [Test]
+    public void For_QualifiedLabel_StatesOnlyItsLeaf()
+    {
+        // The dialog lists every changing property directly beneath this alert, each under its full qualified label,
+        // so spelling the whole path out here printed the same string twice on one screen (#1275).
+        var group = ConfigurationChangePreflightConsequences.For(Preflight(
+            Item("Partitions > dc=corp,dc=local > Containers > ou=Contractors,dc=corp,dc=local",
+                ConfigurationChangeClass.Destructive, consequence: "Deselecting this container...",
+                changeType: ConfigurationDiffChangeType.Removed, isCollectionItem: true)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(group!.Items.Single().Text,
+                Is.EqualTo("ou=Contractors,dc=corp,dc=local: Deselecting this container..."));
+            Assert.That(group.Items.Single().Text, Does.Not.Contain("Partitions >"));
+        }
+    }
+
+    [Test]
+    public void For_UnqualifiedLabel_IsStatedWhole()
+    {
+        var group = ConfigurationChangePreflightConsequences.For(Preflight(
+            Item("Deprovisioning Action", ConfigurationChangeClass.Destructive, consequence: "Objects will be deleted.")));
+
+        Assert.That(group!.Items.Single().Text, Is.EqualTo("Deprovisioning Action: Objects will be deleted."));
     }
 
     private static ConfigurationChangePreflight Preflight(params ConfigurationChangePreflightItem[] items) =>

@@ -1062,11 +1062,11 @@ public class ExportEvaluationTests
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create));
             Assert.That(result[0].ProvisioningSyncRuleId, Is.EqualTo(exportRule.Id));
-        });
+        }
     }
 
     /// <summary>
@@ -1090,11 +1090,11 @@ public class ExportEvaluationTests
 
         // Assert
         Assert.That(result, Is.Not.Empty, "This test is only meaningful if an export was actually produced.");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
             Assert.That(result.Where(pe => pe.ProvisioningSyncRuleId != null), Is.Empty);
-        });
+        }
     }
 
     /// <summary>

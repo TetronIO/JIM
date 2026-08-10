@@ -30,10 +30,24 @@ function Get-JIMConnectedSystemObjectType {
         the Connected System (for example class-kind = structural, visibility = internal),
         and an IsInternal boolean derived from them.
 
+        Each attribute carries a writability value of Writable, ReadOnly or WritableOnCreate.
+        ReadOnly attributes can be imported but cannot be targeted by an export Attribute Flow.
+        WritableOnCreate attributes can be targeted, but JIM sends the value only when it creates
+        the object and never again, because changing it would break the link to the object (a
+        table's primary key, a directory's relative distinguished name).
+
     .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1
 
         Gets the object types for Connected System 1 that an administrator would manage.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
+            ForEach-Object { $_.attributes } |
+            Where-Object { $_.writability -eq 'WritableOnCreate' } |
+            Select-Object name, type
+
+        Lists the attributes JIM may only set when it creates the object.
 
     .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 -IncludeInternal

@@ -578,10 +578,19 @@ Object type definitions with their attributes, selection state, and external ID 
 
 Each Object Type also carries `Tags`, the classification key/value pairs the Connected System reported (for example `class-kind` = `structural`, `visibility` = `internal`), and `IsInternal`, derived from them.
 
+Each attribute carries `writability`, one of `Writable`, `ReadOnly` or `WritableOnCreate`. See [Attribute writability](../configuration/connected-systems.md#attribute-writability) for what each one means for Attribute Flow.
+
 ### Examples
 
 ```powershell title="Get object types for a Connected System"
 Get-JIMConnectedSystemObjectType -ConnectedSystemId 3
+```
+
+```powershell title="List the attributes JIM may only set when it creates the object"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 3 |
+    ForEach-Object { $_.attributes } |
+    Where-Object { $_.writability -eq 'WritableOnCreate' } |
+    Select-Object name, type
 ```
 
 ```powershell title="Include the directory's own internal object types"
@@ -814,13 +823,13 @@ Set-JIMConnectedSystemPartition -ConnectedSystemId 3 -PartitionId 1 -Selected $f
 
 ## Set-JIMConnectedSystemContainer
 
-Updates the selection state of a container within a partition.
+Updates the selection state and scope of a container within a partition.
 
 ### Syntax
 
 ```powershell
 Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
-    [-Selected <bool>] [-PassThru]
+    [-Selected <bool>] [-Scope <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -830,6 +839,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ContainerId` | `int` | Yes | | Container identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this container is selected for synchronisation |
+| `Scope` | `string` | No | | How far beneath the container objects are imported from: `Subtree` or `OneLevel`. Omit to leave the stored scope unchanged. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated container |
 
 ### Output
@@ -842,6 +852,14 @@ When `-PassThru` is specified, returns the updated container. Otherwise, no outp
 Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $true
 ```
 
+```powershell title="Select a container without its child containers"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $true -Scope OneLevel
+```
+
+```powershell title="Widen an already selected container back to its whole subtree"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Scope Subtree
+```
+
 ```powershell title="Select multiple containers via pipeline"
 @(7, 8, 9) | ForEach-Object {
     Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId $_ -Selected $true
@@ -851,6 +869,8 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $t
 ### Notes
 
 - The parent partition must also be selected for container selection to take effect during import operations.
+- `Scope` defaults to `Subtree` on containers that have never had it set, which is how container selection behaved before the option existed.
+- Narrowing a container to `OneLevel` takes the objects beneath it out of scope, exactly as deselecting those containers would. The Connected System Objects already imported from them become obsolete on the next import.
 - Supports `ShouldProcess` (Medium impact).
 
 ---

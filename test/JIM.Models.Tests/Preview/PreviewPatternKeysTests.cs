@@ -30,14 +30,14 @@ public class PreviewPatternKeysTests
         var keys = AllKeys.ToList();
 
         Assert.That(keys, Is.Not.Empty, "the reflection above is the whole test; if it finds nothing it is broken, not passing");
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             foreach (var key in keys)
             {
                 Assert.That(PreviewPatternKeys.GetDisplayName(key), Is.Not.Null.And.Not.Empty,
                     $"{key} has no display name, so the portal would show a detected pattern as blank");
             }
-        });
+        }
     }
 
     [Test]
@@ -59,10 +59,10 @@ public class PreviewPatternKeysTests
     [Test]
     public void GetDisplayName_NoPattern_IsNull()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(PreviewPatternKeys.GetDisplayName(null), Is.Null);
             Assert.That(PreviewPatternKeys.GetDisplayName(string.Empty), Is.Null);
-        });
+        }
     }
 }

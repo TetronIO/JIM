@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Sql.Providers;
 using JIM.Models.Core;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -151,16 +152,22 @@ internal sealed record SqlConnectorWatermark
     /// <summary>
     /// Describes a value a database handed back, so it can be carried as text and bound back later.
     /// </summary>
+    /// <remarks>
+    /// A watermark column is not part of the Connected System's schema, so there is no recorded attribute
+    /// type to render it by and the type is taken from what the driver returned. The rendering itself is
+    /// still <see cref="SqlAnchorValue"/>'s, which is what keeps a watermark and an anchor of the same
+    /// type in the same string form.
+    /// </remarks>
     /// <returns>The described value, or null where the column had none (an empty change log has no highest sequence).</returns>
     /// <exception cref="NotSupportedException">The value's type cannot order a change set, so it could never be a watermark.</exception>
-    internal static SqlDeltaValue? Describe(object? value)
+    internal static SqlDeltaValue? Describe(ISqlProvider provider, object? value)
     {
         if (value == null || value == DBNull.Value)
             return null;
 
         var type = value switch
         {
-            // A value carrying its own offset is normalised to UTC before it is rendered, exactly as an
+            // A value carrying its own offset is normalised to UTC as it is rendered, exactly as an
             // anchor is, so the same instant always produces the same text.
             DateTimeOffset or DateTime => AttributeDataType.DateTime,
             byte[] => AttributeDataType.Binary,
@@ -172,7 +179,6 @@ internal sealed record SqlConnectorWatermark
             _ => throw new NotSupportedException($"A {value.GetType().Name} value cannot order a change set, so it cannot be used as a Delta Import watermark.")
         };
 
-        var normalised = value is DateTimeOffset dateTimeOffset ? dateTimeOffset.UtcDateTime : value;
-        return new SqlDeltaValue(SqlAnchorValue.ToTokenString(normalised, type), type);
+        return new SqlDeltaValue(SqlAnchorValue.ToTokenString(provider, value, type), type);
     }
 }

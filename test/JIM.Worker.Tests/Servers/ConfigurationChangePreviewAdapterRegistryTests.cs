@@ -64,11 +64,11 @@ public class ConfigurationChangePreviewAdapterRegistryTests
         // acknowledgement and shows no preview. Asking must therefore be cheap and must not throw.
         var registry = new ConfigurationChangePreviewAdapterRegistry([new FakeAdapter(ConfigurationChangePreviewSurface.MetaverseObjectType)]);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(registry.HasAdapterFor(ConfigurationChangePreviewSurface.MetaverseObjectType), Is.True);
             Assert.That(registry.HasAdapterFor(ConfigurationChangePreviewSurface.ConnectedSystem), Is.False);
-        });
+        }
     }
 
     [Test]

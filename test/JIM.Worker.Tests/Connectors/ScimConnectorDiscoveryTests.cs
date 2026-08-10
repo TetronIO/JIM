@@ -171,12 +171,12 @@ public class ScimConnectorDiscoveryTests
         var results = connector.ValidateSettingValues(Settings(), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].IsValid, Is.False);
             Assert.That(results[0].ErrorMessage, Does.Contain("SCIM"));
             Assert.That(results[0].SettingValue?.Setting.Name, Is.EqualTo(ScimConnectorConstants.SettingBaseUrl));
-        });
+        }
     }
 
     [Test]
@@ -214,11 +214,11 @@ public class ScimConnectorDiscoveryTests
         var results = connector.ValidateSettingValues(Settings("not-a-url"), _logger);
 
         Assert.That(results, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results[0].IsValid, Is.False);
             Assert.That(handler.CallCount, Is.Zero);
-        });
+        }
     }
 
     [Test]
@@ -231,11 +231,11 @@ public class ScimConnectorDiscoveryTests
 
         var results = connector.ValidateSettingValues([Setting(ScimConnectorConstants.SettingBaseUrl)], _logger);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(results, Is.Empty);
             Assert.That(handler.CallCount, Is.Zero);
-        });
+        }
     }
 
     [Test]

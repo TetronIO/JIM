@@ -5,6 +5,7 @@ using JIM.Connectors.LDAP;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using NUnit.Framework;
+using System.DirectoryServices.Protocols;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -578,6 +579,205 @@ public class LdapConnectorUtilitiesTests
     {
         // One empty component within an otherwise valid multi-valued RDN must still be rejected.
         Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=John+SN=,OU=Users,DC=example,DC=local"), Is.False);
+    }
+
+    #endregion
+
+    #region GetSearchScope tests
+
+    [Test]
+    public void GetSearchScope_SubtreeContainer_ReturnsSubtree()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.GetSearchScope(container), Is.EqualTo(SearchScope.Subtree));
+    }
+
+    [Test]
+    public void GetSearchScope_OneLevelContainer_ReturnsOneLevel()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel);
+        Assert.That(LdapConnectorUtilities.GetSearchScope(container), Is.EqualTo(SearchScope.OneLevel));
+    }
+
+    #endregion
+
+    #region IsDnWithinContainerScope tests
+
+    // The changelog and accesslog delta paths cannot scope their search per Container the way a full import
+    // does; they read one directory-wide log and have to decide, per entry, whether the changed object is one
+    // this Connected System imports. These cases mirror what the server would have returned for the same base
+    // and scope, so a delta import sees exactly what a full import would have.
+
+    [Test]
+    public void IsDnWithinContainerScope_SubtreeContainerAndDirectChild_ReturnsTrue()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_SubtreeContainerAndDeepDescendant_ReturnsTrue()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_SubtreeContainerAndTheContainerItself_ReturnsTrue()
+    {
+        // A subtree search includes its base entry.
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("OU=Corp,DC=example,DC=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_OneLevelContainerAndDirectChild_ReturnsTrue()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_OneLevelContainerAndDeepDescendant_ReturnsFalse()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", container), Is.False);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_OneLevelContainerAndTheContainerItself_ReturnsFalse()
+    {
+        // A one-level search excludes its base entry.
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("OU=Corp,DC=example,DC=local", container), Is.False);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_DnOutsideTheContainer_ReturnsFalse()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice,OU=Other,DC=example,DC=local", container), Is.False);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_DnSharingASuffixButNotTheContainer_ReturnsFalse()
+    {
+        // "OU=NotCorp,..." ends with the same characters as "Corp,..." but is a different branch entirely;
+        // a naive suffix comparison would wrongly admit it.
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice,OU=NotCorp,DC=example,DC=local", container), Is.False);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_DifferentCasing_ReturnsTrue()
+    {
+        // DNs are not case-sensitive, and directories return them in whatever case they hold.
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("cn=Alice,ou=corp,dc=Example,dc=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_SpacingAfterCommas_ReturnsTrue()
+    {
+        // Some directories return DNs with a space after each comma.
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope("CN=Alice, OU=Corp, DC=example, DC=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_OneLevelContainerAndEscapedCommaInRdn_ReturnsTrue()
+    {
+        // An escaped comma is part of the RDN value, not a DN separator, so this is still a direct child.
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope(@"CN=Smith\, Alice,OU=Corp,DC=example,DC=local", container), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinContainerScope_EmptyDn_ReturnsFalse()
+    {
+        var container = CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree);
+        Assert.That(LdapConnectorUtilities.IsDnWithinContainerScope(string.Empty, container), Is.False);
+    }
+
+    [Test]
+    public void IsDnWithinAnyContainerScope_DnInTheSecondContainer_ReturnsTrue()
+    {
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel),
+            CreateContainer("OU=Partners,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=External,OU=Partners,DC=example,DC=local", containers), Is.True);
+    }
+
+    [Test]
+    public void IsDnWithinAnyContainerScope_DnBeneathAOneLevelContainerOnly_ReturnsFalse()
+    {
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.OneLevel),
+            CreateContainer("OU=Partners,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.False);
+    }
+
+    [Test]
+    public void IsDnWithinAnyContainerScope_NoContainers_ReturnsTrue()
+    {
+        // No selected Containers means no Container-level opinion to apply; the caller's partition filtering
+        // still governs. Returning false here would silently empty every delta import.
+        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", []), Is.True);
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static ConnectedSystemContainer CreateContainer(string externalId, ConnectedSystemContainerScope scope)
+    {
+        return new ConnectedSystemContainer
+        {
+            Name = externalId,
+            ExternalId = externalId,
+            Selected = true,
+            Scope = scope
+        };
+    }
+
+    #endregion
+
+    #region GetContainerDisplayNameFromDn Tests
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithANestedDn_ReturnsTheLeafRdnValue()
+    {
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn("OU=Sales,OU=Corp,DC=example,DC=com"), Is.EqualTo("Sales"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithAnEscapedComma_ReturnsTheUnescapedValue()
+    {
+        // A naive split on ',' would answer "Sales\".
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(@"OU=Sales\, EMEA,DC=example,DC=com"), Is.EqualTo("Sales, EMEA"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithAnUnparseableIdentifier_ReturnsItUnchanged()
+    {
+        // Showing something is better than showing an empty row.
+        Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn("not-a-distinguished-name"), Is.EqualTo("not-a-distinguished-name"));
+    }
+
+    [Test]
+    public void GetContainerDisplayNameFromDn_WithNoIdentifier_ReturnsEmpty()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(null), Is.Empty);
+            Assert.That(LdapConnectorUtilities.GetContainerDisplayNameFromDn(string.Empty), Is.Empty);
+        }
     }
 
     #endregion

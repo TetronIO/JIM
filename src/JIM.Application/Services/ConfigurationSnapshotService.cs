@@ -494,6 +494,9 @@ public class ConfigurationSnapshotService
             Add(children, "name", container.Name, "Name");
             Add(children, "externalId", container.ExternalId, "External ID");
             Add(children, "hidden", Render(container.Hidden), "Hidden");
+            // Unlike the scalars above, scope decides what gets imported rather than describing the container:
+            // narrowing it takes objects out of scope. Classified accordingly in ConfigurationChangeClassifier.
+            AddEnum(children, "scope", container.Scope, "Scope");
             children.Add(BuildContainers(container.ChildContainers));
             items.Add(ConfigurationSnapshotNode.ObjectNode("container", children, container.Name, container.Id));
         }

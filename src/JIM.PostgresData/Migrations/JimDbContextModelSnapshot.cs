@@ -2657,6 +2657,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("PartitionId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("Selected")
                         .HasColumnType("boolean");
 

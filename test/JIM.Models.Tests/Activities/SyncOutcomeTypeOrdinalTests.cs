@@ -59,7 +59,8 @@ public class SyncOutcomeTypeOrdinalTests
         // The delete-flavoured sibling of PendingExportCreated (14): staging a Pending Export whose
         // ChangeType is Delete. Before this existed, a deprovisioning cascade was indistinguishable
         // from an attribute update in the causality views.
-        [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = 25
+        [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = 25,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = 26
     };
 
     [Test]

@@ -74,11 +74,11 @@ public class ActivityScheduleAttributionPersistenceDatabaseTests
         await using var read = NewContext();
         var persisted = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.ScheduledByScheduleId, Is.EqualTo(scheduleId), "the Schedule id column must persist");
             Assert.That(persisted.ScheduledByScheduleName, Is.EqualTo("Nightly Sync"), "the Schedule name column must persist");
-        });
+        }
     }
 
     /// <summary>
@@ -142,10 +142,10 @@ public class ActivityScheduleAttributionPersistenceDatabaseTests
         await using var read = NewContext();
         var persisted = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(persisted.ScheduledByScheduleId, Is.Null, "an Activity no Schedule produced carries no attribution");
             Assert.That(persisted.ScheduledByScheduleName, Is.Null, "an Activity no Schedule produced carries no attribution");
-        });
+        }
     }
 }

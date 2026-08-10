@@ -21,6 +21,48 @@ namespace JIM.Web.Api.Tests;
 public class ConfigurationChangePreviewCountsTests
 {
     [Test]
+    public void ForConfirmationVerdict_WithheldWhereTheCountsAre()
+    {
+        // The sentence and the table are the same answer, so they withhold on exactly the same grounds; a
+        // confirmation that suppressed the table but kept the sentence would be worse than either.
+        var failed = CompletedPreview();
+        failed.SummaryStatus = ConfigurationChangePreviewStageStatus.Failed;
+
+        var stillCounting = CompletedPreview();
+        stillCounting.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.InProgress;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ConfigurationChangePreviewCounts.ForConfirmationVerdict(null, isStale: false), Is.Null);
+            Assert.That(ConfigurationChangePreviewCounts.ForConfirmationVerdict(failed, isStale: false), Is.Null);
+            Assert.That(ConfigurationChangePreviewCounts.ForConfirmationVerdict(stillCounting, isStale: false), Is.Null);
+            Assert.That(ConfigurationChangePreviewCounts.ForConfirmationVerdict(CompletedPreview(), isStale: true), Is.Null);
+        }
+    }
+
+    [Test]
+    public void ForConfirmationVerdict_CompletePreviewWithCounts_LeadsWithTheWorstConsequence()
+    {
+        var preview = CompletedPreview(
+            new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, 40_000),
+            new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 4));
+
+        var verdict = ConfigurationChangePreviewCounts.ForConfirmationVerdict(preview, isStale: false);
+
+        Assert.That(verdict, Is.Not.Null);
+        Assert.That(verdict!.Lead, Is.EqualTo("4 objects would become eligible for deletion."));
+    }
+
+    [Test]
+    public void ForConfirmationVerdict_CompletePreviewThatFoundNothing_SaysNothing()
+    {
+        // The counts state a zero here, because an absent table reads as "no preview was run". A sentence does not
+        // have that problem: the dialog already lists what is changing, and "0 objects would change" beneath it is
+        // a line nobody needs.
+        Assert.That(ConfigurationChangePreviewCounts.ForConfirmationVerdict(CompletedPreview(), isStale: false), Is.Null);
+    }
+
+    [Test]
     public void ForConfirmation_NoPreview_StatesNothing()
     {
         Assert.That(ConfigurationChangePreviewCounts.ForConfirmation(null, isStale: false), Is.Empty);
@@ -62,12 +104,12 @@ public class ConfigurationChangePreviewCountsTests
         var counts = ConfigurationChangePreviewCounts.ForConfirmation(preview, isStale: false);
 
         Assert.That(counts, Has.Count.EqualTo(2));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(counts[0].Count, Is.EqualTo(4_812), "the largest impact is the one being consented to");
             Assert.That(counts[0].Label, Is.Not.Empty, "a transition ordinal is not something to put in front of an administrator");
             Assert.That(counts[1].Count, Is.EqualTo(12));
-        });
+        }
     }
 
     [Test]

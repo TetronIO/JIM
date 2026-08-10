@@ -22,11 +22,11 @@ public class ScimConnectorProviderAwarenessTests
     {
         var connector = new ScimConnector();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connector, Is.InstanceOf<IConnectorCredentialAware>());
             Assert.That(connector, Is.InstanceOf<IConnectorCertificateAware>());
-        });
+        }
     }
 
     [Test]
@@ -50,10 +50,10 @@ public class ScimConnectorProviderAwarenessTests
         // fail at construction; the failure, if any, belongs at the point of use.
         var connector = new ScimConnector();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.DoesNotThrow(() => connector.SetCredentialProtection(null));
             Assert.DoesNotThrow(() => connector.SetCertificateProvider(null));
-        });
+        }
     }
 }

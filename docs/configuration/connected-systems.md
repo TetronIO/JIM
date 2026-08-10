@@ -74,8 +74,34 @@ In practice, selecting a partition brings an entire naming context into scope, w
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
 
 - A [Run Profile](run-profiles.md) that targets a deselected partition is refused rather than run. The Run Profiles tab marks it, and the property is available over REST and PowerShell so you can find every affected Run Profile at once.
-- Exports are refused outside the selected containers. Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
+- Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
+
+### Previewing a partition or container change
+
+Because narrowing scope is silently destructive, the Partitions & Containers tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
+
+The preview reports:
+
+| Transition | What it means |
+|---|---|
+| Leaves import scope | Connected System Objects that leave import scope and are not joined to anything. Nothing in the Metaverse changes as a result. |
+| Disconnects from its Metaverse Object | Objects that leave import scope and *are* joined. Each takes the attribute values it contributed out of the Metaverse Object with it. |
+| Becomes eligible for deletion | Metaverse Objects that those disconnections would leave satisfying their [deletion rule](metaverse.md#deletion-behaviour). These are deletions your selection would set in motion. |
+| Enters import scope | Objects JIM still holds from scope you are re-selecting. |
+
+The counts honour each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope): beneath a One Level container an import returns nothing, so objects a level deeper are already out of scope and deselecting it takes nothing further away.
+
+Two limits are worth knowing, and the preview states both where they apply:
+
+- **Objects JIM has never imported cannot be counted.** Selecting new scope makes the next Full Import discover objects that are not in the connector space yet, and there is nothing to count until it runs.
+- **Some objects cannot be placed.** An object imported before JIM recorded partitions, or one whose Connector cannot say what container an object is in, is left out of the counts entirely rather than guessed at in either direction.
+
+Save after previewing and the confirmation opens with the preview's own sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
+
+The same evaluation is available to automation: [`New-JIMConfigurationChangePreview -ConnectedSystemId`](../powershell/previews.md) in PowerShell, or `POST connected-systems/{id}/scope-selection/preview` in the [REST API](../../api/reference/). Send the whole proposed selection rather than one flag: what a deselection costs depends on the rest of the selection, because an object leaves scope only when nothing else still covers it.
+
+See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
 
 ### Renames and moves in the source system
 
@@ -104,6 +130,32 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 - **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
+
+## Attribute writability
+
+When JIM retrieves a Connected System's schema, each discovered attribute is recorded with how the system will let JIM write to it. You can see this in the Schema tab's **Writability** column, filter the attribute list by it, and read it from the REST API and PowerShell as the attribute's `writability` value. It is discovered, never set by an administrator: it reflects what the Connected System told JIM.
+
+There are three states.
+
+| Shown as | `writability` | What it means |
+|----------|---------------|---------------|
+| Writable | `Writable` | The Connected System accepts writes to this attribute. An export Attribute Flow can target it and keep it up to date. |
+| Read-Only | `ReadOnly` | The Connected System will not accept writes at all. The attribute can still be imported (`whenCreated` and `objectSid` are useful to hold in the Metaverse), but no export Attribute Flow may target it; JIM refuses the mapping when you try to create it. |
+| Set on creation only | `WritableOnCreate` | The Connected System accepts a value only as part of creating the object. An export Attribute Flow may target it, and usually should: without one the object cannot be provisioned. JIM sends the value with the Create Pending Export and never sends it again. |
+
+### Why "Set on creation only" exists
+
+Some attributes are what the Connected System uses to identify the object. A relational table's primary key is the clearest case: JIM has to supply it when it inserts the row, and from then on it is what ties the Connected System Object to that row. Rewriting it later would not update the row, it would point JIM at a different one, and the object JIM thought it was managing would be orphaned. A directory's relative distinguished name has the same shape, being changed by a rename operation rather than by an ordinary attribute write.
+
+JIM therefore treats these attributes as write-once, and enforces it on the export path rather than trusting the configuration to be right:
+
+- **Provisioning**<br /> The value flows normally. It is part of the Create Pending Export, exactly like any other mapped attribute.
+- **Updates**<br /> The attribute is excluded from every Update Pending Export, **even when the Metaverse value has changed**. Nothing is sent, and no error is raised: this is the intended behaviour, not a failure.
+- **Drift Correction**<br /> A value that has diverged in the Connected System is not treated as drift and is not corrected, because correcting it would mean rewriting the identifier.
+
+If a source value feeding one of these attributes genuinely does change (an employee number is reissued, say), JIM will not chase it into the Connected System. That is deliberate: re-identifying an existing object is a decision for an administrator, not something a synchronisation run should do quietly.
+
+The Attribute Flow editor marks an export mapping whose target is set on creation only, so it is clear at a glance which mappings apply during provisioning alone, and a Connected System Object's detail page marks the attribute itself, so the same is obvious when looking at a single object's values.
 
 ## Credential attributes are never managed
 

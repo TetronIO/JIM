@@ -65,11 +65,11 @@ public class OracleProviderTests
     {
         var parameter = _provider.CreateParameter("pageSize", 500);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parameter.ParameterName, Is.EqualTo("pageSize"));
             Assert.That(parameter.Value, Is.EqualTo(500));
-        });
+        }
     }
 
     [Test]
@@ -190,13 +190,13 @@ public class OracleProviderTests
 
         var sql = _provider.BuildKeysetPageCommandText(request);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("WHERE (\"COMPANY_ID\" > :lastAnchor0 OR (\"COMPANY_ID\" = :lastAnchor0 AND \"EMPLOYEE_ID\" > :lastAnchor1))"),
                 "Oracle supports row-value comparison only for equality, so a composite anchor must expand into the equivalent OR chain.");
             Assert.That(sql, Does.Contain("ORDER BY \"COMPANY_ID\", \"EMPLOYEE_ID\""),
                 "The ordering must match the comparison exactly or pages overlap or skip rows.");
-        });
+        }
     }
 
     [Test]
@@ -266,14 +266,14 @@ public class OracleProviderTests
 
         var sql = _provider.BuildKeysetPageCommandText(request);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("EXISTS (SELECT 1 FROM \"EMPLOYEE_PHONES\" \"JIM_RELATED0\" WHERE \"JIM_RELATED0\".\"EMPLOYEE_ID\" = \"JIM_SOURCE\".\"EMPLOYEE_ID\" AND \"JIM_RELATED0\".\"ROW_CHANGED\" > :relatedWatermark0)"));
             Assert.That(sql, Does.Contain("EXISTS (SELECT 1 FROM \"EMPLOYEE_GROUPS\" \"JIM_RELATED1\" WHERE \"JIM_RELATED1\".\"EMPLOYEE_ID\" = \"JIM_SOURCE\".\"EMPLOYEE_ID\" AND \"JIM_RELATED1\".\"ROW_CHANGED\" > :relatedWatermark1)"),
                 "Each related table carries its own watermark, so each one gets its own correlated subquery rather than being folded into a single join.");
             Assert.That(sql, Does.Not.Contain("JOIN"),
                 "A join would return one parent row per matching related row, which is how a page silently turns into duplicate objects.");
-        });
+        }
     }
 
     #endregion
@@ -309,12 +309,12 @@ public class OracleProviderTests
     {
         var parameter = _provider.CreateGeneratedKeyParameter("generatedKey", AttributeDataType.Number);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parameter, Is.Not.Null, "Oracle needs a real output parameter to receive the RETURNING value.");
             Assert.That(parameter!.ParameterName, Is.EqualTo("generatedKey"));
             Assert.That(parameter.Direction, Is.EqualTo(ParameterDirection.Output));
-        });
+        }
     }
 
     [Test]
@@ -322,12 +322,12 @@ public class OracleProviderTests
     {
         var parameter = _provider.CreateGeneratedKeyParameter("generatedKey", AttributeDataType.Text);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parameter, Is.Not.Null);
             Assert.That(parameter!.Size, Is.GreaterThan(0),
                 "An unsized output parameter silently truncates a returned string key to nothing on ODP.NET.");
-        });
+        }
     }
 
     #endregion
@@ -356,7 +356,7 @@ public class OracleProviderTests
 
         var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(builder.DataSource, Does.Contain("(PROTOCOL=TCP)"), "Without TLS the listener is addressed over plain TCP.");
             Assert.That(builder.DataSource, Does.Contain("(HOST=oracle.example.local)"));
@@ -365,7 +365,7 @@ public class OracleProviderTests
             Assert.That(builder.UserID, Is.EqualTo("jim_reader"));
             Assert.That(builder.Password, Is.EqualTo("s3cret"));
             Assert.That(builder.ConnectionTimeout, Is.EqualTo(20));
-        });
+        }
     }
 
     [Test]
@@ -408,23 +408,23 @@ public class OracleProviderTests
 
         var builder = new OracleConnectionStringBuilder(_provider.BuildConnectionString(settings));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(builder.DataSource, Does.Contain("(PROTOCOL=TCP)"));
             Assert.That(builder.DataSource, Does.Not.Contain("TCPS"));
             Assert.That(builder.DataSource, Does.Contain("(PORT=1521)"), "TCPS has its own listener port; Native Network Encryption uses the ordinary one.");
-        });
+        }
     }
 
     [Test]
     public void GetDefaultPort_DependsOnWhetherTheTransportIsTcps()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.Tls), Is.EqualTo(2484), "TCPS listens on its own port.");
             Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.OracleNativeNetworkEncryption), Is.EqualTo(1521));
             Assert.That(_provider.GetDefaultPort(SqlConnectionEncryption.None), Is.EqualTo(1521));
-        });
+        }
     }
 
     [Test]
@@ -438,7 +438,7 @@ public class OracleProviderTests
 
         _provider.ConfigureConnection(connection, settings);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connection.SqlNetEncryptionClient, Is.EqualTo("REQUIRED"),
                 "Anything weaker lets the connection fall back to plain text without saying so, which is exactly what Mandatory rules out on Microsoft SQL Server.");
@@ -447,7 +447,7 @@ public class OracleProviderTests
             Assert.That(connection.SqlNetCryptoChecksumClient, Is.EqualTo("REQUIRED"),
                 "Encryption without integrity protection leaves the traffic malleable; Oracle estates configure the pair together.");
             Assert.That(connection.SqlNetCryptoChecksumTypesClient, Is.EqualTo("SHA512, SHA384, SHA256"));
-        });
+        }
     }
 
     [Test]
@@ -461,13 +461,13 @@ public class OracleProviderTests
 
         _provider.ConfigureConnection(connection, settings);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // An untouched setting reads back from the driver as null rather than as an empty string.
             // Either way nothing has been asked for, which is what this asserts.
             Assert.That(connection.SqlNetEncryptionClient, Is.Null.Or.Empty);
             Assert.That(connection.SqlNetCryptoChecksumClient, Is.Null.Or.Empty);
-        });
+        }
     }
 
     [Test]
@@ -480,13 +480,13 @@ public class OracleProviderTests
 
         _provider.ConfigureConnection(connection, settings);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // An untouched setting reads back from the driver as null rather than as an empty string.
             // Either way nothing has been asked for, which is what this asserts.
             Assert.That(connection.SqlNetEncryptionClient, Is.Null.Or.Empty);
             Assert.That(connection.SqlNetCryptoChecksumClient, Is.Null.Or.Empty);
-        });
+        }
     }
 
     [Test]
@@ -525,11 +525,11 @@ public class OracleProviderTests
 
         using var connection = _provider.CreateConnection(_provider.BuildConnectionString(settings));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(connection, Is.InstanceOf<OracleConnection>());
             Assert.That(connection.State, Is.EqualTo(ConnectionState.Closed), "Creating a connection must not open it; the caller owns the lifetime.");
-        });
+        }
     }
 
     [Test]
@@ -556,12 +556,12 @@ public class OracleProviderTests
 
         var result = _provider.ConvertToGuid(raw16);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.EqualTo(expected));
             Assert.That(raw16[0], Is.EqualTo(0x55),
                 "The fixture is only meaningful while Oracle's RAW(16) layout genuinely differs from the Microsoft one, whose first byte here is 0x00.");
-        });
+        }
     }
 
     [Test]
@@ -605,12 +605,12 @@ public class OracleProviderTests
     {
         var sql = _provider.TablesCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("ALL_TABLES"));
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.SchemaName), "Both dialects alias to the same result column names so schema discovery stays dialect-free.");
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.ObjectName));
-        });
+        }
     }
 
     [Test]
@@ -624,12 +624,12 @@ public class OracleProviderTests
     {
         var sql = _provider.ColumnsCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("ALL_TAB_COLUMNS"));
             Assert.That(sql, Does.Contain(":" + SqlCatalogueParameters.SchemaName), "Catalogue filters are values, so they must be bound as parameters.");
             Assert.That(sql, Does.Contain(":" + SqlCatalogueParameters.ObjectName));
-        });
+        }
     }
 
     [Test]
@@ -637,12 +637,12 @@ public class OracleProviderTests
     {
         var sql = _provider.PrimaryKeyColumnsCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("ALL_CONSTRAINTS"));
             Assert.That(sql, Does.Contain("'P'"), "Oracle records a primary key as constraint type 'P'.");
             Assert.That(sql, Does.Contain("ORDER BY"), "A composite key's column order is part of the anchor's meaning.");
-        });
+        }
     }
 
     [Test]
@@ -650,12 +650,12 @@ public class OracleProviderTests
     {
         var sql = _provider.ForeignKeyColumnsCommandText;
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(sql, Does.Contain("'R'"), "Oracle records a referential constraint as type 'R'.");
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.ReferencedTable), "Reference suggestions need the referenced table and column, not just the owning column.");
             Assert.That(sql, Does.Contain(SqlCatalogueColumns.ReferencedColumn));
-        });
+        }
     }
 
     #endregion

@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Connectors;
+using System.Collections.Concurrent;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -121,14 +122,14 @@ public class MultiAccountPasswordSetTests
 
         var result = await SetOnAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcomes, Has.Count.EqualTo(3));
             Assert.That(_connectors[1].PasswordsSet, Is.EqualTo(new[] { Password }));
             Assert.That(_connectors[3].PasswordsSet, Is.EqualTo(new[] { Password }), "the system after the refusal must still be attempted");
             Assert.That(result.SucceededCount, Is.EqualTo(2));
             Assert.That(result.IsPartial, Is.True);
-        });
+        }
     }
 
     /// <summary>
@@ -150,12 +151,12 @@ public class MultiAccountPasswordSetTests
 
         var result = await SetOnAsync(accounts);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcomes, Has.Count.EqualTo(3));
             Assert.That(result.Failed.Single().Result.FailureReason, Is.EqualTo(PasswordSetFailureReason.TargetObjectNotFound));
             Assert.That(_connectors[3].PasswordsSet, Is.EqualTo(new[] { Password }));
-        });
+        }
     }
 
     [Test]
@@ -167,11 +168,11 @@ public class MultiAccountPasswordSetTests
         var result = await SetOnAsync();
 
         var refused = result.Failed.Single();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(refused.ConnectedSystemName, Is.EqualTo("Fabrikam HR"));
             Assert.That(refused.Result.ErrorMessage, Does.Contain("does not meet the requirements"));
-        });
+        }
     }
 
     #endregion
@@ -197,8 +198,13 @@ public class MultiAccountPasswordSetTests
     [Test]
     public async Task SetPasswordOnAccountsAsync_ReportsEachOutcomeAsItLandsAsync()
     {
-        var reported = new List<AccountPasswordSetOutcome>();
-        await SetOnAsync(progress: new Progress<AccountPasswordSetOutcome>(reported.Add));
+        // A concurrent collection rather than a List, because the callbacks are not serialised: NUnit's
+        // SafeSynchronizationContext hands each Progress<T> callback to its own thread pool thread, so all three
+        // can run at once even though the product reports the accounts strictly one at a time. Two concurrent
+        // List<T>.Add calls can write the same index, and the outcome that loses is gone with no error anywhere;
+        // that is what failed this test on main, reproducibly at roughly one run in thirteen.
+        var reported = new ConcurrentQueue<AccountPasswordSetOutcome>();
+        await SetOnAsync(progress: new Progress<AccountPasswordSetOutcome>(reported.Enqueue));
 
         // Progress<T> posts to the captured context, so the reports may arrive after the call returns.
         var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -221,12 +227,12 @@ public class MultiAccountPasswordSetTests
 
         var result = await SetOnAsync(cancellationToken: cancellation.Token);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcomes, Has.Count.EqualTo(1), "the accounts after the cancellation are not attempted");
             Assert.That(result.Outcomes[0].ConnectedSystemName, Is.EqualTo("Contoso AD"));
             Assert.That(_connectors[2].PasswordsSet, Is.Empty);
-        });
+        }
     }
 
     #endregion
@@ -247,13 +253,13 @@ public class MultiAccountPasswordSetTests
         var parent = activities.Single(a => a.TargetType == ActivityTargetType.MetaverseObject);
         var children = activities.Where(a => a.TargetType == ActivityTargetType.ConnectedSystemObject).ToList();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(children, Has.Count.EqualTo(3));
             Assert.That(children.Select(c => c.ParentActivityId), Is.All.EqualTo(parent.Id));
             Assert.That(parent.MetaverseObjectId, Is.EqualTo(_metaverseObjectId));
             Assert.That(parent.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetPassword));
-        });
+        }
     }
 
     /// <summary>
@@ -265,12 +271,12 @@ public class MultiAccountPasswordSetTests
         await SetOnAsync([_accounts[0]]);
 
         var activities = CreatedActivities();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(activities, Has.Count.EqualTo(1));
             Assert.That(activities[0].TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystemObject));
             Assert.That(activities[0].ParentActivityId, Is.Null);
-        });
+        }
     }
 
     /// <summary>
@@ -285,12 +291,12 @@ public class MultiAccountPasswordSetTests
         await SetOnAsync();
 
         var parent = CreatedActivities().Single(a => a.TargetType == ActivityTargetType.MetaverseObject);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(parent.Status, Is.EqualTo(ActivityStatus.FailedWithError));
             Assert.That(parent.ErrorMessage, Does.Contain("Fabrikam HR"));
             Assert.That(parent.ErrorMessage, Does.Contain("2 of 3"));
-        });
+        }
     }
 
     [Test]

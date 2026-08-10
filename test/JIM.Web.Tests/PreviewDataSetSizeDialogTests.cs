@@ -28,12 +28,12 @@ public class PreviewDataSetSizeDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(250_000);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("250,000"), "a choice offered without a size is not informed");
             Assert.That(provider.Markup, Does.Contain("MB").Or.Contain("GB"),
                 "storage is the cost the administrator is actually being asked to accept");
-        });
+        }
     }
 
     [Test]
@@ -49,13 +49,13 @@ public class PreviewDataSetSizeDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(250_000);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("recommended"),
                 "both answers are legitimate, so the dialog has to say which one it would pick");
             Assert.That(provider.Markup, Does.Contain("exact"),
                 "an administrator must not think capping would under-report what the change does");
-        });
+        }
     }
 
     [Test]
@@ -67,11 +67,11 @@ public class PreviewDataSetSizeDialogTests : JimComponentTestContext
         provider.Find($"[data-testid='{ConfirmButtonMarker}']").Click();
 
         var completed = await result;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(completed!.Canceled, Is.False);
             Assert.That(completed.Data, Is.EqualTo(ConfigurationChangePreviewDeltaPersistence.Capped));
-        });
+        }
     }
 
     [Test]
@@ -85,11 +85,11 @@ public class PreviewDataSetSizeDialogTests : JimComponentTestContext
         provider.FindAll("button").First(b => b.TextContent.Contains("Cancel")).Click();
 
         var completed = await result;
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(completed!.Canceled, Is.True);
             Assert.That(completed.Data, Is.Null);
-        });
+        }
     }
 
     private Task<DialogResult?>? LastResult { get; set; }

@@ -200,13 +200,13 @@ public class ServerCertificateTrustTests
     {
         var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _leaf.Thumbprint, _testUser);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
             Assert.That(result.Certificate, Is.Not.Null);
             Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(_leaf.Thumbprint));
             Assert.That(result.Certificate!.Name, Is.EqualTo("hr.corp.local"));
-        });
+        }
     }
 
     [Test]
@@ -214,12 +214,12 @@ public class ServerCertificateTrustTests
     {
         var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _issuer.Thumbprint, _testUser);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
             Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(_issuer.Thumbprint));
             Assert.That(result.Certificate!.Name, Is.EqualTo("Corp Issuing CA 2"));
-        });
+        }
     }
 
     [Test]
@@ -237,12 +237,12 @@ public class ServerCertificateTrustTests
     {
         var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, "0123456789ABCDEF0123456789ABCDEF01234567", _testUser);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.ThumbprintMismatch));
             Assert.That(result.PresentedThumbprint, Is.EqualTo(_leaf.Thumbprint));
             Assert.That(result.Message, Does.Contain("nothing has been trusted"));
-        });
+        }
         _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
     }
 
@@ -327,11 +327,11 @@ public class ServerCertificateTrustTests
         await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, _leaf.Thumbprint, _testUser);
 
         Assert.That(probed, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(probed!.Host, Is.EqualTo("hr.corp.local"));
             Assert.That(probed!.Port, Is.EqualTo(443));
-        });
+        }
     }
 
     #endregion
@@ -356,11 +356,11 @@ public class ServerCertificateTrustTests
         await _jim.Certificates.ReadServerCertificateAsync(ConnectedSystemId, Drafts("https://hr.corp.local:8443/scim/v2"));
 
         Assert.That(probed, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(probed!.Host, Is.EqualTo("hr.corp.local"));
             Assert.That(probed!.Port, Is.EqualTo(8443));
-        });
+        }
     }
 
     [Test]
@@ -376,11 +376,11 @@ public class ServerCertificateTrustTests
         var result = await _jim.Certificates.TrustServerCertificateAsync(
             ConnectedSystemId, _leaf.Thumbprint, _testUser, changeReason: null, draftSettingValues: Drafts("https://hr.corp.local/scim/v2"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
             Assert.That(probed!.Host, Is.EqualTo("hr.corp.local"));
-        });
+        }
     }
 
     /// <summary>
@@ -428,14 +428,14 @@ public class ServerCertificateTrustTests
     {
         var result = await _jim.Certificates.ReadServerCertificateAsync(ConnectedSystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateReadOutcome.Read));
             Assert.That(result.Diagnostic, Is.Not.Null);
             Assert.That(result.Diagnostic!.Thumbprint, Is.EqualTo(_leaf.Thumbprint));
             Assert.That(result.Diagnostic!.IsIssuerCertificateAvailable, Is.True);
             Assert.That(result.ReadAt, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -453,11 +453,11 @@ public class ServerCertificateTrustTests
 
         var result = await _jim.Certificates.ReadServerCertificateAsync(ConnectedSystemId);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Outcome, Is.EqualTo(ServerCertificateReadOutcome.ServerUnreachable));
             Assert.That(result.Diagnostic, Is.Null);
-        });
+        }
     }
 
     #endregion
