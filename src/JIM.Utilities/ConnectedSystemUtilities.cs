@@ -51,37 +51,73 @@ public static class ConnectedSystemUtilities
         container.Selected && container.Scope == ConnectedSystemContainerScope.Subtree;
 
     /// <summary>
-    /// Recalculates every container's <see cref="ConnectedSystemContainer.Included"/> display flag from the current
-    /// selections and scopes, for the whole of a partition's container hierarchy.
+    /// Recalculates every container's <see cref="ConnectedSystemContainer.Included"/> and
+    /// <see cref="ConnectedSystemContainer.ExcludedByAncestor"/> display flags from the current selections,
+    /// exclusions and scopes, for the whole of a partition's container hierarchy.
     /// </summary>
     /// <remarks>
-    /// A container is "included" when a selected ancestor's search already covers it, so the administrator does not
-    /// need to (and cannot) select it in its own right. Only a <see cref="ConnectedSystemContainerScope.Subtree"/>
-    /// ancestor covers anything beneath it: beneath a <see cref="ConnectedSystemContainerScope.OneLevel"/> ancestor
-    /// nothing is imported at all, so those containers stay selectable. This is the display-side counterpart of the
-    /// coverage rule <see cref="GetTopLevelSelectedContainers"/> applies, and both must agree; if they do not, the
-    /// portal shows one scope and the import performs another.
+    /// Both flags answer one question: what has already been decided about this container from above? A container is
+    /// "included" when a selected ancestor's search covers it, so the administrator does not need to (and cannot)
+    /// select it in its own right; it is "excluded by ancestor" when an excluded ancestor has carved it out, which
+    /// the administrator can overrule by selecting it. Only a <see cref="ConnectedSystemContainerScope.Subtree"/>
+    /// statement reaches past its own container: beneath a <see cref="ConnectedSystemContainerScope.OneLevel"/> one
+    /// nothing is decided at all, so those containers stay open to statements of their own.
+    ///
+    /// A container that states something itself carries neither flag, whichever an ancestor said, because its own
+    /// statement is what governs it. That is the same rule the import applies when it asks which container decides
+    /// an object's fate (<c>ContainerSpecificity</c>), one level up: nearest statement wins. This is the
+    /// display-side counterpart of the coverage rule <see cref="GetTopLevelSelectedContainers"/> applies, and all
+    /// three must agree; if they do not, the portal shows one scope and the import performs another.
     /// </remarks>
     public static void ApplyContainerInclusion(ConnectedSystemPartition connectedSystemPartition)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
 
+        // A root container has no ancestor, so nothing has been decided about it from above.
         foreach (var rootContainer in connectedSystemPartition.Containers ?? [])
-        {
-            // A root container has no ancestor, so nothing can be covering it.
-            rootContainer.Included = false;
-            ApplyContainerInclusion(rootContainer, CoversDescendants(rootContainer));
-        }
+            ApplyContainerInclusion(rootContainer, AncestorStatement.None);
     }
 
-    private static void ApplyContainerInclusion(ConnectedSystemContainer container, bool coveredByAnAncestor)
+    /// <summary>
+    /// What the nearest ancestor holding an opinion has said about a container.
+    /// </summary>
+    private enum AncestorStatement
     {
+        /// <summary>No ancestor's statement reaches this container.</summary>
+        None,
+
+        /// <summary>A selected ancestor's search already covers it.</summary>
+        Covered,
+
+        /// <summary>An excluded ancestor has carved it out.</summary>
+        Excluded
+    }
+
+    private static void ApplyContainerInclusion(ConnectedSystemContainer container, AncestorStatement fromAncestors)
+    {
+        var statesSomethingItself = container.Selected || container.Excluded;
+        container.Included = !statesSomethingItself && fromAncestors == AncestorStatement.Covered;
+        container.ExcludedByAncestor = !statesSomethingItself && fromAncestors == AncestorStatement.Excluded;
+
+        var forDescendants = StatementForDescendants(container, fromAncestors);
         foreach (var childContainer in container.ChildContainers)
-        {
-            childContainer.Included = coveredByAnAncestor;
-            ApplyContainerInclusion(childContainer, coveredByAnAncestor || CoversDescendants(childContainer));
-        }
+            ApplyContainerInclusion(childContainer, forDescendants);
+    }
+
+    /// <summary>
+    /// What a container's children have had decided about them: this container's own statement where it makes one
+    /// that reaches them, and otherwise whatever reached this container from above.
+    /// </summary>
+    private static AncestorStatement StatementForDescendants(ConnectedSystemContainer container, AncestorStatement fromAncestors)
+    {
+        if (container.Scope != ConnectedSystemContainerScope.Subtree)
+            return fromAncestors;
+
+        if (container.Excluded)
+            return AncestorStatement.Excluded;
+
+        return container.Selected ? AncestorStatement.Covered : fromAncestors;
     }
 
     /// <summary>

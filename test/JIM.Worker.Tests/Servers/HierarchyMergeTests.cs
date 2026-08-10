@@ -75,6 +75,82 @@ public class HierarchyMergeTests
         }
     }
 
+    [Test]
+    public void MergeHierarchy_WhenAnExcludedContainerIsRenamed_KeepsTheExclusion()
+    {
+        // An exclusion is a statement about a Container, so it has to survive the Container being renamed or moved,
+        // exactly as a selection does. Matching is on the Connected System's own immutable identifier for precisely
+        // this reason: matching on the Distinguished Name would read a rename as a removal plus an addition, and the
+        // re-added Container would arrive stating nothing, silently importing the branch that was carved out.
+        var excluded = new ConnectedSystemContainer
+        {
+            Name = "Service Accounts",
+            ExternalId = "OU=Service Accounts,OU=Corp,DC=example,DC=local",
+            StableId = "11111111-1111-1111-1111-111111111111",
+            Excluded = true
+        };
+        var corp = new ConnectedSystemContainer
+        {
+            Name = "Corp",
+            ExternalId = "OU=Corp,DC=example,DC=local",
+            StableId = "22222222-2222-2222-2222-222222222222",
+            Selected = true
+        };
+        corp.AddChildContainer(excluded);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Partitions =
+            [
+                new ConnectedSystemPartition
+                {
+                    Name = "example.local",
+                    ExternalId = "DC=example,DC=local",
+                    Selected = true,
+                    Containers = [corp]
+                }
+            ]
+        };
+
+        // The same two Containers as the directory now reports them, with Service Accounts renamed in place.
+        var discoveredCorp = new ConnectorContainer("OU=Corp,DC=example,DC=local", "Corp")
+        {
+            StableId = "22222222-2222-2222-2222-222222222222"
+        };
+        discoveredCorp.ChildContainers.Add(new ConnectorContainer("OU=Svc,OU=Corp,DC=example,DC=local", "Svc")
+        {
+            StableId = "11111111-1111-1111-1111-111111111111"
+        });
+
+        ConnectedSystemServer.MergeHierarchy(
+            connectedSystem,
+            [
+                new ConnectorPartition
+                {
+                    Id = "DC=example,DC=local",
+                    Name = "example.local",
+                    Containers = [discoveredCorp]
+                }
+            ]);
+
+        var merged = FlattenContainers(connectedSystem).Single(c => c.StableId == "11111111-1111-1111-1111-111111111111");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(merged.Excluded, Is.True, "the exclusion must survive a rename, or the branch is imported after all");
+            Assert.That(merged.Selected, Is.False);
+            Assert.That(merged.ExternalId, Is.EqualTo("OU=Svc,OU=Corp,DC=example,DC=local"), "the Container adopts its new Distinguished Name");
+            Assert.That(merged.Name, Is.EqualTo("Svc"));
+        }
+    }
+
+    private static IEnumerable<ConnectedSystemContainer> FlattenContainers(ConnectedSystem connectedSystem) =>
+        (connectedSystem.Partitions ?? [])
+            .SelectMany(p => p.Containers ?? [])
+            .SelectMany(Flatten);
+
+    private static IEnumerable<ConnectedSystemContainer> Flatten(ConnectedSystemContainer container) =>
+        new[] { container }.Concat(container.ChildContainers.SelectMany(Flatten));
+
     #endregion
 
     #region HierarchyChangeItem Tests
