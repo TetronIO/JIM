@@ -7,12 +7,8 @@
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Models
-@using JIM.Web.Services
-@implements IAsyncDisposable
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
-@inject IJSRuntime JS
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -22,7 +18,7 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
-@if (_isInitialised && _preferencesLoaded && PredefinedSearch != null)
+@if (_isInitialised && PredefinedSearch != null)
 {
     @if (_hasAttributeName != null)
     {
@@ -37,55 +33,24 @@
         }
     }
 
-    @* Virtualised (infinite-scroll) list: the grid fills the available viewport height and streams windows of rows
-       from the server as the user scrolls, so there is no page size to choose and no wasted space or page controls.
-
-       OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
-       SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
-       Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
-       rather than repeatedly out-running the fetch. It stays far inside the 500-row window cap. *@
-    @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
-       inside the grid, so it is reached as a descendant of something this page names rather than by a global
-       selector that another table on a future page could match. *@
-    <div id="@ScrollContainerId">
-    <MudDataGrid @ref="_dataGrid" T="MetaverseObjectHeader" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
-                 FixedHeader="true" Height="calc(100vh - 320px)" ItemSize="@RowHeight"
-                 Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
-                 RowClass="cursor-pointer" RowClick="HandleRowClick" Class="mt-5">
-        <ToolBarContent>
-            <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
-            @* The total match count, in the toolbar's title slot. The old pager's "1-25 of 3,868" was the only
-               place the list said how big it was, and virtualisation removed the pager; this is where that figure
-               returns to. While a search narrows the list it reads "x of y" against the unfiltered baseline. *@
-            @* The noun is the Predefined Search's name, not the type's plural: on /t/users/s/service-principals the
-               reader is looking at Service Principals, and the baseline being counted is that search's match set.
-               A singular form only exists when the default search is active (its name is the type's own plural). *@
-            <TableObjectCount Count="@_totalItems" Total="@_unfilteredTotalItems"
-                              SingularName="@(PredefinedSearch?.IsDefaultForMetaverseObjectType == true ? MetaverseObjectType?.Name : null)"
-                              PluralName="@PageTitle"
-                              ShowSeparator="true" />
-            <MudSpacer />
-            @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
-               filtered by a term the reader cannot see. *@
-            <SearchField Value="@_searchString" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="Search..." Class="mt-0" />
-        </ToolBarContent>
+    @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
+       shared grid; this page supplies the Predefined Search's columns, the window loader and the empty states. *@
+    <VirtualisedDataGrid @ref="_grid" T="MetaverseObjectHeader"
+                         ContainerId="metaverse-object-list"
+                         StateKey="@($"{TypeNameUrlParam}/{PredefinedSearchUri}")"
+                         DefaultSortBy="@Constants.BuiltInAttributes.DisplayName"
+                         LoadWindow="LoadWindowAsync"
+                         RowClicked="HandleRowClicked"
+                         SingularName="@(PredefinedSearch.IsDefaultForMetaverseObjectType ? MetaverseObjectType?.Name : null)"
+                         PluralName="@PageTitle">
         <Columns>
             @foreach (var psa in PredefinedSearch.Attributes)
             {
                 var attrName = psa.MetaverseAttribute.Name;
                 var isDisplayName = attrName == Constants.BuiltInAttributes.DisplayName;
-                @* Sorting is driven by the page (see ServerReload), not the grid's own sort state: a dynamic
-                   TemplateColumn cannot expose a server-side sort key, so the header click sets the SQL sort column. *@
                 <TemplateColumn Title="@attrName" Sortable="false">
                     <HeaderTemplate>
-                        <span class="cursor-pointer d-inline-flex align-center" @onclick="@(() => ToggleSortAsync(attrName))">
-                            <MudText Typo="Typo.button">@attrName</MudText>
-                            @if (_sortBy == attrName)
-                            {
-                                <MudIcon Icon="@(_sortDescending ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)"
-                                         Size="Size.Small" Class="ml-1" />
-                            }
-                        </span>
+                        <VirtualisedSortHeader Title="@attrName" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (isDisplayName)
@@ -115,42 +80,31 @@
                 </TemplateColumn>
             }
         </Columns>
-        <NoRecordsContent>
-            @* Only speak once the match set is known to be empty. MudDataGrid renders this fragment whenever it holds
-               no rows, and a virtualiser holds none between windows, so an unguarded message flashes "No results"
-               over data that is merely in flight. _totalItems is null until the first window returns and zero only
-               when the search genuinely matched nothing. *@
-            @if (_totalItems == 0)
+        <EmptyContent Context="grid">
+            @* The noun is the Predefined Search's name (PageTitle), not the type's plural: a search's page
+               (/t/users/s/service-principals) must say "No Service Principals ...", never "No Users ...". *@
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
-                @* An empty list means one of three different things, and the message says which: a search that
-                   matched nothing (with the way out as the action), a presence filter nothing satisfies (the chip
-                   above already offers its own clear), or a type with no objects at all. *@
-                @* The noun is the Predefined Search's name (PageTitle), not the type's plural: a search's page
-                   (/t/users/s/service-principals) must say "No Service Principals ...", never "No Users ...". *@
-                @if (!string.IsNullOrWhiteSpace(_searchString))
-                {
-                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No {PageTitle} match \"{_searchString}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
-                                     OnAction="@(() => OnSearchAsync(string.Empty))" />
-                }
-                else if (_hasAttributeName != null)
-                {
-                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                     PrimaryText="@($"No {PageTitle} have a value for {_hasAttributeName}")"
-                                     SecondaryText="@($"Clear the filter above to browse all {PageTitle}.")" />
-                }
-                else
-                {
-                    <TableEmptyState Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)"
-                                     PrimaryText="@($"No {PageTitle} yet")"
-                                     SecondaryText="Objects appear here once they are created or imported." />
-                }
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No {PageTitle} match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
             }
-        </NoRecordsContent>
-    </MudDataGrid>
-    </div>
+            else if (_hasAttributeName != null)
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                 PrimaryText="@($"No {PageTitle} have a value for {_hasAttributeName}")"
+                                 SecondaryText="@($"Clear the filter above to browse all {PageTitle}.")" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)"
+                                 PrimaryText="@($"No {PageTitle} yet")"
+                                 SecondaryText="Objects appear here once they are created or imported." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 else if (_isInitialised)
 {
@@ -171,61 +125,8 @@ else if (_isInitialised)
     [Parameter]
     public string? PredefinedSearchUri { get; set; }
 
-    private MudDataGrid<MetaverseObjectHeader>? _dataGrid;
-    private string _searchString = "";
-    private bool _preferencesLoaded;
+    private VirtualisedDataGrid<MetaverseObjectHeader>? _grid;
     private bool _isInitialised;
-    private bool _dense;
-
-    // Sort state, driven by the column header clicks (see ToggleSortAsync) rather than the grid's own sort
-    // definitions. Defaults to Display Name ascending, matching the previous list default.
-    private string _sortBy = Constants.BuiltInAttributes.DisplayName;
-    private bool _sortDescending;
-
-    // ─── URL view state ───
-    // The search, sort and scroll position live in the URL so a refresh or a shared link lands on the rows the
-    // sender was looking at; MetaverseObjectListUrlState owns the round trip and says why all of them travel
-    // together. The id names the wrapper this page renders, and the interop reaches the virtualiser's own scroll
-    // container beneath it.
-    private const string ScrollContainerId = "metaverse-object-list";
-    private const string ScrollContainerSelector = $"#{ScrollContainerId} .mud-table-container";
-
-    // The row height the grid is laid out at, and the divisor that turns a scroll offset into a row index. The two
-    // must agree, so both read this rather than repeating the numbers.
-    private float RowHeight => _dense ? 36f : 50f;
-
-    // The row to restore to, read from the URL on load, then kept current as the reader scrolls. _scrollRestored
-    // stops the restore repeating on every later render, and turns the page from reading the position to writing it.
-    private int _firstVisibleRow;
-    private bool _scrollRestored;
-    private DotNetObjectReference<Index>? _selfReference;
-    private bool _scrollObserved;
-
-    // Long enough that a flick through the list settles before the URL is rewritten, short enough that a reader who
-    // stops to read and then copies the address bar gets where they are actually looking.
-    private const int ScrollDebounceMilliseconds = 400;
-
-    // How long a restore waits for its row to become reachable. It is generous because the wait covers the grid
-    // rendering, the first window read and the virtualiser sizing its scroll area, and because the cost of giving up
-    // early (landing at the top of a list the reader was sent into the middle of) is worse than a moment's delay.
-    private const int ScrollRestoreTimeoutMilliseconds = 5000;
-
-    // The total match count, held across window reads. It exists only to size the scroll area, and counting the whole
-    // match set is a second query over every matching object, so asking for it on every window would make scrolling
-    // cost twice what it needs to: a pager asked once per page click, a virtualiser would ask once per window. Set
-    // back to null wherever the filters change (the search text, the presence filter, the Predefined Search) so the
-    // next window read re-counts. Sorting deliberately does not reset it: reordering the same match set cannot change
-    // its size. The figure is therefore as old as the last filter change, which is what a list view wants; objects
-    // created by a sync in the meantime appear on the next navigation, as they did under paging.
-    private int? _totalItems;
-
-    // The match count with no search text, held so the toolbar count can read "12 of 3,868" while a search is
-    // active. Captured opportunistically: whenever a count comes back and no search is narrowing the list, that
-    // count IS the baseline. It resets wherever the baseline itself changes (a different type or presence filter),
-    // and deliberately not on a search change, which is the very thing it exists to be compared against. A deep
-    // link straight into a search has no baseline until the search is cleared; the count then shows the filtered
-    // figure alone, which is truthful rather than a guess.
-    private int? _unfilteredTotalItems;
 
     // Attribute-presence filter (the ?search=hasAttribute:{name} deep link). _hasAttributeName is the parsed token
     // (null when no presence filter is active); _hasAttributeId is its resolved attribute id; _hasAttributeUnknown is
@@ -247,25 +148,6 @@ else if (_isInitialised)
         _hasAttributeName = null;
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
-        _totalItems = null;
-        _unfilteredTotalItems = null;
-
-        // Adopt the search, sort and scroll position the URL asks for, before anything queries the database, so the
-        // first window read is already the one the reader is being sent to rather than the top of an unsorted list.
-        var urlState = MetaverseObjectListUrlState.Read(
-            NavManager.ToAbsoluteUri(NavManager.Uri).Query, Constants.BuiltInAttributes.DisplayName);
-        _searchString = urlState.SearchText ?? string.Empty;
-        _sortBy = urlState.SortBy ?? Constants.BuiltInAttributes.DisplayName;
-        _sortDescending = urlState.SortDescending;
-        _firstVisibleRow = urlState.FirstVisibleRow;
-        _scrollRestored = _firstVisibleRow == 0;
-
-        // Every Metaverse Object Type shares this route, so moving between two lists reuses this component: the same
-        // instance is handed new parameters and renders a new grid, while the scroll listener stays bound to the
-        // element that has just been discarded. Forgetting that it was ever attached is what makes OnAfterRenderAsync
-        // attach it to the new one; observe() releases the old listener itself. Without this the second list a reader
-        // visits silently stops reporting its position, while a typed URL or a refresh works perfectly.
-        _scrollObserved = false;
 
         using var jim = JimFactory.Create();
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
@@ -342,155 +224,24 @@ else if (_isInitialised)
         _isInitialised = true;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        // Load the table density preference once, before the grid is revealed, so it paints at the correct density
-        // (and picks the matching virtualisation row height) on first appearance rather than flashing.
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            _preferencesLoaded = true;
-            StateHasChanged();
-            return;
-        }
-
-        // Everything below needs the grid in the DOM, which it only is once the preferences gate has opened.
-        if (!_preferencesLoaded || PredefinedSearch == null || _scrollObserved)
-            return;
-
-        // Restore first, then watch, so the restore's own scrolling is not reported back as the reader's position.
-        // scrollToRow waits for the row to become reachable rather than needing a retry here; this page does not
-        // re-render when the grid loads its data, so there would be no later pass to retry on.
-        if (!_scrollRestored)
-        {
-            await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
-            _scrollRestored = true;
-        }
-
-        _selfReference ??= DotNetObjectReference.Create(this);
-        _scrollObserved = await InvokeInteropAsync<bool>("jimVirtualList.observe", ScrollContainerSelector, _selfReference, RowHeight, ScrollDebounceMilliseconds);
-    }
-
-    /// <summary>
-    /// Records where the reader has scrolled to and puts it in the URL. Called from JavaScript, debounced there, so
-    /// a flick through a long list costs one call rather than one per frame.
-    /// </summary>
-    [JSInvokable]
-    public async Task OnFirstVisibleRowChanged(int row)
-    {
-        if (row == _firstVisibleRow)
-            return;
-
-        _firstVisibleRow = row;
-        await WriteUrlStateAsync();
-    }
-
-    /// <summary>
-    /// Rewrites the URL to match the current search, sort and scroll position, in place and without a navigation.
-    /// NavigationManager is deliberately not used: it would raise a navigation, re-running OnParametersSetAsync and
-    /// with it this page's whole database load, on every scroll. The trade-off is that the browser's back button
-    /// does not step through searches and sorts; they are view state on one page rather than places to return to.
-    /// </summary>
-    private async Task WriteUrlStateAsync()
-    {
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var state = new MetaverseObjectListUrlState
-        {
-            SearchText = _searchString,
-            SortBy = _sortBy,
-            SortDescending = _sortDescending,
-            FirstVisibleRow = _firstVisibleRow
-        };
-
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", state.Write(uri.Query, Constants.BuiltInAttributes.DisplayName));
-    }
-
-    /// <summary>
-    /// Calls a JavaScript helper, treating the two failures that mean "there is no browser to talk to" as a plain
-    /// negative result rather than an error: interop before the runtime is ready, and interop after the circuit has
-    /// gone. Both are reachable here, because this page talks to JavaScript from OnAfterRenderAsync, from a
-    /// JavaScript callback, and from disposal.
-    /// </summary>
-    private async Task<T?> InvokeInteropAsync<T>(string identifier, params object?[] args)
-    {
-        try
-        {
-            return await JS.InvokeAsync<T>(identifier, args);
-        }
-        catch (JSDisconnectedException)
-        {
-            return default;
-        }
-        catch (InvalidOperationException)
-        {
-            return default;
-        }
-    }
-
-    private async Task<GridData<MetaverseObjectHeader>> ServerReload(GridStateVirtualize<MetaverseObjectHeader> state, CancellationToken token)
+    private async Task<VirtualisedWindow<MetaverseObjectHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
         // No search, or a presence filter naming an attribute that does not exist: nothing can match.
         if (PredefinedSearch == null || _hasAttributeUnknown)
-            return new GridData<MetaverseObjectHeader> { TotalItems = 0, Items = [] };
-
-        // The virtualiser can momentarily request a zero-width window while measuring; clamp to at least one row.
-        var count = Math.Max(1, state.Count);
+            return new VirtualisedWindow<MetaverseObjectHeader>([], 0);
 
         using var jim = JimFactory.Create();
         var result = await jim.Metaverse.GetMetaverseObjectHeadersRangeAsync(
             PredefinedSearch,
-            state.StartIndex,
-            count,
-            string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-            _sortBy,
-            _sortDescending,
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
             _hasAttributeId,
-            includeTotalCount: _totalItems == null);
+            includeTotalCount: request.IncludeTotalCount);
 
-        // Null means the count was not requested because we already hold it (see _totalItems), never that nothing
-        // matched; a genuine zero comes back as zero and is kept.
-        _totalItems = result.TotalResults ?? _totalItems;
-
-        // With no search narrowing the list, the count just taken is the unfiltered baseline (see the field).
-        if (string.IsNullOrWhiteSpace(_searchString))
-            _unfilteredTotalItems = _totalItems;
-
-        return new GridData<MetaverseObjectHeader>
-        {
-            TotalItems = _totalItems ?? 0,
-            Items = result.Results
-        };
-    }
-
-    private async Task ToggleSortAsync(string attrName)
-    {
-        // Note there is no _totalItems reset here, deliberately: sorting reorders the match set without changing
-        // which objects are in it, so the total the scroll area is sized from still holds.
-        // Clicking the active column flips direction; clicking a new column sorts it ascending.
-        if (_sortBy == attrName)
-            _sortDescending = !_sortDescending;
-        else
-        {
-            _sortBy = attrName;
-            _sortDescending = false;
-        }
-
-        // Re-sorting puts different objects under the reader's scroll position, so the position it describes is gone;
-        // send them back to the top and say so in the URL, rather than leaving a stale row index behind.
-        await ResetScrollAsync();
-
-        if (_dataGrid != null)
-            await _dataGrid.ReloadServerData();
-    }
-
-    private async Task OnSearchAsync(string text)
-    {
-        _searchString = text;
-        _totalItems = null;
-        await ResetScrollAsync();
-
-        if (_dataGrid != null)
-            await _dataGrid.ReloadServerData();
+        return new VirtualisedWindow<MetaverseObjectHeader>(result.Results, result.TotalResults);
     }
 
     private async Task ClearHasAttributeFilterAsync()
@@ -498,56 +249,17 @@ else if (_isInitialised)
         _hasAttributeName = null;
         _hasAttributeId = null;
         _hasAttributeUnknown = false;
-        _totalItems = null;
-        // The presence filter is part of the baseline the toolbar count compares a search against, so removing it
-        // invalidates that baseline too; the next window read re-counts and re-captures it.
-        _unfilteredTotalItems = null;
 
-        // Drop the presence filter from the URL while keeping the search, sort and (reset) position this page owns.
+        // Drop the presence filter from the URL while keeping the search, sort and (reset) position the grid owns.
         // Rewriting in place rather than navigating keeps OnParametersSetAsync, and so the page's whole load, out of
-        // what is only a filter change.
-        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        query.Remove("search");
-        _firstVisibleRow = 0;
-        var state = new MetaverseObjectListUrlState
+        // what is only a filter change. The filter is part of the baseline the toolbar count compares a search
+        // against, so the totals are invalidated for a re-count.
+        if (_grid != null)
         {
-            SearchText = _searchString,
-            SortBy = _sortBy,
-            SortDescending = _sortDescending,
-            FirstVisibleRow = 0
-        };
-        await InvokeInteropAsync<object>("jimInterop.replaceQueryString", state.Write(query.ToString(), Constants.BuiltInAttributes.DisplayName));
-        await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, 0, RowHeight, ScrollRestoreTimeoutMilliseconds);
-
-        if (_dataGrid != null)
-            await _dataGrid.ReloadServerData();
-    }
-
-    /// <summary>
-    /// Returns the reader to the top and records that in the URL, for the changes that invalidate a scroll position
-    /// rather than preserve it: a different filter or a different order puts different objects at every index.
-    /// </summary>
-    private async Task ResetScrollAsync()
-    {
-        _firstVisibleRow = 0;
-        await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, 0, RowHeight, ScrollRestoreTimeoutMilliseconds);
-        await WriteUrlStateAsync();
-    }
-
-    /// <summary>
-    /// Re-applies the scroll position after a density change. The row height changes underneath the virtualiser, so
-    /// the same scroll offset in pixels is now a different row; without this the list appears to jump on a toggle
-    /// that was only meant to change spacing.
-    /// </summary>
-    private async Task OnDensityChangedAsync()
-    {
-        if (_firstVisibleRow > 0)
-            await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
-
-        // The listener was created with the old row height baked in, so it would report the wrong index from here on.
-        await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
-        _scrollObserved = false;
+            await _grid.ClearQueryParameterAsync("search");
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
     }
 
     private string? GetSearchFromUrl()
@@ -557,25 +269,11 @@ else if (_isInitialised)
         return query["search"];
     }
 
-    private void HandleRowClick(DataGridRowClickEventArgs<MetaverseObjectHeader> args)
+    private void HandleRowClicked(MetaverseObjectHeader item)
     {
-        if (args.Item == null)
-            return;
-
         // Navigate using absolute path to ensure no query params are carried over
-        var href = Utilities.GetMetaverseObjectHref(args.Item);
+        var href = Utilities.GetMetaverseObjectHref(item);
         var uri = NavManager.ToAbsoluteUri(href);
         NavManager.NavigateTo(uri.AbsolutePath);
-    }
-
-    /// <summary>
-    /// Releases the scroll listener and the reference JavaScript holds on this component. Both survive the page
-    /// otherwise: the listener would keep calling into a component that has gone, and the reference would keep the
-    /// component alive for the life of the circuit.
-    /// </summary>
-    public async ValueTask DisposeAsync()
-    {
-        await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
-        _selfReference?.Dispose();
     }
 }

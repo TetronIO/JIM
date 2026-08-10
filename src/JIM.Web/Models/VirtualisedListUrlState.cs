@@ -19,7 +19,7 @@ namespace JIM.Web.Models;
 /// keeps an untouched list's URL clean and, more importantly, means returning a value to its default removes the
 /// parameter instead of pinning the default forever.
 /// </remarks>
-public sealed record MetaverseObjectListUrlState
+public sealed record VirtualisedListUrlState
 {
     /// <summary>The free-text search. Distinct from the page's own <c>search</c> attribute-presence deep link.</summary>
     public const string SearchTextParameter = "q";
@@ -59,21 +59,24 @@ public sealed record MetaverseObjectListUrlState
     /// </summary>
     /// <param name="query">The query string, with or without its leading '?'.</param>
     /// <param name="defaultSortBy">The attribute the list sorts by when the URL says nothing.</param>
-    public static MetaverseObjectListUrlState Read(string? query, string defaultSortBy)
+    /// <param name="parameterPrefix">Prefix applied to every parameter this state owns, so two virtualised lists
+    /// on one page (each with its own prefix) can share a URL without overwriting each other. Null for a page
+    /// with a single list.</param>
+    public static VirtualisedListUrlState Read(string? query, string defaultSortBy, string? parameterPrefix = null)
     {
         var parameters = HttpUtility.ParseQueryString(query ?? string.Empty);
 
-        var searchText = parameters[SearchTextParameter];
-        var sortBy = parameters[SortByParameter];
+        var searchText = parameters[parameterPrefix + SearchTextParameter];
+        var sortBy = parameters[parameterPrefix + SortByParameter];
         var row = 0;
-        if (int.TryParse(parameters[FirstVisibleRowParameter], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRow) && parsedRow > 0)
+        if (int.TryParse(parameters[parameterPrefix + FirstVisibleRowParameter], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRow) && parsedRow > 0)
             row = parsedRow;
 
-        return new MetaverseObjectListUrlState
+        return new VirtualisedListUrlState
         {
             SearchText = string.IsNullOrWhiteSpace(searchText) ? null : searchText,
             SortBy = string.IsNullOrWhiteSpace(sortBy) ? defaultSortBy : sortBy,
-            SortDescending = parameters[SortDescendingParameter] == "1",
+            SortDescending = parameters[parameterPrefix + SortDescendingParameter] == "1",
             FirstVisibleRow = row
         };
     }
@@ -85,14 +88,17 @@ public sealed record MetaverseObjectListUrlState
     /// </summary>
     /// <param name="query">The current query string, with or without its leading '?'.</param>
     /// <param name="defaultSortBy">The attribute the list sorts by when the URL says nothing.</param>
-    public string Write(string? query, string defaultSortBy)
+    /// <param name="parameterPrefix">Prefix applied to every parameter this state owns; see
+    /// <see cref="Read(string?, string, string?)"/>. Parameters carrying a different prefix belong to another
+    /// list and are preserved untouched, exactly like any other unrelated parameter.</param>
+    public string Write(string? query, string defaultSortBy, string? parameterPrefix = null)
     {
         var parameters = HttpUtility.ParseQueryString(query ?? string.Empty);
 
-        Set(parameters, SearchTextParameter, string.IsNullOrWhiteSpace(SearchText) ? null : SearchText);
-        Set(parameters, SortByParameter, string.Equals(SortBy, defaultSortBy, StringComparison.Ordinal) ? null : SortBy);
-        Set(parameters, SortDescendingParameter, SortDescending ? "1" : null);
-        Set(parameters, FirstVisibleRowParameter, FirstVisibleRow > 0 ? FirstVisibleRow.ToString(CultureInfo.InvariantCulture) : null);
+        Set(parameters, parameterPrefix + SearchTextParameter, string.IsNullOrWhiteSpace(SearchText) ? null : SearchText);
+        Set(parameters, parameterPrefix + SortByParameter, string.Equals(SortBy, defaultSortBy, StringComparison.Ordinal) ? null : SortBy);
+        Set(parameters, parameterPrefix + SortDescendingParameter, SortDescending ? "1" : null);
+        Set(parameters, parameterPrefix + FirstVisibleRowParameter, FirstVisibleRow > 0 ? FirstVisibleRow.ToString(CultureInfo.InvariantCulture) : null);
 
         return parameters.ToString() ?? string.Empty;
     }

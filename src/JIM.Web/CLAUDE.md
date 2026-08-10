@@ -28,6 +28,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
+| `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
 
 ## Choosing Containers
 
@@ -108,6 +109,20 @@ All data tables should let users switch between normal and compact row spacing, 
   Inject `IUserPreferenceService PreferenceService`. No `try`/`catch` is needed here: `GetTableDenseAsync` swallows the "JS interop not ready" `InvalidOperationException` internally. Pages that gate their whole render on a `_preferencesLoaded` flag should load `_dense` alongside their other preferences inside that same gate (so there is no flash of normal-then-dense).
 - `<TableDensityToggle>` owns the toolbar button and persists the toggle; do **not** add an `OnToggleDense` method or build the tooltip/icon button by hand.
 - Default to normal spacing (`_dense = false`).
+
+## Virtualised lists
+
+**An infinite-scroll list is a `<VirtualisedDataGrid T="X">`; never hand-roll one around `MudDataGrid`'s `VirtualizeServerData`.** The component owns everything every virtualised list must get right and got wrong at least once while the pattern lived in a page: the URL round trip for search, sort and scroll position (`q`/`sort`/`desc`/`row`, written in place via `history.replaceState`, never `NavigationManager`); counting the match set once per filter change rather than once per scroll window; restoring a scroll position the virtualiser cannot reach yet; re-attaching the scroll listener when SPA navigation reuses the component; the density-dependent row height; the toolbar count; and the guarded empty-state slot. `Types/Index.razor` is the worked example.
+
+A page supplies:
+
+- **`LoadWindow`**: a `Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<T>>>` that calls a repository **range read** (`offset`/`count`, not page/pageSize) and MUST honour `IncludeTotalCount` by skipping its count query and returning a null total when false; counting is the expensive half of a window read at scale. Null means "not counted", never zero. Pattern: `GetMetaverseObjectHeadersRangeAsync`.
+- **`Columns`**: `TemplateColumn`s, with `<VirtualisedSortHeader Title="..." />` in the `HeaderTemplate` for server-side sortable columns (the grid cascades itself as `IVirtualisedSortable`).
+- **`EmptyContent`**: the context-aware empty states ("Table empty states" below); the fragment's context is the grid, so branch on `context.SearchText` and wire the action to `context.ClearSearchAsync()`.
+- **`ContainerId`** (unique per grid) and, when two grids share one page, a **`UrlParameterPrefix`** each so their URL state cannot collide.
+- **`StateKey`** (the route parameter) so a component instance reused across SPA navigations re-reads the URL and re-attaches its scroll tracking.
+
+Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTotals: true)` after changing what matches, plus `ResetScrollAsync()`; the old total describes a match set that no longer exists. Sorting deliberately does not invalidate the total.
 
 ## Object counts in table toolbars
 

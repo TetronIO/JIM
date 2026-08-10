@@ -12,14 +12,14 @@ namespace JIM.Web.Tests.Models;
 /// the filter and sort that produced it points at a different object entirely.
 /// </summary>
 [TestFixture]
-public class MetaverseObjectListUrlStateTests
+public class VirtualisedListUrlStateTests
 {
     private const string DefaultSort = "Display Name";
 
     [Test]
     public void Read_EmptyQuery_ReturnsTheListsOwnDefaults()
     {
-        var state = MetaverseObjectListUrlState.Read(string.Empty, DefaultSort);
+        var state = VirtualisedListUrlState.Read(string.Empty, DefaultSort);
 
         using (Assert.EnterMultipleScope())
         {
@@ -33,7 +33,7 @@ public class MetaverseObjectListUrlStateTests
     [Test]
     public void Read_NullQuery_ReturnsTheListsOwnDefaults()
     {
-        var state = MetaverseObjectListUrlState.Read(null, DefaultSort);
+        var state = VirtualisedListUrlState.Read(null, DefaultSort);
 
         Assert.That(state.SortBy, Is.EqualTo(DefaultSort));
     }
@@ -41,7 +41,7 @@ public class MetaverseObjectListUrlStateTests
     [Test]
     public void Read_AllParametersPresent_ParsesEveryOne()
     {
-        var state = MetaverseObjectListUrlState.Read("?q=smith&sort=Job+Title&desc=1&row=1240", DefaultSort);
+        var state = VirtualisedListUrlState.Read("?q=smith&sort=Job+Title&desc=1&row=1240", DefaultSort);
 
         using (Assert.EnterMultipleScope())
         {
@@ -56,7 +56,7 @@ public class MetaverseObjectListUrlStateTests
     public void Read_RowIsNotANumber_FallsBackToTheTopOfTheList()
     {
         // A hand-edited or truncated link must land somewhere valid rather than throwing at the reader.
-        var state = MetaverseObjectListUrlState.Read("?row=not-a-number", DefaultSort);
+        var state = VirtualisedListUrlState.Read("?row=not-a-number", DefaultSort);
 
         Assert.That(state.FirstVisibleRow, Is.Zero);
     }
@@ -64,7 +64,7 @@ public class MetaverseObjectListUrlStateTests
     [Test]
     public void Read_RowIsNegative_FallsBackToTheTopOfTheList()
     {
-        var state = MetaverseObjectListUrlState.Read("?row=-40", DefaultSort);
+        var state = VirtualisedListUrlState.Read("?row=-40", DefaultSort);
 
         Assert.That(state.FirstVisibleRow, Is.Zero);
     }
@@ -72,7 +72,7 @@ public class MetaverseObjectListUrlStateTests
     [Test]
     public void Read_BlankSearchText_IsTreatedAsNoSearchRatherThanAnEmptyOne()
     {
-        var state = MetaverseObjectListUrlState.Read("?q=%20%20", DefaultSort);
+        var state = VirtualisedListUrlState.Read("?q=%20%20", DefaultSort);
 
         Assert.That(state.SearchText, Is.Null);
     }
@@ -80,7 +80,7 @@ public class MetaverseObjectListUrlStateTests
     [Test]
     public void Write_EverythingAtItsDefault_EmitsNoParametersAtAll()
     {
-        var state = new MetaverseObjectListUrlState { SortBy = DefaultSort };
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort };
 
         var query = state.Write(string.Empty, DefaultSort);
 
@@ -91,7 +91,7 @@ public class MetaverseObjectListUrlStateTests
     [Test]
     public void Write_NonDefaultValues_EmitsOnlyTheParametersThatDifferFromTheDefault()
     {
-        var state = new MetaverseObjectListUrlState
+        var state = new VirtualisedListUrlState
         {
             SearchText = "smith",
             SortBy = "Job Title",
@@ -107,14 +107,14 @@ public class MetaverseObjectListUrlStateTests
             Assert.That(query, Does.Contain("desc=1"));
             Assert.That(query, Does.Contain("row=1240"));
             // The sort column travels URL-encoded; assert on the decoded round trip rather than the encoding.
-            Assert.That(MetaverseObjectListUrlState.Read(query, DefaultSort).SortBy, Is.EqualTo("Job Title"));
+            Assert.That(VirtualisedListUrlState.Read(query, DefaultSort).SortBy, Is.EqualTo("Job Title"));
         }
     }
 
     [Test]
     public void Write_SortMatchesTheDefault_OmitsTheSortParameter()
     {
-        var state = new MetaverseObjectListUrlState { SortBy = DefaultSort, FirstVisibleRow = 20 };
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort, FirstVisibleRow = 20 };
 
         var query = state.Write(string.Empty, DefaultSort);
 
@@ -130,7 +130,7 @@ public class MetaverseObjectListUrlStateTests
     {
         // The attribute-presence deep link (?search=hasAttribute:Email) is owned by the page, not by this state,
         // and dropping it would silently widen the reader's filter.
-        var state = new MetaverseObjectListUrlState { SortBy = DefaultSort, FirstVisibleRow = 60 };
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort, FirstVisibleRow = 60 };
 
         var query = state.Write("?search=hasAttribute%3aEmail", DefaultSort);
 
@@ -145,7 +145,7 @@ public class MetaverseObjectListUrlStateTests
     public void Write_ValueReturnedToItsDefault_RemovesTheParameterItHadWritten()
     {
         // Clearing the search box must clear it from the URL too, or a refresh reinstates a filter the reader removed.
-        var state = new MetaverseObjectListUrlState { SortBy = DefaultSort };
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort };
 
         var query = state.Write("?q=smith&row=1240", DefaultSort);
 
@@ -153,9 +153,53 @@ public class MetaverseObjectListUrlStateTests
     }
 
     [Test]
+    public void Write_WithAPrefix_PrefixesEveryParameterItOwns()
+    {
+        // Two virtualised lists on one page (the Deleted Objects tabs) share one URL, so each list's parameters
+        // carry its prefix and neither can overwrite the other's state.
+        var state = new VirtualisedListUrlState { SearchText = "smith", SortBy = DefaultSort, FirstVisibleRow = 40 };
+
+        var query = state.Write(string.Empty, DefaultSort, "cso-");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(query, Does.Contain("cso-q=smith"));
+            Assert.That(query, Does.Contain("cso-row=40"));
+            Assert.That(query, Does.Not.Contain("&q=").And.Not.StartWith("q="));
+        }
+    }
+
+    [Test]
+    public void Read_WithAPrefix_ReadsOnlyItsOwnParameters()
+    {
+        var state = VirtualisedListUrlState.Read("?q=other-lists-search&cso-q=smith&cso-row=40", DefaultSort, "cso-");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(state.SearchText, Is.EqualTo("smith"));
+            Assert.That(state.FirstVisibleRow, Is.EqualTo(40));
+        }
+    }
+
+    [Test]
+    public void Write_WithAPrefix_LeavesAnotherPrefixesParametersUntouched()
+    {
+        var state = new VirtualisedListUrlState { SortBy = DefaultSort };
+
+        // Returning this list's values to their defaults must not remove the sibling list's state.
+        var query = state.Write("?mvo-q=jones&cso-q=smith", DefaultSort, "cso-");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(query, Does.Contain("mvo-q=jones"));
+            Assert.That(query, Does.Not.Contain("cso-q"));
+        }
+    }
+
+    [Test]
     public void ReadWrite_RoundTripsEveryValue()
     {
-        var original = new MetaverseObjectListUrlState
+        var original = new VirtualisedListUrlState
         {
             SearchText = "o'brien & sons",
             SortBy = "Department",
@@ -163,7 +207,7 @@ public class MetaverseObjectListUrlStateTests
             FirstVisibleRow = 993
         };
 
-        var round = MetaverseObjectListUrlState.Read(original.Write(string.Empty, DefaultSort), DefaultSort);
+        var round = VirtualisedListUrlState.Read(original.Write(string.Empty, DefaultSort), DefaultSort);
 
         Assert.That(round, Is.EqualTo(original));
     }
