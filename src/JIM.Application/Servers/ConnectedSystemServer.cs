@@ -6307,6 +6307,26 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Only a newly created account has never had a password, so a rule that creates none cannot deliver an
+        // initial password. Switching the setting off with the provisioning it depended on keeps the stored
+        // configuration honest, rather than leaving one that reads as on and can never run.
+        //
+        // The REST API states the same rule by refusing an enabled initial-password configuration on such a
+        // Synchronisation Rule outright. That is right for a request whose whole subject is the initial
+        // password, and wrong here: this path saves a whole rule, and an administrator turning provisioning off
+        // has not asked about passwords at all. The portal removes the Initial Password tab the moment
+        // provisioning goes off, so refusing would also leave nothing on screen to correct.
+        //
+        // Left above the parked-account comparison below on purpose: the comparison must see the settings as
+        // they will be stored, so that switching the feature off releases the accounts parked against it.
+        if (syncRule.InitialPassword is { Enabled: true } &&
+            !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
+        {
+            Log.Information("CreateOrUpdateSyncRuleAsync: Switching the initial password off for Synchronisation Rule {Id}, " +
+                "which no longer provisions to its Connected System and so creates no account to give one to", syncRule.Id);
+            syncRule.InitialPassword.Enabled = false;
+        }
+
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??

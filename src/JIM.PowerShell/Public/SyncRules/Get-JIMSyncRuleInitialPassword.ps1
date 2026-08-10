@@ -20,8 +20,9 @@ function Get-JIMSyncRuleInitialPassword {
         added to it: those accounts were provisioned, never given a password within its time to live, and
         correcting these settings does nothing for them.
 
-        No password value is ever returned. Passwords are generated at the moment they are set and are not
-        stored by JIM.
+        No password value is ever returned. A generated password is produced at the moment it is set and stored
+        nowhere; where the rule uses one static password (source Static) that password is stored, encrypted, and
+        is write-only, so all that comes back is that one is set and when it last changed.
 
     .PARAMETER Id
         The unique identifier of the Synchronisation Rule.
@@ -33,10 +34,12 @@ function Get-JIMSyncRuleInitialPassword {
         An object with the following properties:
 
         - enabled              [bool]    Whether JIM sets an initial password on accounts this rule provisions
-        - source               [string]  Discovered or Custom
+        - source               [string]  Discovered, Custom or Static
         - customPolicy         [object]  The generator settings used when source is Custom
         - expiryBehaviour      [string]  What happens to the password once it is set
         - enableAccount        [bool]    Whether the account is enabled once the password is set
+        - staticPasswordSet    [bool]    Whether one password is stored for every account this rule provisions
+        - staticPasswordSetAt  [datetime] When that password last changed, or null where none is set
         - parkedAccountCount   [int]     Accounts waiting on a change to these settings
         - expiredAccountCount  [int]     Accounts never given an initial password within its time to live
         - parkedReasons        [array]   One entry per distinct refusal, biggest group first, each with
@@ -68,6 +71,17 @@ function Get-JIMSyncRuleInitialPassword {
         }
 
         Reports every Synchronisation Rule with initial password work waiting on somebody.
+
+    .EXAMPLE
+        Get-JIMSyncRule -All | ForEach-Object {
+            $p = Get-JIMSyncRuleInitialPassword -Id $_.id
+            if ($p.staticPasswordSet -and $p.staticPasswordSetAt -lt (Get-Date).AddDays(-90)) {
+                [PSCustomObject]@{ Rule = $_.name; LastChanged = $p.staticPasswordSetAt }
+            }
+        }
+
+        Finds the Synchronisation Rules whose shared initial password has not been changed for 90 days. The
+        password itself is never returned, which is why the date is what a rotation check has to work from.
 
     .EXAMPLE
         Get-JIMSyncRule -All | Where-Object provisionToConnectedSystem |
