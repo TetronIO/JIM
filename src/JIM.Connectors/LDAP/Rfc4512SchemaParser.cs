@@ -149,18 +149,17 @@ internal static class Rfc4512SchemaParser
     {
         var index = new Rfc4512ObjectClassIndex();
 
-        foreach (var parsed in definitions.Select(ParseObjectClassDescription))
-        {
-            if (parsed?.Name == null)
-                continue;
+        var namedClasses = definitions
+            .Select(ParseObjectClassDescription)
+            .OfType<Rfc4512ObjectClassDescription>()
+            .Where(parsed => parsed.Name != null);
 
+        foreach (var parsed in namedClasses)
+        {
             // A parsed class always has a name (the parser discards it otherwise) but not necessarily an OID, so the
             // name index is the complete one and the OID index is best-effort. Index the OID only for a class the
             // name index accepted, so a lookup by either key can never hand back a class the other one rejected.
-            if (!index.ByName.TryAdd(parsed.Name, parsed))
-                continue;
-
-            if (parsed.Oid != null)
+            if (index.ByName.TryAdd(parsed.Name!, parsed) && parsed.Oid != null)
                 index.ByOid.TryAdd(parsed.Oid, parsed);
         }
 
@@ -180,11 +179,13 @@ internal static class Rfc4512SchemaParser
     {
         var result = new Dictionary<string, Rfc4512DitContentRuleDescription>(StringComparer.Ordinal);
 
-        foreach (var parsed in definitions.Select(ParseDitContentRuleDescription))
-        {
-            if (parsed?.Oid != null)
-                result.TryAdd(parsed.Oid, parsed);
-        }
+        var identifiedRules = definitions
+            .Select(ParseDitContentRuleDescription)
+            .OfType<Rfc4512DitContentRuleDescription>()
+            .Where(parsed => parsed.Oid != null);
+
+        foreach (var parsed in identifiedRules)
+            result.TryAdd(parsed.Oid!, parsed);
 
         return result;
     }
