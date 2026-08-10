@@ -141,13 +141,13 @@ This applies wherever the deletion happens: during a Synchronisation Run Profile
 
 ## Initial password
 
-An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** section of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
+An account a Synchronisation Rule has just provisioned has no password, and in most directories cannot be signed in to or even enabled without one. The **Initial Password** tab of an export Synchronisation Rule tells JIM to set one on every account that rule creates.
 
 For how the password channel works as a whole (policy discovery and its limits, where a password comes from, and the security rules that hold across every surface) see [Passwords](../concepts/passwords.md).
 
 It is off until you turn it on, on every rule: JIM setting passwords on accounts nobody asked it to is not a sensible default.
 
-It also depends on the rule provisioning. Only a newly created account has never had a password, so the section is shown only on an export rule with **Provision ... to the Connected System?** switched on. Switching that off hides the section and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any accounts parked waiting on those settings stop waiting. Switching provisioning back on brings the section back with its settings intact, switched off.
+It also depends on the rule provisioning. Only a newly created account has never had a password, so the tab appears only on an export rule with **Provision ... to the Connected System?** switched on, which is a setting on the Details tab. Switching that off removes the tab and switches the initial password off with it, rather than leaving a setting that reads as configured and can never run; any accounts parked waiting on those settings stop waiting. Switching provisioning back on brings the tab back with its settings intact, switched off.
 
 The setting lives on the Synchronisation Rule rather than on the Connected System because rules are how JIM distinguishes populations. A rule provisioning contractors and a rule provisioning permanent staff into the same directory can reasonably want different password rules.
 
@@ -208,7 +208,7 @@ The typical loop is therefore: read what the target said on the parked account, 
 You do not have to go looking. Parked and expired accounts are reported in three places:
 
 - **The Synchronisation Rules and Connected Systems lists**<br /> An amber chip counts the accounts parked against a rule, and a red one counts those that expired. They stay separate because they ask for different things: parked work is fixed by correcting the settings and saving, expired work cannot be fixed that way at all. A rule or system with nothing outstanding shows no chip, so the lists stay quiet until something needs you.
-- **The Initial Password section itself**<br /> The panel heading carries the parked count even while collapsed, and opening it shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and the panel confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
+- **The Initial Password tab itself**<br /> The tab carries the parked count as a badge, so you see it without opening the tab, and the tab shows the accounts grouped by what the target said, biggest group first, with the target's own words unaltered and how long each fault has been there. Correct the settings and it confirms, before you save, how many accounts saving will release; it stays quiet for an edit that would not change what is delivered.
 - **Automation**<br /> `Get-JIMSyncRuleInitialPassword` and the Synchronisation Rule's initial password endpoint report `parkedAccountCount`, `expiredAccountCount` and the same grouped reasons. `Get-JIMConnectedSystem -Id <id>` carries the two counts for a whole Connected System.
 
 ## Attribute mappings

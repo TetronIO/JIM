@@ -43,7 +43,6 @@ else if (_syncRule != null)
             <SyncRuleDetailsTab SyncRule="_syncRule"
                                 ConnectedSystemHeaders="_connectedSystemHeaders"
                                 MetaverseObjectTypes="_metaverseObjectTypes"
-                                OnInitialPasswordIssuesChanged="OnInitialPasswordIssuesChanged"
                                 OnChanged="OnChildChanged" />
         </MudTabPanel>
 
@@ -54,6 +53,21 @@ else if (_syncRule != null)
         <MudTabPanel Text="Scope">
             <SyncRuleScopeTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
         </MudTabPanel>
+
+        @* Only meaningful for an Export rule that provisions, since only a newly created account has never had a
+           password. Absent rather than disabled when provisioning is off: there is nothing to configure, and the
+           switch that brings it back is on the Details tab, which is index 0 either way. *@
+        @if (ShowInitialPasswordTab)
+        {
+            @* Badged with the parked count, which is what the panel's collapsed title used to carry. Accounts
+               waiting on a person must be visible without opening the tab to find out. *@
+            <MudTabPanel Text="Initial Password" BadgeColor="Color.Warning"
+                         BadgeData="@(_parkedInitialPasswordCount > 0 ? _parkedInitialPasswordCount.ToString("N0") : null)">
+                <SyncRuleInitialPasswordTab SyncRule="_syncRule"
+                                            OnInitialPasswordIssuesChanged="OnInitialPasswordIssuesChanged"
+                                            OnChanged="OnChildChanged" />
+            </MudTabPanel>
+        }
 
         <MudTabPanel Text="Attribute Flow">
             <SyncRuleAttributeFlowTab SyncRule="_syncRule" OnChanged="OnChildChanged" />
@@ -130,9 +144,25 @@ else if (_syncRule != null)
     private int _activeTabIndex;
     private int _changeCount;
 
-    // Details, Matching, Scope, Attribute Flow occupy indexes 0-3. For an existing rule, Changes (4) and Danger
-    // Zone (5) follow; both are read-only views, so the editing save bar is hidden when either is active.
-    private const int ChangesTabIndex = 4;
+    /// <summary>
+    /// Accounts parked against this rule, for the Initial Password tab's badge. Loaded here beside the
+    /// Changes count because a badge belongs to the tab strip, which is the page's, and the tab itself is
+    /// not rendered until it is opened.
+    /// </summary>
+    private int _parkedInitialPasswordCount;
+
+    /// <summary>
+    /// Whether the rule can deliver an initial password at all, and so whether its tab is one of the editing
+    /// tabs. See the comment on the tab itself.
+    /// </summary>
+    private bool ShowInitialPasswordTab =>
+        _syncRule is { Direction: SyncRuleDirection.Export, ProvisionToConnectedSystem: true };
+
+    // Details, Matching, Scope, [Initial Password], Attribute Flow are the editing tabs; for an existing rule
+    // Changes and Danger Zone follow, and both are read-only views, so the editing save bar is hidden when
+    // either is active. Computed rather than a constant because the Initial Password tab is conditional, and a
+    // fixed index would put the save bar back on a read-only tab whenever it is present.
+    private int ChangesTabIndex => ShowInitialPasswordTab ? 5 : 4;
     private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
 
     // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
@@ -187,6 +217,10 @@ else if (_syncRule != null)
 
             // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
             _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, _syncRule.Id, 1, 1)).TotalResults;
+
+            // Counts only; the reasons behind them are the Initial Password tab's own load.
+            var attention = await _jim.InitialPasswords.GetAttentionBySyncRuleAsync([_syncRule.Id]);
+            _parkedInitialPasswordCount = attention.TryGetValue(_syncRule.Id, out var parked) ? parked.ParkedCount : 0;
         }
         else
         {

@@ -159,7 +159,7 @@ public class InitialPasswordReleaseOnSaveTests
     /// <para>
     /// This is the save path's half of the rule the REST API states by refusing an enabled initial-password
     /// configuration on such a Synchronisation Rule outright. It cannot refuse here: the administrator is
-    /// saving a whole rule and has not asked about passwords at all, and the portal hides the panel the moment
+    /// saving a whole rule and has not asked about passwords at all, and the portal removes the tab the moment
     /// provisioning goes off, so there would be nothing on screen to correct.
     /// </para>
     /// </summary>
@@ -171,11 +171,11 @@ public class InitialPasswordReleaseOnSaveTests
 
         var saved = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiatedBy);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(saved, Is.True, "the rest of the rule is perfectly savable");
             Assert.That(configuration.Enabled, Is.False);
-        });
+        }
     }
 
     /// <summary>

@@ -6314,7 +6314,7 @@ public class ConnectedSystemServer
         // The REST API states the same rule by refusing an enabled initial-password configuration on such a
         // Synchronisation Rule outright. That is right for a request whose whole subject is the initial
         // password, and wrong here: this path saves a whole rule, and an administrator turning provisioning off
-        // has not asked about passwords at all. The portal hides the Initial Password panel the moment
+        // has not asked about passwords at all. The portal removes the Initial Password tab the moment
         // provisioning goes off, so refusing would also leave nothing on screen to correct.
         //
         // Left above the parked-account comparison below on purpose: the comparison must see the settings as

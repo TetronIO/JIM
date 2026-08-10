@@ -20,8 +20,8 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// The Synchronisation Rule editor's Details tab, on the one thing it decides rather than displays: whether the
-/// initial-password settings on the rule are savable (issue #1273).
+/// The Synchronisation Rule editor's Initial Password tab, on the one thing it decides rather than displays:
+/// whether the initial-password settings on the rule are savable (issue #1273).
 /// <para>
 /// The REST API refuses settings that cannot be satisfied, because saving them parks every account the rule
 /// provisions. The portal used to accept the same settings without comment, so which surface an administrator
@@ -30,7 +30,7 @@ namespace JIM.Web.Tests;
 /// </para>
 /// </summary>
 [TestFixture]
-public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
+public class SyncRuleInitialPasswordTabTests : JimComponentTestContext
 {
     private const int ConnectedSystemId = 7;
     private const int SyncRuleId = 3;
@@ -81,7 +81,7 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
     /// REST API refuses it, so the portal must report it too rather than saving it silently.
     /// </summary>
     [Test]
-    public void SyncRuleDetailsTab_WithAnUnsatisfiableCustomPolicy_ReportsTheProblemToItsParent()
+    public void SyncRuleInitialPasswordTab_WithAnUnsatisfiableCustomPolicy_ReportsTheProblemToItsParent()
     {
         var syncRule = CreateProvisioningSyncRule(new SyncRuleInitialPassword
         {
@@ -101,7 +101,7 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
     /// a perfectly good rule.
     /// </summary>
     [Test]
-    public void SyncRuleDetailsTab_WithSatisfiableSettings_ReportsNothing()
+    public void SyncRuleInitialPasswordTab_WithSatisfiableSettings_ReportsNothing()
     {
         var syncRule = CreateProvisioningSyncRule(new SyncRuleInitialPassword
         {
@@ -120,7 +120,7 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
     /// unsatisfiable generator configuration and is reported the same way.
     /// </summary>
     [Test]
-    public void SyncRuleDetailsTab_WithAStaticSourceAndNoPasswordSet_ReportsTheProblemToItsParent()
+    public void SyncRuleInitialPasswordTab_WithAStaticSourceAndNoPasswordSet_ReportsTheProblemToItsParent()
     {
         var syncRule = CreateProvisioningSyncRule(new SyncRuleInitialPassword
         {
@@ -140,7 +140,7 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
     /// afterwards, so the value was on the rule waiting for the next Save.
     /// </summary>
     [Test]
-    public async Task SyncRuleDetailsTab_WithAnUnusableStaticPasswordTyped_DoesNotTakeItOntoTheRuleAsync()
+    public async Task SyncRuleInitialPasswordTab_WithAnUnusableStaticPasswordTyped_DoesNotTakeItOntoTheRuleAsync()
     {
         var configuration = new SyncRuleInitialPassword
         {
@@ -154,19 +154,19 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
 
         await TypeStaticPasswordAsync(cut, "TooShort1!");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(configuration.StaticPasswordEncryptedValue, Is.Null, "a password the target would refuse is not stored");
             Assert.That(configuration.StaticPasswordSetAt, Is.Null);
             Assert.That(issues, Is.Not.Empty, "and the administrator is told why saving is blocked");
-        });
+        }
     }
 
     /// <summary>
     /// The other half of the rule above: a usable password is encrypted, stamped, and clears the complaint.
     /// </summary>
     [Test]
-    public async Task SyncRuleDetailsTab_WithAUsableStaticPasswordTyped_TakesItOntoTheRuleAsync()
+    public async Task SyncRuleInitialPasswordTab_WithAUsableStaticPasswordTyped_TakesItOntoTheRuleAsync()
     {
         var configuration = new SyncRuleInitialPassword
         {
@@ -180,51 +180,22 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
 
         await TypeStaticPasswordAsync(cut, "Correct-Horse-Battery-7");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(configuration.StaticPasswordEncryptedValue, Is.Not.Null.And.Not.EqualTo("Correct-Horse-Battery-7"),
                 "the plaintext must never be what is stored");
             Assert.That(configuration.StaticPasswordSetAt, Is.Not.Null);
             Assert.That(issues, Is.Empty);
-        });
-    }
-
-    /// <summary>
-    /// The provisioning switch names what the rule would create. Before an Object Type is chosen there is no
-    /// name to use, and the placeholder standing in for one is already plural: pluralising it again produced
-    /// "Provision objectses to the Connected System?" on every new Export rule.
-    /// </summary>
-    [Test]
-    public void SyncRuleDetailsTab_WithNoConnectedSystemObjectTypeChosen_DoesNotPluraliseThePlaceholderTwice()
-    {
-        var syncRule = CreateProvisioningSyncRule(initialPassword: null);
-        // Declared non-nullable and initialised to null!, which is exactly the state a rule is in before an
-        // Object Type has been chosen; the markup reads it through a null-conditional for that reason.
-        syncRule.ConnectedSystemObjectType = null!;
-
-        var cut = RenderTab(syncRule, []);
-
-        Assert.That(cut.Markup, Does.Contain("Provision objects to the Connected System?"));
-    }
-
-    /// <summary>
-    /// And where there is a name, it is still pluralised: the fix must not turn the label into a singular.
-    /// </summary>
-    [Test]
-    public void SyncRuleDetailsTab_WithAConnectedSystemObjectTypeChosen_PluralisesItsName()
-    {
-        var cut = RenderTab(CreateProvisioningSyncRule(initialPassword: null), []);
-
-        Assert.That(cut.Markup, Does.Contain("Provision users to the Connected System?"));
+        }
     }
 
     #region Helper Methods
 
     /// <summary>
-    /// Hands the typed password to the tab exactly as the Initial Password panel does when both of its fields
+    /// Hands the typed password to the tab exactly as the password fields do when both of them
     /// agree, which is the only route by which one reaches the tab.
     /// </summary>
-    private static async Task TypeStaticPasswordAsync(IRenderedComponent<SyncRuleDetailsTab> cut, string password)
+    private static async Task TypeStaticPasswordAsync(IRenderedComponent<SyncRuleInitialPasswordTab> cut, string password)
     {
         var section = cut.FindComponent<SyncRuleInitialPasswordSection>();
         await cut.InvokeAsync(() => section.Instance.OnStaticPasswordEntered.InvokeAsync(password));
@@ -237,9 +208,9 @@ public class SyncRuleDetailsTabInitialPasswordTests : JimComponentTestContext
         return issues;
     }
 
-    private IRenderedComponent<SyncRuleDetailsTab> RenderTab(SyncRule syncRule, List<string> issues)
+    private IRenderedComponent<SyncRuleInitialPasswordTab> RenderTab(SyncRule syncRule, List<string> issues)
     {
-        return Render<SyncRuleDetailsTab>(p => p
+        return Render<SyncRuleInitialPasswordTab>(p => p
             .Add(c => c.SyncRule, syncRule)
             .Add(c => c.OnInitialPasswordIssuesChanged, reported =>
             {

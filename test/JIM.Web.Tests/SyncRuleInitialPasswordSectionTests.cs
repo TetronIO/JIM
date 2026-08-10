@@ -64,12 +64,12 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void InitialPasswordSection_WithParkedAccounts_ShowsTheCountOnThePanelTitle()
+    public void InitialPasswordSection_WithParkedAccounts_ReportsHowManyAreWaiting()
     {
         var cut = Render(OneReason(accounts: 14));
 
-        Assert.That(cut.Markup, Does.Contain("14 parked"),
-            "the count belongs on the collapsed title too, or a closed panel hides the whole problem");
+        // The tab's own badge carries the count outside the tab; in here the notice states it in words.
+        Assert.That(cut.Markup, Does.Contain("14 accounts are waiting on a change to these settings"));
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
         {
             Assert.That(cut.Markup, Does.Contain("Not complex enough."));
             Assert.That(cut.Markup, Does.Contain("Too short."));
-            Assert.That(cut.Markup, Does.Contain("14 parked"), "the title carries the total across every reason");
+            Assert.That(cut.Markup, Does.Contain("14 accounts are waiting"), "the notice totals every reason");
         }
     }
 
@@ -111,7 +111,7 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(cut.Markup, Does.Contain("2 parked"));
+            Assert.That(cut.Markup, Does.Contain("2 accounts are waiting"));
             Assert.That(cut.Markup, Does.Contain("refused the password without saying why"));
         }
     }

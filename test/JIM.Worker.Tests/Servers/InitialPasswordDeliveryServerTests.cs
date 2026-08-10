@@ -535,11 +535,11 @@ public class InitialPasswordDeliveryServerTests
 
         var problems = _server.AssessConfiguration(configuration, null);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(problems, Has.Count.EqualTo(1));
             Assert.That(problems[0], Does.Contain("no password has been set"));
-        });
+        }
     }
 
     /// <summary>
