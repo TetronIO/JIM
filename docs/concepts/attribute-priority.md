@@ -100,6 +100,10 @@ Priority is also surfaced where an Attribute Flow is created, so you are not lef
 
 Reordering is not offered here: priority is managed in one place, and the dialog links through to the Object Type page for it.
 
+### 🔀 Finding contested attributes
+
+Both surfaces above start from something you already suspect: an Object Type, or a mapping you are editing. To find the attributes worth reviewing in the first place, use the [Data Flow](../configuration/data-flow.md) view (**Administration → Schema → Data Flow**) with **Contested only** switched on. It lists every inbound flow whose target has more than one contributor, across all Connected Systems at once, which is the set whose priority order decides anything.
+
 **"Null is a value"** is set in this dialog rather than on the Object Type page when you are creating the mapping, because it belongs to that mapping rather than to the ordering. It can be changed later from either surface.
 
 ### 🔧 Via the REST API and PowerShell

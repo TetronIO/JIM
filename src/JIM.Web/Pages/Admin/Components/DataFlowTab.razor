@@ -1,0 +1,325 @@
+@using JIM.Models.Logic
+@using JIM.Models.Logic.DTOs
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The system-wide view of every attribute data flow in both directions (#1199). Pure discovery: nothing is edited *@
+@* here, rows link to the surface that owns the change. *@
+
+<MudText Typo="Typo.body1" Class="mud-text-secondary">
+    Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where
+    does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.
+</MudText>
+
+@* ─── Filters ─── *@
+<MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="SyncRuleDirection?" Label="Direction" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_direction" ValueChanged="OnDirectionChangedAsync">
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Import)">Inbound</MudSelectItem>
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Export)">Outbound</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="int?" Label="Connected System" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_connectedSystemId" ValueChanged="OnConnectedSystemChangedAsync">
+            @foreach (var option in _connectedSystemOptions)
+            {
+                <MudSelectItem T="int?" Value="@option.Key" @key="option.Key">@option.Value</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="int?" Label="Metaverse Object Type" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_metaverseObjectTypeId" ValueChanged="OnMetaverseObjectTypeChangedAsync">
+            @foreach (var option in _metaverseObjectTypeOptions)
+            {
+                <MudSelectItem T="int?" Value="@option.Key" @key="option.Key">@option.Value</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="int?" Label="Metaverse Attribute" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_metaverseAttributeId" ValueChanged="OnMetaverseAttributeChangedAsync">
+            @foreach (var option in _metaverseAttributeOptions)
+            {
+                <MudSelectItem T="int?" Value="@option.Key" @key="option.Key">@option.Value</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem>
+        <MudTooltip Text="Show only Inbound flows whose Metaverse Attribute has more than one contributor, which are the only flows whose priority decides anything." Arrow="true" Placement="Placement.Top">
+            <MudSwitch T="bool" Value="_contestedOnly" ValueChanged="OnContestedOnlyChangedAsync" Color="Color.Primary">Contested only</MudSwitch>
+        </MudTooltip>
+    </MudItem>
+</MudStack>
+
+<MudTable Items="@_flows" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-4 mb-5" SortLabel="Sort By"
+          Outlined="true" Elevation="0" Loading="@_loading" LoadingProgressColor="Color.Primary"
+          RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
+    <ToolBarContent>
+        <TableDensityToggle @bind-Dense="_dense" />
+        <MudText Class="mx-2 mud-text-disabled">|</MudText>
+        <MudText Typo="Typo.body1">@_flows.Count @(_flows.Count == 1 ? "flow" : "flows")</MudText>
+        <MudSpacer />
+        <SearchField Value="@_search" ValueChanged="OnSearchChangedAsync" DebounceInterval="500"
+                     HelperText="Matches Synchronisation Rules, Connected Systems, object types, attributes and expression text."
+                     Class="mt-0" />
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Direction)"><MudText Typo="Typo.button">Direction</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">Connected System</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudText Typo="Typo.button">Source</MudText></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.TargetName)"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudText Typo="Typo.button">Options</MudText></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Direction">
+            <MudChip T="string" Variant="Variant.Text" Color="@(context.Direction == SyncRuleDirection.Import ? Color.Info : Color.Warning)">
+                @DataFlowDisplay.DirectionLabel(context.Direction)
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Connected System">
+            <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.ConnectedSystemObjectTypeName</MudText>
+        </MudTd>
+        <MudTd DataLabel="Object Type">@context.MetaverseObjectTypeName</MudTd>
+        <MudTd DataLabel="Source">
+            @foreach (var source in context.Sources.OrderBy(s => s.Order))
+            {
+                @if (source.IsExpression)
+                {
+                    <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Tertiary" Icon="@Icons.Material.Filled.Functions"
+                                 @key="@($"{context.SyncRuleMappingId}-{source.Order}")">Expression</MudChip>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
+                             @key="@($"{context.SyncRuleMappingId}-{source.Order}")">@source.DisplayName</MudChip>
+                }
+            }
+        </MudTd>
+        <MudTd DataLabel="Target">
+            <MudLink Href="@DataFlowDisplay.TargetHref(context)">@DataFlowDisplay.TargetName(context)</MudLink>
+        </MudTd>
+        <MudTd DataLabel="Priority">
+            @{
+                var priorityLabel = DataFlowDisplay.PriorityLabel(context);
+            }
+            @if (priorityLabel == null)
+            {
+                <EmptyValue />
+            }
+            else
+            {
+                <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string"
+                             Variant="@(context.HasMultipleContributors ? Variant.Filled : Variant.Text)"
+                             Color="@(context.HasMultipleContributors ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                </MudTooltip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Options">
+            @if (context.NullIsValue == true)
+            {
+                <MudTooltip Text="This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor." Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Null is a value</MudChip>
+                </MudTooltip>
+            }
+            else if (context.EnforceState == true)
+            {
+                <MudTooltip Text="Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value." Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Enforce State</MudChip>
+                </MudTooltip>
+            }
+            else
+            {
+                <EmptyValue />
+            }
+        </MudTd>
+        <MudTd DataLabel="Synchronisation Rule">
+            <MudLink Href="@DataFlowDisplay.RuleHref(context)">@context.SyncRuleName</MudLink>
+            @if (!context.SyncRuleEnabled)
+            {
+                <MudTooltip Text="This Synchronisation Rule is disabled, so this flow is configured but moves no data." Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.PauseCircleOutline">Disabled</MudChip>
+                </MudTooltip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No data flows match these filters.</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager RowsPerPageString="Rows per page:" PageSizeOptions="@(new[] { 10, 25, 50, 100 })" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private IList<DataFlowHeader> _flows = new List<DataFlowHeader>();
+    private bool _loading = true;
+    private bool _dense;
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
+
+    // Filter state. Held as fields rather than in a DataFlowQuery so each control can bind to one of them; the
+    // query is rebuilt per load, which keeps the portal's filters and the REST endpoint's identical by construction.
+    private SyncRuleDirection? _direction;
+    private int? _connectedSystemId;
+    private int? _metaverseObjectTypeId;
+    private int? _metaverseAttributeId;
+    private bool _contestedOnly;
+    private string? _search;
+
+    // Built once from the unfiltered set, so choosing a filter never removes options from the other drop-downs.
+    // Derived from the flows themselves rather than from the schema, so the lists only offer values that would
+    // actually match something.
+    private IReadOnlyList<KeyValuePair<int, string>> _connectedSystemOptions = [];
+    private IReadOnlyList<KeyValuePair<int, string>> _metaverseObjectTypeOptions = [];
+    private IReadOnlyList<KeyValuePair<int, string>> _metaverseAttributeOptions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(buildOptions: true);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop is not available on the first server-side render; retried on the next one.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads the flows matching the current filters. Every filter is evaluated server-side, including the free-text
+    /// search: doing it client-side would mean maintaining a second definition of what "matches" means, which would
+    /// drift from the REST endpoint's the first time either changed.
+    /// </summary>
+    private async Task LoadAsync(bool buildOptions = false)
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var flows = await jim.ConnectedSystems.GetDataFlowsAsync(BuildQuery());
+
+            if (buildOptions)
+                BuildFilterOptions(flows);
+
+            _flows = flows;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private DataFlowQuery BuildQuery() => new()
+    {
+        Direction = _direction,
+        ConnectedSystemId = _connectedSystemId,
+        MetaverseObjectTypeId = _metaverseObjectTypeId,
+        MetaverseAttributeId = _metaverseAttributeId,
+        MultipleContributorsOnly = _contestedOnly,
+        Search = string.IsNullOrWhiteSpace(_search) ? null : _search
+    };
+
+    private void BuildFilterOptions(IEnumerable<DataFlowHeader> flows)
+    {
+        var systems = new Dictionary<int, string>();
+        var objectTypes = new Dictionary<int, string>();
+        var attributes = new Dictionary<int, string>();
+
+        foreach (var flow in flows)
+        {
+            systems[flow.ConnectedSystemId] = flow.ConnectedSystemName;
+            objectTypes[flow.MetaverseObjectTypeId] = flow.MetaverseObjectTypeName;
+
+            // A Metaverse Attribute is a flow's target inbound and one of its sources outbound, so both sides have
+            // to be collected for the filter to offer every attribute that participates in any flow.
+            if (flow is { TargetMetaverseAttributeId: not null, TargetMetaverseAttributeName: not null })
+            {
+                var targetId = flow.TargetMetaverseAttributeId.Value;
+                attributes[targetId] = flow.TargetMetaverseAttributeName;
+            }
+
+            foreach (var source in flow.Sources)
+            {
+                if (source is { MetaverseAttributeId: not null, MetaverseAttributeName: not null })
+                {
+                    var sourceId = source.MetaverseAttributeId.Value;
+                    attributes[sourceId] = source.MetaverseAttributeName;
+                }
+            }
+        }
+
+        _connectedSystemOptions = systems.OrderBy(o => o.Value).ToList();
+        _metaverseObjectTypeOptions = objectTypes.OrderBy(o => o.Value).ToList();
+        _metaverseAttributeOptions = attributes.OrderBy(o => o.Value).ToList();
+    }
+
+    private async Task OnDirectionChangedAsync(SyncRuleDirection? direction)
+    {
+        _direction = direction;
+        await LoadAsync();
+    }
+
+    private async Task OnConnectedSystemChangedAsync(int? connectedSystemId)
+    {
+        _connectedSystemId = connectedSystemId;
+        await LoadAsync();
+    }
+
+    private async Task OnMetaverseObjectTypeChangedAsync(int? metaverseObjectTypeId)
+    {
+        _metaverseObjectTypeId = metaverseObjectTypeId;
+        await LoadAsync();
+    }
+
+    private async Task OnMetaverseAttributeChangedAsync(int? metaverseAttributeId)
+    {
+        _metaverseAttributeId = metaverseAttributeId;
+        await LoadAsync();
+    }
+
+    private async Task OnContestedOnlyChangedAsync(bool contestedOnly)
+    {
+        _contestedOnly = contestedOnly;
+        await LoadAsync();
+    }
+
+    private async Task OnSearchChangedAsync(string search)
+    {
+        _search = search;
+        await LoadAsync();
+    }
+
+    private async Task OnRowsPerPageChangedAsync(int rowsPerPage)
+    {
+        _rowsPerPage = rowsPerPage;
+        await PreferenceService.SetRowsPerPageAsync(rowsPerPage);
+    }
+}
