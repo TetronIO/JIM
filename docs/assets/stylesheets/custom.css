@@ -808,10 +808,15 @@ body:has(.jim-home) .md-content__button {
   cursor: grabbing;
 }
 
-.jim-dgz__svg {
+/* The clone keeps its .jim-diagram class (the --jimdg-* theming depends on it),
+   which carries a top margin for in-page flow. Inside a fixed-height stage that
+   margin displaces the diagram downwards and clips the same amount off the
+   bottom, so it has to be cancelled here. */
+.jim-dgz__stage .jim-dgz__svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  margin: 0;
   font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
 }
 
