@@ -178,6 +178,77 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
+    public void DataFlowTab_OutboundView_DropsPriorityAndNamesTheSettingItDoesShow()
+    {
+        // Priority orders competing contributions into the Metaverse, so an Outbound-only view would spend a column
+        // on dashes. With one direction chosen, only one setting can appear, so it is named rather than left under
+        // a catch-all "Options" heading.
+        SetupFlows(BuildExportFlow());
+        var cut = Render<DataFlowTab>();
+
+        ClickDirection(cut, "Outbound");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain(">Priority<"));
+            Assert.That(cut.Markup, Does.Contain("Enforce State"));
+        }
+    }
+
+    [Test]
+    public void DataFlowTab_InboundView_KeepsPriorityAndNamesItsOwnSetting()
+    {
+        SetupFlows(BuildImportFlow());
+        var cut = Render<DataFlowTab>();
+
+        ClickDirection(cut, "Inbound");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain(">Priority<"));
+            Assert.That(cut.Markup, Does.Contain("Null is a value"));
+            Assert.That(_lastQuery!.Direction, Is.EqualTo(SyncRuleDirection.Import));
+        }
+    }
+
+    [Test]
+    public void DataFlowTab_BothView_KeepsTheColumnsThatOnlyHalfTheRowsUse()
+    {
+        // "Both" answers the lineage question that spans directions, so it cannot drop either direction's column.
+        SetupFlows(BuildImportFlow(), BuildExportFlow());
+
+        var cut = Render<DataFlowTab>();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain(">Priority<"));
+            Assert.That(cut.Markup, Does.Contain(">Options<"));
+            Assert.That(_lastQuery!.Direction, Is.Null, "Both is the default view");
+        }
+    }
+
+    [Test]
+    public void DataFlowTab_ArrowPointsAwayFromWhicheverSideSuppliesTheValue()
+    {
+        // The two side columns never move; the arrow between them is the only thing direction changes.
+        SetupFlows(BuildImportFlow(), BuildExportFlow());
+
+        var cut = Render<DataFlowTab>();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("→"));
+            Assert.That(cut.Markup, Does.Contain("←"));
+        }
+    }
+
+    private static void ClickDirection(IRenderedComponent<DataFlowTab> cut, string label)
+    {
+        var button = cut.FindAll("button").First(b => b.TextContent.Trim() == label);
+        button.Click();
+    }
+
+    [Test]
     public void DataFlowTab_ContestedOnlySwitch_NarrowsTheQuery()
     {
         // The switch has to reach the query: filtering by eye over a page of flows is exactly the work the page

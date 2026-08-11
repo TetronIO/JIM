@@ -110,6 +110,59 @@ public class DataFlowDisplayTests
     }
 
     [Test]
+    public void SideNames_ImportFlow_PutTheConnectedSystemOnOneSideAndTheMetaverseOnTheOther()
+    {
+        // The table anchors its columns to sides rather than to source and target, because source and target swap
+        // sides between directions and a column that changes meaning per row cannot be learned.
+        var flow = BuildImportFlow(priority: 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DataFlowDisplay.ConnectedSystemSideName(flow), Is.EqualTo("dept"));
+            Assert.That(DataFlowDisplay.MetaverseSideName(flow), Is.EqualTo("Department"));
+        }
+    }
+
+    [Test]
+    public void SideNames_ExportFlow_KeepEachAttributeOnTheSameSideAsItWasInbound()
+    {
+        // The same two columns, holding the same two kinds of thing, even though the flow now runs the other way.
+        // This is the whole point: only the arrow changes between directions, never the columns.
+        var flow = BuildExportFlow();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DataFlowDisplay.ConnectedSystemSideName(flow), Is.EqualTo("department"));
+            Assert.That(DataFlowDisplay.MetaverseSideName(flow), Is.EqualTo("Department"));
+        }
+    }
+
+    [Test]
+    public void SideNames_MultipleSources_SortOnTheFirstOneEvaluated()
+    {
+        var flow = BuildImportFlow(priority: 1);
+        flow.Sources =
+        [
+            new DataFlowSource { Order = 1, ConnectedSystemAttributeId = 8, ConnectedSystemAttributeName = "sn" },
+            new DataFlowSource { Order = 0, ConnectedSystemAttributeId = 9, ConnectedSystemAttributeName = "givenName" }
+        ];
+
+        Assert.That(DataFlowDisplay.ConnectedSystemSideName(flow), Is.EqualTo("givenName"));
+    }
+
+    [Test]
+    public void DirectionArrow_PointsAwayFromWhicheverSideSuppliesTheValue()
+    {
+        // The Connected System column is always on the left, so an Inbound flow runs left to right and an Outbound
+        // flow runs right to left. The arrow is the only thing in the row that direction changes.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DataFlowDisplay.DirectionArrow(SyncRuleDirection.Import), Is.EqualTo("→"));
+            Assert.That(DataFlowDisplay.DirectionArrow(SyncRuleDirection.Export), Is.EqualTo("←"));
+        }
+    }
+
+    [Test]
     public void TargetName_ImportFlow_IsTheMetaverseAttributeItWrites()
     {
         var flow = BuildImportFlow(priority: 1);

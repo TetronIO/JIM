@@ -15,15 +15,21 @@
     does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.
 </MudText>
 
+@* ─── Direction ─── *@
+@* Direction is chosen rather than shown in a column. Inbound and Outbound flows carry different settings *@
+@* (priority inbound, Enforce State outbound), so one table serving both leaves each row half empty; choosing *@
+@* the direction lets the table drop the columns that do not apply and name the one that does. *@
+<MudButtonGroup Variant="Variant.Outlined" Class="mt-6" OverrideStyles="false">
+    <MudButton Color="@DirectionSegmentColour(SyncRuleDirection.Import)" Variant="@DirectionSegmentVariant(SyncRuleDirection.Import)"
+               DropShadow="false" OnClick="@(() => OnDirectionChangedAsync(SyncRuleDirection.Import))">Inbound</MudButton>
+    <MudButton Color="@DirectionSegmentColour(SyncRuleDirection.Export)" Variant="@DirectionSegmentVariant(SyncRuleDirection.Export)"
+               DropShadow="false" OnClick="@(() => OnDirectionChangedAsync(SyncRuleDirection.Export))">Outbound</MudButton>
+    <MudButton Color="@DirectionSegmentColour(null)" Variant="@DirectionSegmentVariant(null)"
+               DropShadow="false" OnClick="@(() => OnDirectionChangedAsync(null))">Both</MudButton>
+</MudButtonGroup>
+
 @* ─── Filters ─── *@
-<MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
-    <MudItem Class="flex-grow-1">
-        <MudSelect T="SyncRuleDirection?" Label="Direction" Variant="Variant.Outlined" Dense="true" Clearable="true"
-                   Value="_direction" ValueChanged="OnDirectionChangedAsync">
-            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Import)">Inbound</MudSelectItem>
-            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Export)">Outbound</MudSelectItem>
-        </MudSelect>
-    </MudItem>
+<MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.Center">
     <MudItem Class="flex-grow-1">
         <MudSelect T="int?" Label="Connected System" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_connectedSystemId" ValueChanged="OnConnectedSystemChangedAsync">
@@ -76,66 +82,99 @@
         <MudSpacer />
         <SearchField Value="@_search" ValueChanged="OnSearchChangedAsync" DebounceInterval="500" Class="mt-0" />
     </ToolBarContent>
+    @* Columns are anchored to sides, not to source and target: those two swap sides between directions, so a
+       Source column means the Connected System on one row and the Metaverse on the next, and no column can be
+       learned. The Connected System block is always on the left and the Metaverse block always on the right; only
+       the arrow between them changes with direction. *@
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Direction)"><MudText Typo="Typo.button">Direction</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">Connected System</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudText Typo="Typo.button">Source</MudText></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.TargetName)"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
-        <MudTh>
-            <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one flow contributes, which is what the highlighted rows are." Arrow="true" Placement="Placement.Top">
-                <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
-            </MudTooltip>
-        </MudTh>
-        <MudTh><MudText Typo="Typo.button">Options</MudText></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.ConnectedSystemSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
+        <MudTh Style="width: 1%;"></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Metaverse Object Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.MetaverseSideName)"><MudText Typo="Typo.button">Metaverse Attribute</MudText></MudTableSortLabel></MudTh>
+        @if (ShowPriorityColumn)
+        {
+            <MudTh>
+                <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one flow contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
+                    <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
+                </MudTooltip>
+            </MudTh>
+        }
+        <MudTh><MudText Typo="Typo.button">@OptionsColumnHeader</MudText></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Direction">
-            <MudChip T="string" Variant="Variant.Text" Color="@(context.Direction == SyncRuleDirection.Import ? Color.Info : Color.Warning)">
-                @DataFlowDisplay.DirectionLabel(context.Direction)
-            </MudChip>
-        </MudTd>
         <MudTd DataLabel="Connected System">
             <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
-            @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
-               wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
-            <div><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></div>
         </MudTd>
-        <MudTd DataLabel="Object Type"><code class="jim-code-inline">@context.MetaverseObjectTypeName</code></MudTd>
-        <MudTd DataLabel="Source">
-            @foreach (var source in context.Sources.OrderBy(s => s.Order))
+        @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
+           wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
+        <MudTd DataLabel="Object Type"><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></MudTd>
+        <MudTd DataLabel="Attribute">
+            @if (context.Direction == SyncRuleDirection.Import)
             {
-                <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
-                               Kind="@SourceKind(source)"
-                               Name="@source.DisplayName"
-                               Expression="@source.Expression" />
-            }
-        </MudTd>
-        <MudTd DataLabel="Target">
-            <AttributeChip Kind="@(context.Direction == SyncRuleDirection.Import ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
-                           Name="@DataFlowDisplay.TargetName(context)"
-                           Href="@DataFlowDisplay.TargetHref(context)" />
-        </MudTd>
-        <MudTd DataLabel="Priority">
-            @{
-                var priorityLabel = DataFlowDisplay.PriorityLabel(context);
-                var isTopContender = DataFlowDisplay.IsTopPriorityContender(context);
-            }
-            @if (priorityLabel == null)
-            {
-                <EmptyValue />
+                @foreach (var source in context.Sources.OrderBy(s => s.Order))
+                {
+                    <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
+                                   Kind="@SourceKind(source)"
+                                   Name="@source.DisplayName"
+                                   Expression="@source.Expression" />
+                }
             }
             else
             {
-                <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string"
-                             Variant="@(isTopContender ? Variant.Filled : Variant.Outlined)"
-                             Color="@(isTopContender ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
-                </MudTooltip>
+                <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                               Name="@context.TargetConnectedSystemAttributeName"
+                               Href="@DataFlowDisplay.TargetHref(context)" />
             }
         </MudTd>
-        <MudTd DataLabel="Options">
+        <MudTd Class="mud-text-secondary" Style="text-align: center;">
+            <MudTooltip Text="@($"{DataFlowDisplay.DirectionLabel(context.Direction)}: the value moves this way")" Arrow="true" Placement="Placement.Top">
+                <span>@DataFlowDisplay.DirectionArrow(context.Direction)</span>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Metaverse Object Type"><code class="jim-code-inline">@context.MetaverseObjectTypeName</code></MudTd>
+        <MudTd DataLabel="Metaverse Attribute">
+            @if (context.Direction == SyncRuleDirection.Import)
+            {
+                <AttributeChip Kind="AttributeChipKind.Metaverse"
+                               Name="@context.TargetMetaverseAttributeName"
+                               Href="@DataFlowDisplay.TargetHref(context)" />
+            }
+            else
+            {
+                @foreach (var source in context.Sources.OrderBy(s => s.Order))
+                {
+                    <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
+                                   Kind="@SourceKind(source)"
+                                   Name="@source.DisplayName"
+                                   Expression="@source.Expression" />
+                }
+            }
+        </MudTd>
+        @if (ShowPriorityColumn)
+        {
+            <MudTd DataLabel="Priority">
+                @{
+                    var priorityLabel = DataFlowDisplay.PriorityLabel(context);
+                    var isTopContender = DataFlowDisplay.IsTopPriorityContender(context);
+                }
+                @if (priorityLabel == null)
+                {
+                    <EmptyValue />
+                }
+                else
+                {
+                    <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string"
+                                 Variant="@(isTopContender ? Variant.Filled : Variant.Outlined)"
+                                 Color="@(isTopContender ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                    </MudTooltip>
+                }
+            </MudTd>
+        }
+        <MudTd DataLabel="@OptionsColumnHeader">
             @if (context.NullIsValue == true)
             {
                 <MudTooltip Text="This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor." Arrow="true" Placement="Placement.Top">
@@ -243,6 +282,30 @@
             StateHasChanged();
         }
     }
+
+    /// <summary>
+    /// Whether the Priority column applies to what is on screen. Priority orders competing contributions into the
+    /// Metaverse, so an Outbound-only view would show a column of dashes; dropping it says the same thing without
+    /// spending a column on it. The "Both" view keeps it, because half its rows do have one.
+    /// </summary>
+    private bool ShowPriorityColumn => _direction != SyncRuleDirection.Export;
+
+    /// <summary>
+    /// The direction-appropriate name for the settings column. With a direction chosen, only one setting can appear
+    /// in it, so it is named outright rather than hidden behind a catch-all heading.
+    /// </summary>
+    private string OptionsColumnHeader => _direction switch
+    {
+        SyncRuleDirection.Import => "Null is a value",
+        SyncRuleDirection.Export => "Enforce State",
+        _ => "Options"
+    };
+
+    private Color DirectionSegmentColour(SyncRuleDirection? direction) =>
+        _direction == direction ? Color.Primary : Color.Default;
+
+    private Variant DirectionSegmentVariant(SyncRuleDirection? direction) =>
+        _direction == direction ? Variant.Filled : Variant.Outlined;
 
     /// <summary>
     /// Which side of the Metaverse a source sits on, read from the source itself rather than from the flow's

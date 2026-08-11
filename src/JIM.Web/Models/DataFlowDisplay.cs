@@ -73,6 +73,48 @@ public static class DataFlowDisplay
         direction == SyncRuleDirection.Import ? "Inbound" : "Outbound";
 
     /// <summary>
+    /// The attribute on the Connected System side of the flow: its source inbound, its target outbound. Where
+    /// several sources feed the flow, the first one evaluated.
+    /// </summary>
+    /// <remarks>
+    /// The table anchors its columns to sides rather than to source and target, because those two swap sides
+    /// between directions: a column whose meaning changes from row to row cannot be learned, and the reader is left
+    /// checking each cell's marker to work out what they are looking at. Anchoring means only the arrow between the
+    /// two blocks changes with direction.
+    /// </remarks>
+    public static string ConnectedSystemSideName(DataFlowHeader flow)
+    {
+        ArgumentNullException.ThrowIfNull(flow);
+
+        return flow.Direction == SyncRuleDirection.Import
+            ? FirstSourceName(flow)
+            : flow.TargetConnectedSystemAttributeName ?? string.Empty;
+    }
+
+    /// <summary>
+    /// The attribute on the Metaverse side of the flow: its target inbound, its source outbound. The mirror of
+    /// <see cref="ConnectedSystemSideName"/>.
+    /// </summary>
+    public static string MetaverseSideName(DataFlowHeader flow)
+    {
+        ArgumentNullException.ThrowIfNull(flow);
+
+        return flow.Direction == SyncRuleDirection.Import
+            ? flow.TargetMetaverseAttributeName ?? string.Empty
+            : FirstSourceName(flow);
+    }
+
+    /// <summary>
+    /// Which way the value moves between the two side columns. The Connected System side is always on the left, so
+    /// an Inbound flow runs left to right and an Outbound flow runs right to left.
+    /// </summary>
+    public static string DirectionArrow(SyncRuleDirection direction) =>
+        direction == SyncRuleDirection.Import ? "→" : "←";
+
+    private static string FirstSourceName(DataFlowHeader flow) =>
+        flow.Sources.OrderBy(s => s.Order).Select(s => s.DisplayName).FirstOrDefault() ?? string.Empty;
+
+    /// <summary>
     /// The attribute the flow writes, whichever side of the Metaverse that lands on.
     /// </summary>
     public static string TargetName(DataFlowHeader flow)
