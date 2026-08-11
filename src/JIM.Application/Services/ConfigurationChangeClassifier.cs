@@ -138,6 +138,9 @@ public static class ConfigurationChangeClassifier
         ["objectMatchingRuleMode"] = B,
         ["unresolvedReferenceHandling"] = B,
         ["maxExportParallelism"] = C,
+        // How long an account provisioned into this system stays owed an initial password. It changes how long
+        // JIM keeps trying, never what it synchronises, so no Full Synchronisation is implied.
+        ["initialPasswordTimeToLive"] = C,
         ["settingValues"] = B,
         // Every individual setting value, whatever the connector calls it. Connector settings are the connector's
         // instructions: where it reads from, what it filters, how it writes. One key covers them all because the

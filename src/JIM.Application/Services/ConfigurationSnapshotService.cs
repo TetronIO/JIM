@@ -322,6 +322,7 @@ public class ConfigurationSnapshotService
         // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
         // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
+        Add(children, "initialPasswordTimeToLive", Render(connectedSystem.InitialPasswordTimeToLive), "Initial password time to live");
         children.Add(BuildSettingValues(connectedSystem.SettingValues, hashKey));
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
         children.Add(BuildObjectTypes(connectedSystem.ObjectTypes));
