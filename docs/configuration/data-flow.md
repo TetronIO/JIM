@@ -44,7 +44,7 @@ Every filter is optional and they combine, so you can go from "everything" to "t
 - **Connected System**<br /> Everything one system reads or writes.
 - **Metaverse Object Type**<br /> Users, Groups, or any custom type.
 - **Metaverse Attribute**<br /> Every flow that touches the attribute, in either direction. An inbound flow matches when it writes the attribute and an outbound flow when it reads it, so this is the fastest way to see an attribute's full journey: which systems feed it, and where it goes afterwards.
-- **Contested only**<br /> Just the inbound flows whose target has more than one contributor. These are the flows whose priority order decides which value wins, and the ones worth reviewing after adding a Connected System.
+- **Multiple contributors**<br /> Just the inbound flows whose target Metaverse Attribute is fed by more than one Synchronisation Rule. Several systems contributing one attribute is a normal, expected arrangement; this simply narrows the list to where the priority order decides which value wins, which is what is worth reviewing after adding a Connected System.
 - **Search**<br /> Free text matched against Synchronisation Rules, Connected Systems, object types, attribute names on either side, and expression text.
 
 !!! note "Expressions and the attribute filters"

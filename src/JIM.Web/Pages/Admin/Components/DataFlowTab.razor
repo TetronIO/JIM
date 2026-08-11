@@ -55,8 +55,8 @@
         </MudSelect>
     </MudItem>
     <MudItem>
-        <MudTooltip Text="Show only Inbound flows whose Metaverse Attribute has more than one contributor, which are the only flows whose priority decides anything." Arrow="true" Placement="Placement.Top">
-            <MudSwitch T="bool" Value="_contestedOnly" ValueChanged="OnContestedOnlyChangedAsync" Color="Color.Primary">Contested only</MudSwitch>
+        <MudTooltip Text="Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronisation Rule. This is a normal arrangement; it is simply where the priority order decides which value wins." Arrow="true" Placement="Placement.Top">
+            <MudSwitch T="bool" Value="_multipleContributorsOnly" ValueChanged="OnMultipleContributorsOnlyChangedAsync" Color="Color.Primary">Multiple contributors</MudSwitch>
         </MudTooltip>
     </MudItem>
 </MudStack>
@@ -93,7 +93,7 @@
         @if (ShowPriorityColumn)
         {
             <MudTh>
-                <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one flow contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
                     <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
                 </MudTooltip>
             </MudTh>
@@ -155,7 +155,7 @@
             <MudTd DataLabel="Priority">
                 @{
                     var priorityLabel = DataFlowDisplay.PriorityLabel(context);
-                    var isTopContender = DataFlowDisplay.IsTopPriorityContender(context);
+                    var isHighestPriorityContributor = DataFlowDisplay.IsHighestPriorityContributor(context);
                 }
                 @if (priorityLabel == null)
                 {
@@ -165,8 +165,8 @@
                 {
                     <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string"
-                                 Variant="@(isTopContender ? Variant.Filled : Variant.Outlined)"
-                                 Color="@(isTopContender ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                                 Variant="@(isHighestPriorityContributor ? Variant.Filled : Variant.Outlined)"
+                                 Color="@(isHighestPriorityContributor ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
                     </MudTooltip>
                 }
             </MudTd>
@@ -220,7 +220,7 @@
     private int? _connectedSystemId;
     private int? _metaverseObjectTypeId;
     private int? _metaverseAttributeId;
-    private bool _contestedOnly;
+    private bool _multipleContributorsOnly;
     private string? _search;
 
     // Built once from the unfiltered set, so choosing a filter never removes options from the other drop-downs.
@@ -317,7 +317,7 @@
         ConnectedSystemId = _connectedSystemId,
         MetaverseObjectTypeId = _metaverseObjectTypeId,
         MetaverseAttributeId = _metaverseAttributeId,
-        MultipleContributorsOnly = _contestedOnly,
+        MultipleContributorsOnly = _multipleContributorsOnly,
         Search = string.IsNullOrWhiteSpace(_search) ? null : _search
     };
 
@@ -379,9 +379,9 @@
         await LoadAsync();
     }
 
-    private async Task OnContestedOnlyChangedAsync(bool contestedOnly)
+    private async Task OnMultipleContributorsOnlyChangedAsync(bool multipleContributorsOnly)
     {
-        _contestedOnly = contestedOnly;
+        _multipleContributorsOnly = multipleContributorsOnly;
         await LoadAsync();
     }
 

@@ -23,9 +23,9 @@ public static class DataFlowDisplay
     /// <remarks>
     /// A position is only meaningful against the set it is a position in, and a table row cannot rely on that set
     /// being visible: sorting by another column, filtering, or a page boundary all separate a contribution from its
-    /// competitors. So a contested flow carries its own denominator ("2 of 3") rather than leaving the reader to
-    /// reconstruct the contest from neighbouring rows. A sole contributor shows the bare number, because "1 of 1"
-    /// states a contest that does not exist.
+    /// fellow contributors. So a flow sharing its target carries its own denominator ("2 of 3") rather than leaving the
+    /// reader to reconstruct the set from neighbouring rows. A sole contributor shows the bare number, because
+    /// "1 of 1" states a set that does not exist.
     /// <para>
     /// A mapping that has never been ordered carries the safe-addition sentinel (<see cref="int.MaxValue"/>), which
     /// is a "put me last, harmlessly" marker rather than a position an administrator chose. Rendering the raw number
@@ -47,19 +47,20 @@ public static class DataFlowDisplay
     }
 
     /// <summary>
-    /// Whether this flow holds the highest position among the contributions competing for its target Metaverse
-    /// Attribute, and is therefore the row to emphasise in the Priority column.
+    /// Whether this flow holds the highest position among the contributions to its target Metaverse Attribute, and
+    /// is therefore the row to emphasise in the Priority column.
     /// </summary>
     /// <remarks>
-    /// Emphasis encodes rank, not "is contested". Encoding the latter paints an identical chip on positions 1 and 2,
-    /// which tells the reader something matters here and then gives them no way to see which one it is.
+    /// Emphasis encodes rank, not "has more than one contributor". Encoding the latter paints an identical chip on
+    /// positions 1 and 2, which tells the reader something matters here and then gives them no way to see which
+    /// one it is. Several systems feeding one attribute is a normal arrangement, not a problem to flag.
     /// <para>
     /// "Highest priority" is not the same as "wins": resolution is decided per object, and a priority-1 contribution
     /// with no value for a given object loses to the next one that has one. The emphasis marks configuration, and
     /// the column's tooltip carries that qualification.
     /// </para>
     /// </remarks>
-    public static bool IsTopPriorityContender(DataFlowHeader flow)
+    public static bool IsHighestPriorityContributor(DataFlowHeader flow)
     {
         ArgumentNullException.ThrowIfNull(flow);
 

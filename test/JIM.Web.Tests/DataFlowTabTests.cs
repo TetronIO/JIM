@@ -47,7 +47,7 @@ public class DataFlowTabTests : JimComponentTestContext
     {
         _lastQuery = null;
 
-        // Two contributors to the Metaverse Attribute the Import flow targets, so the flow reads as contested.
+        // Two contributors to the Metaverse Attribute the Import flow targets, so its priority decides the value.
         _mockConnectedSystemRepo
             .Setup(r => r.GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<SyncRuleMapping>
@@ -256,7 +256,7 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void DataFlowTab_ContestedOnlySwitch_NarrowsTheQuery()
+    public void DataFlowTab_MultipleContributorsSwitch_NarrowsTheQuery()
     {
         // The switch has to reach the query: filtering by eye over a page of flows is exactly the work the page
         // exists to remove, and a control that only changes colour is worse than no control.
