@@ -251,6 +251,92 @@ public class ExportEvaluationMergeTests
 
     #endregion
 
+    #region Whole-attribute replacement supersedes staged changes (#1199)
+
+    [Test]
+    public void SelectSurvivingDriftChanges_IncomingUpdateOnMultiValuedAttribute_SupersedesStagedRemoveOfTheOldValue()
+    {
+        // The Scenario 14 export failure. Drift staged Remove title="Consultant (Secondary)" (the value the
+        // directory actually held), then export evaluation staged Update title="Consultant (Primary)", because
+        // the change type follows the Metaverse attribute's plurality (Job Title is single-valued) while the
+        // merge key follows the Connected System attribute's (LDAP `title` is multi-valued). The two keys
+        // therefore differed and both changes survived, so the connector emitted `replace title: Consultant
+        // (Primary)` followed by `delete title: Consultant (Secondary)`. The replace had already removed the old
+        // value, LDAP rejected the whole modify atomically with "modify/delete: title: no such value", and the
+        // export never applied.
+        var driftChanges = new List<PendingExportAttributeValueChange>
+        {
+            CreateMultiValuedChange(TitleAttributeId, "title", "Consultant (Secondary)", PendingExportAttributeChangeType.Remove)
+        };
+        var exportEvalChanges = new List<PendingExportAttributeValueChange>
+        {
+            CreateMultiValuedChange(TitleAttributeId, "title", "Consultant (Primary)", PendingExportAttributeChangeType.Update)
+        };
+
+        var surviving = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
+
+        Assert.That(surviving, Is.Empty,
+            "an incoming Update sets the attribute's whole value set, so a staged per-value Remove for the same " +
+            "attribute is void and must not reach the connector");
+    }
+
+    [Test]
+    public void SelectSurvivingDriftChanges_IncomingRemoveAll_SupersedesEveryStagedChangeForThatAttribute()
+    {
+        // RemoveAll exports as a replace with no values, so it voids staged changes exactly as Update does.
+        var driftChanges = new List<PendingExportAttributeValueChange>
+        {
+            CreateMemberChange(PendingExportAttributeChangeType.Remove, "CN=User1,DC=test,DC=local"),
+            CreateMemberChange(PendingExportAttributeChangeType.Add, "CN=User2,DC=test,DC=local")
+        };
+        var exportEvalChanges = new List<PendingExportAttributeValueChange>
+        {
+            CreateMemberChange(PendingExportAttributeChangeType.RemoveAll, "CN=Ignored,DC=test,DC=local")
+        };
+
+        var surviving = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
+
+        Assert.That(surviving, Is.Empty);
+    }
+
+    [Test]
+    public void SelectSurvivingDriftChanges_IncomingUpdate_LeavesOtherAttributesStagedChangesAlone()
+    {
+        // The supersede rule is per attribute; a Update on one attribute says nothing about any other.
+        var driftChanges = new List<PendingExportAttributeValueChange>
+        {
+            CreateMultiValuedChange(TitleAttributeId, "title", "Old Title", PendingExportAttributeChangeType.Remove),
+            CreateMemberChange(PendingExportAttributeChangeType.Remove, "CN=User1,DC=test,DC=local")
+        };
+        var exportEvalChanges = new List<PendingExportAttributeValueChange>
+        {
+            CreateMultiValuedChange(TitleAttributeId, "title", "New Title", PendingExportAttributeChangeType.Update)
+        };
+
+        var surviving = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(surviving, Has.Count.EqualTo(1));
+            Assert.That(surviving[0].AttributeId, Is.EqualTo(MemberAttributeId));
+        }
+    }
+
+    [Test]
+    public void SelectSurvivingDriftChanges_IncomingAddsOnly_DoNotSupersedePerValueRemovals()
+    {
+        // Guards the large-group membership case against the supersede rule: Add and Remove act on one value
+        // each, so an incoming Add must leave unrelated staged removals in place.
+        var driftChanges = CreateMemberChanges(PendingExportAttributeChangeType.Remove, 3, "OldUser");
+        var exportEvalChanges = CreateMemberChanges(PendingExportAttributeChangeType.Add, 2, "NewUser");
+
+        var surviving = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
+
+        Assert.That(surviving, Has.Count.EqualTo(3));
+    }
+
+    #endregion
+
     #region Merge scenario tests (value-level deduplication)
 
     [Test]
@@ -261,9 +347,7 @@ public class ExportEvaluationMergeTests
         var driftChanges = CreateMemberChanges(PendingExportAttributeChangeType.Remove, 117, "OldUser");
         var exportEvalChanges = CreateMemberChanges(PendingExportAttributeChangeType.Add, 2, "NewUser");
 
-        // Build the key sets to simulate merge logic
-        var exportEvalKeys = exportEvalChanges.Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
-        var driftOnlyChanges = driftChanges.Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+        var driftOnlyChanges = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
 
         // All 117 drift changes should survive because they target different values
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(117));
@@ -290,8 +374,7 @@ public class ExportEvaluationMergeTests
             CreateMemberChange(PendingExportAttributeChangeType.Add, "CN=User1,DC=test,DC=local")
         };
 
-        var exportEvalKeys = exportEvalChanges.Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
-        var driftOnlyChanges = driftChanges.Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+        var driftOnlyChanges = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
 
         // User1 should be excluded from drift (export eval wins)
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(2));
@@ -316,8 +399,7 @@ public class ExportEvaluationMergeTests
         var driftChanges = new List<PendingExportAttributeValueChange> { driftChange };
         var exportEvalChanges = new List<PendingExportAttributeValueChange> { exportEvalChange };
 
-        var exportEvalKeys = exportEvalChanges.Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
-        var driftOnlyChanges = driftChanges.Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+        var driftOnlyChanges = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
 
         // Drift change should be excluded — same attribute ID key for single-valued
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(0));
@@ -339,8 +421,7 @@ public class ExportEvaluationMergeTests
         var driftChanges = new List<PendingExportAttributeValueChange> { driftChange };
         var exportEvalChanges = new List<PendingExportAttributeValueChange> { exportEvalChange };
 
-        var exportEvalKeys = exportEvalChanges.Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
-        var driftOnlyChanges = driftChanges.Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+        var driftOnlyChanges = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
 
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(0));
     }
@@ -364,8 +445,7 @@ public class ExportEvaluationMergeTests
             CreateSingleValuedChange(TitleAttributeId, "title", "Senior Developer")
         };
 
-        var exportEvalKeys = exportEvalChanges.Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
-        var driftOnlyChanges = driftChanges.Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+        var driftOnlyChanges = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
 
         // Only the 2 member removals should survive — title drift is replaced by export eval
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(2));
@@ -408,8 +488,7 @@ public class ExportEvaluationMergeTests
         var driftChanges = new List<PendingExportAttributeValueChange> { driftChange };
         var exportEvalChanges = new List<PendingExportAttributeValueChange> { exportEvalChange };
 
-        var exportEvalKeys = exportEvalChanges.Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
-        var driftOnlyChanges = driftChanges.Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+        var driftOnlyChanges = ExportEvaluationServer.SelectSurvivingDriftChanges(exportEvalChanges, driftChanges);
 
         // Same MVO ID = same key, so drift version is excluded (export eval wins)
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(0));
@@ -570,6 +649,30 @@ public class ExportEvaluationMergeTests
             },
             StringValue = value,
             ChangeType = PendingExportAttributeChangeType.Update
+        };
+    }
+
+    /// <summary>
+    /// A change on a MULTI-valued Connected System attribute with an explicit change type. The combination that
+    /// matters is a multi-valued Connected System attribute carrying an Update: the change type follows the
+    /// Metaverse attribute's plurality, so a single-valued Metaverse attribute flowing to a multi-valued Connected
+    /// System attribute (Job Title to LDAP's `title`) produces exactly that.
+    /// </summary>
+    private static PendingExportAttributeValueChange CreateMultiValuedChange(
+        int attributeId, string attributeName, string value, PendingExportAttributeChangeType changeType)
+    {
+        return new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = attributeId,
+            Attribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Id = attributeId,
+                Name = attributeName,
+                AttributePlurality = AttributePlurality.MultiValued
+            },
+            StringValue = value,
+            ChangeType = changeType
         };
     }
 

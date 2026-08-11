@@ -92,7 +92,7 @@ Authoring rules:
 - Edge animation uses SMIL data packets (`<circle class="jimdg-packet">` with `animateMotion`), only on live edges, direction matching the arrowheads; `custom.css` hides `.jimdg-packet` under `prefers-reduced-motion`. Full motion rules: `engineering/DESIGN.md` > Diagrams.
 - Follow the snippet include with a `<p class="jim-diagram-caption">` footnote decoding the visual encoding (illustrative examples, dashed = planned). Wrap any sentence that refers to the packet animation in `<span class="jimdg-caption-motion">`; it hides together with the dots under `prefers-reduced-motion`.
 - No build step: the SVG is a static asset edited by hand; preview with `jim-docs` and verify in both themes.
-- GLightbox does not apply to inline SVGs (it wraps `<img>` only); size the composition to be legible at content-column width.
+- Inline SVGs are made click-to-enlarge by `diagram-zoom.js` (see "Diagram lightbox" below), not by GLightbox, which only wraps `<img>`. Nothing per-diagram is needed: the script finds every `svg.jim-diagram`. Still size the composition to be legible at content-column width; the lightbox is for inspecting detail, not a substitute for a readable default.
 - **README exports:** the GitHub README embeds self-contained light/dark copies of `system-context.svg` and `containers.svg` from `.github/diagrams/`. After changing either source (or the `--jimdg-*` tokens in `custom.css`), regenerate them with `pwsh ./scripts/Export-ReadmeDiagrams.ps1` and commit the results.
 
 ## Mermaid Diagrams
@@ -106,30 +106,36 @@ flowchart TD
 ```
 ````
 
-No additional markup or attributes are needed. They are clickable automatically.
+No additional markup or attributes are needed. They are clickable automatically (see "Diagram lightbox" below).
 
-### How mermaid-zoom.js works
+## Diagram lightbox
 
-`docs/assets/javascripts/mermaid-zoom.js` provides the click-to-zoom behaviour. Understanding the internals matters for debugging or upgrading MkDocs Material.
+`docs/assets/javascripts/diagram-zoom.js` makes **both** diagram families click-to-enlarge in one overlay with zoom and pan; styling lives in the "Diagram lightbox" section of `custom.css`. No per-diagram markup is needed. No external dependencies: it uses only the Mermaid instance MkDocs Material already loads.
 
-**The problem:** MkDocs Material renders Mermaid into a **closed Shadow DOM** (`attachShadow({mode:"closed"})`), making the rendered SVG completely inaccessible via `querySelector` or `shadowRoot`.
+The script wraps each diagram in a `<button class="jim-dgz-trigger">` so it is keyboard-reachable, and adds a persistent "Enlarge" chip (a hover-only cue is invisible on touch). The overlay traps focus, restores it on close, and closes on backdrop click or Esc.
 
-**The solution:**
+**Getting an SVG out of the page differs per family:**
 
-1. The script captures each diagram's source text from `<pre class="mermaid">` elements **before** Material replaces them with shadow-host `<div class="mermaid">` elements
-2. Sources and divs are matched by **insertion order** (top-to-bottom DOM order) - stable because Material processes diagrams sequentially
-3. On click, the captured source is re-rendered via the Mermaid JS API (already initialised on the page) using a temporary off-screen DOM node
-4. The resulting SVG is displayed in a custom modal overlay (not GLightbox - Mermaid SVGs are handled separately from image files)
+| Family | How the overlay gets an SVG |
+|--------|-----------------------------|
+| Concept SVGs (`svg.jim-diagram`) | Inlined by pymdownx.snippets, so the node is in the DOM and is cloned directly. |
+| Mermaid | Material renders into a **closed Shadow DOM** (`attachShadow({mode:"closed"})`), so the rendered SVG is unreachable via `querySelector` or `shadowRoot`. The script captures each diagram's source from `<pre class="mermaid">` *before* Material replaces it, pairs sources to shadow hosts by **insertion order**, and re-renders on click through the Mermaid API into a temporary off-screen node. |
 
-**The modal** is theme-aware: dark navy (`#051526`) in slate mode, white in default mode. Closes on backdrop click or Esc.
+**Three non-obvious behaviours worth keeping:**
 
-**No external dependencies** - uses only the Mermaid and GLightbox instances MkDocs Material already loads.
+- **100% means fit-to-*width*, not fit-to-viewport.** Fitting a tall Mermaid flowchart to viewport *height* renders it narrower than it already is in the page (measured: 1294px wide at fit-to-width versus 180px at fit-to-height). Tall diagrams therefore open full width and are panned vertically.
+- **The visible window always carries the stage's aspect ratio**, so `preserveAspectRatio="xMidYMid meet"` never letterboxes and pointer coordinates map exactly. Zoom and pan are pure `viewBox` maths; there is no transform layer.
+- **SMIL packets must be primed after any re-parenting.** A cloned or moved `<svg>` is its own timeline root and restarts at zero, which parks every packet with a positive `begin` offset at 0,0 - a dot stuck in the top-left corner for up to 1.2s. `primeAnimations()` winds the clock past the longest offset; it is called both when wrapping an in-page SVG in its trigger and when opening a clone. Removing either call brings the artefact back.
 
-**If diagrams stop being clickable after a MkDocs Material upgrade:** check whether Material changed how it processes Mermaid. Look for changes to the `div.mermaid` shadow host insertion or `attachShadow` call (search for `attachShadow` in the bundle). The relevant function in the current bundle is named `Zn()`.
+Ids are stripped from clones (they exist only for `aria-labelledby`); this is safe because no diagram references its own ids via `url(#…)` or `<mpath>`. If a future diagram does, the clone will need id rewriting instead.
+
+**If diagrams stop being clickable after a MkDocs Material upgrade:** check whether Material changed how it processes Mermaid. Look for changes to the `div.mermaid` shadow host insertion or `attachShadow` call (search for `attachShadow` in the bundle). The relevant function in the current bundle is named `Zn()`. Concept SVGs are unaffected by Material upgrades; they never enter a shadow root.
+
+**Verifying changes:** Material loads Mermaid from `unpkg.com`, so Mermaid diagrams silently never render in an offline sandbox (the `<pre class="mermaid">` is consumed and nothing replaces it). To test that path, download the bundle once and intercept the CDN request in Playwright; otherwise you are only testing the concept-SVG half.
 
 ## GLightbox (image files)
 
-GLightbox is configured as a plugin in `mkdocs.yml` and wraps all `<img>` tags automatically. No per-image markup is needed.
+GLightbox is configured as a plugin in `mkdocs.yml` and wraps all `<img>` tags automatically. No per-image markup is needed. It handles raster images and any `<img>`-referenced SVG; vector diagrams inlined in the page are handled by `diagram-zoom.js` instead.
 
 The lightbox background is themed via `docs/assets/stylesheets/custom.css` (`.gslide-image img` rules) so transparent SVGs render against the correct surface colour in each theme.
 

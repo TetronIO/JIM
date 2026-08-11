@@ -4,6 +4,7 @@
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
+using JIM.Connectors.Sql;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -786,7 +787,7 @@ internal class SeedingServer
     /// </summary>
     internal static List<IConnector> BuiltInConnectors()
     {
-        return [new LdapConnector(), new FileConnector(), new ScimConnector()];
+        return [new LdapConnector(), new FileConnector(), new ScimConnector(), new SqlConnector()];
     }
 
     /// <summary>

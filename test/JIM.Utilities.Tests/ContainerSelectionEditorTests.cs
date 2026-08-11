@@ -310,11 +310,203 @@ public class ContainerSelectionEditorTests
 
     #endregion
 
+    #region Excluding and re-including (#1255)
+
+    [Test]
+    public void ToggleExcluded_OnAContainerCoveredByASelectedAncestor_ExcludesIt()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children: [Container("Service Accounts")]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var serviceAccounts = Child(partition, "Corp", "Service Accounts");
+
+        ContainerSelectionEditor.ToggleExcluded(serviceAccounts);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Excluded, Is.True);
+            Assert.That(serviceAccounts.Selected, Is.False);
+            Assert.That(serviceAccounts.Included, Is.False, "an excluded Container is no longer covered by the ancestor it was carved out of");
+        }
+    }
+
+    [Test]
+    public void ToggleExcluded_OnAnExcludedContainer_ClearsTheExclusion()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children: [Container("Service Accounts", excluded: true)]));
+        var serviceAccounts = Child(partition, "Corp", "Service Accounts");
+
+        ContainerSelectionEditor.ToggleExcluded(serviceAccounts);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Excluded, Is.False);
+            Assert.That(serviceAccounts.Included, Is.True, "clearing the exclusion hands the Container back to the ancestor covering it");
+        }
+    }
+
+    [Test]
+    public void ToggleExcluded_OnASelectedContainer_ClearsTheSelection()
+    {
+        // The two statements are mutually exclusive: a Container cannot say both "manage this" and "do not".
+        var partition = PartitionWith(Container("Corp", selected: true));
+        var corp = Root(partition, "Corp");
+
+        ContainerSelectionEditor.ToggleExcluded(corp);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(corp.Excluded, Is.True);
+            Assert.That(corp.Selected, Is.False);
+        }
+    }
+
+    [Test]
+    public void ToggleSelected_OnAnExcludedContainer_ClearsTheExclusion()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true),
+            Container("People")
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var serviceAccounts = Child(partition, "Corp", "Service Accounts");
+
+        ContainerSelectionEditor.ToggleSelected(serviceAccounts);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Selected, Is.True);
+            Assert.That(serviceAccounts.Excluded, Is.False);
+        }
+    }
+
+    [Test]
+    public void ToggleSelected_OnAContainerBeneathAnExcludedAncestor_SelectsIt()
+    {
+        // Re-inclusion: ticking a Container an exclusion has carved out is a meaningful statement, unlike ticking
+        // one a selection already covers.
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [Container("App1"), Container("App2")]),
+            Container("People")
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var app1 = Child(Child(partition, "Corp", "Service Accounts"), "App1");
+
+        ContainerSelectionEditor.ToggleSelected(app1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(app1.Selected, Is.True);
+            Assert.That(app1.ExcludedByAncestor, Is.False);
+        }
+    }
+
+    [Test]
+    public void ToggleSelected_CompletingTheSelectionInsideAnExcludedBranch_DoesNotRollUpOntoTheExclusion()
+    {
+        // Rolling up would replace the re-inclusions with a selection on the excluded Container itself, which both
+        // breaks the one-statement-per-Container rule and silently undoes the exclusion.
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [Container("App1", selected: true), Container("App2")])
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var serviceAccounts = Child(partition, "Corp", "Service Accounts");
+        var app2 = Child(serviceAccounts, "App2");
+
+        ContainerSelectionEditor.ToggleSelected(app2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Excluded, Is.True);
+            Assert.That(serviceAccounts.Selected, Is.False);
+            Assert.That(Child(serviceAccounts, "App1").Selected, Is.True);
+            Assert.That(app2.Selected, Is.True);
+        }
+    }
+
+    [Test]
+    public void ClearSelection_WithAnExcludedContainer_ClearsTheExclusionToo()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children: [Container("Service Accounts", excluded: true)]));
+
+        ContainerSelectionEditor.ClearSelection(partition);
+
+        Assert.That(ContainerSelectionEditor.Flatten(partition).Any(c => c.Excluded), Is.False);
+    }
+
+    [Test]
+    public void RecalculateCoverage_WithAnExcludedBranch_MarksItsDescendantsExcludedByAncestor()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [Container("App1")])
+        ]));
+
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var serviceAccounts = Child(partition, "Corp", "Service Accounts");
+        var app1 = Child(serviceAccounts, "App1");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Included, Is.False);
+            Assert.That(serviceAccounts.ExcludedByAncestor, Is.False, "Service Accounts states its own exclusion; nothing above it did");
+            Assert.That(app1.Included, Is.False, "the exclusion is nearer than Corp's selection, so Corp no longer covers App1");
+            Assert.That(app1.ExcludedByAncestor, Is.True);
+        }
+    }
+
+    [Test]
+    public void RecalculateCoverage_WithAReInclusionBeneathAnExclusion_CoversWhatTheReInclusionReaches()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children:
+            [
+                Container("App1", selected: true, children: [Container("Staging")])
+            ])
+        ]));
+
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var app1 = Child(Child(partition, "Corp", "Service Accounts"), "App1");
+        var staging = Child(app1, "Staging");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(app1.ExcludedByAncestor, Is.False, "App1 states its own selection, so the exclusion above it no longer governs it");
+            Assert.That(staging.Included, Is.True, "App1's selection is nearer than the exclusion above it");
+            Assert.That(staging.ExcludedByAncestor, Is.False);
+        }
+    }
+
+    [Test]
+    public void RecalculateCoverage_WithAnExclusionBeneathAOneLevelSelection_LeavesTheBranchUntouched()
+    {
+        // A OneLevel selection reaches nothing beneath it, so there is nothing for an exclusion to carve out.
+        var partition = PartitionWith(Container("Corp", selected: true, scope: ConnectedSystemContainerScope.OneLevel, children:
+        [
+            Container("Service Accounts", children: [Container("App1")])
+        ]));
+
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var serviceAccounts = Child(partition, "Corp", "Service Accounts");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Included, Is.False);
+            Assert.That(serviceAccounts.ExcludedByAncestor, Is.False);
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private ConnectedSystemContainer Container(
         string name,
         bool selected = false,
+        bool excluded = false,
         ConnectedSystemContainerScope scope = ConnectedSystemContainerScope.Subtree,
         IEnumerable<ConnectedSystemContainer>? children = null)
     {
@@ -324,6 +516,7 @@ public class ContainerSelectionEditorTests
             Name = name,
             ExternalId = $"OU={name}",
             Selected = selected,
+            Excluded = excluded,
             Scope = scope
         };
 
@@ -352,6 +545,12 @@ public class ContainerSelectionEditorTests
 
     private static ConnectedSystemContainer Root(ConnectedSystemPartition partition, string name) =>
         partition.Containers!.Single(c => c.Name == name);
+
+    private static ConnectedSystemContainer Child(ConnectedSystemPartition partition, string rootName, string childName) =>
+        Child(Root(partition, rootName), childName);
+
+    private static ConnectedSystemContainer Child(ConnectedSystemContainer container, string childName) =>
+        container.ChildContainers.Single(c => c.Name == childName);
 
     #endregion
 }

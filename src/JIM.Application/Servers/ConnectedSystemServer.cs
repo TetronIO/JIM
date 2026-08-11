@@ -2780,6 +2780,12 @@ public class ConnectedSystemServer
         // Track which existing partitions we've matched
         var matchedPartitionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Container identity is global rather than per level, because a container can be matched at a level it did
+        // not previously sit at: that is what a move is. Both of these are therefore collected across the whole
+        // refresh and applied afterwards (#1318).
+        var matchedContainers = new HashSet<ConnectedSystemContainer>();
+        var containersToReparent = new List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)>();
+
         // Ensure Partitions list exists
         connectedSystem.Partitions ??= new List<ConnectedSystemPartition>();
 
@@ -2803,15 +2809,19 @@ public class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Merge containers recursively within this partition
+                // Match containers recursively within this partition. Reparenting and removals are deliberately
+                // deferred to passes of their own, once every partition has been matched; see the comment on
+                // MatchContainersRecursive.
                 existing.Containers ??= new HashSet<ConnectedSystemContainer>();
-                MergeContainersRecursive(
-                    existing.Containers,
+                MatchContainersRecursive(
+                    existing,
+                    parentContainer: null,
                     discovered.Containers,
-                    null, // parent ExternalId for root containers
                     result,
                     existingContainerLookup,
-                    existingContainerStableIdLookup);
+                    existingContainerStableIdLookup,
+                    matchedContainers,
+                    containersToReparent);
             }
             else
             {
@@ -2842,6 +2852,16 @@ public class ConnectedSystemServer
                 CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
             }
         }
+
+        // Apply the moves now that every partition has been matched, so that a container is only ever detached from
+        // its old home after everything that might claim it has had its say.
+        foreach (var (container, partition, newParent) in containersToReparent)
+            ReparentContainer(container, connectedSystem, partition, newParent);
+
+        // Only now remove what the directory no longer holds. Running this last is what keeps a moved container:
+        // by this point it sits under its new parent, so the pass walking its old parent no longer sees it.
+        foreach (var partition in connectedSystem.Partitions.Where(p => p.Containers != null))
+            RemoveUnmatchedContainers(partition.Containers!, matchedContainers, result);
 
         // Remove unmatched partitions (they no longer exist in the external system)
         var toRemove = connectedSystem.Partitions
@@ -2964,23 +2984,32 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Recursively merges discovered containers with existing ones.
+    /// Recursively matches discovered containers against stored ones, adding those the directory has gained and
+    /// noting those it has moved. Removes nothing and reparents nothing.
     /// </summary>
-    private static void MergeContainersRecursive(
-        HashSet<ConnectedSystemContainer> existingContainers,
+    /// <remarks>
+    /// Matching, reparenting and removal are three passes rather than one because container identity is global
+    /// while the hierarchy is walked level by level. A container resolves by its stable identifier wherever it now
+    /// sits, so a moved one is matched at a level it did not previously belong to; a single pass that also removed
+    /// per level therefore deleted it from its old parent, either before or after the level that claimed it
+    /// depending only on the order the Connector happened to return its containers in. Splitting the passes is what
+    /// makes the outcome independent of that order (#1318).
+    /// </remarks>
+    private static void MatchContainersRecursive(
+        ConnectedSystemPartition partition,
+        ConnectedSystemContainer? parentContainer,
         List<ConnectorContainer> discoveredContainers,
-        string? parentExternalId,
         HierarchyRefreshResult result,
         Dictionary<string, ConnectedSystemContainer> globalLookup,
-        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup)
+        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup,
+        HashSet<ConnectedSystemContainer> matchedContainers,
+        List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)> containersToReparent)
     {
-        var matchedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var discovered in discoveredContainers)
         {
             if (TryResolveExistingContainer(discovered, globalLookup, globalStableIdLookup, out var existing))
             {
-                matchedIds.Add(discovered.Id);
+                matchedContainers.Add(existing);
 
                 // Record the identifier the first time the Connector supplies one, so a container selected before
                 // stable identifiers existed survives its next rename.
@@ -3005,41 +3034,52 @@ public class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Check for move (different parent)
-                var existingParentId = existing.ParentContainer?.ExternalId;
-                if (!string.Equals(existingParentId, parentExternalId, StringComparison.OrdinalIgnoreCase))
+                // Check for move (a different parent, or none where there was one). Compared by reference rather
+                // than by Distinguished Name: the parent's own name may be being rewritten in this same refresh.
+                if (!ReferenceEquals(existing.ParentContainer, parentContainer))
                 {
                     result.MovedContainers.Add(new HierarchyMoveItem
                     {
                         ExternalId = discovered.Id,
                         Name = discovered.Name,
-                        OldParentExternalId = existingParentId,
-                        NewParentExternalId = parentExternalId
+                        OldParentExternalId = existing.ParentContainer?.ExternalId,
+                        NewParentExternalId = parentContainer?.ExternalId
                     });
-                    // Note: The actual parent relationship will be corrected by rebuilding the tree structure
-                    // while preserving the Selected flag. For now we just track the move.
+
+                    containersToReparent.Add((existing, partition, parentContainer));
                 }
 
                 // Recurse into children
-                MergeContainersRecursive(
-                    existing.ChildContainers,
+                MatchContainersRecursive(
+                    partition,
+                    existing,
                     discovered.ChildContainers,
-                    discovered.Id,
                     result,
                     globalLookup,
-                    globalStableIdLookup);
+                    globalStableIdLookup,
+                    matchedContainers,
+                    containersToReparent);
             }
             else
             {
-                // NEW container - add it
+                // NEW container: build it and put it where the directory says it belongs.
                 var newContainer = BuildConnectedSystemContainerTree(discovered);
-                existingContainers.Add(newContainer);
+                if (parentContainer != null)
+                {
+                    parentContainer.AddChildContainer(newContainer);
+                }
+                else
+                {
+                    newContainer.Partition = partition;
+                    partition.Containers ??= [];
+                    partition.Containers.Add(newContainer);
+                }
 
-                // Record it as present, or the cleanup pass below deletes it again in this same refresh: it is not in
-                // matchedIds, and "not matched" is how that pass recognises a container that has left the directory.
-                // A container created since the last refresh was therefore reported as added and then silently
-                // dropped, so it never appeared on the Partitions & Containers tab to be selected.
-                matchedIds.Add(discovered.Id);
+                // Record it and its whole subtree as matched, or the removal pass deletes it again in this same
+                // refresh: "not matched" is how that pass recognises a container that has left the directory. A
+                // container created since the last refresh was once reported as added and then silently dropped, so
+                // it never appeared on the Partitions and Containers tab to be selected.
+                MarkContainerTreeMatched(newContainer, matchedContainers);
 
                 result.AddedContainers.Add(new HierarchyChangeItem
                 {
@@ -3052,16 +3092,115 @@ public class ConnectedSystemServer
                 CountAddedContainersRecursive(newContainer.ChildContainers, result.AddedContainers);
             }
         }
+    }
 
-        // Remove unmatched containers (they no longer exist in the external system)
-        var toRemove = existingContainers
-            .Where(c => !matchedIds.Contains(c.ExternalId))
-            .ToList();
+    /// <summary>
+    /// Marks a container and everything beneath it as present in the directory.
+    /// </summary>
+    private static void MarkContainerTreeMatched(ConnectedSystemContainer container, HashSet<ConnectedSystemContainer> matchedContainers)
+    {
+        matchedContainers.Add(container);
 
-        foreach (var container in toRemove)
+        foreach (var childContainer in container.ChildContainers)
+            MarkContainerTreeMatched(childContainer, matchedContainers);
+    }
+
+    /// <summary>
+    /// Moves a stored container to the parent the directory now reports for it, preserving everything the container
+    /// carries: its selection, its exclusion, its scope and its own descendants.
+    /// </summary>
+    /// <remarks>
+    /// Both sides of the relationship are maintained explicitly, navigation and foreign key alike. Only top-level
+    /// containers carry a partition and only nested ones carry a parent container, so a move between those two
+    /// shapes has to clear one pair as it sets the other; leaving a stale foreign key behind would have the row
+    /// claim two homes. The detach searches the whole Connected System rather than the partition being merged,
+    /// because a container's old home is wherever it was, not wherever it is going.
+    /// </remarks>
+    private static void ReparentContainer(
+        ConnectedSystemContainer container,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemPartition partition,
+        ConnectedSystemContainer? newParent)
+    {
+        DetachContainerFromItsCurrentHome(container, connectedSystem);
+
+        if (newParent != null)
         {
-            CollectRemovedContainerRecursive(container, result);
-            existingContainers.Remove(container);
+            newParent.AddChildContainer(container);
+            container.ParentContainerId = newParent.Id;
+            container.Partition = null;
+            container.PartitionId = null;
+        }
+        else
+        {
+            container.ParentContainer = null;
+            container.ParentContainerId = null;
+            container.Partition = partition;
+            container.PartitionId = partition.Id;
+            partition.Containers ??= [];
+            partition.Containers.Add(container);
+        }
+    }
+
+    /// <summary>
+    /// Removes a container from whichever collection currently holds it.
+    /// </summary>
+    /// <remarks>
+    /// The parent navigation answers this on a graph EF Core has fixed up, but it is not relied on alone: the portal
+    /// loads the Connected System in one scope and saves it in another, and a navigation that was never included
+    /// reads as null. Falling back to a search of the stored hierarchy costs one walk per moved container, which is
+    /// nothing against the cost of leaving a container in two collections at once.
+    /// </remarks>
+    private static void DetachContainerFromItsCurrentHome(ConnectedSystemContainer container, ConnectedSystem connectedSystem)
+    {
+        if (container.ParentContainer != null && container.ParentContainer.ChildContainers.Remove(container))
+            return;
+
+        foreach (var partition in connectedSystem.Partitions ?? [])
+        {
+            if (partition.Containers?.Remove(container) == true)
+                return;
+
+            if (partition.Containers != null && RemoveFromDescendants(partition.Containers, container))
+                return;
+        }
+    }
+
+    private static bool RemoveFromDescendants(IEnumerable<ConnectedSystemContainer> containers, ConnectedSystemContainer container)
+    {
+        foreach (var candidate in containers)
+        {
+            if (candidate.ChildContainers.Remove(container))
+                return true;
+
+            if (RemoveFromDescendants(candidate.ChildContainers, container))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Removes every container the directory no longer holds, walking the hierarchy after the moves have settled.
+    /// </summary>
+    private static void RemoveUnmatchedContainers(
+        HashSet<ConnectedSystemContainer> containers,
+        HashSet<ConnectedSystemContainer> matchedContainers,
+        HierarchyRefreshResult result)
+    {
+        foreach (var container in containers.ToList())
+        {
+            if (matchedContainers.Contains(container))
+            {
+                RemoveUnmatchedContainers(container.ChildContainers, matchedContainers, result);
+            }
+            else
+            {
+                // Anything still beneath this container is genuinely gone too: a descendant that moved elsewhere
+                // has already been detached from it by the reparenting pass.
+                CollectRemovedContainerRecursive(container, result);
+                containers.Remove(container);
+            }
         }
     }
 
@@ -5169,7 +5308,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -5206,7 +5345,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -5239,6 +5378,45 @@ public class ConnectedSystemServer
             .Where(m => m.TargetMetaverseAttributeId.HasValue)
             .GroupBy(m => m.TargetMetaverseAttributeId!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <summary>
+    /// Gets every attribute data flow, in both directions, for the system-wide Data Flow view (#1199): one flow per
+    /// Synchronisation Rule mapping, filtered by the supplied query. Import flows are stamped with how many
+    /// contributors their target Metaverse Attribute has, so the caller can tell a contested attribute from a
+    /// single-source one without asking again per row.
+    /// </summary>
+    /// <param name="query">The filters to apply. All are optional and combine with AND.</param>
+    public async Task<IList<DataFlowHeader>> GetDataFlowsAsync(DataFlowQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var flows = await Application.Repository.ConnectedSystems.GetDataFlowHeadersAsync(query);
+
+        // Contributor counts are taken across the WHOLE configuration, not the filtered set: filtering the view to
+        // one Connected System must not make an attribute that system shares with another look like a sole
+        // contributor, which would invert what the count is for. Counted per Metaverse Object Type present in the
+        // results, which is a handful of queries at configuration scale.
+        var importFlows = flows
+            .Where(f => f.Direction == SyncRuleDirection.Import && f.TargetMetaverseAttributeId.HasValue)
+            .ToList();
+
+        var countsByObjectType = new Dictionary<int, Dictionary<int, int>>();
+        foreach (var objectTypeId in importFlows.Select(f => f.MetaverseObjectTypeId).Distinct())
+            countsByObjectType[objectTypeId] = await GetAttributeContributorCountsAsync(objectTypeId);
+
+        foreach (var flow in importFlows)
+        {
+            flow.ContributorCount = countsByObjectType[flow.MetaverseObjectTypeId]
+                .TryGetValue(flow.TargetMetaverseAttributeId!.Value, out var count) ? count : 0;
+        }
+
+        // Applied here rather than in the query because it depends on the counts above, which the query cannot see:
+        // it reads one flow at a time and the count spans every rule contributing to the same attribute.
+        if (query.MultipleContributorsOnly)
+            flows = flows.Where(f => f.HasMultipleContributors).ToList();
+
+        return flows;
     }
 
     /// <summary>
@@ -5306,23 +5484,35 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// After an import mapping (or its rule) is removed, re-densifies the target Metaverse attribute's remaining
-    /// contributor list to a dense 1..N (#91), so deleting a contributor never leaves a gap in the priority numbers.
-    /// Mirrors the safe-addition densify on creation, keeping the contributor list dense across add, reorder, and
-    /// delete. A sole remaining contributor is reset to the int.MaxValue sentinel (priority is meaningless with one
-    /// source, matching the invariant that explicit priorities exist only when an attribute has more than one
-    /// contributor); zero remaining contributors is a no-op. Order-preserving, so no resolution outcome changes.
-    /// Must be called after the removal is persisted, so the query returns only the surviving contributors.
+    /// Reconciles a Metaverse attribute's contributor list to a dense 1..N after its contributor set changes (#91),
+    /// so no gap or stale number is ever left behind. Called whenever a contribution is added, removed or retargeted,
+    /// by both the granular mapping methods and the whole-rule save path (#1199), which is what keeps the list dense
+    /// across every route an administrator can take. A sole remaining contributor is reset to the int.MaxValue
+    /// sentinel (priority is meaningless with one source, matching the invariant that explicit priorities exist only
+    /// when an attribute has more than one contributor); zero contributors is a no-op. Order-preserving, so no
+    /// resolution outcome changes. Must be called after the change is persisted, so the query returns the resulting
+    /// contributor set.
     /// </summary>
     /// <param name="metaverseObjectTypeId">The object type that scopes the attribute's priority list.</param>
-    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list was reduced.</param>
-    private async Task RedensifyAttributePriorityAfterRemovalAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list changed.</param>
+    /// <param name="arrivingMappingIds">Mappings joining this attribute's list from elsewhere (a retargeted mapping),
+    /// which must land at the bottom. Omit where nothing is arriving, such as a deletion.</param>
+    private async Task ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? arrivingMappingIds = null)
     {
         var contributors = await Application.Repository.ConnectedSystems
             .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
 
         if (contributors.Count == 0)
             return;
+
+        // An arriving contribution must land last, and its stored priority cannot put it there. The query orders by
+        // (Priority asc, Id asc), so while every contributor is still at the sentinel the tie-break is the mapping id,
+        // and a retargeted mapping is by definition older than at least some incumbents: it would take the top of its
+        // new attribute's list and silently start winning resolution. Ordering arrivals last is what makes the
+        // safe-addition promise hold for a retarget as well as for a genuine insert (whose id happens to be highest
+        // anyway). OrderBy is stable, so the existing contributors keep their relative order.
+        if (arrivingMappingIds is { Count: > 0 })
+            contributors = contributors.OrderBy(m => arrivingMappingIds.Contains(m.Id) ? 1 : 0).ToList();
 
         if (contributors.Count == 1)
         {
@@ -6328,6 +6518,10 @@ public class ConnectedSystemServer
         }
 
 
+        // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
+        // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
+        var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
@@ -6364,6 +6558,11 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
             await ReleaseParkedInitialPasswordsIfDeliveryChangedAsync(syncRule, previousInitialPassword);
         }
+
+        // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
+        // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
+        // so the snapshot records the priorities as they end up (#1199).
+        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -6439,6 +6638,10 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Capture the attribute priority state the database holds before the save, and reset any retargeted mapping
+        // to the safe-addition sentinel, so the reconcile below can tell what this save actually changed (#1199).
+        var previousImportTargets = await CaptureImportPriorityStateBeforeSaveAsync(syncRule);
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystemForContext = syncRule.ConnectedSystem ??
             (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(syncRule.ConnectedSystemId) : null);
@@ -6467,6 +6670,11 @@ public class ConnectedSystemServer
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
+
+        // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
+        // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
+        // so the snapshot records the priorities as they end up (#1199).
+        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
 
         await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
@@ -6502,7 +6710,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
-            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -6535,9 +6743,103 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
-            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// The Metaverse attribute a mapping targets, read from the navigation property in preference to the scalar FK.
+    /// A whole-rule save arrives straight from the portal's editor, which binds the target to the navigation
+    /// (<see cref="SyncRuleMapping.TargetMetaverseAttribute"/>); EF only fixes the FK up at SaveChanges, so before
+    /// the write the scalar is still null on a new mapping and stale on a retargeted one. Null for export mappings.
+    /// </summary>
+    private static int? GetTargetMetaverseAttributeId(SyncRuleMapping mapping) =>
+        mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId;
+
+    /// <summary>
+    /// Captures, before a whole-rule save, which Metaverse attribute each of the rule's import mappings targets in
+    /// the database, and resets any retargeted mapping to the safe-addition sentinel (#1199).
+    /// <para>
+    /// The portal never calls the granular create/delete mapping methods: its Attribute Flow editor mutates
+    /// <see cref="SyncRule.AttributeFlowRules"/> in memory and saves the whole rule, so without this the
+    /// safe-addition default and the dense-list invariant applied only to API callers.
+    /// </para>
+    /// <para>
+    /// The sentinel reset is the subtle half. Retargeting moves a mapping between two attributes' priority lists,
+    /// and priority numbers are only meaningful within one list: a mapping sitting at priority 1 for its old
+    /// attribute would be renumbered straight to the top of its new attribute's list and silently start winning
+    /// resolution there. Resetting it makes it arrive last, like any other newly-added contribution. It happens
+    /// before the write so the new value rides the same SaveChanges rather than costing a second one.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRule">The rule about to be saved.</param>
+    /// <returns>Target Metaverse attribute id keyed by mapping id, as the database holds it. Empty for an export
+    /// rule or a rule being created, neither of which has import priority state to compare against.</returns>
+    private async Task<Dictionary<int, int>> CaptureImportPriorityStateBeforeSaveAsync(SyncRule syncRule)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import || syncRule.Id == 0)
+            return [];
+
+        var previousTargets = await Application.Repository.ConnectedSystems
+            .GetImportMappingTargetMetaverseAttributesAsync(syncRule.Id);
+
+        foreach (var mapping in syncRule.AttributeFlowRules
+                     .Where(m => GetTargetMetaverseAttributeId(m) is int target &&
+                                 previousTargets.TryGetValue(m.Id, out var previous) &&
+                                 previous != target))
+            mapping.Priority = int.MaxValue;
+
+        return previousTargets;
+    }
+
+    /// <summary>
+    /// After a whole-rule save, reconciles the priority list of every Metaverse attribute whose contributor set this
+    /// save changed (#1199), so adding, removing or retargeting an Attribute Flow in the portal maintains the same
+    /// dense 1..N invariant the granular API paths maintain.
+    /// <para>
+    /// Only genuinely affected attributes are reconciled: an unrelated edit (renaming the rule, changing a scoping
+    /// criterion) touches no contributor set and issues no queries at all. An attribute is affected when a mapping
+    /// now targets it that did not before, or no longer targets it and did.
+    /// </para>
+    /// </summary>
+    /// <param name="syncRule">The just-saved rule. Its mappings now carry database-assigned ids.</param>
+    /// <param name="previousTargets">The pre-save state from <see cref="CaptureImportPriorityStateBeforeSaveAsync"/>.</param>
+    private async Task ReconcileAttributePriorityAfterRuleSaveAsync(SyncRule syncRule, Dictionary<int, int> previousTargets)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Import)
+            return;
+
+        var currentTargets = syncRule.AttributeFlowRules
+            .Where(m => GetTargetMetaverseAttributeId(m).HasValue)
+            .ToDictionary(m => m.Id, m => GetTargetMetaverseAttributeId(m)!.Value);
+
+        var affectedAttributeIds = new HashSet<int>();
+        var arrivalsByAttribute = new Dictionary<int, HashSet<int>>();
+
+        // Attributes that gained a contribution: a mapping targeting something it did not target before. These are the
+        // arrivals, which have to land at the bottom of the attribute's list.
+        foreach (var current in currentTargets
+                     .Where(c => !previousTargets.TryGetValue(c.Key, out var previous) || previous != c.Value))
+        {
+            affectedAttributeIds.Add(current.Value);
+            if (!arrivalsByAttribute.TryGetValue(current.Value, out var arrivals))
+            {
+                arrivals = [];
+                arrivalsByAttribute[current.Value] = arrivals;
+            }
+
+            arrivals.Add(current.Key);
+        }
+
+        // Attributes that lost one: a mapping deleted outright, or retargeted away.
+        foreach (var previous in previousTargets
+                     .Where(p => !currentTargets.TryGetValue(p.Key, out var current) || current != p.Value))
+            affectedAttributeIds.Add(previous.Value);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId,
+                arrivalsByAttribute.GetValueOrDefault(attributeId));
     }
 
     /// <summary>

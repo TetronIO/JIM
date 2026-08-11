@@ -105,6 +105,13 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, long attributeValue);
 
     /// <summary>
+    /// Gets a Connected System Object by a decimal attribute value. Oracle's <c>NUMBER</c> is discovered
+    /// as Decimal, so this covers the ordinary sequence-backed primary key on that provider (#1283).
+    /// Matching is numeric, so a stored 4200.00 matches a supplied 4200.
+    /// </summary>
+    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, decimal attributeValue);
+
+    /// <summary>
     /// Gets a CSO by its secondary external ID attribute value.
     /// Used during confirming imports to match exported objects.
     /// </summary>
@@ -197,6 +204,13 @@ public interface ISyncRepository
     /// Gets all external ID attribute values of type long.
     /// </summary>
     Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
+
+    /// <summary>
+    /// Gets all external ID attribute values of type decimal. Oracle's <c>NUMBER</c> is discovered as
+    /// Decimal, so this covers the ordinary sequence-backed primary key on that provider (#1283).
+    /// Equal decimals hash equally regardless of scale, so the caller may set-compare these directly.
+    /// </summary>
+    Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
 
     /// <summary>
     /// Loads CSOs by ID for cross-page reference resolution.

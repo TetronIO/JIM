@@ -4,12 +4,13 @@
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
+using JIM.Connectors.Sql;
 using JIM.Models.Interfaces;
 
 namespace JIM.Connectors;
 
 /// <summary>
-/// Creates connector instances by name. Handles built-in connectors (LDAP, File) and is the single dispatch
+/// Creates connector instances by name. Handles built-in connectors (LDAP, File, SCIM, SQL) and is the single dispatch
 /// point used by both the application layer and the Worker; it also configures credential protection and
 /// certificate validation on the created connector when it supports them.
 /// Future user-supplied connectors will extend this factory.
@@ -40,6 +41,8 @@ public class ConnectorFactory : IConnectorFactory
             return new FileConnector();
         if (connectorName == ConnectorConstants.ScimClientConnectorName)
             return new ScimConnector();
+        if (connectorName == ConnectorConstants.SqlConnectorName)
+            return new SqlConnector();
 
         throw new NotSupportedException(
             $"Connector definition '{connectorName}' is not supported. No built-in connector with that name is registered.");

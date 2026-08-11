@@ -290,6 +290,16 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
+        int connectedSystemId, int attributeId, decimal attributeValue)
+    {
+        var cso = GetCsosForSystem(connectedSystemId)
+            .FirstOrDefault(c => c.AttributeValues
+                // Numeric equality, so a stored 4200.00 matches a supplied 4200 (#1283).
+                .Any(av => av.AttributeId == attributeId && av.DecimalValue == attributeValue));
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
@@ -554,6 +564,19 @@ public class SyncRepository : ISyncRepository
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.LongValue != null)
             .Select(av => av!.LongValue!.Value)
+            .ToList();
+        return Task.FromResult(values);
+    }
+
+    public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
+            .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
+            .Where(av => av?.DecimalValue != null)
+            .Select(av => av!.DecimalValue!.Value)
             .ToList();
         return Task.FromResult(values);
     }
@@ -2514,6 +2537,9 @@ public class SyncRepository : ISyncRepository
         if (av.StringValue != null) return av.StringValue.ToLowerInvariant();
         if (av.IntValue.HasValue) return av.IntValue.Value.ToString();
         if (av.LongValue.HasValue) return av.LongValue.Value.ToString();
+        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
+        // otherwise key differently despite being the same anchor (#1283).
+        if (av.DecimalValue.HasValue) return ExternalIdValue.ToCanonicalString(av.DecimalValue.Value);
         if (av.GuidValue.HasValue) return av.GuidValue.Value.ToString().ToLowerInvariant();
         return null;
     }

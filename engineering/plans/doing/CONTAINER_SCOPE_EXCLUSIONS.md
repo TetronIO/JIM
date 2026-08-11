@@ -1,6 +1,6 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Doing (Phase 1 complete; model and persistence next)
+- **Status:** Doing (Phases 1-2 complete; Connector honouring next)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
 - **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
@@ -99,8 +99,15 @@ Replace the `Any(...)` OR in `ConnectedSystemScope.Contains` and in `LdapConnect
 
 *Landed as `ContainerSpecificity` (JIM.Models), with `ConnectedSystemScope.Contains` and `LdapConnectorUtilities.ResolveMostSpecificContainerScope` resolving through it. `ContainerSpecificityTests` pins the ranking rule, `ConnectedSystemScopeTests` the membership answers including the undetermined ones, and `LdapConnectorUtilitiesTests` the ranking running on this Connector's own predicate.*
 
-**Phase 2: Model and persistence.**
-`Excluded` on `ConnectedSystemContainer` + migration; mutual exclusivity with `Selected` enforced in `ContainerSelectionEditor` and rejected at the API boundary; `ApplyContainerInclusion` extended so coverage recalculation understands an excluded branch; hierarchy refresh merge keyed on `StableId` carries exclusions through renames and moves, with a `RequiresPostgres` round-trip test.
+**Phase 2: Model and persistence.** ✅
+`Excluded` on `ConnectedSystemContainer` + migration; mutual exclusivity with `Selected` enforced in `ContainerSelectionEditor`; `ApplyContainerInclusion` extended so coverage recalculation understands an excluded branch; hierarchy refresh merge keyed on `StableId` carries exclusions through renames and moves, with a `RequiresPostgres` round-trip test.
+
+*Landed. `Excluded` (mapped) and `ExcludedByAncestor` (derived, alongside `Included`) on `ConnectedSystemContainer`; migration `AddConnectedSystemContainerExcluded`; `ContainerSelectionEditor.ToggleExcluded` plus the mutual-exclusivity and clear-selection rules; `ApplyContainerInclusion` rewritten as a nearest-ancestor-statement walk. Two adjustments to what this phase was scoped to:*
+
+- *The API-boundary rejection moves to Phase 5, where the field is first exposed. Until a surface can set `Excluded`, there is nothing to reject; the invariant is enforced in the editor, so it cannot be expressed through the portal either way.*
+- *`Scope` now describes how far a Container's own statement reaches, whether that statement is a selection or an exclusion, rather than applying to selections alone. This costs nothing (the property already existed) and makes a OneLevel exclusion expressible; the portal offers the control only on selected rows, so an exclusion made there carries the Subtree default.*
+
+*Two rules fell out of the work rather than the design. Roll-up must refuse to select an excluded parent, or completing the selection of every re-inclusion inside a carved-out branch silently undoes the exclusion. And an exclusion must not change the import's search roots: `GetTopLevelSelectedContainersTests` pins that, because the alternative is the search decomposition rejected below.*
 
 **Phase 3: Import, export, and the discard count.**
 Connector-side honouring via the shared predicate (full import, delta paths, export write guard); per-exclusion discarded-entry counts in the import summary statistics and on the Activity.

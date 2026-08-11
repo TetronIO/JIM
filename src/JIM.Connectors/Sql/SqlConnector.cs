@@ -722,6 +722,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             provider.ConfigureConnection(connection, connectionSettings);
 
             connection.Open();
+
+            // And anything the dialect can only apply to a live session is applied here, before a single
+            // value crosses the connection. Oracle's session time zone is the case that needs it: the
+            // driver has no way to set it before the connection is open, and a local-time-zone column
+            // read on an unpinned session comes back in the Worker host's zone rather than the
+            // Connected System's.
+            provider.ConfigureOpenedConnection(connection, connectionSettings);
+
             return connection;
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or ArgumentException or SocketException or IOException)
@@ -816,7 +824,13 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             Username = username,
             Password = decryptedPassword,
             Encryption = ResolveEncryption(settingValues),
-            ConnectionTimeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds
+            ConnectionTimeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds,
+
+            // Carried on the connection settings as well as held for the value conversions, because one
+            // dialect has to act on it while the connection is being established rather than afterwards:
+            // Oracle returns a TIMESTAMP WITH LOCAL TIME ZONE column in the session's time zone, so the
+            // session is pinned to this zone as it opens.
+            DatabaseTimeZone = ResolveDatabaseTimeZone(settingValues)
         };
     }
 

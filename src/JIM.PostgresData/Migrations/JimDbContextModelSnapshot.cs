@@ -2643,6 +2643,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<bool>("Excluded")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ExternalId")
                         .IsRequired()
                         .HasColumnType("text");

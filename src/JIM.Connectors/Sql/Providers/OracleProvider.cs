@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Utilities;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using System.Data;
 using System.Data.Common;
 
@@ -187,6 +188,93 @@ internal class OracleProvider : SqlProviderBase
         oracleConnection.SqlNetCryptoChecksumTypesClient = "SHA512, SHA384, SHA256";
     }
 
+    /// <summary>
+    /// Pins the session's time zone to the Connected System's Database Time Zone, which is what makes a
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> column mean the same thing on every Worker.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Oracle stores a local-time-zone value normalised to the database time zone and returns it
+    /// converted into the <i>session's</i> time zone. ODP.NET leaves the session at the client host's
+    /// zone, so without this the value JIM reads depends on which machine the run happened on: neither
+    /// UTC nor the zone the administrator declared. Verified against Oracle Database Free 23ai, where
+    /// one stored value read back as 13:45, 14:45 or 08:45 according to the session's zone alone.
+    /// </para>
+    /// <para>
+    /// <b>This is one half of a two-part fix, and neither half works alone.</b> The other half is that
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> is not in
+    /// <see cref="SqlTypeMapper"/>'s offset-carrying set, so both directions treat it as the zoneless
+    /// wall-clock reading the driver actually hands over. That treatment is only true once the session
+    /// is pinned here: the wall clock has to be in the zone the administrator declared for the zoneless
+    /// path to convert it correctly, and for an export's inverse conversion to write the instant back
+    /// unchanged. Remove the pinning and the classification is wrong; remove the classification and the
+    /// pinning is pointless. Do not delete either as redundant.
+    /// </para>
+    /// <para>
+    /// Applied through the driver's own session API rather than by running an <c>ALTER SESSION</c>: it
+    /// takes the region as a value rather than as SQL text, so a time zone name can never become part of
+    /// a statement. It also leaves the rest of the session's globalisation alone, which was confirmed
+    /// against the live container (<c>NLS_DATE_FORMAT</c> unchanged either side of the call).
+    /// </para>
+    /// <para>
+    /// A zone the database does not recognise fails the connection rather than being quietly downgraded
+    /// to an offset: a fixed offset would be right for half the year and silently an hour out for the
+    /// other half, which is exactly the class of corruption this method exists to prevent.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The connection is not open, or Oracle does not recognise the configured time zone.</exception>
+    public override void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        // Refused rather than skipped: a connection whose session was never pinned reads local-time-zone
+        // columns in the host's zone, and a silent skip is how that reaches production unnoticed.
+        if (connection.State != ConnectionState.Open)
+            throw new InvalidOperationException("An Oracle session's time zone can only be set once the connection is open.");
+
+        var oracleConnection = (OracleConnection)connection;
+        var region = ResolveSessionTimeZoneName(settings.DatabaseTimeZone);
+
+        // Read-modify-write is Oracle's own pattern for this API: the globalisation object carries the
+        // whole session state, so it is fetched rather than constructed, and only the time zone altered.
+        var globalization = oracleConnection.GetSessionInfo();
+        globalization.TimeZone = region;
+
+        try
+        {
+            oracleConnection.SetSessionInfo(globalization);
+        }
+        catch (OracleException ex)
+        {
+            throw new InvalidOperationException(
+                $"Oracle does not recognise the time zone region '{region}', so this Connected System's {SqlConnectorConstants.SettingDatabaseTimeZone} cannot be applied to the session. " +
+                "Date and time columns would otherwise be read in whichever zone the Worker's host uses, so the connection is refused instead. " +
+                "Choose a time zone the database's own time zone file knows, or have the database's time zone file updated.", ex);
+        }
+    }
+
+    /// <summary>
+    /// The Oracle time zone region name for a .NET time zone.
+    /// </summary>
+    /// <remarks>
+    /// Oracle names its regions exactly as IANA does, and the Database Time Zone setting asks an
+    /// administrator for an IANA name, so the two agree without translation on Linux, where a resolved
+    /// zone already carries its IANA identifier. A Worker on Windows resolves the same zone to a Windows
+    /// identifier Oracle has never heard of ("GMT Standard Time"), which is what the conversion is for.
+    /// Anything neither of those recognises is handed over as it stands: Oracle is the authority on what
+    /// region names it knows, and its refusal is a clearer answer than a guess made here.
+    /// </remarks>
+    internal static string ResolveSessionTimeZoneName(TimeZoneInfo timeZone)
+    {
+        ArgumentNullException.ThrowIfNull(timeZone);
+
+        if (timeZone.HasIanaId)
+            return timeZone.Id;
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(timeZone.Id, out var ianaId) ? ianaId : timeZone.Id;
+    }
+
     public override DbConnection CreateConnection(string connectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
@@ -271,6 +359,72 @@ internal class OracleProvider : SqlProviderBase
     #endregion
 
     #region Values
+
+    /// <summary>
+    /// Unwraps ODP.NET's own value types, which is what a bound parameter answers with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ODP.NET never answers <see cref="DbParameter.Value"/> with a CLR primitive: a
+    /// <c>RETURNING ... INTO</c> parameter comes back as an <see cref="OracleDecimal"/>, an
+    /// <see cref="OracleBinary"/> or an <see cref="OracleString"/> according to how it was bound. Only
+    /// the last of those survived being read straight through, and only because
+    /// <see cref="Convert.ToString(object?, IFormatProvider?)"/> falls back to a type's own
+    /// <c>ToString</c>; a sequence-backed <c>NUMBER</c> key, which is the ordinary Oracle case, failed
+    /// every create.
+    /// </para>
+    /// <para>
+    /// <b>The null sentinel is the part that has to be right.</b> Each wrapper states "no value" as a
+    /// null instance of itself rather than as <see cref="DBNull"/>, so an
+    /// <see cref="OracleDecimal"/>.<see cref="OracleDecimal.Null"/> read without this is an ordinary
+    /// boxed struct that passes every emptiness test the Connector makes. Answering null instead is what
+    /// keeps "the database returned no key" the clear failure it already was, rather than a wrong
+    /// external ID composed from a wrapper's <c>ToString</c>.
+    /// </para>
+    /// <para>
+    /// A wrapper this Connector never binds a value as is refused rather than passed on, because passing
+    /// it on is exactly the defect this method exists to fix.
+    /// </para>
+    /// <para>
+    /// <b>This is about bound parameters and nothing else.</b> Values that come back as query results do
+    /// not need it: measured against Oracle Database Free 23ai, both
+    /// <see cref="DbDataReader.GetValue"/> and <see cref="DbCommand.ExecuteScalar"/> answer with CLR
+    /// types (<c>String</c>, <c>Byte[]</c>, <c>DateTime</c>, <c>DateTimeOffset</c>, one of the numeric
+    /// primitives for a <c>NUMBER</c>, and <see cref="DBNull"/> for an empty result), never with an
+    /// ODP.NET wrapper. The Delta Import watermark read is the call site that would have suffered
+    /// otherwise, and it is correct as it stands.
+    /// </para>
+    /// <para>
+    /// <b>Which</b> numeric primitive a <c>NUMBER</c> arrives as is a separate problem, and not one this
+    /// method solves: the driver decides it from the column's declared precision and scale, so a
+    /// <c>NUMBER(10,2)</c> arrives as a <c>Double</c> while a <c>NUMBER(18,4)</c> arrives as a
+    /// <c>Decimal</c>. Keeping a Decimal-mapped column exact regardless is
+    /// <see cref="SqlValueReader"/>'s job, on the reader rather than behind this seam, because the
+    /// accessor it uses is ADO.NET's own.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">The driver answered with an ODP.NET type no value this Connector binds is ever returned as.</exception>
+    public override object? ConvertFromDriverValue(object? value)
+    {
+        if (value == null || value == DBNull.Value)
+            return null;
+
+        // Ahead of the type switch, so that every wrapper's null sentinel is answered the same way
+        // whichever type it is an instance of.
+        if (value is INullable { IsNull: true })
+            return null;
+
+        return value switch
+        {
+            OracleDecimal number => number.Value,
+            OracleString text => text.Value,
+            OracleBinary bytes => bytes.Value,
+            INullable => throw new NotSupportedException(
+                $"The Oracle driver returned an {value.GetType().Name}, which the JIM SQL Connector has no CLR value for, so it is refused rather than passed on as a driver type. " +
+                "The Connector binds only exact numerics, character strings and RAW values through a parameter, so this is a defect in JIM rather than anything to correct in the database; report it with the Object Type and the column involved."),
+            _ => value
+        };
+    }
 
     public override Guid ConvertToGuid(object value)
     {

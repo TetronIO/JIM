@@ -9,8 +9,11 @@ name: CodeQL
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  pull_request:  # Runs on ALL pull requests regardless of target branch, matching ci.yml.
+                 # A stacked PR targets the layer below it rather than main, and every PR in a
+                 # stack is still evaluated against main's ruleset, so filtering to main here
+                 # left the required Analyze checks permanently unreported on every layer but
+                 # the bottom one, and the stack could never be merged.
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
 
@@ -35,13 +38,13 @@ jobs:
       uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@a2983b8bed1923f44751c5c43237f479442827b3  # v3.37.4
+      uses: github/codeql-action/init@c4dd10e44af883a891fe31ced449bcb4a6728b9b  # v3.37.6
       with:
         languages: ${{ matrix.language }}
         config-file: ./.github/codeql/codeql-config.yml
 
     - name: Autobuild
-      uses: github/codeql-action/autobuild@a2983b8bed1923f44751c5c43237f479442827b3  # v3.37.4
+      uses: github/codeql-action/autobuild@c4dd10e44af883a891fe31ced449bcb4a6728b9b  # v3.37.6
 
     # The analyze/filter/upload split exists because the action applies the configuration's
     # paths-ignore to extraction only, which does nothing for compiled languages: C# is built and
@@ -50,7 +53,7 @@ jobs:
     # for every language identically. The filter reads the same paths-ignore block, so the config
     # file remains the single place a path is excluded.
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@a2983b8bed1923f44751c5c43237f479442827b3  # v3.37.4
+      uses: github/codeql-action/analyze@c4dd10e44af883a891fe31ced449bcb4a6728b9b  # v3.37.6
       with:
         category: "/language:${{ matrix.language }}"
         upload: failure-only
@@ -61,7 +64,7 @@ jobs:
       run: ./scripts/Filter-Sarif.ps1 -SarifDirectory sarif-results -ConfigFile ./.github/codeql/codeql-config.yml
 
     - name: Upload filtered SARIF
-      uses: github/codeql-action/upload-sarif@4187e74d05793876e9989daffde9c3e66b4acd07  # v3.37.3
+      uses: github/codeql-action/upload-sarif@c4dd10e44af883a891fe31ced449bcb4a6728b9b  # v3.37.6
       with:
         sarif_file: sarif-results
         category: "/language:${{ matrix.language }}"
