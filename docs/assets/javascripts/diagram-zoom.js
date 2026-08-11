@@ -357,22 +357,28 @@
 
   // ── Triggers ──────────────────────────────────────────────────────────────
 
+  // Diagonal expand arrows: the conventional "open full size" glyph for a
+  // lightbox. The magnifier-plus reads as "zoom in", which is what the
+  // controls inside the overlay do, not what this button does.
   var HINT_SVG =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/>' +
-    '<path d="M20 20l-4.5-4.5M11 8v6M8 11h6"/></svg>';
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M14 4h6v6M10 20H4v-6M20 4l-7.5 7.5M4 20l7.5-7.5"/></svg>';
 
   // Wrap a diagram element in a real <button> so it is reachable by keyboard
-  // and announced as an control, and give it a visible affordance.
+  // and announced as a control, and give it a visible affordance. The button
+  // carries the accessible name; the chip is icon-only and decorative.
   function makeTrigger(el, label, onActivate) {
+    var name = label ? "Enlarge diagram: " + label : "Enlarge diagram";
     var btn = document.createElement("button");
     btn.type = "button";
     btn.className = "jim-dgz-trigger";
-    btn.setAttribute("aria-label", label ? "Enlarge diagram: " + label : "Enlarge diagram");
+    btn.setAttribute("aria-label", name);
+    btn.title = name; // an icon-only cue needs a hover tooltip to explain itself
 
     var hint = document.createElement("span");
     hint.className = "jim-dgz-trigger__hint";
     hint.setAttribute("aria-hidden", "true");
-    hint.innerHTML = HINT_SVG + "<span>Enlarge</span>";
+    hint.innerHTML = HINT_SVG;
 
     el.parentNode.insertBefore(btn, el);
     btn.appendChild(hint);
