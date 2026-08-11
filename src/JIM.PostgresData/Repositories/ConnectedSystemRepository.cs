@@ -2068,6 +2068,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return allMatches.FirstOrDefault();
     }
 
+    /// <inheritdoc />
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, decimal attributeValue)
+    {
+        var allMatches = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.Type)
+            .Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                // Numeric equality in the database, so a stored 4200.00 matches a supplied 4200.
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.DecimalValue == attributeValue))
+            .OrderBy(cso => cso.Id)
+            .ToListAsync();
+
+        if (allMatches.Count > 1)
+        {
+            var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in Connected System {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+                allMatches.Count, attributeValue, connectedSystemId, csoIds);
+        }
+
+        return allMatches.FirstOrDefault();
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
         var allMatches = await Repository.Database.ConnectedSystemObjects
@@ -2146,7 +2176,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.StringValue,
                         av.IntValue,
                         av.LongValue,
-                        av.GuidValue
+                        av.GuidValue,
+                        av.DecimalValue
                     })
                     .ToList()
             })
@@ -2159,7 +2190,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue);
+            var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue, primaryAv?.DecimalValue);
 
             if (primaryValue != null)
             {
@@ -2172,7 +2203,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (cso.SecondaryExternalIdAttributeId.HasValue)
             {
                 var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue);
+                var secondaryValue = GetExternalIdValueString(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue, secondaryAv?.DecimalValue);
 
                 if (secondaryValue != null)
                 {
@@ -2232,11 +2263,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Converts an external ID attribute value to its lowercase string representation for cache key building.
     /// Returns null if no value column is populated.
     /// </summary>
-    private static string? GetExternalIdValueString(string? stringValue, int? intValue, long? longValue, Guid? guidValue)
+    private static string? GetExternalIdValueString(string? stringValue, int? intValue, long? longValue, Guid? guidValue, decimal? decimalValue)
     {
         if (stringValue != null) return stringValue.ToLowerInvariant();
         if (intValue.HasValue) return intValue.Value.ToString();
         if (longValue.HasValue) return longValue.Value.ToString();
+        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
+        // otherwise key differently despite being the same anchor (#1283).
+        if (decimalValue.HasValue) return ExternalIdValue.ToCanonicalString(decimalValue.Value);
         if (guidValue.HasValue) return guidValue.Value.ToString().ToLowerInvariant();
         return null;
     }
@@ -2851,6 +2885,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         av.Attribute.IsExternalId &&
                         av.LongValue.HasValue)
                     .Select(av => av.LongValue!.Value)).ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)
+    {
+        return await BuildDeletionDetectionQuery(connectedSystemId, connectedSystemObjectTypeId, partitionId)
+            .SelectMany(q =>
+                q.AttributeValues.Where(av =>
+                        av.Attribute.Type == AttributeDataType.Decimal &&
+                        av.Attribute.IsExternalId &&
+                        av.DecimalValue.HasValue)
+                    .Select(av => av.DecimalValue!.Value)).ToListAsync();
     }
 
     public async Task<List<Guid>> GetAllExternalIdAttributeValuesOfTypeGuidAsync(int connectedSystemId, int connectedSystemObjectTypeId, int? partitionId = null)

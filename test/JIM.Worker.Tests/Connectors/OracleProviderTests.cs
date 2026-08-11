@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Utilities;
 using NUnit.Framework;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using System.Data;
 
 namespace JIM.Worker.Tests.Connectors;
@@ -490,6 +491,46 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void ResolveSessionTimeZoneName_Utc_IsTheUtcRegion()
+    {
+        Assert.That(OracleProvider.ResolveSessionTimeZoneName(TimeZoneInfo.Utc), Is.EqualTo("UTC"),
+            "Verified against Oracle Database Free 23ai: 'UTC' is a region name ALTER SESSION accepts.");
+    }
+
+    [TestCase("Europe/London")]
+    [TestCase("America/New_York")]
+    [TestCase("Australia/Sydney")]
+    [TestCase("Asia/Kolkata")]
+    public void ResolveSessionTimeZoneName_AnIanaZone_IsPassedThroughUnchanged(string ianaId)
+    {
+        // Oracle names its time zone regions exactly as IANA does, and the Database Time Zone setting
+        // asks an administrator for an IANA name, so the two agree without translation. Every one of
+        // these was accepted by the live 23ai container.
+        Assert.That(OracleProvider.ResolveSessionTimeZoneName(TimeZoneInfo.FindSystemTimeZoneById(ianaId)), Is.EqualTo(ianaId));
+    }
+
+    [Test]
+    public void ResolveSessionTimeZoneName_AWindowsZone_IsConvertedToItsIanaName()
+    {
+        // A Worker running on Windows resolves a zone to a Windows identifier ("GMT Standard Time"),
+        // which Oracle has never heard of. On Linux the same lookup already yields the IANA name, so
+        // this holds on both.
+        Assert.That(OracleProvider.ResolveSessionTimeZoneName(TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time")), Is.EqualTo("Europe/London"));
+    }
+
+    [Test]
+    public void ConfigureOpenedConnection_AClosedConnection_IsLeftAlone()
+    {
+        // Pinning the session time zone needs a session. The Connector only ever calls this on an open
+        // connection; a closed one is refused rather than silently skipped, because a connection that
+        // never had its session pinned would read local-time-zone columns in the host's zone.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", DatabaseTimeZone = TimeZoneInfo.Utc };
+        using var connection = _provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        Assert.Throws<InvalidOperationException>(() => _provider.ConfigureOpenedConnection(connection, settings));
+    }
+
+    [Test]
     public void BuildConnectionString_NeitherServiceNameNorSid_Throws()
     {
         var settings = new SqlConnectionSettings { Host = "oracle.example.local", Port = 1521 };
@@ -594,6 +635,102 @@ public class OracleProviderTests
 
         Assert.That(result, Is.EqualTo(Guid.Parse("550e8400-e29b-41d4-a716-446655440000")),
             "Some estates store identifiers as VARCHAR2 rather than RAW(16).");
+    }
+
+    #endregion
+
+    #region Driver values
+
+    [Test]
+    public void ConvertFromDriverValue_AnOracleDecimal_UnwrapsToTheDecimalItHolds()
+    {
+        // A sequence-backed NUMBER key. ODP.NET's wrapper implements none of the conversion interfaces
+        // the rest of the Connector reads a value through, so left wrapped it fails every create.
+        var result = _provider.ConvertFromDriverValue(new OracleDecimal(4711));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.EqualTo(4711m));
+            Assert.That(result, Is.TypeOf<decimal>(), "No provider-specific type may cross the dialect seam.");
+        }
+    }
+
+    [Test]
+    public void ConvertFromDriverValue_AnOracleBinary_UnwrapsToTheBytesItHolds()
+    {
+        var raw16 = IdentifierParser.ToRfc4122Bytes(Guid.Parse("550e8400-e29b-41d4-a716-446655440000"));
+
+        var result = _provider.ConvertFromDriverValue(new OracleBinary(raw16));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.EqualTo(raw16));
+            Assert.That(result, Is.TypeOf<byte[]>(),
+                "The bytes are what ConvertToGuid reads, and it is deliberately given no knowledge of ODP.NET's wrappers.");
+        }
+    }
+
+    [Test]
+    public void ConvertFromDriverValue_AnOracleString_UnwrapsToTheTextItHolds()
+    {
+        var result = _provider.ConvertFromDriverValue(new OracleString("EMP-4711"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.EqualTo("EMP-4711"));
+            Assert.That(result, Is.TypeOf<string>());
+        }
+    }
+
+    /// <summary>
+    /// ODP.NET states "no value" with a null sentinel of the wrapper's own type. A null
+    /// <c>OracleDecimal</c> is an ordinary boxed struct rather than <see cref="DBNull"/>, so a caller
+    /// testing only for <see cref="DBNull"/> would read one as though it held a value.
+    /// </summary>
+    [TestCaseSource(nameof(NullSentinels))]
+    public void ConvertFromDriverValue_AWrappersOwnNullSentinel_IsNull(object nullSentinel)
+    {
+        Assert.That(_provider.ConvertFromDriverValue(nullSentinel), Is.Null);
+    }
+
+    private static IEnumerable<TestCaseData> NullSentinels()
+    {
+        yield return new TestCaseData(OracleDecimal.Null).SetArgDisplayNames("OracleDecimal.Null");
+        yield return new TestCaseData(OracleString.Null).SetArgDisplayNames("OracleString.Null");
+        yield return new TestCaseData(OracleBinary.Null).SetArgDisplayNames("OracleBinary.Null");
+    }
+
+    [Test]
+    public void ConvertFromDriverValue_NothingAtAll_IsNull()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_provider.ConvertFromDriverValue(null), Is.Null);
+            Assert.That(_provider.ConvertFromDriverValue(DBNull.Value), Is.Null);
+        }
+    }
+
+    [Test]
+    public void ConvertFromDriverValue_AValueThatIsAlreadyAClrType_IsHandedBackUnchanged()
+    {
+        // The data reader path already yields CLR types, and a provider that re-interpreted them would
+        // be a second conversion nobody asked for.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_provider.ConvertFromDriverValue(4711m), Is.EqualTo(4711m));
+            Assert.That(_provider.ConvertFromDriverValue("EMP-4711"), Is.EqualTo("EMP-4711"));
+            Assert.That(_provider.ConvertFromDriverValue(new byte[] { 1, 2, 3 }), Is.EqualTo(new byte[] { 1, 2, 3 }));
+        }
+    }
+
+    [Test]
+    public void ConvertFromDriverValue_AnOdpNetWrapperNoGeneratedKeyIsEverBoundAs_ThrowsRatherThanPassingItThrough()
+    {
+        // Fast and hard, rather than handing a wrapper struct on to a conversion that would report a
+        // cast failure naming a type an administrator has no way to act on.
+        var exception = Assert.Throws<NotSupportedException>(() => _provider.ConvertFromDriverValue(new OracleDate(new DateTime(2026, 8, 8, 0, 0, 0, DateTimeKind.Utc))));
+
+        Assert.That(exception!.Message, Does.Contain(nameof(OracleDate)));
     }
 
     #endregion
