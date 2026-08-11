@@ -1001,21 +1001,24 @@ public class Worker : BackgroundService
             var retentionPeriod = await jim.ServiceSettings.GetHistoryRetentionPeriodAsync();
             var configurationRetentionPeriod = await jim.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
             var securityRetentionPeriod = await jim.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
+            var initialPasswordRetentionPeriod = await jim.ServiceSettings.GetInitialPasswordRetentionPeriodAsync();
             var batchSize = await jim.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
 
             var cutoffDate = DateTime.UtcNow - retentionPeriod;
             var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
             var securityCutoffDate = DateTime.UtcNow - securityRetentionPeriod;
+            var initialPasswordCutoffDate = DateTime.UtcNow - initialPasswordRetentionPeriod;
 
             // Perform cleanup (creates its own Activity for audit)
-            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, batchSize);
+            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, initialPasswordCutoffDate, batchSize);
 
             // Log results if anything was deleted
             if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0
-                || result.ConfigurationChangeActivitiesDeleted > 0 || result.SecurityEventActivitiesDeleted > 0)
+                || result.ConfigurationChangeActivitiesDeleted > 0 || result.SecurityEventActivitiesDeleted > 0
+                || result.InitialPasswordWorkRecordsDeleted > 0)
             {
-                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities",
-                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
+                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {InitialPasswordCount} initial-password records",
+                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted);
             }
         }
         catch (Exception ex)

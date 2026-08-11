@@ -199,12 +199,14 @@ Updates the configuration of an existing Connected System.
 # ById (default)
 Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
     [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
+    [-InitialPasswordTimeToLive <timespan>]
     [-UnresolvedReferenceHandling <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-UnresolvedReferenceHandling <string>]
+    [-MaxExportParallelism <int>] [-InitialPasswordTimeToLive <timespan>]
+    [-UnresolvedReferenceHandling <string>]
     [-ChangeReason <string>] [-PassThru]
 ```
 
@@ -218,6 +220,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
+| `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; accounts provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
 | `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |

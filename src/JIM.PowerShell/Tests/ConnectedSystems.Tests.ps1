@@ -123,6 +123,12 @@ Describe 'Set-JIMConnectedSystem' {
             $validateRange | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have an InitialPasswordTimeToLive parameter typed as a TimeSpan' {
+            $param = $command.Parameters['InitialPasswordTimeToLive']
+            $param | Should -Not -BeNullOrEmpty
+            $param.ParameterType | Should -Be ([timespan])
+        }
+
         It 'Should have an UnresolvedReferenceHandling parameter with ValidateSet' {
             $param = $command.Parameters['UnresolvedReferenceHandling']
             $param | Should -Not -BeNullOrEmpty

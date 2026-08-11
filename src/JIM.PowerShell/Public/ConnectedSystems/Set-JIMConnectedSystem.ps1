@@ -31,6 +31,12 @@ function Set-JIMConnectedSystem {
         Only applicable when the connector supports parallel export.
         Default is 1 (sequential processing).
 
+    .PARAMETER InitialPasswordTimeToLive
+        How long an account provisioned into this Connected System stays owed an initial password before JIM
+        records an expiry and stops trying. Accepts a TimeSpan, e.g. (New-TimeSpan -Days 30). JIM's default when
+        none has been set is 7 days. Raise it ahead of a planned outage longer than the current window; every
+        account provisioned while the target is unreachable otherwise expires without a password.
+
     .PARAMETER UnresolvedReferenceHandling
         Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
         is treated: 'Error' (default; marks the affected Run Profile Execution Item as errored), 'Warn' (no
@@ -78,6 +84,12 @@ function Set-JIMConnectedSystem {
         Enables parallel export batch processing with up to 4 concurrent batches.
 
     .EXAMPLE
+        Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)
+
+        Gives accounts provisioned into this Connected System thirty days to receive their initial password,
+        rather than the default seven.
+
+    .EXAMPLE
         Set-JIMConnectedSystem -Id 1 -UnresolvedReferenceHandling Ignore
 
         Suppresses errors and warnings for import-time unresolved references (e.g. group members outside the
@@ -110,6 +122,9 @@ function Set-JIMConnectedSystem {
         [Parameter()]
         [ValidateRange(1, 16)]
         [int]$MaxExportParallelism,
+
+        [Parameter()]
+        [timespan]$InitialPasswordTimeToLive,
 
         [Parameter()]
         [ValidateSet('Error', 'Warn', 'Ignore')]
@@ -154,6 +169,11 @@ function Set-JIMConnectedSystem {
 
         if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
             $body.maxExportParallelism = $MaxExportParallelism
+        }
+
+        if ($PSBoundParameters.ContainsKey('InitialPasswordTimeToLive')) {
+            # Serialised in the ISO 8601 / .NET constant format the API's TimeSpan binder accepts.
+            $body.initialPasswordTimeToLive = $InitialPasswordTimeToLive.ToString('c')
         }
 
         if ($PSBoundParameters.ContainsKey('UnresolvedReferenceHandling')) {

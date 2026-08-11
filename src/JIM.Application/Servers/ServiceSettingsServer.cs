@@ -302,6 +302,26 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the initial password record retention period (how long a parked or expired initial-password
+        /// record is kept before housekeeping removes it). Records still being worked are never removed.
+        /// Default: 90 days.
+        /// </summary>
+        public async Task<TimeSpan> GetInitialPasswordRetentionPeriodAsync()
+        {
+            var retentionPeriod = await GetSettingValueAsync(Constants.SettingKeys.InitialPasswordRetentionPeriod, TimeSpan.FromDays(90));
+
+            // Guard against zero or negative retention period, which would remove a record the moment it parked
+            // and take the reason with it, leaving nothing for the administrator it was parked for to read.
+            if (retentionPeriod <= TimeSpan.Zero)
+            {
+                Log.Warning("Initial password retention period is {RetentionPeriod}, which would remove records as soon as they are parked. Using default of 90 days", retentionPeriod);
+                return TimeSpan.FromDays(90);
+            }
+
+            return retentionPeriod;
+        }
+
+        /// <summary>
         /// Gets the cleanup batch size (maximum records to delete per housekeeping cycle).
         /// Default: 100 records.
         /// </summary>

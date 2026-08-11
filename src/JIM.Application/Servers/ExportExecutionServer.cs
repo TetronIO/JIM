@@ -557,7 +557,7 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive);
                             }
                         }
                         catch (OperationCanceledException)
@@ -872,7 +872,8 @@ public class ExportExecutionServer
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal);
+                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal,
+                    connectedSystem.EffectiveInitialPasswordTimeToLive);
             }
         }
 
@@ -940,7 +941,8 @@ public class ExportExecutionServer
         ExportExecutionResult result,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
-        int passTotal)
+        int passTotal,
+        TimeSpan initialPasswordTimeToLive)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -991,7 +993,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, initialPasswordTimeToLive);
             }
 
             processedCount += batch.Count;
@@ -1108,7 +1110,7 @@ public class ExportExecutionServer
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1266,7 +1268,8 @@ public class ExportExecutionServer
         List<PendingExport> batch,
         List<ConnectedSystemExportResult> exportResults,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        TimeSpan initialPasswordTimeToLive)
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
@@ -1364,7 +1367,7 @@ public class ExportExecutionServer
         // record work against an account JIM could not yet address.
         if (provisionedAccounts.Count > 0)
         {
-            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository);
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository, initialPasswordTimeToLive);
         }
 
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
@@ -1400,7 +1403,8 @@ public class ExportExecutionServer
     private static async Task StageInitialPasswordsForBatchAsync(
         List<PendingExport> provisionedAccounts,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        TimeSpan initialPasswordTimeToLive)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("StageInitialPasswords")
             .SetTag("count", provisionedAccounts.Count);
@@ -1429,7 +1433,7 @@ public class ExportExecutionServer
                     SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
                     Status = PendingInitialPasswordStatus.Pending,
                     CreatedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.Add(PendingInitialPassword.DefaultTimeToLive)
+                    ExpiresAt = DateTime.UtcNow.Add(initialPasswordTimeToLive)
                 })
                 .ToList();
 
