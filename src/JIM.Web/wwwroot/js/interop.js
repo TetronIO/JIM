@@ -64,6 +64,59 @@ window.jimInterop = {
 // state (a listener and its debounce timer) that has to be released when the component goes away.
 window.jimVirtualList = {
     _observed: {},
+    _fitted: {},
+    // Sizes a virtualised list's scroll container so the page footer lands at the bottom of the viewport with
+    // the same breathing room below it as it has above it (its own top margin), and keeps that true as the
+    // window resizes. Measuring where the footer actually lands, rather than each page carrying a hand-tuned
+    // height, is what makes the footer sit in the same place on every list page regardless of how much header,
+    // filter and breadcrumb chrome sits above the grid.
+    fit: function (selector) {
+        window.jimVirtualList.unfit(selector);
+        var element = document.querySelector(selector);
+        if (!element) return false;
+
+        var entry = { element: element, timer: null };
+        entry.apply = function () {
+            var footer = document.querySelector('.jim-page-footer');
+            // A couple of passes, because changing the height can re-wrap content and move the footer again.
+            for (var i = 0; i < 3; i++) {
+                var gap = footer ? parseFloat(window.getComputedStyle(footer).marginTop) || 20 : 20;
+                var anchor = footer || element;
+                var bottom = anchor.getBoundingClientRect().bottom + window.scrollY;
+                var delta = bottom + gap - window.innerHeight;
+                var current = element.getBoundingClientRect().height;
+                var next = Math.max(240, Math.round(current - delta));
+                if (Math.abs(next - current) < 1) break;
+                element.style.height = next + 'px';
+            }
+        };
+        entry.handler = function () {
+            if (entry.timer) window.clearTimeout(entry.timer);
+            entry.timer = window.setTimeout(entry.apply, 100);
+        };
+
+        entry.apply();
+        window.addEventListener('resize', entry.handler);
+        // The page keeps moving after the grid appears: filter summaries and alerts render above it as their
+        // data arrives, and a one-shot measurement goes stale the moment they do. Watching the document's own
+        // height re-fits whenever anything moves the footer; this converges rather than looping, because a fit
+        // that already holds computes a delta of zero and writes nothing.
+        entry.observer = new ResizeObserver(entry.handler);
+        entry.observer.observe(document.body);
+        window.jimVirtualList._fitted[selector] = entry;
+        return true;
+    },
+    // Releases the resize listener fit registered. Deliberately separate from stop(): observe() replaces the
+    // scroll listener via stop() while the fit must live on, so the two lifecycles cannot share a teardown.
+    unfit: function (selector) {
+        var entry = window.jimVirtualList._fitted[selector];
+        if (!entry) return;
+
+        if (entry.timer) window.clearTimeout(entry.timer);
+        window.removeEventListener('resize', entry.handler);
+        if (entry.observer) entry.observer.disconnect();
+        delete window.jimVirtualList._fitted[selector];
+    },
     // Reports the index of the first visible row back to .NET as the reader scrolls, debounced so a flick
     // through a long list produces one call rather than hundreds. Row height is fixed by the grid's ItemSize,
     // which is what makes an index derivable from scrollTop at all.

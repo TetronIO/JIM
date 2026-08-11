@@ -32,7 +32,7 @@
        Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
        rather than repeatedly out-running the fetch. *@
     <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
-                 FixedHeader="true" Height="@Height" ItemSize="@RowHeight"
+                 FixedHeader="true" ItemSize="@RowHeight"
                  Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
                  RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClick="HandleRowClick" Class="mt-5">
         <ToolBarContent>
@@ -114,10 +114,6 @@
     /// <summary>Placeholder for the built-in search box.</summary>
     [Parameter]
     public string SearchPlaceholder { get; set; } = "Search...";
-
-    /// <summary>The grid's height. The default fills the viewport under a standard page header.</summary>
-    [Parameter]
-    public string Height { get; set; } = "calc(100vh - 320px)";
 
     /// <summary>Prefix for the URL parameters this grid owns (q, sort, desc, row), so two grids on one page do
     /// not overwrite each other's state. Null for a page with a single grid.</summary>
@@ -222,6 +218,12 @@
 
         if (!_preferencesLoaded || _scrollObserved)
             return;
+
+        // Fit the height before restoring the scroll position: the restore clamps to the scroll area, and the
+        // height decides how tall that area is. There is no height to pass because there is no height to know:
+        // JavaScript measures where the page footer lands and sizes the container so every list page ends at the
+        // same place, whatever chrome sits above the grid (a CSS fallback covers the first paint).
+        await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
 
         // Restore first, then watch, so the restore's own scrolling is not reported back as the reader's position.
         // scrollToRow waits for the row to become reachable rather than needing a retry here; this component does
@@ -423,6 +425,7 @@
     public async ValueTask DisposeAsync()
     {
         await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
+        await InvokeInteropAsync<object>("jimVirtualList.unfit", ScrollContainerSelector);
         _selfReference?.Dispose();
     }
 }

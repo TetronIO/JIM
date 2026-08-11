@@ -67,8 +67,7 @@
                      RowClicked="HandleRowClicked"
                      SingularName="log entry"
                      PluralName="log entries"
-                     SearchPlaceholder="Search messages..."
-                     Height="calc(100vh - 430px)">
+                     SearchPlaceholder="Search messages...">
     <Columns>
         <TemplateColumn T="LogEntry" Title="Time" Sortable="false" HeaderStyle="width: 100px;" CellStyleFunc="@GetRowStyle">
             <CellTemplate>
@@ -273,22 +272,6 @@
         !string.IsNullOrEmpty(_appliedService) ||
         _appliedDate.HasValue ||
         _appliedLevels.Count > 0;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try
-            {
-                // Hide the page footer to maximise viewing area for logs
-                await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", true);
-            }
-            catch (JSDisconnectedException)
-            {
-                // Ignore - circuit is disconnected and being disposed
-            }
-        }
-    }
 
     private async Task<VirtualisedWindow<LogEntry>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
@@ -602,17 +585,9 @@
         Snackbar.Add("Copied to clipboard", Severity.Success);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _refreshTimer?.Dispose();
-        // Remove the footer-hiding class when leaving the page
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", false);
-        }
-        catch (JSDisconnectedException)
-        {
-            // Ignore - circuit is disconnected during navigation
-        }
+        return ValueTask.CompletedTask;
     }
 }
