@@ -678,3 +678,208 @@ body:has(.jim-home) .md-content__button {
     display: none;
   }
 }
+
+/* ========================================
+   Diagram lightbox
+   Click-to-enlarge overlay with zoom and pan, shared by the concept SVGs
+   and the Mermaid diagrams. Behaviour: assets/javascripts/diagram-zoom.js.
+   GLightbox still handles <img> files; this is for vector diagrams, which
+   it cannot wrap.
+   ======================================== */
+
+/* -- The clickable wrapper the script puts around each diagram -- */
+.md-typeset .jim-dgz-trigger {
+  display: block;
+  position: relative;
+  width: 100%;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* The wrapper owns the diagram's top margin now, so drop the SVG's own. */
+.md-typeset .jim-dgz-trigger > .jim-diagram {
+  margin: 0;
+}
+
+.md-typeset .jim-dgz-trigger:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 4px;
+}
+
+/* Persistent affordance: a touch device never gets a hover state, and these
+   diagrams are the customer-facing ones, so the cue stays visible. */
+.jim-dgz-trigger__hint {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 6px;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color--light);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  pointer-events: none;
+}
+
+.jim-dgz-trigger:hover .jim-dgz-trigger__hint,
+.jim-dgz-trigger:focus-visible .jim-dgz-trigger__hint {
+  opacity: 1;
+  color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+}
+
+.jim-dgz-trigger__hint svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* -- The overlay -- */
+.jim-dgz {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  cursor: zoom-out;
+}
+
+.jim-dgz[data-open="true"] {
+  display: flex;
+}
+
+[data-md-color-scheme="default"] .jim-dgz {
+  background: rgba(18, 27, 41, 0.62);
+}
+
+[data-md-color-scheme="slate"] .jim-dgz {
+  background: rgba(2, 9, 18, 0.78);
+}
+
+.jim-dgz__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 100%;
+  max-height: 100%;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 10px;
+  background: var(--md-default-bg-color);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  cursor: default;
+}
+
+.jim-dgz__stage {
+  overflow: hidden;
+  border-radius: 4px;
+  touch-action: none;
+}
+
+.jim-dgz__stage[data-panable="true"] {
+  cursor: grab;
+}
+
+.jim-dgz__stage[data-panable="true"].is-dragging {
+  cursor: grabbing;
+}
+
+.jim-dgz__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+}
+
+.jim-dgz__close {
+  position: absolute;
+  top: -0.7rem;
+  right: -0.7rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 50%;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.jim-dgz__close:hover,
+.jim-dgz__close:focus-visible {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.jim-dgz__tools {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+/* A diagram with no usable viewBox cannot be zoomed; show it fitted only. */
+.jim-dgz[data-zoomable="false"] .jim-dgz__tools {
+  display: none;
+}
+
+.jim-dgz__tools button {
+  min-width: 1.9rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 6px;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-code-font-family, monospace);
+  font-size: 0.62rem;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.jim-dgz__tools button:hover,
+.jim-dgz__tools button:focus-visible {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.jim-dgz__level {
+  min-width: 3.2rem;
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-code-font-family, monospace);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.jim-dgz__close:focus-visible,
+.jim-dgz__tools button:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
