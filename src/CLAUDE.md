@@ -55,19 +55,29 @@ This rule overrides any instinct to "minimise change" or "stay tightly scoped" w
   - Lowercase only when referring to a generic concept rather than the named entity (e.g. "object matching" as an activity), or in code identifiers and variable names
 
 **Copyright Headers (MANDATORY on all new files):**
-Every new source file MUST include a copyright header as the very first content. The `.editorconfig` enforces this for `.cs` files via `IDE0073`.
+Every new source file MUST include a copyright header as the very first content.
 
 | File type | Header |
 |-----------|--------|
 | `.cs` | `// Copyright (c) Tetron Limited. All rights reserved.`<br>`// Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
 | `.razor` | `@* Copyright (c) Tetron Limited. All rights reserved. *@`<br>`@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@` |
-| `.ps1` | `# Copyright (c) Tetron Limited. All rights reserved.`<br>`# Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
+| `.ps1`, `.psm1`, `.psd1` | `# Copyright (c) Tetron Limited. All rights reserved.`<br>`# Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
 | `.sh` | `# Copyright (c) Tetron Limited. All rights reserved.`<br>`# Licensed under the Tetron Commercial License. See LICENSE file in the project root.` |
 
-- For `.cs` and `.ps1` files: place the header at line 1, followed by a blank line, then the file content
+- For `.cs` files: place the header at line 1, followed by a blank line, then the file content
+- For `.ps1`/`.psm1`/`.psd1` files: place the header at line 1, or immediately below a `#Requires` directive where one is present. In a `.psd1` manifest the comment header goes above the opening `@{`; it is **in addition to** the manifest's own `Copyright` key, which is what `Get-Module` surfaces and which neither states the licence nor satisfies this rule
 - For `.sh` files: place the header **after** the shebang line (`#!/bin/bash` or similar), no blank line between shebang and header
-- For `.razor` files: place the header **after** all `@` directives (`@page`, `@using`, `@inject`, etc.), followed by a blank line before the markup. Razor requires directives at the start of the file. Do NOT add headers to `_Imports.razor`.
+- For `.razor` files: place the header **after** all `@` directives (`@page`, `@using`, `@inject`, etc.), followed by a blank line before the markup; where a component declares no directives, line 1. This is house style, not a compiler constraint (Razor is happy with the notice on line 1), but it is the enforced position. `_Imports.razor` is included like any other component
 - Do NOT add headers to auto-generated files (EF migrations, `.Designer.cs`, `.g.cs`, `.AssemblyInfo.cs`)
+
+**Enforcement:** `scripts/Lint-CopyrightHeaders.ps1` checks every file of the types above and fails the `build-and-test` CI job on anything missing or misplaced. **Position is enforced, not just presence** - 12 `JIM.Web` components had the notice injected between an `@if` condition and its opening brace, which a presence check would have passed. Blank-line counts are not policed; only that nothing of substance precedes the notice.
+
+```bash
+pwsh -File ./scripts/Lint-CopyrightHeaders.ps1        # report
+pwsh -File ./scripts/Lint-CopyrightHeaders.ps1 -Fix   # insert or relocate, per file type
+```
+
+`.editorconfig` enforces the same rule for `.cs` via `file_header_template` + `IDE0073`. Because `Directory.Build.props` sets `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors`, a `.cs` file without the header is a **build error**, not an IDE hint. The generated-code exclusions above are duplicated there as `severity = none` sections; **if you change the exclusions in one place, change them in the other**, or `dotnet build` and the lint script will disagree.
 
 **DateTime Handling (IMPORTANT):**
 - Always use `DateTime` type (not `DateTimeOffset`) in models

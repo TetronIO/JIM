@@ -6,6 +6,9 @@
 @inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Environment
 
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
 @if (_loaded)
 {
     <div class="jim-user-menu @(!DrawerOpen ? "jim-user-menu-collapsed" : "")" @onclick="TogglePopover" @onclick:stopPropagation="true">
