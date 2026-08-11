@@ -2780,6 +2780,12 @@ public class ConnectedSystemServer
         // Track which existing partitions we've matched
         var matchedPartitionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Container identity is global rather than per level, because a container can be matched at a level it did
+        // not previously sit at: that is what a move is. Both of these are therefore collected across the whole
+        // refresh and applied afterwards (#1318).
+        var matchedContainers = new HashSet<ConnectedSystemContainer>();
+        var containersToReparent = new List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)>();
+
         // Ensure Partitions list exists
         connectedSystem.Partitions ??= new List<ConnectedSystemPartition>();
 
@@ -2803,15 +2809,19 @@ public class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Merge containers recursively within this partition
+                // Match containers recursively within this partition. Reparenting and removals are deliberately
+                // deferred to passes of their own, once every partition has been matched; see the comment on
+                // MatchContainersRecursive.
                 existing.Containers ??= new HashSet<ConnectedSystemContainer>();
-                MergeContainersRecursive(
-                    existing.Containers,
+                MatchContainersRecursive(
+                    existing,
+                    parentContainer: null,
                     discovered.Containers,
-                    null, // parent ExternalId for root containers
                     result,
                     existingContainerLookup,
-                    existingContainerStableIdLookup);
+                    existingContainerStableIdLookup,
+                    matchedContainers,
+                    containersToReparent);
             }
             else
             {
@@ -2842,6 +2852,16 @@ public class ConnectedSystemServer
                 CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
             }
         }
+
+        // Apply the moves now that every partition has been matched, so that a container is only ever detached from
+        // its old home after everything that might claim it has had its say.
+        foreach (var (container, partition, newParent) in containersToReparent)
+            ReparentContainer(container, connectedSystem, partition, newParent);
+
+        // Only now remove what the directory no longer holds. Running this last is what keeps a moved container:
+        // by this point it sits under its new parent, so the pass walking its old parent no longer sees it.
+        foreach (var partition in connectedSystem.Partitions.Where(p => p.Containers != null))
+            RemoveUnmatchedContainers(partition.Containers!, matchedContainers, result);
 
         // Remove unmatched partitions (they no longer exist in the external system)
         var toRemove = connectedSystem.Partitions
@@ -2964,23 +2984,32 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Recursively merges discovered containers with existing ones.
+    /// Recursively matches discovered containers against stored ones, adding those the directory has gained and
+    /// noting those it has moved. Removes nothing and reparents nothing.
     /// </summary>
-    private static void MergeContainersRecursive(
-        HashSet<ConnectedSystemContainer> existingContainers,
+    /// <remarks>
+    /// Matching, reparenting and removal are three passes rather than one because container identity is global
+    /// while the hierarchy is walked level by level. A container resolves by its stable identifier wherever it now
+    /// sits, so a moved one is matched at a level it did not previously belong to; a single pass that also removed
+    /// per level therefore deleted it from its old parent, either before or after the level that claimed it
+    /// depending only on the order the Connector happened to return its containers in. Splitting the passes is what
+    /// makes the outcome independent of that order (#1318).
+    /// </remarks>
+    private static void MatchContainersRecursive(
+        ConnectedSystemPartition partition,
+        ConnectedSystemContainer? parentContainer,
         List<ConnectorContainer> discoveredContainers,
-        string? parentExternalId,
         HierarchyRefreshResult result,
         Dictionary<string, ConnectedSystemContainer> globalLookup,
-        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup)
+        Dictionary<string, ConnectedSystemContainer> globalStableIdLookup,
+        HashSet<ConnectedSystemContainer> matchedContainers,
+        List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)> containersToReparent)
     {
-        var matchedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var discovered in discoveredContainers)
         {
             if (TryResolveExistingContainer(discovered, globalLookup, globalStableIdLookup, out var existing))
             {
-                matchedIds.Add(discovered.Id);
+                matchedContainers.Add(existing);
 
                 // Record the identifier the first time the Connector supplies one, so a container selected before
                 // stable identifiers existed survives its next rename.
@@ -3005,41 +3034,52 @@ public class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Check for move (different parent)
-                var existingParentId = existing.ParentContainer?.ExternalId;
-                if (!string.Equals(existingParentId, parentExternalId, StringComparison.OrdinalIgnoreCase))
+                // Check for move (a different parent, or none where there was one). Compared by reference rather
+                // than by Distinguished Name: the parent's own name may be being rewritten in this same refresh.
+                if (!ReferenceEquals(existing.ParentContainer, parentContainer))
                 {
                     result.MovedContainers.Add(new HierarchyMoveItem
                     {
                         ExternalId = discovered.Id,
                         Name = discovered.Name,
-                        OldParentExternalId = existingParentId,
-                        NewParentExternalId = parentExternalId
+                        OldParentExternalId = existing.ParentContainer?.ExternalId,
+                        NewParentExternalId = parentContainer?.ExternalId
                     });
-                    // Note: The actual parent relationship will be corrected by rebuilding the tree structure
-                    // while preserving the Selected flag. For now we just track the move.
+
+                    containersToReparent.Add((existing, partition, parentContainer));
                 }
 
                 // Recurse into children
-                MergeContainersRecursive(
-                    existing.ChildContainers,
+                MatchContainersRecursive(
+                    partition,
+                    existing,
                     discovered.ChildContainers,
-                    discovered.Id,
                     result,
                     globalLookup,
-                    globalStableIdLookup);
+                    globalStableIdLookup,
+                    matchedContainers,
+                    containersToReparent);
             }
             else
             {
-                // NEW container - add it
+                // NEW container: build it and put it where the directory says it belongs.
                 var newContainer = BuildConnectedSystemContainerTree(discovered);
-                existingContainers.Add(newContainer);
+                if (parentContainer != null)
+                {
+                    parentContainer.AddChildContainer(newContainer);
+                }
+                else
+                {
+                    newContainer.Partition = partition;
+                    partition.Containers ??= [];
+                    partition.Containers.Add(newContainer);
+                }
 
-                // Record it as present, or the cleanup pass below deletes it again in this same refresh: it is not in
-                // matchedIds, and "not matched" is how that pass recognises a container that has left the directory.
-                // A container created since the last refresh was therefore reported as added and then silently
-                // dropped, so it never appeared on the Partitions & Containers tab to be selected.
-                matchedIds.Add(discovered.Id);
+                // Record it and its whole subtree as matched, or the removal pass deletes it again in this same
+                // refresh: "not matched" is how that pass recognises a container that has left the directory. A
+                // container created since the last refresh was once reported as added and then silently dropped, so
+                // it never appeared on the Partitions and Containers tab to be selected.
+                MarkContainerTreeMatched(newContainer, matchedContainers);
 
                 result.AddedContainers.Add(new HierarchyChangeItem
                 {
@@ -3052,16 +3092,115 @@ public class ConnectedSystemServer
                 CountAddedContainersRecursive(newContainer.ChildContainers, result.AddedContainers);
             }
         }
+    }
 
-        // Remove unmatched containers (they no longer exist in the external system)
-        var toRemove = existingContainers
-            .Where(c => !matchedIds.Contains(c.ExternalId))
-            .ToList();
+    /// <summary>
+    /// Marks a container and everything beneath it as present in the directory.
+    /// </summary>
+    private static void MarkContainerTreeMatched(ConnectedSystemContainer container, HashSet<ConnectedSystemContainer> matchedContainers)
+    {
+        matchedContainers.Add(container);
 
-        foreach (var container in toRemove)
+        foreach (var childContainer in container.ChildContainers)
+            MarkContainerTreeMatched(childContainer, matchedContainers);
+    }
+
+    /// <summary>
+    /// Moves a stored container to the parent the directory now reports for it, preserving everything the container
+    /// carries: its selection, its exclusion, its scope and its own descendants.
+    /// </summary>
+    /// <remarks>
+    /// Both sides of the relationship are maintained explicitly, navigation and foreign key alike. Only top-level
+    /// containers carry a partition and only nested ones carry a parent container, so a move between those two
+    /// shapes has to clear one pair as it sets the other; leaving a stale foreign key behind would have the row
+    /// claim two homes. The detach searches the whole Connected System rather than the partition being merged,
+    /// because a container's old home is wherever it was, not wherever it is going.
+    /// </remarks>
+    private static void ReparentContainer(
+        ConnectedSystemContainer container,
+        ConnectedSystem connectedSystem,
+        ConnectedSystemPartition partition,
+        ConnectedSystemContainer? newParent)
+    {
+        DetachContainerFromItsCurrentHome(container, connectedSystem);
+
+        if (newParent != null)
         {
-            CollectRemovedContainerRecursive(container, result);
-            existingContainers.Remove(container);
+            newParent.AddChildContainer(container);
+            container.ParentContainerId = newParent.Id;
+            container.Partition = null;
+            container.PartitionId = null;
+        }
+        else
+        {
+            container.ParentContainer = null;
+            container.ParentContainerId = null;
+            container.Partition = partition;
+            container.PartitionId = partition.Id;
+            partition.Containers ??= [];
+            partition.Containers.Add(container);
+        }
+    }
+
+    /// <summary>
+    /// Removes a container from whichever collection currently holds it.
+    /// </summary>
+    /// <remarks>
+    /// The parent navigation answers this on a graph EF Core has fixed up, but it is not relied on alone: the portal
+    /// loads the Connected System in one scope and saves it in another, and a navigation that was never included
+    /// reads as null. Falling back to a search of the stored hierarchy costs one walk per moved container, which is
+    /// nothing against the cost of leaving a container in two collections at once.
+    /// </remarks>
+    private static void DetachContainerFromItsCurrentHome(ConnectedSystemContainer container, ConnectedSystem connectedSystem)
+    {
+        if (container.ParentContainer != null && container.ParentContainer.ChildContainers.Remove(container))
+            return;
+
+        foreach (var partition in connectedSystem.Partitions ?? [])
+        {
+            if (partition.Containers?.Remove(container) == true)
+                return;
+
+            if (partition.Containers != null && RemoveFromDescendants(partition.Containers, container))
+                return;
+        }
+    }
+
+    private static bool RemoveFromDescendants(IEnumerable<ConnectedSystemContainer> containers, ConnectedSystemContainer container)
+    {
+        foreach (var candidate in containers)
+        {
+            if (candidate.ChildContainers.Remove(container))
+                return true;
+
+            if (RemoveFromDescendants(candidate.ChildContainers, container))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Removes every container the directory no longer holds, walking the hierarchy after the moves have settled.
+    /// </summary>
+    private static void RemoveUnmatchedContainers(
+        HashSet<ConnectedSystemContainer> containers,
+        HashSet<ConnectedSystemContainer> matchedContainers,
+        HierarchyRefreshResult result)
+    {
+        foreach (var container in containers.ToList())
+        {
+            if (matchedContainers.Contains(container))
+            {
+                RemoveUnmatchedContainers(container.ChildContainers, matchedContainers, result);
+            }
+            else
+            {
+                // Anything still beneath this container is genuinely gone too: a descendant that moved elsewhere
+                // has already been detached from it by the reparenting pass.
+                CollectRemovedContainerRecursive(container, result);
+                containers.Remove(container);
+            }
         }
     }
 
