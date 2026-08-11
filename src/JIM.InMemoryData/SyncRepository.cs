@@ -1430,6 +1430,24 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(expiring.Count);
     }
 
+    public Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
+    {
+        if (maxRecords <= 0)
+            return Task.FromResult(0);
+
+        var trimming = _pendingInitialPasswords.Values
+            .Where(p => p.Status is PendingInitialPasswordStatus.Parked or PendingInitialPasswordStatus.Expired &&
+                        (p.LastAttemptedAt ?? p.CreatedAt) < olderThan)
+            .OrderBy(p => p.LastAttemptedAt ?? p.CreatedAt)
+            .Take(maxRecords)
+            .ToList();
+
+        foreach (var pending in trimming)
+            _pendingInitialPasswords.Remove(pending.Id);
+
+        return Task.FromResult(trimming.Count);
+    }
+
     public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
     {
         var parked = _pendingInitialPasswords.Values

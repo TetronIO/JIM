@@ -310,6 +310,7 @@ public static class ConfigurationChangeClassifier
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,
         [Constants.SettingKeys.ConfigurationChangeRetentionPeriod] = C,
         [Constants.SettingKeys.SecurityEventRetentionPeriod] = C,
+        [Constants.SettingKeys.InitialPasswordRetentionPeriod] = C,
         [Constants.SettingKeys.HistoryCleanupBatchSize] = C,
         [Constants.SettingKeys.ChangeTrackingCsoChangesEnabled] = C,
         [Constants.SettingKeys.ChangeTrackingMvoChangesEnabled] = C,

@@ -273,6 +273,33 @@ public class InitialPasswordDeliveryServer
     }
 
     /// <summary>
+    /// Removes initial-password records that reached a terminal state long enough ago to have had their
+    /// retention period, and returns how many were removed.
+    /// <para>
+    /// Parked and Expired records are kept on purpose, so that an account provisioned without a working password
+    /// says so rather than disappearing. Kept for ever, though, they are unbounded growth: one row per account
+    /// a misconfigured Synchronisation Rule ever provisioned, in a table nobody is watching. This is the other
+    /// end of that decision, and it is deliberately the only thing that removes a record JIM did not resolve.
+    /// </para>
+    /// <para>
+    /// Called from housekeeping alongside the change-history trims, under its own retention period
+    /// (<see cref="Constants.SettingKeys.InitialPasswordRetentionPeriod"/>) and the shared cleanup batch size.
+    /// </para>
+    /// </summary>
+    /// <param name="olderThan">The retention cutoff; records last touched before this are eligible.</param>
+    /// <param name="maxRecords">The most to remove in one pass.</param>
+    public async Task<int> DeleteExpiredWorkRecordsAsync(DateTime olderThan, int maxRecords)
+    {
+        var deleted = await _syncRepo.DeleteTerminalInitialPasswordsAsync(olderThan, maxRecords);
+
+        if (deleted > 0)
+            Log.Information("DeleteExpiredWorkRecordsAsync: Removed {Count} initial-password records that had been " +
+                "parked or expired since before {OlderThan}", deleted, olderThan);
+
+        return deleted;
+    }
+
+    /// <summary>
     /// How many accounts under each of these Synchronisation Rules are waiting on a person, for the indicator on
     /// the Synchronisation Rules list.
     /// <para>
