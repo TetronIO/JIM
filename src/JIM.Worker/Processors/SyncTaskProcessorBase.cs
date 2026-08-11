@@ -1731,6 +1731,26 @@ public abstract class SyncTaskProcessorBase
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
+            // Create error RPEIs where an outbound Synchronisation Rule could not export because the Metaverse
+            // Object's one Connected System Object in this system is of a different Object Type (#1331). No
+            // Pending Export was staged for that Rule; the object's other export Rules are unaffected. Reported
+            // rather than thrown, because it is a configuration fault for the administrator to resolve and the
+            // rest of the run still carries useful work.
+            foreach (var conflict in result.ObjectTypeConflicts)
+            {
+                var conflictRpei = _activity.PrepareRunProfileExecutionItem();
+                conflictRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject;
+                conflictRpei.ConnectedSystemObjectId = conflict.ExistingConnectedSystemObjectId;
+                conflictRpei.ErrorMessage =
+                    $"Metaverse Object {conflict.MetaverseObjectId}: " +
+                    $"Synchronisation Rule '{conflict.SyncRuleName}' exports Connected System Object Type '{conflict.TargetObjectTypeName}' to " +
+                    $"'{_connectedSystem.Name}', but this Metaverse Object is already represented there by a '{conflict.ExistingObjectTypeName}' " +
+                    "object. A Metaverse Object can have only one Connected System Object per Connected System, so nothing was exported for this " +
+                    "Rule. Either narrow the scopes so that no Metaverse Object satisfies two outbound Synchronisation Rules targeting this " +
+                    "Connected System, or give the exported Object Types their own Connected System over the same target.";
+                _activity.RunProfileExecutionItems.Add(conflictRpei);
+            }
+
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {

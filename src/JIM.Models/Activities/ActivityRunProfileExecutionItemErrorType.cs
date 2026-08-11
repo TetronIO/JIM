@@ -140,5 +140,19 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// object was not imported. Unlike most import errors this is not a source-data problem: the fix is
     /// in the Connected System's configuration, not in the Connected System itself.
     /// </summary>
-    ConnectorConfigurationError
+    ConnectorConfigurationError,
+
+    /// <summary>
+    /// An outbound Synchronisation Rule could not export a Metaverse Object because that Object's one
+    /// Connected System Object in the target Connected System is of a different Connected System Object
+    /// Type than the Rule targets. A Metaverse Object holds at most one Connected System Object per
+    /// Connected System, so the slot the Rule needs is already occupied and no Pending Export is staged.
+    /// The export-side counterpart of <see cref="CouldNotJoinDueToExistingJoin"/>.
+    ///
+    /// Two configurations reach this. Two outbound Synchronisation Rules into one Connected System whose
+    /// scopes overlap: narrow them so no Metaverse Object satisfies both. Or a Connected System that both
+    /// imports objects of one Object Type and exports another for the same Metaverse Objects: give the
+    /// exported Object Types their own Connected System over the same target.
+    /// </summary>
+    CouldNotExportDueToExistingConnectedSystemObject
 }
