@@ -19,22 +19,24 @@
     three test/integration scripts, two .razor files, two test .cs files and
     the session-start hook.
 
-    WHAT COUNTS AS PRESENT
+    WHAT COUNTS AS COMPLIANT
 
-    The two lines must appear consecutively, in order, and within the file's
-    leading preamble: the run of lines from the start of the file that are
-    blank, comments, or language directives, ending at the first line of real
-    content. That definition is deliberate rather than a fixed line number,
-    because JIM.Web carries two established Razor styles - App.razor puts the
-    notice on lines 1-2, while AdminIndex.razor and 76 others put it after the
-    @page/@inject directive block, as deep as line 21. Both place the notice
-    ahead of any content, which is the point of a copyright header; neither is
-    worth 77 files of churn to normalise.
+    The two lines must appear consecutively, in order, and at the canonical
+    position for the file type: line 1, except that a shebang and #Requires
+    directives come first in scripts, and a Razor @directive block comes first
+    in components. Nothing but blank lines may sit between the last of those
+    and the notice; how many blank lines is not policed.
+
+    Position is enforced, not merely presence, because a notice can be present
+    and still be wrong. Twelve JIM.Web components had the pair injected between
+    an @if condition and its opening brace, separating the two - the file
+    carried the notice, and no presence check would have noticed.
 
     The text must match exactly. A near-miss is a violation: the wording is the
     licence grant, not a decorative comment. JIM.psd1's manifest Copyright key
-    ('(c) Tetron Limited. All rights reserved.') is an example of the drift
-    this catches - it omits 'Copyright' and says nothing about the licence.
+    used to read '(c) Tetron Limited. All rights reserved.' - the kind of drift
+    this catches, since it omitted 'Copyright' and said nothing about the
+    licence.
 
     WHAT IS OUT OF SCOPE
 
@@ -43,8 +45,8 @@
     directory (EF Core rewrites the whole folder, including the model
     snapshot, on every 'dotnet ef migrations add') and *.Designer.cs. Build
     output (bin/, obj/, node_modules/ and friends) is skipped for the obvious
-    reason. _Imports.razor is skipped because src/CLAUDE.md carves it out by
-    name.
+    reason. These exclusions are mirrored in .editorconfig, which enforces the
+    same rule for .cs via IDE0073; keep the two in step.
 
 .PARAMETER Path
     One or more roots to scan, recursively. Defaults to the repository root.
@@ -86,7 +88,7 @@ param(
 
     [string[]]$ExcludeDirectory = @('bin', 'obj', 'node_modules', 'packages', 'TestResults', 'Migrations', '.git', '.vs', '.vscode'),
 
-    [string[]]$ExcludeFilePattern = @('*.Designer.cs', '*.g.cs', '*.generated.cs', '*.AssemblyInfo.cs', '_Imports.razor')
+    [string[]]$ExcludeFilePattern = @('*.Designer.cs', '*.g.cs', '*.generated.cs', '*.AssemblyInfo.cs')
 )
 
 Set-StrictMode -Version Latest
@@ -124,80 +126,55 @@ function Get-HeaderLine {
     )
 }
 
-# Returns the number of leading lines that are blank, comments or language
-# directives - i.e. everything before the file's first line of real content.
-# The header must live inside this run.
-function Get-PreambleLineCount {
+# Index of the first of the two header lines, or -1 when the pair is absent.
+function Get-HeaderIndex {
     param(
         [string[]]$Lines,
-        [string]$Kind
+        [string[]]$Header
     )
 
-    $inBlockComment = $false
-    $index = 0
-
-    foreach ($line in $Lines) {
-        $trimmed = $line.Trim()
-
-        if ($inBlockComment) {
-            $index++
-            $closer = if ($Kind -eq 'Slash') { '*/' } elseif ($Kind -eq 'Razor') { '*@' } else { '#>' }
-            if ($trimmed.Contains($closer)) { $inBlockComment = $false }
-            continue
+    for ($i = 0; $i -lt $Lines.Count - 1; $i++) {
+        if (([string]$Lines[$i]).Trim() -eq $Header[0] -and ([string]$Lines[$i + 1]).Trim() -eq $Header[1]) {
+            return $i
         }
-
-        if ($trimmed.Length -eq 0) { $index++; continue }
-
-        $isPreamble = $false
-        $opensBlock = $false
-
-        switch ($Kind) {
-            'Hash' {
-                # Covers '#!' shebangs, '#Requires' directives and ordinary comments.
-                if ($trimmed.StartsWith('#')) { $isPreamble = $true }
-                elseif ($trimmed.StartsWith('<#')) { $isPreamble = $true; $opensBlock = -not $trimmed.Contains('#>') }
-            }
-            'Slash' {
-                # '#' covers preprocessor directives: #nullable, #pragma, #region.
-                if ($trimmed.StartsWith('//') -or $trimmed.StartsWith('#')) { $isPreamble = $true }
-                elseif ($trimmed.StartsWith('/*')) { $isPreamble = $true; $opensBlock = -not $trimmed.Contains('*/') }
-            }
-            'Razor' {
-                if ($trimmed.StartsWith('@*')) { $isPreamble = $true; $opensBlock = -not $trimmed.Contains('*@') }
-                elseif ($trimmed.StartsWith('@')) {
-                    $word = ($trimmed.Substring(1) -split '[^A-Za-z]', 2)[0]
-                    if ($RazorDirectives -contains $word) { $isPreamble = $true }
-                }
-            }
-        }
-
-        if (-not $isPreamble) { break }
-
-        $index++
-        if ($opensBlock) { $inBlockComment = $true }
     }
 
-    return $index
+    return -1
 }
 
-function Test-HasCopyrightHeader {
+# 'Missing' (no notice at all), 'Misplaced' (present, but not where the rule
+# puts it) or 'Ok'. The two are worth distinguishing: one is a licensing
+# omission, the other is tidying.
+function Get-HeaderStatus {
     param(
         [string[]]$Lines,
         [hashtable]$Style
     )
 
-    $expected = Get-HeaderLine -Style $Style
-    $preamble = Get-PreambleLineCount -Lines $Lines -Kind $Style.Kind
+    $header = Get-HeaderLine -Style $Style
+    $at = Get-HeaderIndex -Lines $Lines -Header $header
+    if ($at -lt 0) { return 'Missing' }
 
-    # Both lines must sit inside the preamble, so the last viable start is
-    # preamble - 2.
-    for ($i = 0; $i -lt $preamble - 1; $i++) {
-        if ($Lines[$i].Trim() -eq $expected[0] -and $Lines[$i + 1].Trim() -eq $expected[1]) {
-            return $true
-        }
+    # What must precede the notice - a shebang, #Requires, or a Razor directive
+    # block - measured on the file with the notice taken out, so its own lines
+    # cannot terminate the scan.
+    $stripped = [System.Collections.Generic.List[string]]::new()
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($i -eq $at -or $i -eq $at + 1) { continue }
+        $stripped.Add([string]$Lines[$i])
     }
 
-    return $false
+    $required = Get-HeaderInsertIndex -Lines $stripped.ToArray() -Kind $Style.Kind
+    if ($at -lt $required) { return 'Misplaced' }
+
+    # Everything between the last required line and the notice must be blank.
+    # Blank-line counts are not policed; only that nothing of substance has got
+    # in front of the notice.
+    for ($i = $required; $i -lt $at; $i++) {
+        if (([string]$Lines[$i]).Trim().Length -gt 0) { return 'Misplaced' }
+    }
+
+    return 'Ok'
 }
 
 # Where the header belongs, per the placement rules in src/CLAUDE.md.
@@ -270,6 +247,13 @@ function Remove-MisplacedHeader {
         }
 
         $i++
+
+        # Same tidy-up at the top of the file, where there is no preceding line
+        # to absorb: a notice on line 1 is followed by its blank, and leaving it
+        # behind would open the file with an empty line.
+        if ($kept.Count -eq 0 -and $i + 1 -lt $Lines.Count -and ([string]$Lines[$i + 1]).Trim().Length -eq 0) {
+            $i++
+        }
     }
 
     return $kept.ToArray()
@@ -355,14 +339,21 @@ foreach ($root in $Path) {
         $raw = Get-Content -LiteralPath $file.FullName -Raw
         $lines = if ([string]::IsNullOrEmpty($raw)) { @() } else { $raw -split "`r?`n" }
 
-        if (Test-HasCopyrightHeader -Lines $lines -Style $style) { continue }
+        $status = Get-HeaderStatus -Lines $lines -Style $style
+        if ($status -eq 'Ok') { continue }
 
         if ($Fix) {
             Add-CopyrightHeader -FilePath $file.FullName -Lines $lines -Style $style
             $fixed.Add($relative)
         }
         else {
-            $violations.Add($relative)
+            $reason = if ($status -eq 'Missing') {
+                'is missing the Tetron copyright header.'
+            }
+            else {
+                'has the Tetron copyright header, but not in the canonical position for its file type.'
+            }
+            $violations.Add("$relative  $reason")
         }
     }
 }
@@ -375,10 +366,10 @@ if ($Fix) {
     exit 0
 }
 
-foreach ($v in $violations) { Write-Host "ERROR:   $v  is missing the Tetron copyright header." -ForegroundColor Red }
+foreach ($v in $violations) { Write-Host "ERROR:   $v" -ForegroundColor Red }
 
 if ($violations.Count -gt 0) {
-    Write-Host "`nCopyright header lint FAILED ($($violations.Count) file(s) missing the header)." -ForegroundColor Red
+    Write-Host "`nCopyright header lint FAILED ($($violations.Count) file(s))." -ForegroundColor Red
     Write-Host "Run 'pwsh -File ./scripts/Lint-CopyrightHeaders.ps1 -Fix' to insert it." -ForegroundColor Red
     exit 1
 }

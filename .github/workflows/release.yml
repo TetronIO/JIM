@@ -71,6 +71,12 @@ jobs:
       - name: Run .NET tests
         run: dotnet test JIM.sln --no-build --configuration Release --verbosity normal
 
+      # Gated here as well as in CI, so a release cannot ship a file without
+      # its copyright notice even if it is cut from a ref that bypassed CI.
+      - name: Lint copyright headers
+        shell: pwsh
+        run: pwsh -File ./scripts/Lint-CopyrightHeaders.ps1
+
       - name: Run Pester tests
         shell: pwsh
         run: |

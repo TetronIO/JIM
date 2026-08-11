@@ -67,17 +67,17 @@ Every new source file MUST include a copyright header as the very first content.
 - For `.cs` files: place the header at line 1, followed by a blank line, then the file content
 - For `.ps1`/`.psm1`/`.psd1` files: place the header at line 1, or immediately below a `#Requires` directive where one is present. In a `.psd1` manifest the comment header goes above the opening `@{`; it is **in addition to** the manifest's own `Copyright` key, which is what `Get-Module` surfaces and which neither states the licence nor satisfies this rule
 - For `.sh` files: place the header **after** the shebang line (`#!/bin/bash` or similar), no blank line between shebang and header
-- For `.razor` files: place the header **after** all `@` directives (`@page`, `@using`, `@inject`, etc.), followed by a blank line before the markup. (This is house style, not a compiler constraint: Razor is happy with the notice on line 1, and around 60 files in `JIM.Web` are written that way. Both placements pass the lint below; prefer after-the-directives in new files, to match the majority.) Do NOT add headers to `_Imports.razor`
+- For `.razor` files: place the header **after** all `@` directives (`@page`, `@using`, `@inject`, etc.), followed by a blank line before the markup; where a component declares no directives, line 1. This is house style, not a compiler constraint (Razor is happy with the notice on line 1), but it is the enforced position. `_Imports.razor` is included like any other component
 - Do NOT add headers to auto-generated files (EF migrations, `.Designer.cs`, `.g.cs`, `.AssemblyInfo.cs`)
 
-**Enforcement:** `scripts/Lint-CopyrightHeaders.ps1` checks every file of the types above and fails the `build-and-test` CI job on any that is missing the notice. It accepts the header anywhere in a file's leading preamble (blank lines, comments and language directives), so both Razor placements pass, and it skips the generated-code and `_Imports.razor` exclusions listed above.
+**Enforcement:** `scripts/Lint-CopyrightHeaders.ps1` checks every file of the types above and fails the `build-and-test` CI job on anything missing or misplaced. **Position is enforced, not just presence** - 12 `JIM.Web` components had the notice injected between an `@if` condition and its opening brace, which a presence check would have passed. Blank-line counts are not policed; only that nothing of substance precedes the notice.
 
 ```bash
 pwsh -File ./scripts/Lint-CopyrightHeaders.ps1        # report
-pwsh -File ./scripts/Lint-CopyrightHeaders.ps1 -Fix   # insert, in the right place for the file type
+pwsh -File ./scripts/Lint-CopyrightHeaders.ps1 -Fix   # insert or relocate, per file type
 ```
 
-`.editorconfig` also sets `file_header_template` + `IDE0073` for `.cs`, but that section is `[*.cs]`-scoped and the severity is only `suggestion`, so it never fails a build. It is an IDE convenience; the lint script is the actual gate.
+`.editorconfig` enforces the same rule for `.cs` via `file_header_template` + `IDE0073`. Because `Directory.Build.props` sets `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors`, a `.cs` file without the header is a **build error**, not an IDE hint. The generated-code exclusions above are duplicated there as `severity = none` sections; **if you change the exclusions in one place, change them in the other**, or `dotnet build` and the lint script will disagree.
 
 **DateTime Handling (IMPORTANT):**
 - Always use `DateTime` type (not `DateTimeOffset`) in models

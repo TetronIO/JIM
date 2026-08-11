@@ -108,9 +108,11 @@ Describe 'Lint-CopyrightHeaders' {
             (Invoke-Lint -Root $root).ExitCode | Should -Be 0
         }
 
-        It 'accepts a header that follows a PowerShell block comment' {
+        It 'accepts a Razor header on line 1 when the file declares no directives' {
+            # 15 JIM.Web components are shaped this way. With no directive
+            # block to sit below, line 1 is the canonical position.
             $root = New-HeaderFixture -Files @{
-                'Helper.ps1' = "<#`n.SYNOPSIS`n    A helper.`n#>`n# $script:CopyrightText`n# $script:LicenceText`n`nWrite-Host 'hi'`n"
+                'Plain.razor' = "@* $script:CopyrightText *@`n@* $script:LicenceText *@`n`n<div />`n"
             }
 
             (Invoke-Lint -Root $root).ExitCode | Should -Be 0
@@ -183,9 +185,31 @@ Describe 'Lint-CopyrightHeaders' {
             (Invoke-Lint -Root $root).ExitCode | Should -Be 1
         }
 
-        It 'fails when the notice sits below the preamble, after real content' {
+        It 'fails when the notice sits below real content' {
             $root = New-HeaderFixture -Files @{
                 'Late.cs' = "namespace JIM.Fixture;`n`n// $script:CopyrightText`n// $script:LicenceText`n"
+            }
+
+            $r = Invoke-Lint -Root $root
+            $r.ExitCode | Should -Be 1
+            $r.Output | Should -Match 'not in the canonical position'
+        }
+
+        It 'fails a Razor header on line 1 when the file does declare directives' {
+            # The notice belongs below the directive block; 121 of 144 JIM.Web
+            # components are written that way and src/CLAUDE.md mandates it.
+            $root = New-HeaderFixture -Files @{
+                'Dialog.razor' = "@* $script:CopyrightText *@`n@* $script:LicenceText *@`n`n@inject IDialogService Dialogs`n`n<div />`n"
+            }
+
+            $r = Invoke-Lint -Root $root
+            $r.ExitCode | Should -Be 1
+            $r.Output | Should -Match 'not in the canonical position'
+        }
+
+        It 'fails a script header pushed below a comment block' {
+            $root = New-HeaderFixture -Files @{
+                'Helper.ps1' = "<#`n.SYNOPSIS`n    A helper.`n#>`n# $script:CopyrightText`n# $script:LicenceText`n`nWrite-Host 'hi'`n"
             }
 
             (Invoke-Lint -Root $root).ExitCode | Should -Be 1
@@ -238,10 +262,14 @@ Describe 'Lint-CopyrightHeaders' {
             (Invoke-Lint -Root $root).ExitCode | Should -Be 0
         }
 
-        It 'skips _Imports.razor, which src/CLAUDE.md carves out by name' {
+        It 'checks _Imports.razor like any other component' {
+            # It used to be carved out by name, on the mistaken grounds that
+            # Razor needs its directives first. It does not.
             $root = New-HeaderFixture -Files @{ 'src/JIM.Web/_Imports.razor' = "@using JIM.Application`n" }
 
-            (Invoke-Lint -Root $root).ExitCode | Should -Be 0
+            $r = Invoke-Lint -Root $root
+            $r.ExitCode | Should -Be 1
+            $r.Output | Should -Match '_Imports\.razor'
         }
 
         It 'skips EF Core migrations and designer files, which are tool-generated' {
@@ -320,6 +348,23 @@ Describe 'Lint-CopyrightHeaders' {
             $lines[2] | Should -Be ''
             $lines[3] | Should -Be "@* $script:CopyrightText *@"
             $lines[4] | Should -Be "@* $script:LicenceText *@"
+        }
+
+        It 'moves a line-1 Razor header down below the directive block' {
+            $original = "@* $script:CopyrightText *@`n@* $script:LicenceText *@`n`n@inject IDialogService Dialogs`n`n<div />`n"
+            $root = New-HeaderFixture -Files @{ 'Dialog.razor' = $original }
+
+            (Invoke-Lint -Root $root -Fix).ExitCode | Should -Be 0
+            (Invoke-Lint -Root $root).ExitCode | Should -Be 0
+
+            $fixed = Get-FixtureContent -Root $root -RelativePath 'Dialog.razor'
+            ([regex]::Matches($fixed, [regex]::Escape($script:CopyrightText))).Count | Should -Be 1
+
+            $lines = $fixed -split "`r?`n"
+            $lines[0] | Should -Be '@inject IDialogService Dialogs'
+            $lines[1] | Should -Be ''
+            $lines[2] | Should -Be "@* $script:CopyrightText *@"
+            $lines[3] | Should -Be "@* $script:LicenceText *@"
         }
 
         It 'relocates a misplaced Razor header rather than duplicating it' {
