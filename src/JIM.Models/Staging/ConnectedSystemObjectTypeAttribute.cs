@@ -25,6 +25,17 @@ public class ConnectedSystemObjectTypeAttribute
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>
+    /// Whether the Connected System requires a value for this attribute on an object of the class named by
+    /// <see cref="ClassName"/>, i.e. an RFC 4512 MUST.
+    /// </summary>
+    /// <remarks>
+    /// Connector-supplied and replaced on every schema refresh, in the same way as <see cref="Writability"/>. JIM
+    /// uses it to refuse an export that would leave an object invalid at the Connected System, naming what is
+    /// missing, rather than sending a change the directory rejects with an error an administrator cannot read.
+    /// </remarks>
+    public bool Required { get; set; }
+
+    /// <summary>
     /// The Connected System Object Type this attribute belongs to.
     /// </summary>
     public ConnectedSystemObjectType ConnectedSystemObjectType { get; set; } = null!;

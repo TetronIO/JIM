@@ -96,6 +96,41 @@ public class SchemaRefreshAuxiliaryClassTests
         return connectedSystem.ObjectTypes!.Single(objectType => objectType.Name == "inetOrgPerson");
     }
 
+    /// <summary>
+    /// A Connector reports which attributes its Connected System demands. JIM has to keep that: an export omitting
+    /// one leaves the object invalid at the Connected System, and refusing it with the attribute named is only
+    /// possible if the requirement survived schema import.
+    /// </summary>
+    [Test]
+    public void MergeSchema_KeepsWhichAttributesTheConnectedSystemRequires()
+    {
+        var connectedSystem = BuildConnectedSystem();
+
+        ConnectedSystemServer.MergeSchemaIntoConnectedSystem(connectedSystem, BuildDiscoveredSchema());
+
+        var cn = Person(connectedSystem).Attributes!.Single(attribute => attribute.Name == "cn");
+        Assert.That(cn.Required, Is.True);
+    }
+
+    /// <summary>
+    /// A Connected System that stops demanding an attribute must be reflected too, or JIM would go on refusing
+    /// exports it would now accept.
+    /// </summary>
+    [Test]
+    public void MergeSchema_WhenTheConnectedSystemStopsRequiringAnAttribute_ReflectsThat()
+    {
+        var connectedSystem = BuildConnectedSystem();
+        Person(connectedSystem).Attributes!.Single(attribute => attribute.Name == "cn").Required = true;
+
+        var schema = BuildDiscoveredSchema();
+        schema.ObjectTypes.Single(objectType => objectType.Name == "inetOrgPerson")
+            .Attributes.Single(attribute => attribute.Name == "cn").Required = false;
+
+        ConnectedSystemServer.MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+        Assert.That(Person(connectedSystem).Attributes!.Single(attribute => attribute.Name == "cn").Required, Is.False);
+    }
+
     [Test]
     public void MergeSchema_ForAnAttributeAnAuxiliaryClassContributed_KeepsTheSameAttributeRow()
     {

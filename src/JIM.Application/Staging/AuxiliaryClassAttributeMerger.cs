@@ -134,6 +134,10 @@ internal static class AuxiliaryClassAttributeMerger
                     Type = attribute.Type,
                     Writability = attribute.Writability,
 
+                    // The auxiliary class's own requirement travels with the attribute: an entry that carries the
+                    // class must satisfy its MUSTs, whichever structural class it is merged onto.
+                    Required = attribute.Required,
+
                     // Provenance, and the marker this merger recognises its own work by.
                     ClassName = contributor.Name
 

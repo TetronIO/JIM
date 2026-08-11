@@ -1606,6 +1606,7 @@ public class ConnectedSystemServer
                         existingAttribute.Type = schemaAttribute.Type;
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
+                        existingAttribute.Required = schemaAttribute.Required;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -1619,7 +1620,8 @@ public class ConnectedSystemServer
                             AttributePlurality = schemaAttribute.AttributePlurality,
                             Type = schemaAttribute.Type,
                             ClassName = schemaAttribute.ClassName,
-                            Writability = schemaAttribute.Writability
+                            Writability = schemaAttribute.Writability,
+                            Required = schemaAttribute.Required
                         });
                     }
                 }
@@ -1649,7 +1651,8 @@ public class ConnectedSystemServer
                         AttributePlurality = a.AttributePlurality,
                         Type = a.Type,
                         ClassName = a.ClassName,
-                        Writability = a.Writability
+                        Writability = a.Writability,
+                        Required = a.Required
                     }).ToList()
                 };
 
