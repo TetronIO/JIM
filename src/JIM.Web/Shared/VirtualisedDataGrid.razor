@@ -10,7 +10,8 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The virtualised (infinite-scroll) list: fills the available viewport height and streams windows of rows from
+@* The virtualised (infinite-scroll) list: grows with its rows up to the available viewport height (a short
+   list reads as an ordinary table; a long one fills to the page footer) and streams windows of rows from
    the server as the reader scrolls, so there is no page size to choose and no page controls. This component owns
    everything every virtualised list must get right and got wrong at least once while the pattern lived in a page:
    the URL round trip for search, sort and scroll position; re-counting only when the filters change; restoring a
@@ -240,10 +241,11 @@
         if (!_preferencesLoaded || _scrollObserved)
             return;
 
-        // Fit the height before restoring the scroll position: the restore clamps to the scroll area, and the
-        // height decides how tall that area is. There is no height to pass because there is no height to know:
-        // JavaScript measures where the page footer lands and sizes the container so every list page ends at the
-        // same place, whatever chrome sits above the grid (a CSS fallback covers the first paint).
+        // Fit the height ceiling before restoring the scroll position: the restore clamps to the scroll area,
+        // and the ceiling decides how tall that area can get. There is no height to pass because there is no
+        // height to know: JavaScript measures where the page footer lands and caps the container so a long list
+        // ends at the same place on every page, while a short one collapses to its content, whatever chrome
+        // sits above the grid (a CSS fallback covers the first paint).
         await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
 
         // Restore first, then watch, so the restore's own scrolling is not reported back as the reader's position.

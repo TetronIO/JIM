@@ -65,11 +65,12 @@ window.jimInterop = {
 window.jimVirtualList = {
     _observed: {},
     _fitted: {},
-    // Sizes a virtualised list's scroll container so the page footer lands at the bottom of the viewport with
-    // the same breathing room below it as it has above it (its own top margin), and keeps that true as the
-    // window resizes. Measuring where the footer actually lands, rather than each page carrying a hand-tuned
-    // height, is what makes the footer sit in the same place on every list page regardless of how much header,
-    // filter and breadcrumb chrome sits above the grid.
+    // Gives a virtualised list's scroll container a height CEILING so a long list ends with the page footer
+    // at the bottom of the viewport, with the same breathing room below the footer as it has above it (its own
+    // top margin), and keeps that true as the window resizes. It is a ceiling, not a fixed height: a list of a
+    // few rows collapses to its content like an ordinary table, with the footer following it up the page.
+    // Measuring where the footer actually lands, rather than each page carrying a hand-tuned constant, is what
+    // makes long lists end in the same place whatever header, filter and breadcrumb chrome sits above the grid.
     fit: function (selector) {
         window.jimVirtualList.unfit(selector);
         var element = document.querySelector(selector);
@@ -78,16 +79,18 @@ window.jimVirtualList = {
         var entry = { element: element, timer: null };
         entry.apply = function () {
             var footer = document.querySelector('.jim-page-footer');
-            // A couple of passes, because changing the height can re-wrap content and move the footer again.
+            // A couple of passes, because changing the ceiling can re-wrap content and move the measurements.
             for (var i = 0; i < 3; i++) {
                 var gap = footer ? parseFloat(window.getComputedStyle(footer).marginTop) || 20 : 20;
-                var anchor = footer || element;
-                var bottom = anchor.getBoundingClientRect().bottom + window.scrollY;
-                var delta = bottom + gap - window.innerHeight;
-                var current = element.getBoundingClientRect().height;
-                var next = Math.max(240, Math.round(current - delta));
-                if (Math.abs(next - current) < 1) break;
-                element.style.height = next + 'px';
+                var rect = element.getBoundingClientRect();
+                // Everything between the container's bottom edge and the footer's bottom edge moves with the
+                // container, so their distance is the same however tall the container is; the ceiling is what
+                // remains of the viewport after the chrome above the container and that fixed tail below it.
+                var below = footer ? footer.getBoundingClientRect().bottom - rect.bottom : 0;
+                var ceiling = Math.max(240, Math.round(window.innerHeight - (rect.top + window.scrollY) - below - gap));
+                var current = parseFloat(element.style.maxHeight) || 0;
+                if (Math.abs(ceiling - current) < 1) break;
+                element.style.maxHeight = ceiling + 'px';
             }
         };
         entry.handler = function () {
