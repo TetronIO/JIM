@@ -225,6 +225,15 @@ When feature work surfaces something that must be solved to deliver the feature 
   ```
 
   **Do NOT use `gh stack rebase` for this.** It rebases *every* branch in the chain, starting with the bottom layer onto `main`, which is precisely what the merge-don't-rebase rule exists to avoid: on a long-lived bottom layer it replays every commit over `main`'s drift and re-resolves the same conflicts per commit. On stack #1211 it hit conflicts in three files while replaying 53 commits and had to be aborted with `gh stack rebase --abort` (which restores cleanly). The `--onto` form above touches only the layer that actually needs moving. The `-c rebase.backend=apply` is for the same misleading "local changes would be overwritten by merge" on a clean tree noted in the next section; without it the rebase aborts on the first commit.
+- **A rebased layer loses its commit signatures; re-sign before wondering why it will not merge.** `main`'s ruleset carries a `required_signatures` rule, and a rebase performed by the stack tooling (or by GitHub retargeting a layer onto `main` when the layer below merges) rewrites the commit *without* re-signing it. The PR then sits at `mergeStateStatus: BLOCKED` with **every required check green and no failures**, which reads exactly like "checks still settling" and is not. Confirm with `gh api graphql -f query='{repository(owner:"TetronIO",name:"JIM"){pullRequest(number:<n>){commits(last:1){nodes{commit{oid signature{isValid state}}}}}}}'`; a `signature` of `null` is the answer. Fix by re-signing the identical tree and force-pushing:
+
+  ```bash
+  git commit --amend --no-edit -S   # commit.gpgsign is already true; the tree is unchanged
+  git push --force-with-lease
+  ```
+
+  Note that `git log --format='%G?'` reports `N` locally even for correctly signed commits, because `gpg.ssh.allowedSignersFile` is not configured; that is a local *verification* gap, not a signing failure. Check `git cat-file commit HEAD` for a `gpgsig` header, or ask GitHub as above. (Rule added after stack #1320's upper layer sat BLOCKED with nine green checks and no failures.)
+- **`failures: none` is not `mergeable`.** When polling a PR, key on `mergeStateStatus`, not on the absence of failed checks: a required check that never ran, and an unsigned commit, are both invisible to a rollup that only lists what exists. `CLEAN` is the only state that means ready.
 - Layers stay shallow and single-concern; nest further layers the same way. Layer branches belong to the same session and objective as their parent feature branch; the `-stack-` naming keeps the lineage visible across parallel sessions.
 - GitHub issues remain only for genuine observations that are NOT needed to deliver the current objective (link them with native blocked-by/sub-issue relationships per the rules above).
 

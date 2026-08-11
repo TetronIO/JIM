@@ -4,6 +4,7 @@
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
+using JIM.Connectors.Sql;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -786,7 +787,7 @@ internal class SeedingServer
     /// </summary>
     internal static List<IConnector> BuiltInConnectors()
     {
-        return [new LdapConnector(), new FileConnector(), new ScimConnector()];
+        return [new LdapConnector(), new FileConnector(), new ScimConnector(), new SqlConnector()];
     }
 
     /// <summary>
@@ -1173,6 +1174,17 @@ internal class SeedingServer
             Category = ServiceSettingCategory.History,
             ValueType = ServiceSettingValueType.TimeSpan,
             DefaultValue = "365.00:00:00", // ~1 year
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.InitialPasswordRetentionPeriod,
+            DisplayName = "Initial password record retention period",
+            Description = "The duration for which an initial-password record that has reached a terminal state (parked for an administrator, or expired without one being set) is kept before housekeeping removes it. Records still being worked are never removed, however old. The Activity recording what happened to the account outlives this. Format: d.hh:mm:ss (e.g., '90.00:00:00' for 90 days).",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "90.00:00:00", // 90 days
             IsReadOnly = false
         });
 

@@ -1,3 +1,6 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 @{
     # Script module or binary module file associated with this manifest.
     RootModule = 'JIM.psm1'
@@ -18,7 +21,7 @@
     CompanyName = 'Tetron'
 
     # Copyright statement for this module
-    Copyright = '(c) Tetron Limited. All rights reserved.'
+    Copyright = 'Copyright (c) Tetron Limited. All rights reserved.'
 
     # Description of the functionality provided by this module
     Description = 'PowerShell module for administering JIM (Junctional Identity Manager). Provides cmdlets for managing Connected Systems, Synchronisation Rules, Run Profiles, Metaverse Objects, Activities, API Keys, Certificates, and more. Supports both interactive (SSO) and non-interactive (API Key) authentication.'

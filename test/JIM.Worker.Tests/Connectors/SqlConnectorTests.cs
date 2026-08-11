@@ -7,6 +7,7 @@ using JIM.Connectors.Sql.Providers;
 using JIM.Models.Staging;
 using NUnit.Framework;
 using Serilog;
+using System.Data;
 using ILogger = Serilog.ILogger;
 
 namespace JIM.Worker.Tests.Connectors;
@@ -629,6 +630,59 @@ public class SqlConnectorTests
 
         Assert.That(provider.ConfiguredConnectionSettings, Has.Count.EqualTo(1));
         Assert.That(provider.ConfiguredConnectionSettings[0], Is.SameAs(provider.BuiltConnectionSettings[0]));
+    }
+
+    [Test]
+    public void ValidateSettingValues_AnyConnection_LetsTheDialectConfigureTheSessionOnceItIsOpen()
+    {
+        // Oracle Database's session time zone is the case this exists for: it decides what a TIMESTAMP
+        // WITH LOCAL TIME ZONE column reads back as, and ODP.NET offers no way to set it before the
+        // connection is open, so a pre-open hook alone cannot reach it.
+        var provider = new FakeSqlProvider();
+        var connector = CreateConnectorWith(provider);
+
+        connector.ValidateSettingValues(CreateSqlServerSettingValues(encrypt: true), _logger);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.ConfiguredOpenConnectionSettings, Has.Count.EqualTo(1));
+            Assert.That(provider.ConfiguredOpenConnectionSettings[0], Is.SameAs(provider.BuiltConnectionSettings[0]));
+            Assert.That(provider.ConnectionStatesWhenConfiguredOpen, Is.EqualTo(new[] { ConnectionState.Open }),
+                "A session setting can only be applied to a session, so the connection has to be open by the time the dialect is asked.");
+        }
+    }
+
+    [Test]
+    public void ValidateSettingValues_ADatabaseTimeZone_ReachesTheProviderAsTheConfiguredZoneRatherThanTheHosts()
+    {
+        // The Database Time Zone is not only an interpretation rule applied after the fact: Oracle
+        // Database converts a local-time-zone column into the session's time zone before the driver
+        // ever sees it, so the provider needs the configured zone at connection time to pin the session
+        // to it. Left to itself the session takes the Worker host's zone, which makes what JIM reads
+        // depend on which machine the run happened on.
+        var provider = new FakeSqlProvider();
+        var connector = CreateConnectorWith(provider);
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseTimeZone, "Australia/Sydney");
+
+        connector.ValidateSettingValues(settingValues, _logger);
+
+        Assert.That(provider.BuiltConnectionSettings.Single().DatabaseTimeZone,
+            Is.EqualTo(TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney")));
+    }
+
+    [Test]
+    public void ValidateSettingValues_NoDatabaseTimeZone_ReachesTheProviderAsUtc()
+    {
+        var provider = new FakeSqlProvider();
+        var connector = CreateConnectorWith(provider);
+        var settingValues = CreateSqlServerSettingValues(encrypt: true);
+        SetString(settingValues, SqlConnectorConstants.SettingDatabaseTimeZone, null);
+
+        connector.ValidateSettingValues(settingValues, _logger);
+
+        Assert.That(provider.BuiltConnectionSettings.Single().DatabaseTimeZone, Is.EqualTo(TimeZoneInfo.Utc),
+            "UTC is the documented default, and the one zone that needs no interpretation.");
     }
 
     // The expected value crosses as an int because the encryption mode is internal to JIM.Connectors:

@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using NUnit.Framework;
+using Oracle.ManagedDataAccess.Types;
 using Serilog;
 using Serilog.Core;
 
@@ -82,6 +83,18 @@ public class SqlConnectorExportTests
         {
           "objectTypes": [
             { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "STAFF_GUID" ] }
+          ]
+        }
+        """;
+
+    /// <summary>
+    /// An object type identified by a character column, which is what an Oracle table keyed on a
+    /// <c>VARCHAR2</c> filled by a trigger looks like.
+    /// </summary>
+    private const string TextAnchorDocument = """
+        {
+          "objectTypes": [
+            { "name": "Person", "schema": "HR", "table": "EMPLOYEES", "anchorColumns": [ "STAFF_CODE" ] }
           ]
         }
         """;
@@ -836,6 +849,127 @@ public class SqlConnectorExportTests
 
     #endregion
 
+    #region Oracle driver values
+
+    /// <summary>
+    /// A sequence-backed <c>NUMBER</c> primary key, which is the ordinary way an Oracle table generates
+    /// one. ODP.NET never hands a CLR primitive back through an output parameter, so every create
+    /// against one failed on a cast the driver's own wrapper struct could not satisfy.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_AnOracleNumberKeyReturnedAsAnOracleDecimal_ComposesTheExternalIdAnImportOfTheSameRowWouldCompose()
+    {
+        var provider = OracleGeneratedKeyProvider(new OracleDecimal(4711));
+
+        var results = await ExportAsync(provider, PersonDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].ExternalId, Is.EqualTo("4711"),
+                "The driver's own numeric wrapper has to be unwrapped before the external ID is composed, or the object is never findable again.");
+            Assert.That(provider.Transactions.Single().Committed, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// <c>RAW(16) DEFAULT SYS_GUID()</c>, whose key ODP.NET returns as an <c>OracleBinary</c> rather
+    /// than as the <c>byte[]</c> the same column reads back as through a data reader.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_AnOracleRaw16KeyReturnedAsAnOracleBinary_ComposesTheGuidInOraclesOwnByteOrder()
+    {
+        var identifier = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
+        var provider = OracleGeneratedKeyProvider(new OracleBinary(IdentifierParser.ToRfc4122Bytes(identifier)));
+
+        var results = await ExportAsync(provider, GuidAnchorDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].ExternalId, Is.EqualTo(identifier.ToString("D")),
+                "Oracle stores a GUID big-endian, so the unwrapped bytes still have to cross the dialect seam before they are rendered.");
+        }
+    }
+
+    /// <summary>
+    /// A text key, which happened to survive because <see cref="Convert.ToString(object?, IFormatProvider?)"/>
+    /// falls back to a wrapper's own <c>ToString</c>. It is covered so the unwrapping cannot regress it.
+    /// </summary>
+    [Test]
+    public async Task ExportAsync_AnOracleTextKeyReturnedAsAnOracleString_ComposesTheExternalIdFromTheTextItHolds()
+    {
+        var provider = OracleGeneratedKeyProvider(new OracleString("EMP-4711"));
+
+        var results = await ExportAsync(provider, TextAnchorDocument, [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].ExternalId, Is.EqualTo("EMP-4711"));
+        }
+    }
+
+    /// <summary>
+    /// ODP.NET expresses "no value" with a null sentinel of the wrapper's own type, which is not
+    /// <see cref="DBNull"/>: a null <c>OracleDecimal</c> is a perfectly ordinary boxed struct. Read
+    /// without unwrapping, an <c>OracleString.Null</c> composes an external ID out of the wrapper's
+    /// <c>ToString</c>, which is worse than the failure it should have been.
+    /// </summary>
+    [TestCaseSource(nameof(OracleNullSentinels))]
+    public async Task ExportAsync_AnOracleKeyThatCameBackNull_FailsTheObjectAndRollsItBack(object nullSentinel, string objectTypesDocument, string anchorColumn)
+    {
+        var provider = OracleGeneratedKeyProvider(nullSentinel);
+
+        var results = await ExportAsync(provider, objectTypesDocument,
+            [Create(Change("DISPLAY_NAME", AttributeDataType.Text, text: "Ada"))],
+            configureSettings: settingValues => SqlConnectorSettingValues.SetCheckbox(settingValues, SqlConnectorConstants.SettingTreatRaw16AsGuid, true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False, "Nothing would identify the new object, so the create cannot be confirmed.");
+            Assert.That(results[0].ErrorMessage, Does.Contain($"returned no value for its anchor column '{anchorColumn}'"));
+            Assert.That(provider.Transactions.Single().RolledBack, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// The null sentinel of every wrapper this Connector can bind a generated key as, each against the
+    /// kind of anchor column that wrapper actually comes back from.
+    /// </summary>
+    private static IEnumerable<TestCaseData> OracleNullSentinels()
+    {
+        yield return new TestCaseData(OracleDecimal.Null, PersonDocument, "EMPLOYEE_ID").SetArgDisplayNames("OracleDecimal.Null");
+        yield return new TestCaseData(OracleString.Null, TextAnchorDocument, "STAFF_CODE").SetArgDisplayNames("OracleString.Null");
+        yield return new TestCaseData(OracleBinary.Null, GuidAnchorDocument, "STAFF_GUID").SetArgDisplayNames("OracleBinary.Null");
+    }
+
+    /// <summary>
+    /// A stand-in Oracle Database that generates the given key and hands it back the way ODP.NET does:
+    /// through a bound output parameter, as the driver's own wrapper rather than as a CLR value.
+    /// </summary>
+    private static FakeSqlProvider OracleGeneratedKeyProvider(object? generatedKey)
+    {
+        var provider = new FakeSqlProvider
+        {
+            DialectUnderTest = SqlDatabaseType.Oracle,
+            GeneratedKeyRetrievalMode = SqlGeneratedKeyRetrieval.OutputParameter,
+            GeneratedKey = generatedKey
+        };
+
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("STAFF_CODE", "VARCHAR2", MaxLength: 30, IsNullable: false),
+            new FakeCatalogueColumn("STAFF_GUID", "RAW", MaxLength: 16, IsNullable: false),
+            new FakeCatalogueColumn("DISPLAY_NAME", "NVARCHAR2", MaxLength: 200));
+
+        return provider;
+    }
+
+    #endregion
+
     #region Composite anchors
 
     [Test]
@@ -1042,6 +1176,55 @@ public class SqlConnectorExportTests
             Assert.That(update.Parameters[ParameterFor(update, "LAST_REVIEWED")], Is.EqualTo(new DateTimeOffset(2026, 7, 1, 12, 0, 0, TimeSpan.Zero)),
                 "At the UTC default neither kind of column is shifted, so the two carry the same instant.");
         }
+    }
+
+    [Test]
+    public async Task ExportAsync_AnOracleLocalTimeZoneColumn_WritesLocalWallClockTimeInTheConfiguredZone()
+    {
+        // Oracle's catalogue calls this column offset-carrying, but ODP.NET hands it back as a bare
+        // DateTime that Oracle has already converted into the session's time zone, which the Connector
+        // pins to this same Database Time Zone. So it is written exactly as any other zoneless column is;
+        // treating it as offset-carrying wrote the UTC instant instead, an hour out under British Summer
+        // Time, with nothing to say so.
+        var provider = new FakeSqlProvider();
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("LOCAL_UPDATED", AttributeDataType.DateTime, dateTime: new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc), changeType: PendingExportAttributeChangeType.Update));
+
+        await ExportAsync(provider, PersonDocument, [pendingExport], databaseTimeZone: "Europe/London");
+
+        var bound = provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "LOCAL_UPDATED")];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bound, Is.EqualTo(new DateTime(2026, 7, 1, 13, 0, 0)), "British Summer Time is one hour ahead of UTC on that date.");
+            Assert.That(((DateTime)bound!).Kind, Is.EqualTo(DateTimeKind.Unspecified),
+                "A kind of UTC would have the driver convert the value a second time on its way into the column.");
+        }
+    }
+
+    [Test]
+    public async Task ExportAsync_AnOracleLocalTimeZoneColumn_WritesTheSameWallClockAnImportWouldReadBackAsTheOriginalInstant()
+    {
+        // The round trip is the property that matters: what an export writes into a local-time-zone
+        // column is what a session pinned to the same zone reads back, and interpreting that reading in
+        // the Database Time Zone has to land on the instant JIM started with.
+        var provider = new FakeSqlProvider();
+        var instant = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+        var pendingExport = Update(Anchor("EMPLOYEE_ID", AttributeDataType.Number, number: 4711),
+            Change("LOCAL_UPDATED", AttributeDataType.DateTime, dateTime: instant, changeType: PendingExportAttributeChangeType.Update));
+
+        await ExportAsync(provider, PersonDocument, [pendingExport], databaseTimeZone: "Europe/London");
+
+        var written = (DateTime)provider.ExecutedStatements.Single().Parameters[ParameterFor(provider.ExecutedStatements.Single(), "LOCAL_UPDATED")]!;
+
+        // What an import does with the value a pinned session hands back: a zoneless reading interpreted
+        // in the Connected System's declared zone.
+        var readBack = DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(written, DateTimeKind.Unspecified), TimeZoneInfo.FindSystemTimeZoneById("Europe/London")),
+            DateTimeKind.Utc);
+
+        Assert.That(readBack, Is.EqualTo(instant),
+            "Export inverts exactly what import applies, so the instant survives the round trip through a local-time-zone column.");
     }
 
     [Test]
@@ -1338,6 +1521,11 @@ public class SqlConnectorExportTests
             new FakeCatalogueColumn("STAFF_GUID", "uniqueidentifier"),
             new FakeCatalogueColumn("START_DATE", "datetime2"),
             new FakeCatalogueColumn("LAST_REVIEWED", "datetimeoffset"),
+
+            // Oracle's third date and time shape. It sits in an otherwise Microsoft SQL Server catalogue
+            // because the classification is the provider-independent part; what is being pinned down here
+            // is that the Connector writes wall-clock time into it, not the dialect that declared it.
+            new FakeCatalogueColumn("LOCAL_UPDATED", "TIMESTAMP(3) WITH LOCAL TIME ZONE"),
             new FakeCatalogueColumn("MANAGER_EMPLOYEE_ID", "int"),
             new FakeCatalogueColumn("MANAGER_STAFF_GUID", "uniqueidentifier"));
 

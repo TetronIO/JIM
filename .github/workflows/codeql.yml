@@ -9,8 +9,11 @@ name: CodeQL
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  pull_request:  # Runs on ALL pull requests regardless of target branch, matching ci.yml.
+                 # A stacked PR targets the layer below it rather than main, and every PR in a
+                 # stack is still evaluated against main's ruleset, so filtering to main here
+                 # left the required Analyze checks permanently unreported on every layer but
+                 # the bottom one, and the stack could never be merged.
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
 

@@ -182,6 +182,58 @@ public class SqlTypeMapperTests
 
     #endregion
 
+    #region Offset-carrying columns
+
+    [TestCase("datetimeoffset")]
+    [TestCase("datetimeoffset(3)")]
+    [TestCase("DATETIMEOFFSET")]
+    public void CarriesAnOffset_SqlServerDateTimeOffset_IsOffsetCarrying(string typeName)
+    {
+        Assert.That(SqlTypeMapper.CarriesAnOffset(new SqlColumnType(typeName)), Is.True,
+            "'datetimeoffset' states the offset of every value it holds, so the Database Time Zone must not be applied to it in either direction.");
+    }
+
+    [TestCase("TIMESTAMP WITH TIME ZONE")]
+    [TestCase("TIMESTAMP(3) WITH TIME ZONE")]
+    [TestCase("TIMESTAMP(6) WITH TIME ZONE")]
+    public void CarriesAnOffset_OracleTimeStampWithTimeZone_IsOffsetCarrying(string typeName)
+    {
+        // Verified against Oracle Database Free 23ai: ODP.NET returns a DateTimeOffset carrying the
+        // stored offset for this column, and the value it returns does not change with the session's
+        // time zone. It genuinely carries its own offset.
+        Assert.That(SqlTypeMapper.CarriesAnOffset(new SqlColumnType(typeName)), Is.True,
+            "Oracle's TIMESTAMP WITH TIME ZONE stores the offset alongside the value and the driver hands both back.");
+    }
+
+    [TestCase("TIMESTAMP WITH LOCAL TIME ZONE")]
+    [TestCase("TIMESTAMP(3) WITH LOCAL TIME ZONE")]
+    [TestCase("TIMESTAMP(6) WITH LOCAL TIME ZONE")]
+    [TestCase("timestamp(3) with local time zone")]
+    public void CarriesAnOffset_OracleTimeStampWithLocalTimeZone_IsNotOffsetCarrying(string typeName)
+    {
+        // The catalogue names this column as though it carried an offset, but the wire says otherwise:
+        // verified against Oracle Database Free 23ai, ODP.NET hands it back as a bare DateTime with
+        // Kind=Unspecified, already converted into the session's time zone. Import reads that CLR type
+        // and applies the Database Time Zone; classifying it as offset-carrying here made export skip
+        // the same conversion, so the two directions disagreed about one column.
+        Assert.That(SqlTypeMapper.CarriesAnOffset(new SqlColumnType(typeName)), Is.False,
+            "A TIMESTAMP WITH LOCAL TIME ZONE column reaches JIM as a zoneless wall-clock reading, so it is interpreted through the Connected System's Database Time Zone like any other zoneless column.");
+    }
+
+    [TestCase("datetime2")]
+    [TestCase("datetime")]
+    [TestCase("date")]
+    [TestCase("TIMESTAMP")]
+    [TestCase("TIMESTAMP(6)")]
+    [TestCase("DATE")]
+    public void CarriesAnOffset_ZonelessDateOrTimeType_IsNotOffsetCarrying(string typeName)
+    {
+        Assert.That(SqlTypeMapper.CarriesAnOffset(new SqlColumnType(typeName)), Is.False,
+            $"'{typeName}' states nothing about an offset, so its values are wall-clock time in the zone the administrator declared.");
+    }
+
+    #endregion
+
     #region Guid
 
     [Test]

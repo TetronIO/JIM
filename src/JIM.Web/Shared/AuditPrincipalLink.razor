@@ -2,10 +2,10 @@
 @using JIM.Utilities
 @inject IJimApplicationFactory JimFactory
 
-@if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
-
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
 {
     @if (_mvoHref != null)
     {

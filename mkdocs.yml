@@ -191,7 +191,7 @@ extra_css:
   - assets/stylesheets/custom.css
 
 extra_javascript:
-  - assets/javascripts/mermaid-zoom.js
+  - assets/javascripts/diagram-zoom.js
 
 extra:
   social:

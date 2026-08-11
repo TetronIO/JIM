@@ -722,6 +722,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             provider.ConfigureConnection(connection, connectionSettings);
 
             connection.Open();
+
+            // And anything the dialect can only apply to a live session is applied here, before a single
+            // value crosses the connection. Oracle's session time zone is the case that needs it: the
+            // driver has no way to set it before the connection is open, and a local-time-zone column
+            // read on an unpinned session comes back in the Worker host's zone rather than the
+            // Connected System's.
+            provider.ConfigureOpenedConnection(connection, connectionSettings);
+
             return connection;
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or ArgumentException or SocketException or IOException)
@@ -816,7 +824,13 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             Username = username,
             Password = decryptedPassword,
             Encryption = ResolveEncryption(settingValues),
-            ConnectionTimeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds
+            ConnectionTimeoutSeconds = GetInt(settingValues, SqlConnectorConstants.SettingConnectionTimeout) ?? SqlConnectorConstants.DefaultConnectionTimeoutSeconds,
+
+            // Carried on the connection settings as well as held for the value conversions, because one
+            // dialect has to act on it while the connection is being established rather than afterwards:
+            // Oracle returns a TIMESTAMP WITH LOCAL TIME ZONE column in the session's time zone, so the
+            // session is pinned to this zone as it opens.
+            DatabaseTimeZone = ResolveDatabaseTimeZone(settingValues)
         };
     }
 
@@ -1016,7 +1030,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             // The driver's own account of the failure is what an administrator needs (a refused login, an
             // unknown database, an unreachable host all read differently), and it never contains the
             // credential: JIM hands the password to the driver's connection string builder and nowhere else.
-            logger.Error(ex, "TestDatabaseConnectivity failed");
+            // Warning, not Error: this is settings validation, and an administrator naming a host that
+            // cannot be reached is an ordinary, expected outcome which JIM handles and reports back on the
+            // settings form. At Error, every mistyped hostname became an application error in the service
+            // log; it also aborted twelve unrelated Run Profiles in the Scenario 16 matrix, because the
+            // integration harness treats any Error line as a scenario failure and the matrix deliberately
+            // provokes this path to prove validation rejects bad settings. The exception is still logged,
+            // so nothing is lost for diagnosis.
+            logger.Warning(ex, "TestDatabaseConnectivity failed");
             return Failure(settingValues, SqlConnectorConstants.SettingHost, $"Unable to connect. Message: {ex.Message}", ex);
         }
     }
