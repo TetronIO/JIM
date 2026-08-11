@@ -67,6 +67,14 @@ public class UpdateConnectedSystemRequest
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
+    /// How long an account provisioned into this Connected System stays owed an initial password before JIM
+    /// records an expiry and stops trying. Omitted or null leaves the current value unchanged; JIM's default when
+    /// none has ever been set is seven days. Raise it ahead of a planned outage longer than the current window,
+    /// or every account provisioned meanwhile expires without a password.
+    /// </summary>
+    public TimeSpan? InitialPasswordTimeToLive { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated: Error (default), Warn, or Ignore. Null or omitted leaves the current value unchanged.
     /// </summary>
