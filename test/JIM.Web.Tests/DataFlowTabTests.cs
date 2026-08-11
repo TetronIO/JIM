@@ -11,6 +11,7 @@ using JIM.Models.Logic.DTOs;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
 using Moq;
 using NUnit.Framework;
 
@@ -186,7 +187,7 @@ public class DataFlowTabTests : JimComponentTestContext
         SetupFlows(BuildExportFlow());
         var cut = Render<DataFlowTab>();
 
-        ClickDirection(cut, "Outbound");
+        SetDirection(cut, SyncRuleDirection.Export);
 
         using (Assert.EnterMultipleScope())
         {
@@ -201,7 +202,7 @@ public class DataFlowTabTests : JimComponentTestContext
         SetupFlows(BuildImportFlow());
         var cut = Render<DataFlowTab>();
 
-        ClickDirection(cut, "Inbound");
+        SetDirection(cut, SyncRuleDirection.Import);
 
         using (Assert.EnterMultipleScope())
         {
@@ -242,10 +243,16 @@ public class DataFlowTabTests : JimComponentTestContext
         }
     }
 
-    private static void ClickDirection(IRenderedComponent<DataFlowTab> cut, string label)
+    /// <summary>
+    /// Sets the Direction filter by raising the drop-down's own callback, rather than by opening its popover and
+    /// clicking an item. Driving it through the component's public callback exercises the real handler without the
+    /// test depending on MudBlazor's generated markup or CSS class names, which are a third party's implementation
+    /// detail (see <see cref="JimComponentTestContext"/>).
+    /// </summary>
+    private void SetDirection(IRenderedComponent<DataFlowTab> cut, SyncRuleDirection? direction)
     {
-        var button = cut.FindAll("button").First(b => b.TextContent.Trim() == label);
-        button.Click();
+        var select = cut.FindComponent<MudSelect<SyncRuleDirection?>>();
+        cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(direction)).GetAwaiter().GetResult();
     }
 
     [Test]

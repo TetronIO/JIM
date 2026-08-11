@@ -15,21 +15,18 @@
     does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.
 </MudText>
 
-@* ─── Direction ─── *@
-@* Direction is chosen rather than shown in a column. Inbound and Outbound flows carry different settings *@
-@* (priority inbound, Enforce State outbound), so one table serving both leaves each row half empty; choosing *@
-@* the direction lets the table drop the columns that do not apply and name the one that does. *@
-<MudButtonGroup Variant="Variant.Outlined" Class="mt-6" OverrideStyles="false">
-    <MudButton Color="@DirectionSegmentColour(SyncRuleDirection.Import)" Variant="@DirectionSegmentVariant(SyncRuleDirection.Import)"
-               DropShadow="false" OnClick="@(() => OnDirectionChangedAsync(SyncRuleDirection.Import))">Inbound</MudButton>
-    <MudButton Color="@DirectionSegmentColour(SyncRuleDirection.Export)" Variant="@DirectionSegmentVariant(SyncRuleDirection.Export)"
-               DropShadow="false" OnClick="@(() => OnDirectionChangedAsync(SyncRuleDirection.Export))">Outbound</MudButton>
-    <MudButton Color="@DirectionSegmentColour(null)" Variant="@DirectionSegmentVariant(null)"
-               DropShadow="false" OnClick="@(() => OnDirectionChangedAsync(null))">Both</MudButton>
-</MudButtonGroup>
-
 @* ─── Filters ─── *@
-<MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.Center">
+@* Direction sits with the other filters and behaves like them (cleared means both), but it does more than filter: *@
+@* Inbound and Outbound carry different settings, so choosing one lets the table drop the columns that do not apply *@
+@* to it and name the one that does, instead of a catch-all header over two unrelated concepts. *@
+<MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="SyncRuleDirection?" Label="Direction" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_direction" ValueChanged="OnDirectionChangedAsync">
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Import)">Inbound</MudSelectItem>
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Export)">Outbound</MudSelectItem>
+        </MudSelect>
+    </MudItem>
     <MudItem Class="flex-grow-1">
         <MudSelect T="int?" Label="Connected System" Variant="Variant.Outlined" Dense="true" Clearable="true"
                    Value="_connectedSystemId" ValueChanged="OnConnectedSystemChangedAsync">
@@ -300,12 +297,6 @@
         SyncRuleDirection.Export => "Enforce State",
         _ => "Options"
     };
-
-    private Color DirectionSegmentColour(SyncRuleDirection? direction) =>
-        _direction == direction ? Color.Primary : Color.Default;
-
-    private Variant DirectionSegmentVariant(SyncRuleDirection? direction) =>
-        _direction == direction ? Variant.Filled : Variant.Outlined;
 
     /// <summary>
     /// Which side of the Metaverse a source sits on, read from the source itself rather than from the flow's
