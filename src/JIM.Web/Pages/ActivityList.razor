@@ -115,8 +115,11 @@
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
+        @* My Activity is already scoped to one initiator (the signed-in user), so an initiator-type filter is
+           mutually exclusive with that view; the control is disabled rather than hidden so the filter row keeps
+           its shape across the two views. *@
         <MudSelect T="ActivityInitiatorType" Label="Initiator" Variant="Variant.Outlined"
-                   Dense="true" Clearable="true" MultiSelection="true"
+                   Dense="true" Clearable="true" MultiSelection="true" Disabled="_isMyActivity"
                    SelectedValues="_filterInitiatorTypes"
                    SelectedValuesChanged="OnInitiatorTypeFilterChangedAsync"
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
@@ -728,12 +731,14 @@
         }, token);
     }
 
+    // Judge the path, not the whole URI: the grid's and this page's own URL writes append query strings to
+    // both routes, and a suffix test against the full URI would misread /activity/mine?desc=1 as /activity.
+    private bool IsMyActivityPath => NavManager.ToAbsoluteUri(NavManager.Uri).AbsolutePath
+        .EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
+
     private async Task UpdatePageStateAsync()
     {
-        // Judge the path, not the whole URI: the grid's and this page's own URL writes append query strings to
-        // both routes, and a suffix test against the full URI would misread /activity/mine?desc=1 as /activity.
-        _isMyActivity = NavManager.ToAbsoluteUri(NavManager.Uri).AbsolutePath
-            .EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
+        _isMyActivity = IsMyActivityPath;
 
         // SPA navigation between the two views reuses this component, so OnInitialized's URL seeding never
         // re-runs; re-seed the page-owned filters from the new URL here, exactly as a fresh load would, so
@@ -911,8 +916,12 @@
         if (statuses.Count > 0)
             _filterStatuses = statuses;
 
+        // The initiator-type filter never applies to My Activity (the view is already scoped to the signed-in
+        // user), so a hand-edited or stale init parameter is ignored there rather than silently narrowing a
+        // view whose filter control is disabled. Read from the URL, not _isMyActivity: on a fresh load this
+        // runs from OnInitialized, before UpdatePageStateAsync has derived the flag.
         var initiatorTypes = ParseEnumList<ActivityInitiatorType>(query["init"]);
-        if (initiatorTypes.Count > 0)
+        if (initiatorTypes.Count > 0 && !IsMyActivityPath)
             _filterInitiatorTypes = initiatorTypes;
 
         DateTime? from = DateTime.TryParse(query["from"], out var fromDate) ? fromDate : null;
