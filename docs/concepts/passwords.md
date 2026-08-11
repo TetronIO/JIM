@@ -36,7 +36,7 @@ Every account ends up in one of four states, reported on the export's Activity.
 | Delivered | The password was set and the account is ready to use. | Nothing. |
 | Retrying | JIM could not reach the system, or the account was not visible yet. | Nothing; JIM tries again on the next export run. |
 | Parked | The system refused the password itself, for not meeting the rules that apply to that account. Another password generated the same way would be refused for the same reason, so JIM stops rather than spending attempts on the same answer. | Correct the rule's password settings. See below. |
-| Expired | A week passed without success. JIM stops trying, and records that it did rather than quietly forgetting the account. | Set a password on those accounts another way. |
+| Expired | The Connected System's initial password window passed without success, a week by default. JIM stops trying, and records that it did rather than quietly forgetting the account. | Set a password on those accounts another way. |
 
 A parked account keeps **the system's own words, unaltered**, because why a directory refused a password is a fact about that directory, and it is the most useful thing you can be shown.
 
@@ -45,6 +45,14 @@ A parked account keeps **the system's own words, unaltered**, because why a dire
 Parking is not a dead end. **Saving a change to the rule's initial password settings releases every account parked against it**, and they are tried again on that Connected System's next export run. There is nothing to regenerate or invalidate first: a generated password is produced afresh at delivery, and setting a new shared password is itself the change that releases the work, so the retry uses your corrected settings either way. Before you save, the portal tells you how many accounts saving will release, and says nothing at all for an edit that would not change what gets delivered.
 
 You are told where the work is waiting without going looking for it: parked and expired counts appear on the Synchronisation Rules and Connected Systems list pages, on the rule's own Passwords tab, and through `Get-JIMSyncRuleInitialPassword` and `Get-JIMConnectedSystem`. The two counts are shown separately and never added together, because parked work is fixable where it is reported and expired work is not.
+
+### How long JIM keeps trying
+
+An account stays owed its first password for **seven days** by default, after which JIM records the expiry above and stops. That window belongs to the Connected System rather than to the Synchronisation Rule, because what it has to outlast is that system being unavailable, and how long that lasts is a property of the system.
+
+**Raise it before taking a system out of service for longer than the current window.** Every account provisioned while the target is unreachable otherwise expires without a password, and each one then needs a password set by hand. Set it on the Connected System's Settings tab, under **Initial Passwords**, or with `Set-JIMConnectedSystem -Id 1 -InitialPasswordTimeToLive (New-TimeSpan -Days 30)`.
+
+Parked and expired records are kept so you can see what became of an account. They are removed once they have been in that state for the **initial password record retention period** (90 days by default, under Admin > Service Settings), which stops a rule provisioning into a system that refuses its passwords accumulating a record per account for ever. A record still being worked is never removed, however old, and the Activity recording what happened to the account outlives the record either way.
 
 ### One password for every account
 

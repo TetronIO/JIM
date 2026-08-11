@@ -595,6 +595,26 @@ public interface ISyncRepository
     Task<int> ExpireInitialPasswordsAsync(int connectedSystemId, DateTime asOf);
 
     /// <summary>
+    /// Deletes initial-password records that have reached a terminal state and have since had their retention
+    /// period, and returns how many were removed.
+    /// <para>
+    /// Terminal means Parked or Expired. Those states are deliberately retained so an administrator can see what
+    /// became of an account, which is exactly why something has to age them out: without a trim they accumulate
+    /// one row per account for as long as the deployment lives, and a Synchronisation Rule provisioning into a
+    /// directory that refuses its passwords accumulates them quickly.
+    /// </para>
+    /// <para>
+    /// A record still being worked is never removed, however old it is: an account owed a password that a long
+    /// outage has held up must still get one when the target comes back. Age runs from the last attempt where
+    /// there has been one, so a record parked long ago, released, and parked again yesterday is treated as the
+    /// current work it is.
+    /// </para>
+    /// </summary>
+    /// <param name="olderThan">The retention cutoff; records last touched before this are eligible.</param>
+    /// <param name="maxRecords">The most to remove in one pass, bounding the transaction.</param>
+    Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
     /// Counts the accounts needing a person's attention over their initial password, by Synchronisation Rule.
     /// <para>
     /// One grouped count for every rule on the page rather than one query per row: this backs a list indicator,

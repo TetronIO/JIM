@@ -61,10 +61,12 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             var retentionPeriod = await _application.ServiceSettings.GetHistoryRetentionPeriodAsync();
             var configurationRetentionPeriod = await _application.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
             var securityRetentionPeriod = await _application.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
+            var initialPasswordRetentionPeriod = await _application.ServiceSettings.GetInitialPasswordRetentionPeriodAsync();
             var batchSize = await _application.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
             var cutoffDate = DateTime.UtcNow - retentionPeriod;
             var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
             var securityCutoffDate = DateTime.UtcNow - securityRetentionPeriod;
+            var initialPasswordCutoffDate = DateTime.UtcNow - initialPasswordRetentionPeriod;
 
             // Get current API key for initiator tracking
             var apiKey = await GetCurrentApiKeyAsync();
@@ -72,13 +74,13 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             // Perform cleanup, attributing the activity to the calling API key (or System if no key)
             ChangeHistoryServer.ChangeHistoryCleanupResult result;
             if (apiKey != null)
-                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, batchSize, apiKey);
+                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, initialPasswordCutoffDate, batchSize, apiKey);
             else
-                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, batchSize);
+                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, initialPasswordCutoffDate, batchSize);
 
             _logger.LogInformation(
-                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
+                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}, Initial passwords: {InitialPasswordCount}",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted);
 
             var response = new HistoryCleanupResponse
             {
@@ -87,12 +89,14 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 ActivitiesDeleted = result.ActivitiesDeleted,
                 ConfigurationChangeActivitiesDeleted = result.ConfigurationChangeActivitiesDeleted,
                 SecurityEventActivitiesDeleted = result.SecurityEventActivitiesDeleted,
+                InitialPasswordWorkRecordsDeleted = result.InitialPasswordWorkRecordsDeleted,
                 OldestRecordDeleted = result.OldestRecordDeleted,
                 NewestRecordDeleted = result.NewestRecordDeleted,
                 CutoffDate = cutoffDate,
                 RetentionPeriodDays = (int)retentionPeriod.TotalDays,
                 ConfigurationChangeRetentionPeriodDays = (int)configurationRetentionPeriod.TotalDays,
                 SecurityEventRetentionPeriodDays = (int)securityRetentionPeriod.TotalDays,
+                InitialPasswordRetentionPeriodDays = (int)initialPasswordRetentionPeriod.TotalDays,
                 BatchSize = batchSize
             };
 

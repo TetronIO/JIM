@@ -1442,6 +1442,9 @@ public class SynchronisationController(
         if (request.MaxExportParallelism.HasValue)
             connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
 
+        if (request.InitialPasswordTimeToLive.HasValue)
+            connectedSystem.InitialPasswordTimeToLive = request.InitialPasswordTimeToLive.Value;
+
         if (request.UnresolvedReferenceHandling.HasValue)
             connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
 
