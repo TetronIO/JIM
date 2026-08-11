@@ -174,6 +174,10 @@
     private DotNetObjectReference<VirtualisedDataGrid<T>>? _selfReference;
     private bool _scrollObserved;
 
+    // Set when a StateKey change lands on a reused instance; consumed in OnAfterRenderAsync, because the reload
+    // must run against the grid the new render produced, and OnParametersSet is too early to await it anyway.
+    private bool _reloadPending;
+
     // Long enough that a flick through the list settles before the URL is rewritten, short enough that a reader who
     // stops to read and then copies the address bar gets where they are actually looking.
     private const int ScrollDebounceMilliseconds = 400;
@@ -190,6 +194,7 @@
         // which is bound to a DOM that either does not exist yet or has just been discarded.
         if (_appliedStateKey == StateKey)
             return;
+        var isReusedInstance = _appliedStateKey != null;
         _appliedStateKey = StateKey;
 
         var urlState = VirtualisedListUrlState.Read(
@@ -202,6 +207,16 @@
         _scrollObserved = false;
         TotalItems = null;
         UnfilteredTotalItems = null;
+
+        // A reused instance still holds the previous view's rows (the virtualiser caches what it has fetched;
+        // nulling the totals alone reloads nothing) and its DOM keeps the previous view's scroll offset. Reload
+        // the data once the new render is in the DOM, and force the scroll restore even to row zero, so the new
+        // view arrives exactly as a fresh navigation to it would.
+        if (isReusedInstance)
+        {
+            _scrollRestored = false;
+            _reloadPending = true;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -236,6 +251,16 @@
 
         _selfReference ??= DotNetObjectReference.Create(this);
         _scrollObserved = await InvokeInteropAsync<bool>("jimVirtualList.observe", ScrollContainerSelector, _selfReference, RowHeight, ScrollDebounceMilliseconds);
+
+        // A StateKey change on a reused instance: the rows the virtualiser holds belong to the previous view,
+        // so fetch the new view's windows (and, with the totals already nulled, its count) underneath the
+        // freshly restored scroll position.
+        if (_reloadPending)
+        {
+            _reloadPending = false;
+            if (_dataGrid != null)
+                await _dataGrid.ReloadServerData();
+        }
     }
 
     private async Task<GridData<T>> ServerReload(GridStateVirtualize<T> state, CancellationToken token)

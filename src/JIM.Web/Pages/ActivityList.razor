@@ -581,6 +581,11 @@
 @code {
     private VirtualisedDataGrid<Activity>? _grid;
     private bool _isMyActivity;
+
+    // The view this component last applied; null until the first load. Lets UpdatePageStateAsync tell an SPA
+    // navigation between /activity and /activity/mine (which must re-seed the filters from the new URL) apart
+    // from this page's own replace navigations (which must not).
+    private bool? _appliedIsMyActivity;
     private Dictionary<Guid, int> _childActivityCounts = new();
     private Guid? _currentUserId;
     private string _pageTitle = "Activity";
@@ -623,14 +628,40 @@
     protected override void OnInitialized()
     {
         ApplyFiltersFromUrl();
+
+        // SPA navigation between /activity and /activity/mine reuses this instance WITHOUT re-running the
+        // parameter lifecycle: neither route carries a route parameter, so the renderer sees an unchanged
+        // (empty) parameter set and skips SetParametersAsync altogether. The location change event is the only
+        // signal that the view identity changed; without it the page keeps showing the previous view under the
+        // new URL.
+        NavManager.LocationChanged += OnLocationChanged;
         StartPolling();
     }
 
     protected override async Task OnParametersSetAsync()
     {
-        // Runs on first load and again on every SPA navigation between /activity and /activity/mine (and after
-        // this page's own replace navigations, where both calls are cheap no-ops).
+        // First load only; SPA navigation between this component's two routes never re-runs the parameter
+        // lifecycle (see OnInitialized), so view changes arrive via OnLocationChanged instead.
         await UpdatePageStateAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        // The handler also hears this page's own replace navigations (cheap no-ops: the view flip is gated
+        // inside UpdatePageStateAsync) and the navigation away to whatever page comes next, which the path
+        // check screens out before this instance is disposed.
+        var path = NavManager.ToAbsoluteUri(e.Location).AbsolutePath;
+        var isThisPage = path.EndsWith("/activity", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
+        if (!isThisPage)
+            return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await UpdatePageStateAsync();
+            // Repainting hands the grid its new StateKey, and the grid reloads its own data and scroll from that.
+            StateHasChanged();
+        });
     }
 
     /// <summary>
@@ -704,6 +735,19 @@
         _isMyActivity = NavManager.ToAbsoluteUri(NavManager.Uri).AbsolutePath
             .EndsWith("/activity/mine", StringComparison.OrdinalIgnoreCase);
 
+        // SPA navigation between the two views reuses this component, so OnInitialized's URL seeding never
+        // re-runs; re-seed the page-owned filters from the new URL here, exactly as a fresh load would, so
+        // filters from the previous view do not silently survive a navigation whose URL no longer names them.
+        // Gated on the view actually flipping: this method also runs after this page's own replace navigations,
+        // where re-seeding mid filter-edit would race the very state the URL was just written from. The grid
+        // re-reads its own URL state (q/sort/desc/row) and reloads itself when its StateKey changes.
+        if (_appliedIsMyActivity != null && _appliedIsMyActivity != _isMyActivity)
+        {
+            ResetFiltersToDefaults();
+            ApplyFiltersFromUrl();
+        }
+        _appliedIsMyActivity = _isMyActivity;
+
         if (_isMyActivity)
         {
             _pageTitle = "My Activity";
@@ -728,6 +772,7 @@
 
     public void Dispose()
     {
+        NavManager.LocationChanged -= OnLocationChanged;
         _pollingCancellationTokenSource.Cancel();
         _pollingCancellationTokenSource.Dispose();
     }
@@ -992,6 +1037,16 @@
     /// </summary>
     private async Task ClearFiltersAsync()
     {
+        ResetFiltersToDefaults();
+        await ApplyFilterChangeAsync();
+    }
+
+    /// <summary>
+    /// Returns every page-owned filter to its default; the baseline both ClearFiltersAsync and a view change's
+    /// URL re-seed start from.
+    /// </summary>
+    private void ResetFiltersToDefaults()
+    {
         _selectedCategory = null;
         _filterOperations = [];
         _filterOutcomes = [];
@@ -1000,7 +1055,6 @@
         _filterInitiatorTypes = [];
         _filterDateRange = null;
         _filterHasChildren = false;
-        await ApplyFilterChangeAsync();
     }
 
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
