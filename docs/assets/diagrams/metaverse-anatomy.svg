@@ -23,10 +23,10 @@
       <text class="jimdg-card-title" x="380" y="156">person</text>
       <text class="jimdg-card-tag" x="648" y="156">Object Type</text>
       <line class="jimdg-card-divider" x1="380" y1="166" x2="648" y2="166"/>
-      <text class="jimdg-list-item" x="380" y="188"><tspan class="jimdg-attr-name">displayName</tspan> · String</text>
-      <text class="jimdg-list-item" x="380" y="207"><tspan class="jimdg-attr-name">mail</tspan> · String</text>
-      <text class="jimdg-list-item" x="380" y="226"><tspan class="jimdg-attr-name">manager</tspan> · Reference</text>
-      <text class="jimdg-list-item" x="380" y="245"><tspan class="jimdg-attr-name">memberOf</tspan> · Multi-valued</text>
+      <text class="jimdg-list-item" x="380" y="188"><tspan class="jimdg-attr-name">displayName</tspan> · Text · Single-valued</text>
+      <text class="jimdg-list-item" x="380" y="207"><tspan class="jimdg-attr-name">mail</tspan> · Text · Single-valued</text>
+      <text class="jimdg-list-item" x="380" y="226"><tspan class="jimdg-attr-name">manager</tspan> · Reference · Single-valued</text>
+      <text class="jimdg-list-item" x="380" y="245"><tspan class="jimdg-attr-name">memberOf</tspan> · Reference · Multi-valued</text>
     </g>
     <g id="jimdg-mv-type-group">
       <rect class="jimdg-stage" x="700" y="132" width="180" height="56" rx="8"/>
