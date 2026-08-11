@@ -21,9 +21,16 @@ public static class DataFlowDisplay
     /// What the Priority column shows, or null where the column does not apply (Export flows).
     /// </summary>
     /// <remarks>
+    /// A position is only meaningful against the set it is a position in, and a table row cannot rely on that set
+    /// being visible: sorting by another column, filtering, or a page boundary all separate a contribution from its
+    /// competitors. So a contested flow carries its own denominator ("2 of 3") rather than leaving the reader to
+    /// reconstruct the contest from neighbouring rows. A sole contributor shows the bare number, because "1 of 1"
+    /// states a contest that does not exist.
+    /// <para>
     /// A mapping that has never been ordered carries the safe-addition sentinel (<see cref="int.MaxValue"/>), which
     /// is a "put me last, harmlessly" marker rather than a position an administrator chose. Rendering the raw number
     /// would be accurate and unreadable.
+    /// </para>
     /// </remarks>
     public static string? PriorityLabel(DataFlowHeader flow)
     {
@@ -33,7 +40,30 @@ public static class DataFlowDisplay
             return null;
 
         var priority = flow.Priority.Value;
-        return priority == int.MaxValue ? "Unranked" : priority.ToString();
+        if (priority == int.MaxValue)
+            return "Unranked";
+
+        return flow.HasMultipleContributors ? $"{priority} of {flow.ContributorCount}" : priority.ToString();
+    }
+
+    /// <summary>
+    /// Whether this flow holds the highest position among the contributions competing for its target Metaverse
+    /// Attribute, and is therefore the row to emphasise in the Priority column.
+    /// </summary>
+    /// <remarks>
+    /// Emphasis encodes rank, not "is contested". Encoding the latter paints an identical chip on positions 1 and 2,
+    /// which tells the reader something matters here and then gives them no way to see which one it is.
+    /// <para>
+    /// "Highest priority" is not the same as "wins": resolution is decided per object, and a priority-1 contribution
+    /// with no value for a given object loses to the next one that has one. The emphasis marks configuration, and
+    /// the column's tooltip carries that qualification.
+    /// </para>
+    /// </remarks>
+    public static bool IsTopPriorityContender(DataFlowHeader flow)
+    {
+        ArgumentNullException.ThrowIfNull(flow);
+
+        return flow.Direction == SyncRuleDirection.Import && flow.HasMultipleContributors && flow.Priority == 1;
     }
 
     /// <summary>

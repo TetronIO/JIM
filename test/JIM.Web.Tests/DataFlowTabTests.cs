@@ -127,17 +127,38 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void DataFlowTab_ExpressionSource_IsNamedAsAnExpression()
+    public void DataFlowTab_ExpressionSource_ShowsTheExpressionUnderTheExMarker()
     {
-        // An expression has no attribute to name, and the page says so rather than rendering an empty cell that
-        // reads as "nothing feeds this".
+        // An expression has no attribute name to show, so the cell shows the expression itself behind the shared
+        // "Ex" marker, rather than the word "Expression", which would hide the only thing that tells two
+        // computed sources apart.
         var flow = BuildImportFlow();
         flow.Sources = [new DataFlowSource { Order = 0, Expression = "ToUpper(cs[\"dept\"])" }];
         SetupFlows(flow);
 
         var cut = Render<DataFlowTab>();
 
-        Assert.That(cut.Markup, Does.Contain("Expression"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("Ex"));
+            Assert.That(cut.Markup, Does.Contain("ToUpper"));
+        }
+    }
+
+    [Test]
+    public void DataFlowTab_MarksWhichSideOfTheMetaverseEachAttributeSitsOn()
+    {
+        // Both sides are just names, and the sides swap between directions, so the CS / MV markers are the only
+        // thing telling a reader that an Inbound row reads a Connected System attribute and writes a Metaverse one.
+        SetupFlows(BuildImportFlow());
+
+        var cut = Render<DataFlowTab>();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain(">CS<"));
+            Assert.That(cut.Markup, Does.Contain(">MV<"));
+        }
     }
 
     [Test]

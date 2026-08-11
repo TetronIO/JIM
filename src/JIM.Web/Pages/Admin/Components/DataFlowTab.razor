@@ -58,6 +58,14 @@
     </MudItem>
 </MudStack>
 
+@* Search scope lives here rather than as helper text under the toolbar box, which would overflow the toolbar's *@
+@* fixed height and sit on the header row beneath it. *@
+<MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+    Search matches Synchronisation Rules, Connected Systems, object types, attribute names on either side, and
+    expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an
+    expression's attribute references live in its text; search finds those.
+</MudText>
+
 <MudTable Items="@_flows" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-4 mb-5" SortLabel="Sort By"
           Outlined="true" Elevation="0" Loading="@_loading" LoadingProgressColor="Color.Primary"
           RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
@@ -66,9 +74,7 @@
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
         <MudText Typo="Typo.body1">@_flows.Count @(_flows.Count == 1 ? "flow" : "flows")</MudText>
         <MudSpacer />
-        <SearchField Value="@_search" ValueChanged="OnSearchChangedAsync" DebounceInterval="500"
-                     HelperText="Matches Synchronisation Rules, Connected Systems, object types, attributes and expression text."
-                     Class="mt-0" />
+        <SearchField Value="@_search" ValueChanged="OnSearchChangedAsync" DebounceInterval="500" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Direction)"><MudText Typo="Typo.button">Direction</MudText></MudTableSortLabel></MudTh>
@@ -76,7 +82,11 @@
         <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudText Typo="Typo.button">Source</MudText></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.TargetName)"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel></MudTh>
+        <MudTh>
+            <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one flow contributes, which is what the highlighted rows are." Arrow="true" Placement="Placement.Top">
+                <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
+            </MudTooltip>
+        </MudTh>
         <MudTh><MudText Typo="Typo.button">Options</MudText></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
@@ -94,26 +104,21 @@
         <MudTd DataLabel="Source">
             @foreach (var source in context.Sources.OrderBy(s => s.Order))
             {
-                @if (source.IsExpression)
-                {
-                    <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Tertiary" Icon="@Icons.Material.Filled.Functions"
-                                 @key="@($"{context.SyncRuleMappingId}-{source.Order}")">Expression</MudChip>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
-                             @key="@($"{context.SyncRuleMappingId}-{source.Order}")">@source.DisplayName</MudChip>
-                }
+                <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
+                               Kind="@SourceKind(source)"
+                               Name="@source.DisplayName"
+                               Expression="@source.Expression" />
             }
         </MudTd>
         <MudTd DataLabel="Target">
-            <MudLink Href="@DataFlowDisplay.TargetHref(context)">@DataFlowDisplay.TargetName(context)</MudLink>
+            <AttributeChip Kind="@(context.Direction == SyncRuleDirection.Import ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
+                           Name="@DataFlowDisplay.TargetName(context)"
+                           Href="@DataFlowDisplay.TargetHref(context)" />
         </MudTd>
         <MudTd DataLabel="Priority">
             @{
                 var priorityLabel = DataFlowDisplay.PriorityLabel(context);
+                var isTopContender = DataFlowDisplay.IsTopPriorityContender(context);
             }
             @if (priorityLabel == null)
             {
@@ -123,8 +128,8 @@
             {
                 <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
                     <MudChip T="string"
-                             Variant="@(context.HasMultipleContributors ? Variant.Filled : Variant.Text)"
-                             Color="@(context.HasMultipleContributors ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                             Variant="@(isTopContender ? Variant.Filled : Variant.Outlined)"
+                             Color="@(isTopContender ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
                 </MudTooltip>
             }
         </MudTd>
@@ -235,6 +240,19 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// Which side of the Metaverse a source sits on, read from the source itself rather than from the flow's
+    /// direction: the two always agree, and taking it from the data means a malformed row cannot be mislabelled
+    /// as belonging to the side its direction implies.
+    /// </summary>
+    private static AttributeChipKind SourceKind(DataFlowSource source)
+    {
+        if (source.IsExpression)
+            return AttributeChipKind.Expression;
+
+        return source.MetaverseAttributeId.HasValue ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem;
     }
 
     private DataFlowQuery BuildQuery() => new()

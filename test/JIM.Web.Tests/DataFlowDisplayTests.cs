@@ -32,11 +32,24 @@ public class DataFlowDisplayTests
     }
 
     [Test]
-    public void PriorityLabel_ImportFlowWithAPosition_ReadsAsThatNumber()
+    public void PriorityLabel_SoleContributor_ReadsAsThatNumberAlone()
     {
-        var flow = BuildImportFlow(priority: 2);
+        // "1 of 1" is noise: there is no contest to state the size of.
+        var flow = BuildImportFlow(priority: 1);
+        flow.ContributorCount = 1;
 
-        Assert.That(DataFlowDisplay.PriorityLabel(flow), Is.EqualTo("2"));
+        Assert.That(DataFlowDisplay.PriorityLabel(flow), Is.EqualTo("1"));
+    }
+
+    [Test]
+    public void PriorityLabel_ContestedFlow_CarriesItsDenominator()
+    {
+        // A bare "2" is a position with nothing to be a position in, and the reader has to reconstruct the set by
+        // eye from neighbouring rows, which any re-sort or page boundary breaks. The count travels with the number.
+        var flow = BuildImportFlow(priority: 2);
+        flow.ContributorCount = 3;
+
+        Assert.That(DataFlowDisplay.PriorityLabel(flow), Is.EqualTo("2 of 3"));
     }
 
     [Test]
@@ -47,6 +60,41 @@ public class DataFlowDisplayTests
         var flow = BuildExportFlow();
 
         Assert.That(DataFlowDisplay.PriorityLabel(flow), Is.Null);
+    }
+
+    [Test]
+    public void IsTopPriorityContender_ContestedRankOne_IsTheOneToEmphasise()
+    {
+        // Colour has to encode rank, not "is contested". Emphasising every contested row paints identical chips on
+        // 1 and 2 alike, which is what made the column unreadable: the eye is told something is significant and
+        // then given no way to tell the significant one from its competitor.
+        var winner = BuildImportFlow(priority: 1);
+        winner.ContributorCount = 2;
+        var loser = BuildImportFlow(priority: 2);
+        loser.ContributorCount = 2;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DataFlowDisplay.IsTopPriorityContender(winner), Is.True);
+            Assert.That(DataFlowDisplay.IsTopPriorityContender(loser), Is.False);
+        }
+    }
+
+    [Test]
+    public void IsTopPriorityContender_SoleContributor_IsNotEmphasised()
+    {
+        // Nothing is competing, so there is no contest to be winning. Emphasis here would invite an administrator
+        // to read significance into an ordering that decides nothing.
+        var flow = BuildImportFlow(priority: 1);
+        flow.ContributorCount = 1;
+
+        Assert.That(DataFlowDisplay.IsTopPriorityContender(flow), Is.False);
+    }
+
+    [Test]
+    public void IsTopPriorityContender_ExportFlow_IsNeverEmphasised()
+    {
+        Assert.That(DataFlowDisplay.IsTopPriorityContender(BuildExportFlow()), Is.False);
     }
 
     [Test]
