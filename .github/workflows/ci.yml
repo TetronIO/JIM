@@ -29,6 +29,13 @@ jobs:
     - name: Test .NET
       run: dotnet test JIM.sln --no-build --verbosity normal
 
+    # Every source file must carry the Tetron copyright notice. .editorconfig
+    # only ever covered .cs (and only as a suggestion), so this is the gate for
+    # .razor, .ps1, .psm1, .psd1 and .sh.
+    - name: Lint copyright headers
+      shell: pwsh
+      run: pwsh -File ./scripts/Lint-CopyrightHeaders.ps1
+
     # PowerShell Pester Tests for the JIM PowerShell module
     - name: Install Pester
       shell: pwsh
