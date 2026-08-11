@@ -389,10 +389,18 @@ internal class OracleProvider : SqlProviderBase
     /// <b>This is about bound parameters and nothing else.</b> Values that come back as query results do
     /// not need it: measured against Oracle Database Free 23ai, both
     /// <see cref="DbDataReader.GetValue"/> and <see cref="DbCommand.ExecuteScalar"/> answer with CLR
-    /// types (<c>Decimal</c> for a <c>NUMBER</c> and for <c>COUNT(*)</c>, <c>String</c>, <c>Byte[]</c>,
-    /// <c>DateTime</c>, <c>DateTimeOffset</c>, and <see cref="DBNull"/> for an empty result), never with
-    /// an ODP.NET wrapper. The Delta Import watermark read is the call site that would have suffered
+    /// types (<c>String</c>, <c>Byte[]</c>, <c>DateTime</c>, <c>DateTimeOffset</c>, one of the numeric
+    /// primitives for a <c>NUMBER</c>, and <see cref="DBNull"/> for an empty result), never with an
+    /// ODP.NET wrapper. The Delta Import watermark read is the call site that would have suffered
     /// otherwise, and it is correct as it stands.
+    /// </para>
+    /// <para>
+    /// <b>Which</b> numeric primitive a <c>NUMBER</c> arrives as is a separate problem, and not one this
+    /// method solves: the driver decides it from the column's declared precision and scale, so a
+    /// <c>NUMBER(10,2)</c> arrives as a <c>Double</c> while a <c>NUMBER(18,4)</c> arrives as a
+    /// <c>Decimal</c>. Keeping a Decimal-mapped column exact regardless is
+    /// <see cref="SqlValueReader"/>'s job, on the reader rather than behind this seam, because the
+    /// accessor it uses is ADO.NET's own.
     /// </para>
     /// </remarks>
     /// <exception cref="NotSupportedException">The driver answered with an ODP.NET type no value this Connector binds is ever returned as.</exception>
