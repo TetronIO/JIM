@@ -18,85 +18,128 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes.</MudText>
 
-@* TabPanelsClass is pa-0 rather than pt-5 because the virtualised grid on the Attributes tab supplies its own
-   mt-5; the Object Types table carries the matching margin itself so both tabs keep the same gap (see the tab
-   content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content margin). *@
+@* TabPanelsClass is pa-0 rather than pt-5 because both tabs host a virtualised grid, and the grid supplies its
+   own mt-5 (see the tab content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content
+   margin). *@
 <NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0" Class="mt-5">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
-        <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0" Class="mt-5">
-            <ToolBarContent>
-                <MudText Typo="Typo.h6">Object Types</MudText>
-                @* Object count in the toolbar's title slot, per the shared convention (JIM.Web/CLAUDE.md);
-                   a bare number beside the title, which already names the objects. *@
-                <TableObjectCount Count="@_metaverseObjectTypeHeaders?.Count" Class="ml-2" />
-                <MudSpacer />
+        @* Same shared grid as the Attributes tab, but windowed in memory: Object Types are a small configuration
+           list, loaded whole once, so search and sort are applied in the page rather than each becoming a
+           database range read. The URL parameters are prefixed so this grid's state cannot collide with the
+           Attributes grid's (unprefixed) q/sort/desc/row on the shared page URL. The tab already says "Object
+           Types", so there is no toolbar title and the count carries the nouns. *@
+        <VirtualisedDataGrid @ref="_objectTypeGrid" T="MetaverseObjectTypeHeader"
+                             ContainerId="metaverse-object-type-list"
+                             UrlParameterPrefix="ot-"
+                             DefaultSortBy="name"
+                             LoadWindow="LoadObjectTypeWindowAsync"
+                             SingularName="Metaverse Object Type"
+                             PluralName="Metaverse Object Types"
+                             SearchPlaceholder="Search by name">
+            <ToolBarExtras>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           DropShadow="false" Class="ml-3" OnClick="OpenCreateObjectTypeDialogAsync">New Object Type</MudButton>
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)"><MudText Typo="Typo.button">Attributes</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.DeletionRule)"><MudText Typo="Typo.button">Deletion Rule</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)"><MudText Typo="Typo.button">Predefined Searches?</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-                <MudTh></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Name">
-                    <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(context.Icon)" Class="mr-1" Style="vertical-align: middle;" />
-                    <MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink>
-                </MudTd>
-                <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
-                <MudTd DataLabel="Deletion Rule">
-                    @{
-                        var (label, color, icon) = GetDeletionRuleDisplay(context.DeletionRule);
-                    }
-                    <MudTooltip Text="@GetDeletionRuleTooltip(context)" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
-                    </MudTooltip>
-                </MudTd>
-                <MudTd DataLabel="Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
-                <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-                <MudTd DataLabel="Created">
-                    <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        @context.Created.ToLocalTime().ToRelativeTime()
-                    </MudTooltip>
-                </MudTd>
-                <MudTd DataLabel="">
-                    <div class="d-flex justify-end">
-                        @if (!context.BuiltIn)
-                        {
-                            <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditObjectTypeDialogAsync(context))" />
-                            </MudTooltip>
-                            <MudTooltip Text="Delete Object Type" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteObjectTypeDialogAsync(context))" />
-                            </MudTooltip>
+                           DropShadow="false" Class="mr-3" OnClick="OpenCreateObjectTypeDialogAsync">New Object Type</MudButton>
+            </ToolBarExtras>
+            <Columns>
+                <TemplateColumn Title="Name" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Name" Name="name" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudIcon Icon="@Helpers.ResolveObjectTypeIcon(context.Item.Icon)" Class="mr-1" Style="vertical-align: middle;" />
+                        <MudLink Href="@("/admin/schema/object-types/"+context.Item.Id)">@context.Item.Name</MudLink>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Attributes" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Attributes" Name="attributes" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.AttributesCount
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Deletion Rule" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Deletion Rule" Name="deletionrule" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @{
+                            var (label, color, icon) = GetDeletionRuleDisplay(context.Item.DeletionRule);
                         }
-                        else
-                        {
-                            <MudTooltip Text="Built-in Object Types cannot be renamed or deleted." Arrow="true" Placement="Placement.Top">
-                                <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
-                            </MudTooltip>
-                        }
-                        <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowObjectTypeHistoryDialogAsync(context))" />
+                        <MudTooltip Text="@GetDeletionRuleTooltip(context.Item)" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
                         </MudTooltip>
-                    </div>
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                @* Only speak once the load has completed: _metaverseObjectTypeHeaders is null until
-                   OnInitializedAsync returns, and an unguarded message would flash while data is in flight. *@
-                @if (_metaverseObjectTypeHeaders is { Count: 0 })
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Predefined Searches?" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Predefined Searches?" Name="predefinedsearches" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @(context.Item.HasPredefinedSearches ? "Yes" : "No")
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Built-in?" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @(context.Item.BuiltIn ? "Yes" : "No")
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Created" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Created" Name="created" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            @context.Item.Created.ToLocalTime().ToRelativeTime()
+                        </MudTooltip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Sortable="false">
+                    <HeaderTemplate></HeaderTemplate>
+                    <CellTemplate>
+                        <div class="d-flex justify-end">
+                            @if (!context.Item.BuiltIn)
+                            {
+                                <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditObjectTypeDialogAsync(context.Item))" />
+                                </MudTooltip>
+                                <MudTooltip Text="Delete Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteObjectTypeDialogAsync(context.Item))" />
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudTooltip Text="Built-in Object Types cannot be renamed or deleted." Arrow="true" Placement="Placement.Top">
+                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                                </MudTooltip>
+                            }
+                            <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowObjectTypeHistoryDialogAsync(context.Item))" />
+                            </MudTooltip>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Metaverse Object Types match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.Category"
                                      PrimaryText="No Metaverse Object Types yet"
                                      SecondaryText="Use the New Object Type button to create one." />
                 }
-            </NoRecordsContent>
-        </MudTable>
+            </EmptyContent>
+        </VirtualisedDataGrid>
     </MudTabPanel>
     <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
         @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
@@ -242,6 +285,7 @@
 @code {
     private int _activeTabIndex;
     private IList<MetaverseObjectTypeHeader>? _metaverseObjectTypeHeaders;
+    private VirtualisedDataGrid<MetaverseObjectTypeHeader>? _objectTypeGrid;
     private VirtualisedDataGrid<MetaverseAttributeHeader>? _attributeGrid;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
@@ -268,6 +312,36 @@
 
         using var jim = JimFactory.Create();
         _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+    }
+
+    /// <summary>
+    /// Windows the in-memory Object Type list for the grid: Metaverse Object Types are a small configuration
+    /// list, loaded whole once, so search and sort are applied here rather than each becoming a database range
+    /// read (unlike the Attributes tab, whose list is large enough to earn a server-side range read).
+    /// </summary>
+    private Task<VirtualisedWindow<MetaverseObjectTypeHeader>> LoadObjectTypeWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        var headers = _metaverseObjectTypeHeaders ?? new List<MetaverseObjectTypeHeader>();
+
+        var filtered = headers.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+            filtered = filtered.Where(x => x.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
+
+        Func<MetaverseObjectTypeHeader, object> sortKey = request.SortBy switch
+        {
+            "attributes" => x => x.AttributesCount,
+            "deletionrule" => x => x.DeletionRule,
+            "predefinedsearches" => x => x.HasPredefinedSearches,
+            "builtin" => x => x.BuiltIn,
+            "created" => x => x.Created,
+            _ => x => x.Name
+        };
+
+        var sorted = request.SortDescending
+            ? filtered.OrderByDescending(sortKey)
+            : filtered.OrderBy(sortKey);
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
     private async Task<VirtualisedWindow<MetaverseAttributeHeader>> LoadAttributeWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
@@ -372,11 +446,17 @@
             header.Id, "Metaverse Object Type", header.Name);
     }
 
+    /// <summary>
+    /// Reloads the Object Type list after a dialog creates, edits or deletes a Metaverse Object Type, then
+    /// refreshes the grid over it. The totals are invalidated because the change may have altered how many
+    /// Object Types exist or match the current search.
+    /// </summary>
     private async Task ReloadObjectTypeHeadersAsync()
     {
         using var jim = JimFactory.Create();
         _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
-        StateHasChanged();
+        if (_objectTypeGrid != null)
+            await _objectTypeGrid.RefreshAsync(invalidateTotals: true);
     }
 
     private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)

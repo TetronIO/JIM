@@ -40,6 +40,25 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             .Add(c => c.StateKey, stateKey));
 
     [Test]
+    public void VirtualisedDataGrid_RowClassFunc_IsForwardedToTheUnderlyingGrid()
+    {
+        // Pages need per-row classes (e.g. dimming disabled Predefined Searches) without hand-rolling their own
+        // grid; the wrapper forwards the delegate rather than exposing MudDataGrid directly.
+        Func<string, int, string?> rowClass = (_, _) => "jim-readonly-row";
+
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string>(), 0)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.RowClassFunc, rowClass));
+
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.FindComponent<MudBlazor.MudDataGrid<string>>().Instance.RowClassFunc,
+                Is.SameAs(rowClass)));
+    }
+
+    [Test]
     public void VirtualisedDataGrid_OnceRendered_FitsItsHeightToTheViewport()
     {
         var cut = RenderGrid();

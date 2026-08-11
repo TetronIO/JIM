@@ -349,6 +349,30 @@ public interface IMetaverseRepository
         int? objectTypeId = null);
 
     /// <summary>
+    /// Gets a window of MVOs pending deletion addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Pending Deletions list. Shares its filter with
+    /// <see cref="GetMetaverseObjectsPendingDeletionAsync"/>; ordered soonest-scheduled first (by disconnection
+    /// date, ascending) unless <paramref name="sortBy"/> names another sort key.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first item wanted.</param>
+    /// <param name="count">How many items are wanted; capped to bound the latency of a single read.</param>
+    /// <param name="searchQuery">Optional case-insensitive search over the display name and the triggering
+    /// Connected System's name.</param>
+    /// <param name="sortBy">Optional sort key: "displayname", "type", "eligible" or "disconnected" (the default).</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero.</param>
+    public Task<RangeResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        int? objectTypeId = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Gets the count of MVOs that are pending deletion.
     /// </summary>
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>

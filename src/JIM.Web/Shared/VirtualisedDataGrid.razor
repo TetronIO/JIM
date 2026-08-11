@@ -34,7 +34,8 @@
     <MudDataGrid @ref="_dataGrid" T="T" VirtualizeServerData="ServerReload" Virtualize="true" OverscanCount="30"
                  FixedHeader="true" ItemSize="@RowHeight"
                  Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
-                 RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClick="HandleRowClick" Class="mt-5">
+                 RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
+                 RowClick="HandleRowClick" Class="mt-5">
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
             @* The total match count, in the toolbar's title slot; with no pager, this is the only place the list
@@ -132,6 +133,11 @@
     /// <summary>Raised when a row is clicked. When unset, rows do not read as clickable.</summary>
     [Parameter]
     public EventCallback<T> RowClicked { get; set; }
+
+    /// <summary>Optional per-row CSS class (e.g. dimming a disabled row); composes with the grid's own row
+    /// classes rather than replacing them.</summary>
+    [Parameter]
+    public Func<T, int, string?>? RowClassFunc { get; set; }
 
     // ─── State the page and empty-state fragment may read ───
 

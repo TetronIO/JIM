@@ -1775,6 +1775,27 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets a window of MVOs pending deletion addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Pending Deletions list. Shares its filter with
+    /// <see cref="GetMetaverseObjectsPendingDeletionAsync"/>; ordered soonest-scheduled first (by disconnection
+    /// date, ascending) unless <paramref name="sortBy"/> names another sort key ("displayname", "type",
+    /// "eligible" or "disconnected"). Pass <paramref name="includeTotalCount"/> as false to skip counting the
+    /// whole match set when the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        int? objectTypeId = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionRangeAsync(
+            offset, count, searchQuery, sortBy, sortDescending, objectTypeId, includeTotalCount);
+    }
+
+    /// <summary>
     /// Gets the count of MVOs that are pending deletion.
     /// </summary>
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>

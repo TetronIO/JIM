@@ -118,7 +118,9 @@ All data tables should let users switch between normal and compact row spacing, 
 
 A page supplies:
 
-- **`LoadWindow`**: a `Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<T>>>` that calls a repository **range read** (`offset`/`count`, not page/pageSize) and MUST honour `IncludeTotalCount` by skipping its count query and returning a null total when false; counting is the expensive half of a window read at scale. Null means "not counted", never zero. Pattern: `GetMetaverseObjectHeadersRangeAsync`.
+- **`LoadWindow`**: a `Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<T>>>`. Two tiers, chosen by what the list can grow to:
+  - **Unbounded data lists** (objects, activities, changes, pending deletions) call a repository **range read** (`offset`/`count`, not page/pageSize) that MUST honour `IncludeTotalCount` by skipping its count query and returning a null total when false; counting is the expensive half of a window read at scale. Null means "not counted", never zero. Pattern: `GetMetaverseObjectHeadersRangeAsync`.
+  - **Configuration-sized lists** (Connectors, API Keys, Predefined Searches and friends) load the full list once, then filter and sort in the page and finish with `filtered.ToWindow(request)` (`VirtualisedWindowExtensions`); do not grow a database range read for a list that stays in the dozens. Pattern: `ConnectorList.razor`.
 - **`Columns`**: `TemplateColumn`s, with `<VirtualisedSortHeader Title="..." />` in the `HeaderTemplate` for server-side sortable columns (the grid cascades itself as `IVirtualisedSortable`).
 - **`EmptyContent`**: the context-aware empty states ("Table empty states" below); the fragment's context is the grid, so branch on `context.SearchText` and wire the action to `context.ClearSearchAsync()`.
 - **`ContainerId`** (unique per grid) and, when two grids share one page, a **`UrlParameterPrefix`** each so their URL state cannot collide.
