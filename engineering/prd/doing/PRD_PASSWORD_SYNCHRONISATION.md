@@ -1,10 +1,10 @@
 # Password Synchronisation
 
-- **Status:** Planned
+- **Status:** Doing (shared foundation delivered; none of this feature's own queue machinery started)
 - **Created:** 2026-07-25
 - **Author:** Tetron
 - **Issue:** [#1119](https://github.com/TetronIO/JIM/issues/1119)
-- **Note:** Still `Planned` because none of this feature's own machinery (per-system configuration, queue, fan-out, coalescing, expiry, retry, retention, reporting) has been started. The shared connector foundation it depends on has, however, landed under [#1121](https://github.com/TetronIO/JIM/issues/1121), [#1172](https://github.com/TetronIO/JIM/issues/1172), [#1221](https://github.com/TetronIO/JIM/issues/1221) and [#1273](https://github.com/TetronIO/JIM/issues/1273); see [Implementation Progress](#implementation-progress) for exactly which requirements are already satisfied, which of this feature's own questions the initial-password work has already answered, and where it has diverged, so that none of it is built twice.
+- **Note:** `Doing` because Scenario 1 below is delivered: provisioning sets an initial password on the new account over the connector password channel, with change-at-next-sign-in, and records the outcome without the value. Several functional requirements are met with it. What has **not** started is any of this feature's own machinery: per-system configuration, the encrypted queue, fan-out, coalescing, retry and backoff, the queue page, retention, and inbound capture. The foundation landed under [#1121](https://github.com/TetronIO/JIM/issues/1121), [#1172](https://github.com/TetronIO/JIM/issues/1172), [#1221](https://github.com/TetronIO/JIM/issues/1221) and [#1273](https://github.com/TetronIO/JIM/issues/1273); see [Implementation Progress](#implementation-progress) for exactly which requirements are already satisfied, which of this feature's own questions the initial-password work has already answered, and where it has diverged, so that none of it is built twice.
 
 ## Problem Statement
 
@@ -115,11 +115,16 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 
 ## Examples and Scenarios
 
-### Scenario 1: Provisioning sets an initial password
+### Scenario 1: Provisioning sets an initial password ✅ Delivered
 
 **Given**: A Connected System "Corporate AD" has Password Synchronisation configured and enabled, and a Synchronisation Rule provisions new joiners into it.
 **When**: A new identity is provisioned and an initial password is generated.
 **Then**: The account is created, the password is set on the new account over LDAPS, "user must change password at next sign-in" is applied, the queue row is deleted on success, and an Activity records a successful password set against "Corporate AD" with no password value anywhere in the record.
+
+Delivered under [#1121](https://github.com/TetronIO/JIM/issues/1121), and the reason this PRD is `Doing` rather than `Planned`. Two differences from the wording above, neither of which changes the outcome an administrator sees:
+
+- **The initial password is configured on the Synchronisation Rule, not by enabling Password Synchronisation on the Connected System**, because that configuration does not exist yet. The rule is where the setting belongs anyway (see #1121's reasoning); when this feature's per-system configuration lands, it governs *synchronised* passwords rather than taking this one over.
+- **The row that is deleted on success is a `PendingInitialPassword`, not this feature's queue row.** It records the intent only, never a value, and its lifecycle is described under Implementation Progress below.
 
 ### Scenario 2: A target system is unavailable, then recovers
 
@@ -200,7 +205,7 @@ These were open during drafting and have since been decided; they are settled in
 
 This PRD's Resolved Decisions committed to building the connector set-password foundation **once**, under [#1121](https://github.com/TetronIO/JIM/issues/1121), and layering this feature's queue, fan-out, and inbound capture on top. That foundation has now shipped, along with three further consumers of it: [#1172](https://github.com/TetronIO/JIM/issues/1172) (one password across several of a person's accounts), [#1221](https://github.com/TetronIO/JIM/issues/1221) (the outstanding-work lifecycle behind initial passwords) and [#1273](https://github.com/TetronIO/JIM/issues/1273) (a static initial password). Several of the functional requirements below are therefore already met, and #1221 in particular built a durable per-account work store whose shape this feature's queue should follow rather than reinvent. This section records all of that, so that the eventual Password Synchronisation implementation extends what exists rather than duplicating it. It is a status record, not a change of scope: no requirement here has been added, removed, or reworded.
 
-Last reviewed 2026-08-10, against `main`.
+Last reviewed 2026-08-11, against `main`.
 
 ### Requirements already satisfied
 
@@ -240,8 +245,8 @@ Work delivered under #1121 that this PRD assumed but did not require: Connected 
 2. **`ActivityTargetOperationType.SetPassword` exists (value 12); the new Activity target *category* of requirement 24 does not.** Password events currently record against existing target types. Adding the category is still this feature's work, and the existing operation type should be reused rather than a second one introduced.
 3. **JIM now stores a password value, which the Goals said it never would.** The Goals above allow no persisted cleartext password "other than the encrypted queue payload"; #1273 added a second such field, `SyncRuleInitialPassword.StaticPasswordEncryptedValue`, holding the one password a Synchronisation Rule sets on every account it provisions. It is a deliberate, administrator-chosen exception: write-only on every surface, reaching configuration change history as a keyed hash rather than a value, and recommended against in the portal beside the option. It is retired by delivering a generated password to whoever should have it ([#1252](https://github.com/TetronIO/JIM/issues/1252)), not by this feature. Nothing here weakens the rule for synchronised passwords, which are still queue-payload-only; the Goal's wording is simply now one exception out of date.
 4. **That value is protected under the shared credential purpose, not a dedicated one.** Requirement 7 asks for the existing credential protection service under a purpose distinct from connector settings; `CredentialProtectionService` exposes one purpose (`JIM.Credentials.v1`) and `ProtectStaticPassword` uses it. Introducing the dedicated password purpose is still this feature's work, and doing so has to account for the static passwords already encrypted under the shared one.
-5. **The initial-password time to live is a hard-coded 7 days, not a per-system setting.** `PendingInitialPassword.DefaultTimeToLive` matches Resolved Decision 4's default but is fixed, and says in its own comment that it should adopt requirement 5's per-Connected-System setting rather than grow a second one first. Build that setting here and point both stores at it.
-6. **Nothing trims the initial-password store.** Requirements 28 to 30's Schedule-driven trim has no counterpart: terminal `Parked` and `Expired` rows are retained indefinitely, and no worker or Scheduler code references `PendingInitialPassword` at all. The trim this feature builds should cover both stores rather than leaving the older one unbounded.
+5. **The per-system time to live now exists; adopt it rather than growing a second one.** `ConnectedSystem.InitialPasswordTimeToLive` is requirement 5's window, built under [#1316](https://github.com/TetronIO/JIM/issues/1316) and defaulting to Resolved Decision 4's seven days when unset. It is already the property of the Connected System this feature wants, so the queue should read the same field instead of adding one beside it.
+6. **The trim exists, in worker housekeeping rather than on a Schedule.** #1316 removes terminal `Parked` and `Expired` rows past `History.InitialPasswordRetentionPeriod` (90 days by default), beside the change-history trims and under the same batch cap. Requirements 28 to 30 ask for a Schedule instead, consistent with #1118; that was deliberately not built as a lone Schedule step ahead of #1118, so this feature's trim should absorb the existing one when it moves rather than leave two mechanisms. `InitialPasswordDeliveryServer.DeleteExpiredWorkRecordsAsync` is the call to move; the selection rules do not change.
 
 ### Not started
 
