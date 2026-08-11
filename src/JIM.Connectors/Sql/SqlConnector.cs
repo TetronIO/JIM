@@ -1030,7 +1030,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
             // The driver's own account of the failure is what an administrator needs (a refused login, an
             // unknown database, an unreachable host all read differently), and it never contains the
             // credential: JIM hands the password to the driver's connection string builder and nowhere else.
-            logger.Error(ex, "TestDatabaseConnectivity failed");
+            // Warning, not Error: this is settings validation, and an administrator naming a host that
+            // cannot be reached is an ordinary, expected outcome which JIM handles and reports back on the
+            // settings form. At Error, every mistyped hostname became an application error in the service
+            // log; it also aborted twelve unrelated Run Profiles in the Scenario 16 matrix, because the
+            // integration harness treats any Error line as a scenario failure and the matrix deliberately
+            // provokes this path to prove validation rejects bad settings. The exception is still logged,
+            // so nothing is lost for diagnosis.
+            logger.Warning(ex, "TestDatabaseConnectivity failed");
             return Failure(settingValues, SqlConnectorConstants.SettingHost, $"Unable to connect. Message: {ex.Message}", ex);
         }
     }
