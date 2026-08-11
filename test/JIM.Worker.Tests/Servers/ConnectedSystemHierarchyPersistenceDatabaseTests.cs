@@ -213,4 +213,70 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
             Assert.That(await verify.ConnectorDefinitions.CountAsync(), Is.EqualTo(1));
         }
     }
+
+    /// <summary>
+    /// A Container's scope statement survives a round trip through the database, including the exclusion added for
+    /// #1255.
+    /// </summary>
+    /// <remarks>
+    /// The in-memory provider would pass this whatever the EF model said, because it maps whatever the type has. A
+    /// column silently absent from the real schema (a mapping annotation on the wrong property, a migration that
+    /// never reached the model snapshot) shows up only here, as a value that reads back as its default. Reading the
+    /// exclusion back as <c>false</c> is precisely the failure that would import a branch an administrator had
+    /// deliberately carved out.
+    /// </remarks>
+    [Test]
+    public async Task UpdateConnectedSystemAsync_ContainerWithAnExclusion_PersistsTheExclusionAndScopeAsync()
+    {
+        var systemId = await SeedAsync();
+
+        await using (var firstContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(firstContext);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+            var partition = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system,
+                ExternalId = "dc=example,dc=org",
+                Name = "example.org",
+                Selected = true,
+                Containers = []
+            };
+            partition.Containers.Add(new ConnectedSystemContainer
+            {
+                Partition = partition,
+                ExternalId = "ou=corp,dc=example,dc=org",
+                Name = "corp",
+                Selected = true,
+                Scope = ConnectedSystemContainerScope.Subtree
+            });
+            partition.Containers.Add(new ConnectedSystemContainer
+            {
+                Partition = partition,
+                ExternalId = "ou=service accounts,ou=corp,dc=example,dc=org",
+                Name = "service accounts",
+                Excluded = true,
+                Scope = ConnectedSystemContainerScope.OneLevel
+            });
+            system.Partitions ??= [];
+            system.Partitions.Add(partition);
+
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        await using var verify = NewContext();
+        var corp = await verify.ConnectedSystemContainers.SingleAsync(c => c.Name == "corp");
+        var serviceAccounts = await verify.ConnectedSystemContainers.SingleAsync(c => c.Name == "service accounts");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(corp.Selected, Is.True);
+            Assert.That(corp.Excluded, Is.False);
+            Assert.That(corp.Scope, Is.EqualTo(ConnectedSystemContainerScope.Subtree));
+            Assert.That(serviceAccounts.Excluded, Is.True, "the exclusion must survive the round trip, or the branch is imported after all");
+            Assert.That(serviceAccounts.Selected, Is.False);
+            Assert.That(serviceAccounts.Scope, Is.EqualTo(ConnectedSystemContainerScope.OneLevel),
+                "Scope says how far a Container's statement reaches, whether that statement is a selection or an exclusion");
+        }
+    }
 }

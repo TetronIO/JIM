@@ -53,6 +53,12 @@ public class InitialPasswordReleaseOnSaveTests
         mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
 
         _mockCsRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        // Saving a Synchronisation Rule reconciles its target attributes' priority order (#1199), which reads the
+        // mappings' persisted targets. A loose mock returns null for the dictionary and the reconcile throws;
+        // production code is deliberately not null-guarded, because a null there would be a repository contract
+        // violation that should fail loudly rather than be swallowed.
+        _mockCsRepo.Setup(r => r.GetImportMappingTargetMetaverseAttributesAsync(It.IsAny<int>()))
+            .ReturnsAsync(new Dictionary<int, int>());
         _mockSyncRepo.Setup(r => r.ReleaseParkedInitialPasswordsAsync(It.IsAny<int>())).ReturnsAsync(0);
 
         _initiatedBy = TestUtilities.GetInitiatedBy();
