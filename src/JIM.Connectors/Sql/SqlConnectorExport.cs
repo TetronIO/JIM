@@ -298,7 +298,10 @@ internal sealed class SqlConnectorExport
             if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
                 throw new InvalidOperationException(InsertWroteNothingMessage(plan.QualifiedTableName));
 
-            generatedKey = keyParameter.Value;
+            // Through the seam, never read raw: a driver is free to answer a bound parameter with a
+            // value type of its own, and ODP.NET always does. The provider is also what decides whether
+            // the driver said "no value", because its way of saying so need not be DBNull.
+            generatedKey = _provider.ConvertFromDriverValue(keyParameter.Value);
         }
 
         if (generatedKey == null || generatedKey == DBNull.Value)

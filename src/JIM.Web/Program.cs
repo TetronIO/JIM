@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Text.Json;
-using Asp.Versioning;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
@@ -16,6 +15,7 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Web.Extensions.Api;
 using JIM.Web.Hubs;
 using JIM.Web.Logging;
 using JIM.Web.Middleware;
@@ -449,17 +449,7 @@ try
     builder.Services.Configure<RouteOptions>(ro => ro.LowercaseUrls = true);
 
     // Configure API versioning with URL path segment (e.g., /api/v1/...)
-    builder.Services.AddApiVersioning(options =>
-    {
-        options.DefaultApiVersion = new ApiVersion(1, 0);
-        options.AssumeDefaultVersionWhenUnspecified = true;
-        options.ReportApiVersions = true;
-        options.ApiVersionReader = new UrlSegmentApiVersionReader();
-    }).AddApiExplorer(options =>
-    {
-        options.GroupNameFormat = "'v'VVV";
-        options.SubstituteApiVersionInUrl = true;
-    });
+    builder.Services.AddJimApiVersioning();
 
     // Fetch OIDC discovery document to get IDP-agnostic authorization endpoints.
     // In OpenAPI generation mode, use constructed placeholder URLs to avoid requiring a live IdP.
