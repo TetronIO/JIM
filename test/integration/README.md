@@ -101,6 +101,8 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 
 ### Phase 2 Scenarios
 - **Scenario 16: JIM SQL Connector Matrix** - the connector's provider x capability matrix driven against Microsoft SQL Server and Oracle Database ([#170](https://github.com/TetronIO/JIM/issues/170)). Accepts `-Provider SqlServer|Oracle|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import. `-Template` is ignored; the scenario seeds its own rows.
+  - **Blocked from running.** The JIM SQL Connector is registered in neither `ConnectorFactory` nor `SeedingServer.BuiltInConnectors()` until Phase 8, so no Connector Definition is seeded and `Setup-Scenario16.ps1` stops at Step 4. Every row is written but unproven; a green summary from this scenario would not mean anything yet. See the Scenario 16 section of `engineering/INTEGRATION_TESTING.md` for the detail, the seeder timings, and the `jim-network` and Windows-host gotchas.
+  - Rows that cannot be exercised report **`skip` with a reason, never `pass`**. Preserve that: a matrix whose green cells include things nobody ran is worse than no matrix. Two rows are skipped by design today (`Delta.WatermarkColumn` and `Delta.Fallback`), because both need the Connected System's Delta Import Mode changed and its persisted watermark cleared mid-run.
 - Still road-mapped: multi-source aggregation across two database sources, and performance baselines. PostgreSQL and MySQL support are the connector's priority 2 providers and are not covered yet.
 
 ## Available Scripts

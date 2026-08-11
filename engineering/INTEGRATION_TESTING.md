@@ -1119,7 +1119,14 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 #### Scenario 16: JIM SQL Connector Provider x Capability Matrix
 
-**Status**: implemented. This is the correctness gate for the JIM SQL Connector ([#170](https://github.com/TetronIO/JIM/issues/170)).
+**Status**: written, and **blocked from running** until the connector is registered. This is the correctness gate for the JIM SQL Connector ([#170](https://github.com/TetronIO/JIM/issues/170)).
+
+> **The scenario cannot execute a single matrix row today, and the blocker is not in the scenario.** The JIM SQL Connector is deliberately registered in neither `ConnectorFactory.CreateConnectorInstance` nor `SeedingServer.BuiltInConnectors()` until Phase 8 of the plan, so:
+>
+> - no `JIM SQL Connector` Connector Definition is ever seeded, and `Setup-Scenario16.ps1` stops at Step 4 with *"The 'JIM SQL Connector' Connector Definition was not found"*; and
+> - even with a definition in place, `ConnectorFactory` would throw `NotSupportedException` for the name, which is the single dispatch point for the save-time connectivity test, schema discovery, every import and every export.
+>
+> Both registrations are one line each. Until they land, treat every row below as authored but unproven, and do not read a green summary from this scenario as evidence of anything. Verified on this branch against a freshly built stack: `ConnectorDefinitions` holds only the LDAP, File and SCIM 2.0 Client definitions, and both `-Provider SqlServer -Quick` and `-Provider Oracle -Quick` abort at Step 4 in about four seconds.
 
 **Purpose**: drive one capability row per line of the PRD's Testing Requirements table against both priority 1 providers, **Microsoft SQL Server** and **Oracle Database**: full import from a table and from a view, multi-valued and reference import, delta import in both modes plus the fallback path, export (create, update, delete, natural-key and reference), the type-mapping round trip, configuration validation, the provider driver-shape rows the unit suite cannot reach, and the 500,000-row scale import. Databases are deliberately not retrofitted into Scenarios 1-14; this matrix plus the road-mapped Multi-Source Aggregation scenario are the two vehicles for database regression coverage.
 
@@ -1146,6 +1153,19 @@ With neither switch, the default tier runs every functional row against the chos
 - `sqlserver-hris-a` runs `mcr.microsoft.com/mssql/server:2022-latest`. The 2022 image ships **mssql-tools18 only**, so the healthcheck uses the fully qualified `/opt/mssql-tools18/bin/sqlcmd` path (nothing named `sqlcmd` is on `PATH`), with `-C` to trust the self-signed certificate SQL Server generates for itself; tools18 encrypts by default, where the older tools did not, so without `-C` the check fails on every interval no matter how healthy the server is. The SA password comes from `MSSQL_SA_PASSWORD` (the unprefixed `SA_PASSWORD` is deprecated and logs a warning on every start), overridable via `SQL_SA_PASSWORD`. Sized at 4 CPUs / 6GB for the 500,000-row scale run.
 - `oracle-hris-b` runs `container-registry.oracle.com/database/free:23.9.0.0` (**Oracle Database Free 23ai**, not the retired Express 21c image). It pulls **anonymously** from Oracle's own registry: no `docker login`, no licence click-through, and no third-party Docker Hub redistribution. The image is 13.6GB. The CDB service is `FREE`; the pluggable database JIM connects to is `FREEPDB1`, set explicitly via `ORACLE_PDB`. Connect to the PDB, never the CDB: application schemas live in the PDB and a CDB connection cannot see them. Sized at 4 CPUs / 8GB, with `shm_size: 2gb` because Oracle puts the SGA in System V shared memory and Docker's 64MB default `/dev/shm` is far too small (see [ORA-00845](#oracle-fails-to-start-with-ora-00845) below).
 - Oracle's healthcheck runs the image's own `/opt/oracle/checkDBStatus.sh`. It authenticates as SYSDBA through operating-system authentication (`sqlplus -s /`), so it carries **no credentials at all**, and it fails while the pluggable database is still MOUNTED rather than open READ WRITE, which is exactly the window in which a connection attempt would fail confusingly. Its `start_period` is 600s to cover a first start against an empty named volume, which creates the database from scratch. In practice the warm path is far quicker: on the development host used to validate this work, the container reported healthy about **40 seconds** after `docker compose up`, because the 23.9 image ships a pre-created database in its layers.
+
+**What the setup configures.** One Connected System per provider, with all five Object Types selected (`Person`, `PersonView`, `AppUser`, `NaturalKeyAccount`, and `GuidKeyedPerson` on Oracle only), five Run Profiles at page size 10, an Object Matching Rule on `EMPLOYEE_NUMBER`, one inbound Synchronisation Rule projecting `EMPLOYEES` into the Metaverse, and two outbound rules (three on Oracle) covering the three export shapes: a database-generated `IDENTITY` key, a natural key JIM authors, and Oracle's `RAW(16) DEFAULT SYS_GUID()`. It also contributes two Metaverse Attributes, `SQL Matrix FTE` (Decimal) and `SQL Matrix Headcount` (LongNumber), because no built-in attribute has those data types and mapping a `NUMBER(9,4)` onto an Integer attribute would round the value that the exact-numeric row exists to protect.
+
+**Database Time Zone is `Australia/Sydney`, and that is load-bearing.** At the UTC default every zone conversion is the identity, so a zone-inversion defect passes unnoticed; that much is a PRD requirement. What is less obvious is that **Europe/London does not work either for this seed**: the seeder derives `START_DATE` as 2020-01-06 plus n days, so a 50-row database never leaves January and February, where London is UTC+00:00 and the conversion is the identity again. Sydney is UTC+11:00 across the seeded range. The zoneless driver-shape row additionally writes a southern-winter date in (where Sydney is UTC+10:00), asserts against it, and restores the original, because a fixed-offset implementation passes a single-season test.
+
+**Seeder timings** (measured on the validation host, Docker Desktop, 16 CPUs / 64GB, warm containers). The seeder is set-based (`INSERT ... SELECT` over a generated series) rather than one statement per row, and it is not the expensive part of the scenario:
+
+| Provider | 50 rows | 500,000 rows |
+|----------|---------|--------------|
+| Microsoft SQL Server | ~1.2s | **6.8s** |
+| Oracle Database Free 23ai | ~2.0s | **7.9s** |
+
+Re-seeding is skipped when a content hash of the generated script matches what the `JIM_SEED_MANIFEST` table records, so an unchanged seed costs one round trip; pass `-Force` to rebuild regardless. Because the hash covers the script and not the data, rows that a matrix row mutated are **not** detected as drift: re-run with `-Force` when a previous run left the database dirty.
 
 **Image pinning**: both database images use mutable tags on purpose. `engineering/DEPENDENCY_PINNING.md` row 9 records integration test images as an accepted exception to digest pinning (test-only, never shipped, chosen for connector compatibility testing rather than supply chain assurance) and updates them manually as needed. Do not digest-pin them without changing that policy row first.
 
@@ -1768,6 +1788,23 @@ netstat -an | Select-String "389"
 ```
 
 ### Phase 2 Database Containers (Scenario 16)
+
+**"network jim-network was found but has incorrect label" when starting the JIM stack**: the phase2 database containers were brought up before the JIM stack, against a hand-created `jim-network`. The main compose file owns that network (it is not declared external there), so it refuses to reuse one it did not create, and the JIM stack will not start at all. The runner avoids this by starting the stack first; you only hit it when driving the containers by hand.
+
+Do not fix it by tearing the databases down: Oracle's first boot against an empty volume is the expensive part of the whole scenario. Either recreate the network with the containers still running:
+
+```powershell
+docker network disconnect jim-network oracle-hris-b
+docker network disconnect jim-network sqlserver-hris-a
+docker network rm jim-network
+# let the JIM stack create it, then put the databases back
+docker network connect jim-network oracle-hris-b
+docker network connect jim-network sqlserver-hris-a
+```
+
+or add a throwaway overlay that marks the network external for that one run (`networks: { jim-network: { name: jim-network, external: true } }`) and pass it as an extra `-f` after `docker-compose.override.yml`. Neither belongs in the repository.
+
+**Driving the scenario from a Windows host rather than the devcontainer**: the `jim-*` shell aliases do not exist there. The equivalents are `docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build` (set `OPENAPI_STAGE=publish` first to skip the five-minute OpenAPI stage) and `pwsh -NoProfile -File ./test/integration/Run-IntegrationTests.ps1 ...`. You will also need a `.env`: the worktree does not inherit the main clone's copy, and `JIM_INFRASTRUCTURE_API_KEY` must be present before `jim.web` first starts or the scenario's API calls all fail authentication. The Keycloak image comes from quay.io, which times out often enough to be worth a bare `docker pull quay.io/keycloak/keycloak:<tag>` retry before concluding anything is wrong.
 
 **Oracle takes a long time to start**:
 ```powershell

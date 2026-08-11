@@ -7,16 +7,23 @@
 
 .DESCRIPTION
     Creates one Connected System per requested provider against the seeded HR schema, discovers its
-    schema, selects the Object Types and attributes the matrix asserts on, and creates the Run Profiles
-    each capability row drives.
+    schema, selects the Object Types and attributes the matrix asserts on, creates the Run Profiles each
+    capability row drives, and creates the inbound and outbound Synchronisation Rules the import-side and
+    export-side rows need.
+
+    NOT YET EXECUTED. The JIM SQL Connector is registered in neither ConnectorFactory nor
+    SeedingServer.BuiltInConnectors (deliberately, until Phase 8), so no 'JIM SQL Connector' Connector
+    Definition exists to create a Connected System against and this script stops at Step 4. Everything
+    from Step 4 onwards is therefore written but unproven; treat a failure here as a bug in this script
+    until it has had one clean run.
 
     Two configuration choices here are load-bearing rather than incidental:
 
     The Database Time Zone is deliberately NOT UTC. At the UTC default every zone conversion is the
     identity, so a zone-inversion defect (import and export applying the offset the same way round
-    rather than inverting each other) passes unnoticed. Europe/London in summer is one hour off UTC,
-    which makes the two directions distinguishable. This is a PRD acceptance requirement, not a
-    preference.
+    rather than inverting each other) passes unnoticed. Australia/Sydney is eleven hours off UTC over
+    the seeded date range, which makes the two directions distinguishable. This is a PRD acceptance
+    requirement, not a preference; see the parameter's own comment for why it is not Europe/London.
 
     Both Oracle opt-ins are turned on (NUMBER(1) as Boolean, RAW(16) as Guid), because the columns those
     settings reinterpret are exactly the ones the matrix exists to pin down.
@@ -43,8 +50,15 @@ param(
     [int]$RowCount = 50,
 
     # The zone zoneless columns are declared to be in. Not UTC by default, on purpose; see above.
+    #
+    # Australia/Sydney rather than Europe/London. Every seeded date sits in January or February (the
+    # generator derives START_DATE as 2020-01-06 plus n days, so a 50-row seed never leaves winter), and
+    # Europe/London is UTC+00:00 for all of them: the conversion would be the identity and the assertion
+    # would pass with a zone-inversion defect fully present, which is precisely the failure this setting
+    # exists to prevent. Sydney is UTC+11:00 over the seeded range and UTC+10:00 in the southern winter,
+    # so the offset is both non-zero and season-dependent.
     [Parameter(Mandatory=$false)]
-    [string]$DatabaseTimeZone = "Europe/London",
+    [string]$DatabaseTimeZone = "Australia/Sydney",
 
     [Parameter(Mandatory=$false)]
     [string]$Template = "Nano",
@@ -311,18 +325,299 @@ foreach ($runProfile in $runProfiles) {
     Write-Host "  OK $($runProfile.Name) (page size $pageSize)" -ForegroundColor Green
 }
 
+# ─── Step 11: Metaverse plumbing ───────────────────────────────────────────────
+
+Write-TestStep "Step 11" "Resolving the Metaverse schema"
+
+$mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+if (-not $mvUserType) { throw "The built-in Metaverse Object Type 'User' was not found; JIM may not have seeded." }
+
+# Two column shapes the matrix cares about have no built-in Metaverse Attribute of the right data type:
+# a NUMBER(9,4)/decimal(9,4) needs Decimal (the built-in numeric attributes are Integer), and a
+# bigint/NUMBER(19) needs LongNumber. Mapping either onto an Integer attribute would either be refused
+# or would silently round, and a rounded value is exactly the defect the exact-numeric row exists to
+# catch, so the scenario contributes its own two attributes rather than borrowing an ill-fitting one.
+function Add-Scenario16MetaverseAttribute {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)][ValidateSet('Text','Integer','LongNumber','Decimal','DateTime','Boolean','Reference','Guid','Binary')][string]$Type
+    )
+
+    $attribute = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+    if (-not $attribute) {
+        $attribute = New-JIMMetaverseAttribute -Name $Name -Type $Type -Plurality SingleValued -PassThru
+        Write-Host "  Created Metaverse Attribute '$Name' ($Type)" -ForegroundColor Gray
+    }
+
+    # Binding is idempotent from the caller's point of view: a second bind of the same attribute to the
+    # same Object Type is a no-op the API accepts, and the setup runs once per provider.
+    Add-JIMMetaverseObjectTypeAttribute -AttributeId $attribute.id -ObjectTypeId $mvUserType.id -ErrorAction SilentlyContinue | Out-Null
+    return $attribute
+}
+
+$mvFteAttribute       = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE"       -Type Decimal
+$mvHeadcountAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount" -Type LongNumber
+
+$mvAttributes = @(Get-JIMMetaverseAttribute)
+
+function Get-MvAttributeId {
+    param([string]$Name)
+    $attribute = $mvAttributes | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+    if (-not $attribute) { throw "Metaverse Attribute '$Name' was not found." }
+    return $attribute.id
+}
+
+function Get-CsAttributeId {
+    param([string]$ObjectTypeName, [string]$AttributeName)
+    if (-not $selectedTypes.ContainsKey($ObjectTypeName)) {
+        throw "Object Type '$ObjectTypeName' was not selected, so its attributes cannot be mapped."
+    }
+    $attribute = $selectedTypes[$ObjectTypeName].attributes | Where-Object { $_.name -eq $AttributeName } | Select-Object -First 1
+    if (-not $attribute) {
+        throw "Schema discovery did not return attribute '$AttributeName' on Object Type '$ObjectTypeName'. Discovered: $(($selectedTypes[$ObjectTypeName].attributes | ForEach-Object { $_.name }) -join ', ')"
+    }
+    return $attribute.id
+}
+
+# ─── Step 12: Object Matching Rule ─────────────────────────────────────────────
+
+Write-TestStep "Step 12" "Creating the Object Matching Rule for Person"
+
+# EMPLOYEE_NUMBER rather than EMPLOYEE_ID: the Metaverse's 'Employee ID' is a Text attribute and
+# EMPLOYEE_ID is an integer column, so the text-shaped EMPLOYEE_NUMBER is the one that joins without a
+# type coercion the mapping validator would have to invent.
+New-JIMMatchingRule `
+    -ConnectedSystemId $system.id `
+    -ObjectTypeId $selectedTypes['Person'].id `
+    -MetaverseObjectTypeId $mvUserType.id `
+    -SourceAttributeId (Get-CsAttributeId -ObjectTypeName 'Person' -AttributeName 'EMPLOYEE_NUMBER') `
+    -TargetMetaverseAttributeId (Get-MvAttributeId -Name 'Employee ID') | Out-Null
+Write-Host "  OK Person.EMPLOYEE_NUMBER matches on Metaverse 'Employee ID'" -ForegroundColor Green
+
+# ─── Step 13: Inbound Synchronisation Rule ─────────────────────────────────────
+
+Write-TestStep "Step 13" "Creating the inbound Synchronisation Rule (Person to Metaverse)"
+
+# The inbound rule is not decoration for the export rows: three driver-shape rows assert on the UTC
+# instant JIM derived from a source column, and the only place that instant is observable is the
+# Metaverse Object's attribute value. Without this rule those rows can only report the source wall
+# clock back to themselves, which proves nothing.
+$importRule = New-JIMSyncRule `
+    -Name "SQL Matrix Person Import ($($config.DisplayName))" `
+    -Description "Scenario 16 inbound rule: projects EMPLOYEES rows into the Metaverse so the driver-shape rows can read the values JIM derived." `
+    -ConnectedSystemId $system.id `
+    -ConnectedSystemObjectTypeId $selectedTypes['Person'].id `
+    -MetaverseObjectTypeId $mvUserType.id `
+    -Direction Import `
+    -ProjectToMetaverse `
+    -PassThru
+
+# Metaverse attribute names are borrowed for their data type, not their business meaning: this schema
+# has no 'hired at' concept, so the two extra date and time columns land on the closest-shaped built-ins.
+# The mapping table below is the authoritative statement of which column is which.
+$importMappings = @(
+    @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Employee ID'         }
+    @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Account Name'        }
+    @{ Cs = 'EMPLOYEE_ID';         Mv = 'Employee Number'     }
+    @{ Cs = 'FIRST_NAME';          Mv = 'First Name'          }
+    @{ Cs = 'LAST_NAME';           Mv = 'Last Name'           }
+    @{ Cs = 'EMAIL';               Mv = 'Email'               }
+    @{ Cs = 'DEPARTMENT';          Mv = 'Department'          }
+    @{ Cs = 'IS_ACTIVE';           Mv = 'Account Enabled'     }
+    @{ Cs = 'HEADCOUNT';           Mv = 'SQL Matrix Headcount'}
+    @{ Cs = 'FTE';                 Mv = 'SQL Matrix FTE'      }
+    # Zoneless: the Database Time Zone decides the instant. This is the DateTimeNonUtc row's subject.
+    @{ Cs = 'START_DATE';          Mv = 'Employee Start Date' }
+    # Offset-carrying (-05:00 in the seeded data): unambiguous on the wire, so no setting applies.
+    @{ Cs = 'HIRED_AT';            Mv = 'Employee End Date'   }
+    @{ Cs = 'EMPLOYEE_GUID';       Mv = 'objectGUID'          }
+    @{ Cs = 'PHOTO';               Mv = 'Photo'               }
+    @{ Cs = 'MANAGER_EMPLOYEE_ID'; Mv = 'Manager'             }
+    @{ Cs = 'PhoneNumbers';        Mv = 'Other Telephones'    }
+)
+
+# Oracle's third date and time shape. TIMESTAMP WITH LOCAL TIME ZONE exists on Oracle alone, and it is
+# the column where the connector's two oracles (catalogue type name on export, runtime CLR type on
+# import) can disagree, so it gets its own Metaverse attribute to be read back from.
+if ($Provider -eq "Oracle") {
+    $importMappings += @{ Cs = 'HIRED_AT_LOCAL'; Mv = 'Account Expires' }
+}
+
+foreach ($mapping in $importMappings) {
+    New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
+        -TargetMetaverseAttributeId (Get-MvAttributeId -Name $mapping.Mv) `
+        -SourceConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'Person' -AttributeName $mapping.Cs) | Out-Null
+}
+Write-Host "  OK Inbound rule created with $($importMappings.Count) Attribute Flow(s)" -ForegroundColor Green
+
+# ─── Step 14: Outbound Synchronisation Rules ───────────────────────────────────
+
+Write-TestStep "Step 14" "Creating the outbound Synchronisation Rules"
+
+# ── AppUser: the database-generated key target ──
+#
+# APP_USERS.ID is an IDENTITY column on both providers, so JIM never writes it and must read it back
+# from the insert (OUTPUT INSERTED on SQL Server, RETURNING ... INTO on Oracle). That returned value
+# becomes the Connected System Object's external ID, and the confirming Full Import has to compose the
+# same token from the row it reads or the object is imported a second time as a stranger. That
+# agreement is what the Export.Create row checks, and it cannot be checked any other way.
+$appUserRule = New-JIMSyncRule `
+    -Name "SQL Matrix AppUser Export ($($config.DisplayName))" `
+    -Description "Scenario 16 outbound rule: provisions into APP_USERS, whose primary key the database generates." `
+    -ConnectedSystemId $system.id `
+    -ConnectedSystemObjectTypeId $selectedTypes['AppUser'].id `
+    -MetaverseObjectTypeId $mvUserType.id `
+    -Direction Export `
+    -ProvisionToConnectedSystem `
+    -OutboundDeprovisionAction Delete `
+    -PassThru
+
+$appUserMappings = @(
+    @{ Mv = 'Account Name';         Cs = 'USER_NAME'  }
+    @{ Mv = 'Email';                Cs = 'EMAIL'      }
+    @{ Mv = 'SQL Matrix FTE';       Cs = 'FTE'        }
+    @{ Mv = 'Account Enabled';      Cs = 'IS_ENABLED' }
+    @{ Mv = 'Employee Start Date';  Cs = 'STARTS_ON'  }
+    @{ Mv = 'Employee End Date';    Cs = 'STARTS_AT'  }
+    # The reference column. JIM writes the anchor of the manager's own object in THIS Connected System,
+    # which means the manager must have been provisioned first; the seeded population puts every manager
+    # in the first ten rows precisely so that ordering is exercised rather than avoided.
+    @{ Mv = 'Manager';              Cs = 'MANAGER_ID' }
+    # Related-table multi-valued maintenance: rows added to and removed from APP_USER_ROLES inside the
+    # same transaction as the parent row.
+    @{ Mv = 'Other Telephones';     Cs = 'Roles'      }
+)
+
+foreach ($mapping in $appUserMappings) {
+    New-JIMSyncRuleMapping -SyncRuleId $appUserRule.id `
+        -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'AppUser' -AttributeName $mapping.Cs) `
+        -SourceMetaverseAttributeId (Get-MvAttributeId -Name $mapping.Mv) | Out-Null
+}
+
+# An expression rather than a straight flow, so export-side expression evaluation is covered too.
+New-JIMSyncRuleMapping -SyncRuleId $appUserRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'AppUser' -AttributeName 'DISPLAY_NAME') `
+    -Expression 'mv["First Name"] + " " + mv["Last Name"]' | Out-Null
+
+# Scoped on Account Enabled, which is what gives the Export.Delete row something to drive: flipping a
+# source row's IS_ACTIVE takes its Metaverse Object out of scope, and OutboundDeprovisionAction Delete
+# turns that into a delete export rather than a disconnect. The seeded data disables every seventh
+# employee, so both sides of the scope are populated from the first import.
+$appUserScope = New-JIMScopingCriteriaGroup -SyncRuleId $appUserRule.id -Type All -PassThru
+New-JIMScopingCriterion `
+    -SyncRuleId $appUserRule.id `
+    -GroupId $appUserScope.id `
+    -MetaverseAttributeId (Get-MvAttributeId -Name 'Account Enabled') `
+    -ComparisonType Equals `
+    -BoolValue $true | Out-Null
+
+Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attribute Flows, scoped on Account Enabled)" -ForegroundColor Green
+
+# ── NaturalKeyAccount: the key JIM authors ──
+#
+# APP_ACCOUNTS_NATURAL.ACCOUNT_CODE is a natural primary key, so it is writable on create and JIM
+# supplies it. The external ID is then a value JIM chose rather than one the database handed back,
+# which is the opposite half of the anchor-agreement question the AppUser rule asks.
+$naturalRule = New-JIMSyncRule `
+    -Name "SQL Matrix NaturalKeyAccount Export ($($config.DisplayName))" `
+    -Description "Scenario 16 outbound rule: provisions into a table whose primary key JIM authors." `
+    -ConnectedSystemId $system.id `
+    -ConnectedSystemObjectTypeId $selectedTypes['NaturalKeyAccount'].id `
+    -MetaverseObjectTypeId $mvUserType.id `
+    -Direction Export `
+    -ProvisionToConnectedSystem `
+    -OutboundDeprovisionAction Delete `
+    -PassThru
+
+New-JIMSyncRuleMapping -SyncRuleId $naturalRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'NaturalKeyAccount' -AttributeName 'ACCOUNT_CODE') `
+    -SourceMetaverseAttributeId (Get-MvAttributeId -Name 'Account Name') | Out-Null
+
+New-JIMSyncRuleMapping -SyncRuleId $naturalRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'NaturalKeyAccount' -AttributeName 'IS_ENABLED') `
+    -SourceMetaverseAttributeId (Get-MvAttributeId -Name 'Account Enabled') | Out-Null
+
+New-JIMSyncRuleMapping -SyncRuleId $naturalRule.id `
+    -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'NaturalKeyAccount' -AttributeName 'DISPLAY_NAME') `
+    -Expression 'mv["First Name"] + " " + mv["Last Name"]' | Out-Null
+
+# A narrower scope than the AppUser rule's, so the two outbound rules provision different populations
+# and a row asserting on one cannot accidentally be satisfied by the other's work.
+$naturalScope = New-JIMScopingCriteriaGroup -SyncRuleId $naturalRule.id -Type All -PassThru
+New-JIMScopingCriterion `
+    -SyncRuleId $naturalRule.id `
+    -GroupId $naturalScope.id `
+    -MetaverseAttributeId (Get-MvAttributeId -Name 'Department') `
+    -ComparisonType Equals `
+    -StringValue "Research" | Out-Null
+
+Write-Host "  OK NaturalKeyAccount export rule created (3 Attribute Flows, scoped on Department = Research)" -ForegroundColor Green
+
+# ── GuidKeyedPerson (Oracle only): the RAW(16) DEFAULT SYS_GUID() key ──
+#
+# The single most load-bearing outbound rule in the scenario. The generated key comes back through a
+# bound output parameter as an ODP.NET wrapper struct rather than a plain byte[], and nothing in the
+# unit suite can see that shape. This is the first end-to-end proof that provisioning into Oracle works.
+$guidRule = $null
+if ($Provider -eq "Oracle") {
+    $guidRule = New-JIMSyncRule `
+        -Name "SQL Matrix GuidKeyedPerson Export (Oracle)" `
+        -Description "Scenario 16 outbound rule: provisions into a table keyed RAW(16) DEFAULT SYS_GUID()." `
+        -ConnectedSystemId $system.id `
+        -ConnectedSystemObjectTypeId $selectedTypes['GuidKeyedPerson'].id `
+        -MetaverseObjectTypeId $mvUserType.id `
+        -Direction Export `
+        -ProvisionToConnectedSystem `
+        -OutboundDeprovisionAction Delete `
+        -PassThru
+
+    New-JIMSyncRuleMapping -SyncRuleId $guidRule.id `
+        -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'GuidKeyedPerson' -AttributeName 'DEPARTMENT') `
+        -SourceMetaverseAttributeId (Get-MvAttributeId -Name 'Department') | Out-Null
+
+    New-JIMSyncRuleMapping -SyncRuleId $guidRule.id `
+        -TargetConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'GuidKeyedPerson' -AttributeName 'FULL_NAME') `
+        -Expression 'mv["First Name"] + " " + mv["Last Name"]' | Out-Null
+
+    $guidScope = New-JIMScopingCriteriaGroup -SyncRuleId $guidRule.id -Type All -PassThru
+    New-JIMScopingCriterion `
+        -SyncRuleId $guidRule.id `
+        -GroupId $guidScope.id `
+        -MetaverseAttributeId (Get-MvAttributeId -Name 'Department') `
+        -ComparisonType Equals `
+        -StringValue "Finance" | Out-Null
+
+    Write-Host "  OK GuidKeyedPerson export rule created (2 Attribute Flows, scoped on Department = Finance)" -ForegroundColor Green
+}
+
 Write-TestSection "Scenario 16 Setup Complete: $($config.DisplayName)"
 Write-Host "  Connected System:   $systemName (ID: $($system.id))" -ForegroundColor Cyan
 Write-Host "  Object Types:       $(($expectedTypes) -join ', ')" -ForegroundColor Cyan
 Write-Host "  Database Time Zone: $DatabaseTimeZone (deliberately not UTC)" -ForegroundColor Cyan
 Write-Host "  Page size:          $pageSize" -ForegroundColor Cyan
+Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 3 } else { 2 }) outbound" -ForegroundColor Cyan
 
 return @{
-    Provider          = $Provider
-    ConnectedSystemId = $system.id
-    SystemName        = $systemName
-    ObjectTypes       = $selectedTypes
-    RowCount          = $RowCount
-    DatabaseTimeZone  = $DatabaseTimeZone
-    PageSize          = $pageSize
+    Provider           = $Provider
+    ConnectedSystemId  = $system.id
+    SystemName         = $systemName
+    ObjectTypes        = $selectedTypes
+    RowCount           = $RowCount
+    DatabaseTimeZone   = $DatabaseTimeZone
+    PageSize           = $pageSize
+    MetaverseObjectTypeId = $mvUserType.id
+    ImportRuleId       = $importRule.id
+    AppUserRuleId      = $appUserRule.id
+    NaturalKeyRuleId   = $naturalRule.id
+    GuidKeyRuleId      = if ($guidRule) { $guidRule.id } else { $null }
+    # The Metaverse Attributes the driver-shape rows read their derived values back from, named here so
+    # a row does not have to re-derive which built-in was borrowed for which column.
+    MetaverseAttributes = @{
+        ZonelessDate    = 'Employee Start Date'
+        OffsetDate      = 'Employee End Date'
+        LocalZoneDate   = 'Account Expires'
+        Decimal         = $mvFteAttribute.name
+        LongNumber      = $mvHeadcountAttribute.name
+        MultiValued     = 'Other Telephones'
+    }
 }
