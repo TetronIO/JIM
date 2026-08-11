@@ -25,17 +25,24 @@ namespace JIM.Models.Interfaces;
 public interface IConnectorManagedScope
 {
     /// <summary>
-    /// Supplies the containers the administrator has selected, which are the only places the Connector may write.
+    /// Supplies the containers stating where the administrator manages, which decide where the Connector may
+    /// write.
     /// </summary>
-    /// <param name="selectedContainers">
-    /// The selected containers, carrying their identifiers and their
-    /// <see cref="ConnectedSystemContainer.Scope"/>. Never null; an empty list means no scope has been stated and
-    /// everything is permitted.
+    /// <param name="scopeDecidingContainers">
+    /// Every container making a statement about scope, carrying its identifier, its
+    /// <see cref="ConnectedSystemContainer.Scope"/> and whether it is selected or
+    /// <see cref="ConnectedSystemContainer.Excluded"/>. Never null; an empty list means no scope has been stated
+    /// and everything is permitted.
     ///
     /// The whole container is supplied rather than its identifier alone because scope decides what "inside" means:
     /// a <see cref="ConnectedSystemContainerScope.OneLevel"/> container is not a licence to write anywhere beneath
     /// it, only directly within it, and an implementation that assumed a subtree would permit exactly the writes
     /// the next import cannot read back.
+    ///
+    /// Exclusions are part of this list for the same reason (#1255), and an implementation must honour them: the
+    /// most specific container covering a target decides, so an object written into an excluded branch of an
+    /// otherwise selected one is refused. Treating the list as selections alone would permit writes the next
+    /// import discards, which is the very failure this interface exists to prevent.
     /// </param>
-    public void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> selectedContainers);
+    public void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> scopeDecidingContainers);
 }
