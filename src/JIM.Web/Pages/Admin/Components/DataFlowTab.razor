@@ -340,13 +340,12 @@
                 attributes[targetId] = flow.TargetMetaverseAttributeName;
             }
 
-            foreach (var source in flow.Sources)
+            // Filtered in the sequence rather than guarded in the body, per the CodeQL shapes in src/CLAUDE.md.
+            // Null-state does not flow through Where, hence the null-forgiving operators on an already-proven guard.
+            foreach (var source in flow.Sources.Where(s => s is { MetaverseAttributeId: not null, MetaverseAttributeName: not null }))
             {
-                if (source is { MetaverseAttributeId: not null, MetaverseAttributeName: not null })
-                {
-                    var sourceId = source.MetaverseAttributeId.Value;
-                    attributes[sourceId] = source.MetaverseAttributeName;
-                }
+                var sourceId = source.MetaverseAttributeId!.Value;
+                attributes[sourceId] = source.MetaverseAttributeName!;
             }
         }
 
