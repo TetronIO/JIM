@@ -449,6 +449,17 @@ internal abstract class SqlProviderBase : ISqlProvider
 
     #region Values
 
+    /// <summary>
+    /// A pass-through, beyond normalising the two ways ADO.NET states "nothing" into one. That is right
+    /// for any driver that materialises a parameter's value as a CLR type, which is every driver except
+    /// ODP.NET; a dialect whose driver hands back wrappers of its own overrides this and unwraps them
+    /// there, so those types are never named outside that provider.
+    /// </summary>
+    public virtual object? ConvertFromDriverValue(object? value)
+    {
+        return value == null || value == DBNull.Value ? null : value;
+    }
+
     public abstract Guid ConvertToGuid(object value);
 
     public abstract object ConvertFromGuid(Guid value);
