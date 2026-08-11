@@ -36,6 +36,13 @@ public class ChangeHistoryServer
         public int PreviewsDeleted { get; set; }
         public int ConfigurationChangeActivitiesDeleted { get; set; }
         public int SecurityEventActivitiesDeleted { get; set; }
+
+        /// <summary>
+        /// Initial-password records (#1121) that had been parked or expired for longer than their own retention
+        /// period. Reported separately because it counts outstanding-work records rather than history: the
+        /// account's Activity is unaffected and long outlives it.
+        /// </summary>
+        public int InitialPasswordWorkRecordsDeleted { get; set; }
         public DateTime? OldestRecordDeleted { get; set; }
         public DateTime? NewestRecordDeleted { get; set; }
     }
@@ -52,11 +59,12 @@ public class ChangeHistoryServer
         DateTime olderThan,
         DateTime configurationOlderThan,
         DateTime securityOlderThan,
+        DateTime initialPasswordOlderThan,
         int maxRecordsPerType)
     {
         var activity = CreateCleanupActivity();
         await _application.Activities.CreateSystemActivityAsync(activity);
-        return await ExecuteCleanupAsync(activity, olderThan, configurationOlderThan, securityOlderThan, maxRecordsPerType);
+        return await ExecuteCleanupAsync(activity, olderThan, configurationOlderThan, securityOlderThan, initialPasswordOlderThan, maxRecordsPerType);
     }
 
     /// <summary>
@@ -71,12 +79,13 @@ public class ChangeHistoryServer
         DateTime olderThan,
         DateTime configurationOlderThan,
         DateTime securityOlderThan,
+        DateTime initialPasswordOlderThan,
         int maxRecordsPerType,
         ApiKey initiatedByApiKey)
     {
         var activity = CreateCleanupActivity();
         await _application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-        return await ExecuteCleanupAsync(activity, olderThan, configurationOlderThan, securityOlderThan, maxRecordsPerType);
+        return await ExecuteCleanupAsync(activity, olderThan, configurationOlderThan, securityOlderThan, initialPasswordOlderThan, maxRecordsPerType);
     }
 
     /// <summary>
@@ -361,6 +370,7 @@ public class ChangeHistoryServer
         DateTime olderThan,
         DateTime configurationOlderThan,
         DateTime securityOlderThan,
+        DateTime initialPasswordOlderThan,
         int maxRecordsPerType)
     {
         var result = new ChangeHistoryCleanupResult();
@@ -393,6 +403,13 @@ public class ChangeHistoryServer
             Log.Information("ChangeHistoryCleanup: Deleting expired security event activities (older than {SecurityOlderThan})", securityOlderThan);
             result.SecurityEventActivitiesDeleted = await _application.Repository.ChangeHistory.DeleteExpiredSecurityEventActivitiesAsync(securityOlderThan, maxRecordsPerType);
 
+            // Remove initial-password work records that reached a terminal state and have since had their own
+            // retention period (#1121). Nothing else ages them out, and they are retained on purpose until then,
+            // so without this pass a Synchronisation Rule provisioning into a target that refuses its passwords
+            // grows one permanent row per account.
+            Log.Information("ChangeHistoryCleanup: Removing initial-password records parked or expired before {InitialPasswordOlderThan}", initialPasswordOlderThan);
+            result.InitialPasswordWorkRecordsDeleted = await _application.InitialPasswords.DeleteExpiredWorkRecordsAsync(initialPasswordOlderThan, maxRecordsPerType);
+
             // Calculate overall date range (use oldest/newest across all types)
             // Note: We can't get the exact IDs that were deleted without changing the repository methods,
             // so we'll use the olderThan date as a proxy for the date range
@@ -412,8 +429,8 @@ public class ChangeHistoryServer
 
             await _application.Activities.CompleteActivityAsync(activity);
 
-            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities deleted",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
+            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {InitialPasswordCount} initial-password records deleted",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.InitialPasswordWorkRecordsDeleted);
 
             return result;
         }

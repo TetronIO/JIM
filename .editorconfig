@@ -2,4 +2,18 @@ root = true
 
 [*.cs]
 file_header_template = Copyright (c) Tetron Limited. All rights reserved.\nLicensed under the Tetron Commercial License. See LICENSE file in the project root.
-dotnet_diagnostic.IDE0073.severity = suggestion
+# warning, not suggestion: Directory.Build.props sets EnforceCodeStyleInBuild
+# and TreatWarningsAsErrors, so this fails the build rather than decorating the
+# IDE. scripts/Lint-CopyrightHeaders.ps1 is the equivalent gate for .razor,
+# .ps1, .psm1, .psd1 and .sh; keep the two in step, exclusions included.
+dotnet_diagnostic.IDE0073.severity = warning
+
+# Tool-generated code, excluded to match the lint script. A header added by
+# hand here is destroyed the next time the generator runs: EF Core rewrites the
+# whole Migrations folder, model snapshot included, on every
+# 'dotnet ef migrations add'.
+[src/JIM.PostgresData/Migrations/*.cs]
+dotnet_diagnostic.IDE0073.severity = none
+
+[*.{Designer,g,generated}.cs]
+dotnet_diagnostic.IDE0073.severity = none

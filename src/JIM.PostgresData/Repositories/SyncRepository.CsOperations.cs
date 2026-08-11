@@ -853,6 +853,32 @@ public partial class SyncRepository
             asOf);
     }
 
+    public async Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
+    {
+        if (maxRecords <= 0)
+            return 0;
+
+        // A targeted delete of whole rows, so there is no column list to drift from the EF model.
+        //
+        // The batch is chosen by a sub-select rather than deleted outright so one pass cannot turn into a long
+        // transaction on a deployment that has accumulated a large backlog; housekeeping runs again and drains
+        // the rest. Ordering the sub-select by age makes successive passes drain oldest-first rather than
+        // returning an arbitrary slice each time.
+        return await _context.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "PendingInitialPasswords"
+            WHERE "Id" IN (
+                SELECT "Id" FROM "PendingInitialPasswords"
+                WHERE "Status" = ANY({0}) AND COALESCE("LastAttemptedAt", "CreatedAt") < {1}
+                ORDER BY COALESCE("LastAttemptedAt", "CreatedAt")
+                LIMIT {2}
+            )
+            """,
+            new[] { (int)PendingInitialPasswordStatus.Parked, (int)PendingInitialPasswordStatus.Expired },
+            olderThan,
+            maxRecords);
+    }
+
     public async Task<Dictionary<int, InitialPasswordAttention>> GetInitialPasswordAttentionBySyncRuleAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         if (syncRuleIds.Count == 0)

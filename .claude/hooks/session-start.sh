@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
 # SessionStart hook for Claude Code on the web (cloud sandbox) sessions.
 #
 # Prepares the sandbox so agents can build, test and runtime-verify JIM:
