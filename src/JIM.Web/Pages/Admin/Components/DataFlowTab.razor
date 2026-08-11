@@ -246,9 +246,13 @@
                 _preferencesLoaded = true;
                 StateHasChanged();
             }
-            catch
+            catch (InvalidOperationException)
             {
                 // JS interop is not available on the first server-side render; retried on the next one.
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit went away mid-render. There is no preference to load and nobody left to show it to.
             }
         }
     }
@@ -334,11 +338,10 @@
 
             // A Metaverse Attribute is a flow's target inbound and one of its sources outbound, so both sides have
             // to be collected for the filter to offer every attribute that participates in any flow.
-            if (flow is { TargetMetaverseAttributeId: not null, TargetMetaverseAttributeName: not null })
-            {
-                var targetId = flow.TargetMetaverseAttributeId.Value;
-                attributes[targetId] = flow.TargetMetaverseAttributeName;
-            }
+            // Captured by the pattern rather than dereferenced after it: a nullable's null-state does not survive a
+            // property pattern for the analyser's purposes, and binding in the pattern removes the .Value entirely.
+            if (flow is { TargetMetaverseAttributeId: int targetId, TargetMetaverseAttributeName: string targetName })
+                attributes[targetId] = targetName;
 
             // Filtered in the sequence rather than guarded in the body, per the CodeQL shapes in src/CLAUDE.md.
             // Null-state does not flow through Where, hence the null-forgiving operators on an already-proven guard.
