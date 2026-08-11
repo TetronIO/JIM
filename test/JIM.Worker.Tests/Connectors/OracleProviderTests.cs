@@ -491,6 +491,46 @@ public class OracleProviderTests
     }
 
     [Test]
+    public void ResolveSessionTimeZoneName_Utc_IsTheUtcRegion()
+    {
+        Assert.That(OracleProvider.ResolveSessionTimeZoneName(TimeZoneInfo.Utc), Is.EqualTo("UTC"),
+            "Verified against Oracle Database Free 23ai: 'UTC' is a region name ALTER SESSION accepts.");
+    }
+
+    [TestCase("Europe/London")]
+    [TestCase("America/New_York")]
+    [TestCase("Australia/Sydney")]
+    [TestCase("Asia/Kolkata")]
+    public void ResolveSessionTimeZoneName_AnIanaZone_IsPassedThroughUnchanged(string ianaId)
+    {
+        // Oracle names its time zone regions exactly as IANA does, and the Database Time Zone setting
+        // asks an administrator for an IANA name, so the two agree without translation. Every one of
+        // these was accepted by the live 23ai container.
+        Assert.That(OracleProvider.ResolveSessionTimeZoneName(TimeZoneInfo.FindSystemTimeZoneById(ianaId)), Is.EqualTo(ianaId));
+    }
+
+    [Test]
+    public void ResolveSessionTimeZoneName_AWindowsZone_IsConvertedToItsIanaName()
+    {
+        // A Worker running on Windows resolves a zone to a Windows identifier ("GMT Standard Time"),
+        // which Oracle has never heard of. On Linux the same lookup already yields the IANA name, so
+        // this holds on both.
+        Assert.That(OracleProvider.ResolveSessionTimeZoneName(TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time")), Is.EqualTo("Europe/London"));
+    }
+
+    [Test]
+    public void ConfigureOpenedConnection_AClosedConnection_IsLeftAlone()
+    {
+        // Pinning the session time zone needs a session. The Connector only ever calls this on an open
+        // connection; a closed one is refused rather than silently skipped, because a connection that
+        // never had its session pinned would read local-time-zone columns in the host's zone.
+        var settings = new SqlConnectionSettings { Host = "oracle.example.local", ServiceName = "HRPDB", DatabaseTimeZone = TimeZoneInfo.Utc };
+        using var connection = _provider.CreateConnection(_provider.BuildConnectionString(settings));
+
+        Assert.Throws<InvalidOperationException>(() => _provider.ConfigureOpenedConnection(connection, settings));
+    }
+
+    [Test]
     public void BuildConnectionString_NeitherServiceNameNorSid_Throws()
     {
         var settings = new SqlConnectionSettings { Host = "oracle.example.local", Port = 1521 };

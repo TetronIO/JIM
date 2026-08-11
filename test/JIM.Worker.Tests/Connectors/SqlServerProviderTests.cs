@@ -397,6 +397,47 @@ public class SqlServerProviderTests
     }
 
     [Test]
+    public void ConfigureOpenedConnection_AnyConnection_ChangesNothingAboutTheSession()
+    {
+        // Microsoft SQL Server has no analogue of Oracle's session time zone, and no analogue of
+        // TIMESTAMP WITH LOCAL TIME ZONE for one to act on: 'datetime2' is returned exactly as stored
+        // and 'datetimeoffset' carries its own offset, so neither depends on the client's zone. There is
+        // therefore nothing to pin here, and this asserts the Oracle fix left this dialect alone.
+        var settings = new SqlConnectionSettings
+        {
+            Host = "sql.example.local",
+            DatabaseName = "HR",
+            DatabaseTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney")
+        };
+
+        using var connection = _provider.CreateConnection(_provider.BuildConnectionString(settings));
+        var connectionStringBeforehand = connection.ConnectionString;
+
+        // A closed connection is accepted precisely because nothing is done to the session, which is the
+        // difference from Oracle worth pinning down.
+        _provider.ConfigureOpenedConnection(connection, settings);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connection.State, Is.EqualTo(ConnectionState.Closed));
+            Assert.That(connection.ConnectionString, Is.EqualTo(connectionStringBeforehand));
+        }
+    }
+
+    [Test]
+    public void ColumnCarriesAnOffset_SqlServerDateAndTimeTypes_AreUnchangedByTheOracleLocalTimeZoneFix()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_provider.ColumnCarriesAnOffset(new SqlColumnType("datetimeoffset")), Is.True,
+                "'datetimeoffset' states the offset of every value it holds.");
+            Assert.That(_provider.ColumnCarriesAnOffset(new SqlColumnType("datetime2")), Is.False);
+            Assert.That(_provider.ColumnCarriesAnOffset(new SqlColumnType("datetime")), Is.False);
+            Assert.That(_provider.ColumnCarriesAnOffset(new SqlColumnType("date")), Is.False);
+        }
+    }
+
+    [Test]
     public void BuildConnectionString_DiscreteSettings_ProducesTheExpectedConnectionString()
     {
         var settings = new SqlConnectionSettings

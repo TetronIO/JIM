@@ -110,6 +110,14 @@ internal abstract class SqlProviderBase : ISqlProvider
     {
     }
 
+    /// <summary>
+    /// Nothing by default: a dialect whose values do not depend on session state has nothing to pin, and
+    /// only Oracle Database currently does.
+    /// </summary>
+    public virtual void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+    }
+
     public virtual DbCommand CreateCommand(DbConnection connection, string commandText)
     {
         ArgumentNullException.ThrowIfNull(connection);
