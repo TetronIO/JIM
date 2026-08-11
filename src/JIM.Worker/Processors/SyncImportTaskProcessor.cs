@@ -1193,8 +1193,21 @@ public class SyncImportTaskProcessor
             int intId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, intId),
             string stringId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, stringId),
             Guid guidId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, guidId),
+            // long was missing here, though the deletion-detection switch has handed this method a
+            // LongNumber anchor since it was written and the repository overload existed the whole time.
+            // Every such deletion fell to the null arm below, reported itself as "not found. No work to
+            // do." and changed nothing, so a LongNumber-anchored Object Type never had a deletion
+            // detected, silently and with the run reporting success.
+            long longId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, longId),
             decimal decimalId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, decimalId),
-            _ => null
+            // Deletion detection decides whether an object still exists, so an anchor type this method
+            // cannot fetch by is a programming error and must say so. Returning null here is what let
+            // the long gap above go unnoticed: it is indistinguishable from an object legitimately
+            // already gone, which is the one outcome deletion detection is entitled to shrug at.
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(connectedSystemObjectExternalId),
+                connectedSystemObjectExternalId,
+                $"Deletion detection cannot obsolete a Connected System Object by an external ID of type {typeof(T).Name}.")
         };
 
         if (cso == null)
