@@ -98,9 +98,11 @@
         </MudTd>
         <MudTd DataLabel="Connected System">
             <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.ConnectedSystemObjectTypeName</MudText>
+            @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
+               wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
+            <div><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></div>
         </MudTd>
-        <MudTd DataLabel="Object Type">@context.MetaverseObjectTypeName</MudTd>
+        <MudTd DataLabel="Object Type"><code class="jim-code-inline">@context.MetaverseObjectTypeName</code></MudTd>
         <MudTd DataLabel="Source">
             @foreach (var source in context.Sources.OrderBy(s => s.Order))
             {

@@ -146,6 +146,22 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
+    public void DataFlowTab_RendersBothObjectTypeNamesInTheInlineCodeStyle()
+    {
+        // An object type name is a verbatim schema identifier rather than prose, on both sides of the Metaverse,
+        // and JIM styles those as inline code everywhere else it shows them.
+        SetupFlows(BuildImportFlow());
+
+        var cut = Render<DataFlowTab>();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("<code class=\"jim-code-inline\">Employee</code>"));
+            Assert.That(cut.Markup, Does.Contain("<code class=\"jim-code-inline\">Person</code>"));
+        }
+    }
+
+    [Test]
     public void DataFlowTab_MarksWhichSideOfTheMetaverseEachAttributeSitsOn()
     {
         // Both sides are just names, and the sides swap between directions, so the CS / MV markers are the only
