@@ -128,6 +128,62 @@ function Get-Scenario16ObjectTypeId {
     return $Context.ObjectTypes[$Name].id
 }
 
+function Get-S16AttributeValueText {
+    <#
+    .SYNOPSIS
+        Whichever typed column an attribute value row actually carries, rendered as text.
+    .DESCRIPTION
+        The attribute-values endpoint returns one row per value with a column per data type
+        (StringValue, IntValue, LongValue, DecimalValue, DateTimeValue, GuidValue, BoolValue,
+        ByteValue) and no single generic 'value' field, so a caller has to know which one is populated.
+    #>
+    param([Parameter(Mandatory=$true)]$Value)
+
+    foreach ($property in @('StringValue', 'IntValue', 'LongValue', 'DecimalValue', 'GuidValue', 'BoolValue', 'DateTimeValue', 'ByteValue')) {
+        if ($Value.PSObject.Properties.Name -notcontains $property) { continue }
+        $candidate = $Value.$property
+        if ($null -ne $candidate -and "$candidate" -ne '') { return "$candidate" }
+    }
+    return $null
+}
+
+function Get-S16CsoByAnchor {
+    <#
+    .SYNOPSIS
+        The Connected System Object whose anchor holds the given value.
+    .DESCRIPTION
+        Cannot simply filter on the header's externalIdValue, because the Connector Space list
+        projection reads ONLY the StringValue column when it composes that field
+        (ConnectedSystemRepository, the ConnectedSystemObjectHeader projection), so an anchor held in
+        IntValue, LongValue or GuidValue comes back null. Every Object Type in this scenario that is
+        anchored on an integer is affected, and so is the portal page built on the same projection.
+
+        The header is still used when it carries a value, because that is the cheap path and the one
+        that should be working; the fallback asks each object for the anchor attribute's own value,
+        which is correct but costs one call per object. Functional-scale row counts only.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][int]$ObjectTypeId,
+        [Parameter(Mandatory=$true)][string]$AnchorAttributeName,
+        [Parameter(Mandatory=$true)][string]$AnchorValue
+    )
+
+    $objects = @(Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $ObjectTypeId -All -Force)
+
+    $viaHeader = $objects | Where-Object { $_.externalIdValue -eq $AnchorValue } | Select-Object -First 1
+    if ($viaHeader) { return $viaHeader }
+
+    foreach ($candidate in $objects) {
+        $values = @(Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId $Context.ConnectedSystemId -CsoId $candidate.id -AttributeName $AnchorAttributeName -All -Force)
+        foreach ($value in $values) {
+            if ((Get-S16AttributeValueText -Value $value) -eq $AnchorValue) { return $candidate }
+        }
+    }
+
+    return $null
+}
+
 function Invoke-Scenario16Row {
     <#
     .SYNOPSIS
@@ -225,9 +281,7 @@ function Test-S16MultiValuedImport {
     }
 
     $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
-    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -All -Force
-
-    $person3 = $objects | Where-Object { $_.externalIdValue -eq '3' } | Select-Object -First 1
+    $person3 = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '3'
     if (-not $person3) {
         return @{ Status = 'fail'; Detail = "No Connected System Object with external ID 3 was found after the Full Import." }
     }
@@ -246,9 +300,7 @@ function Test-S16ReferenceImport {
     # The seeder gives rows 1 to 10 no manager and every later row a manager in that range, so both a
     # populated and a legitimately absent reference are covered.
     $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
-    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -All -Force
-
-    $person12 = $objects | Where-Object { $_.externalIdValue -eq '12' } | Select-Object -First 1
+    $person12 = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '12'
     if (-not $person12) {
         return @{ Status = 'fail'; Detail = "No Connected System Object with external ID 12 was found." }
     }
@@ -328,6 +380,32 @@ function Initialize-S16SyncBaseline {
     $Context['SyncBaselineDone'] = $true
 }
 
+function Get-S16ExportBlocker {
+    <#
+    .SYNOPSIS
+        The reason the export rows cannot be exercised, or $null when they can.
+    .DESCRIPTION
+        JIM excludes the Connected System being synchronised from export evaluation:
+        ExportEvaluationServer.BuildExportEvaluationCacheAsync filters the export rules' target systems
+        with `.Where(id => id != sourceConnectedSystemId)`. This scenario imports from and provisions
+        into ONE Connected System (different Object Types of the same database, which is the ordinary
+        SQL topology: read the HR table, write the application table), so its outbound rules are never
+        evaluated during its own Full Synchronisation and no Pending Export is ever raised.
+
+        Detected rather than assumed: the check is that the outbound rules produced no Connected System
+        Object at all for their target type after a full pipeline. A row that cannot be exercised
+        reports 'skip' with the reason; reporting 'fail' would blame the Connector for something it was
+        never asked to do, and reporting 'pass' would be a lie.
+    #>
+    param([Parameter(Mandatory=$true)][hashtable]$Context)
+
+    $appUserTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'AppUser'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -Count)
+    if ($csoCount -gt 0) { return $null }
+
+    return "Not exercisable in this topology: JIM excludes the Connected System being synchronised from export evaluation (ExportEvaluationServer.BuildExportEvaluationCacheAsync filters target systems with 'id != sourceConnectedSystemId'), and this scenario imports from and provisions into one Connected System. The outbound rules were created and enabled, the Full Synchronisation completed and projected every Metaverse Object, and no Pending Export was raised. Splitting the export targets into a second Connected System against the same database would exercise the row."
+}
+
 function Initialize-S16ExportBaseline {
     <#
     .SYNOPSIS
@@ -378,8 +456,12 @@ function Get-S16MetaverseObject {
     #>
     param([Parameter(Mandatory=$true)][int]$EmployeeId)
 
+    # Filtered on the 'Employee ID' attribute rather than -Search. -Search matches DISPLAY NAME only,
+    # and this scenario's inbound rule deliberately flows no Display Name (the source has no such
+    # column), so every search returned nothing and every driver-shape row failed with "No Metaverse
+    # Object was projected" while all fifty were sitting in the Metaverse.
     $employeeNumber = Get-S16EmployeeNumber -EmployeeId $EmployeeId
-    $match = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search $employeeNumber -PageSize 10) | Select-Object -First 1
+    $match = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName 'Employee ID' -AttributeValue $employeeNumber -PageSize 10) | Select-Object -First 1
     if (-not $match) { return $null }
     return Get-JIMMetaverseObject -Id $match.id
 }
@@ -404,6 +486,9 @@ function Test-S16ExportCreate {
     param([hashtable]$Context, [hashtable]$Config)
 
     Initialize-S16ExportBaseline -Context $Context
+
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
     $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'Enabled'
     $actualRows = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS;")
@@ -438,6 +523,9 @@ function Test-S16ExportUpdate {
     param([hashtable]$Context, [hashtable]$Config)
 
     Initialize-S16ExportBaseline -Context $Context
+
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
     # Employee 12 is enabled (12 is not a multiple of seven) and has two phone numbers (12 is a multiple
     # of three), so both a scalar change and a multi-valued change have somewhere to land.
@@ -478,6 +566,9 @@ function Test-S16ExportDelete {
 
     Initialize-S16ExportBaseline -Context $Context
 
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
+
     # Employee 20 is enabled in the seeded data, so disabling it takes its Metaverse Object out of the
     # outbound rule's scope; the rule's OutboundDeprovisionAction is Delete, so that becomes a delete
     # export rather than a disconnect.
@@ -514,6 +605,9 @@ function Test-S16ExportNaturalKey {
 
     Initialize-S16ExportBaseline -Context $Context
 
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
+
     # The opposite half of the Export.Create question. Here the primary key is a natural identifier JIM
     # authors and writes, so the external ID is a value JIM chose rather than one the database returned;
     # the confirming import still has to compose the same token from the row.
@@ -544,6 +638,9 @@ function Test-S16ReferenceExport {
 
     Initialize-S16ExportBaseline -Context $Context
 
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
+
     # Employee 12's manager is employee 3 (the seeder gives every row past the tenth a manager of
     # (n modulo 10) + 1), and employee 3 is itself enabled, so the manager has an exported row for the
     # reference to point at. What is asserted is that JIM wrote the manager's OWN generated key rather
@@ -570,6 +667,9 @@ function Test-S16TypeMappingRoundTrip {
     param([hashtable]$Context, [hashtable]$Config)
 
     Initialize-S16ExportBaseline -Context $Context
+
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
     # One employee, every mapped shape, source value against exported value. Employee 12 is enabled so it
     # has an exported row, and its FTE is 0.25, a value binary floating point cannot represent exactly.
@@ -634,8 +734,21 @@ function ConvertTo-S16Utc {
     param([Parameter(Mandatory=$true)]$Value)
 
     if ($Value -is [datetime]) {
-        if ($Value.Kind -eq [System.DateTimeKind]::Utc) { return $Value }
-        return [System.DateTime]::SpecifyKind($Value, [System.DateTimeKind]::Utc)
+        switch ($Value.Kind) {
+            ([System.DateTimeKind]::Utc) { return $Value }
+
+            # CONVERT, never relabel. ConvertFrom-Json turns the API's trailing-Z instant into a
+            # DateTime of Kind Local, expressed in the TEST HOST's zone. Stamping Utc onto that clock
+            # face keeps the digits and throws the offset away, which silently reports every instant as
+            # wrong by the host's current offset from UTC. It cost a full investigation: on a host in
+            # British Summer Time, every seeded January date agreed (London is UTC+00:00 then, so the
+            # relabel was a no-op) while the one deliberately mid-year value came back an hour out, and
+            # it read exactly like a daylight-saving defect in the Connector. It was this line.
+            ([System.DateTimeKind]::Local) { return $Value.ToUniversalTime() }
+
+            # No zone information survived; the API only ever sends UTC, so that is what it is.
+            default { return [System.DateTime]::SpecifyKind($Value, [System.DateTimeKind]::Utc) }
+        }
     }
 
     return [System.DateTime]::Parse(
@@ -878,6 +991,9 @@ function Test-S16Raw16Anchor {
     # the three pre-seeded rows (the import half) and the rows JIM provisioned (the export half).
     Initialize-S16ExportBaseline -Context $Context
 
+    $blocker = Get-S16ExportBlocker -Context $Context
+    if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
+
     $guidTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'GuidKeyedPerson'
     $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -Count
     $expected = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).GUID_KEYED_PEOPLE;")
@@ -917,9 +1033,7 @@ function Test-S16NumberShapes {
     # Int16, Int64 or Decimal for different NUMBER shapes, so this row exists to confirm that whatever
     # the driver returns still reaches JIM as an exact Decimal.
     $personTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'Person'
-    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $personTypeId -All -Force
-
-    $person12 = $objects | Where-Object { $_.externalIdValue -eq '12' } | Select-Object -First 1
+    $person12 = Get-S16CsoByAnchor -Context $Context -ObjectTypeId $personTypeId -AnchorAttributeName 'EMPLOYEE_ID' -AnchorValue '12'
     if (-not $person12) {
         return @{ Status = 'fail'; Detail = "No Connected System Object with external ID 12 was found." }
     }
@@ -933,7 +1047,7 @@ function Test-S16NumberShapes {
 
     # Compared numerically rather than as text: Oracle renders 0.25 as '.25', and the difference is
     # rendering rather than value.
-    $importedValue = [decimal]($importedFte[0].value ?? $importedFte[0])
+    $importedValue = [decimal](Get-S16AttributeValueText -Value $importedFte[0])
     $expectedValue = [decimal]$expectedFte
 
     if ($importedValue -ne $expectedValue) {
@@ -963,10 +1077,16 @@ function Test-S16ConfigurationValidation {
 
     $failures = @()
 
-    # A wrong password must be refused at save time, with the provider's own error surfaced.
+    # -ErrorAction Stop on every call below, without exception. A cmdlet exported from a module reads
+    # the MODULE's preference variables, not the caller's, so a Write-Error inside JIM.psd1 is
+    # non-terminating here whatever this file sets. Without it these try blocks never caught anything:
+    # both refusals were printed to the console by the cmdlet, execution fell straight through to the
+    # $failures lines, and the row reported that the Connector had ACCEPTED credentials it had in fact
+    # rejected. A false failure is better than a false pass, but this was neither: it was the row
+    # reporting the exact opposite of what happened.
     $badPassword = @{ (Get-ValidationSettingId "Password") = @{ stringValue = "definitely-not-the-password" } }
     try {
-        Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $badPassword | Out-Null
+        Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $badPassword -ErrorAction Stop | Out-Null
         $failures += "A wrong password was accepted; the save-time connectivity test did not refuse it."
     }
     catch {
@@ -976,7 +1096,7 @@ function Test-S16ConfigurationValidation {
     # An unreachable host must be refused too.
     $badHost = @{ (Get-ValidationSettingId "Host") = @{ stringValue = "no-such-database-host" } }
     try {
-        Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $badHost | Out-Null
+        Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $badHost -ErrorAction Stop | Out-Null
         $failures += "An unreachable host was accepted; the save-time connectivity test did not refuse it."
     }
     catch {
@@ -984,12 +1104,12 @@ function Test-S16ConfigurationValidation {
     }
 
     # Restore the working configuration, or every later row in this provider's pass would fail for the
-    # wrong reason.
+    # wrong reason. This one must genuinely succeed, so a failure here has to be loud.
     $restore = @{
         (Get-ValidationSettingId "Host")     = @{ stringValue = $Config.Host }
         (Get-ValidationSettingId "Password") = @{ stringValue = $Config.Password }
     }
-    Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $restore | Out-Null
+    Set-JIMConnectedSystem -Id $Context.ConnectedSystemId -SettingValues $restore -ErrorAction Stop | Out-Null
 
     if ($failures.Count -gt 0) {
         return @{ Status = 'fail'; Detail = ($failures -join ' ') }

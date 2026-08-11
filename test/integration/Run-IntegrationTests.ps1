@@ -2222,13 +2222,21 @@ if (-not $SkipReset) {
     docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
-    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap --profile scim --profile phase2 down -v --remove-orphans 2>&1 | Out-Null
+    # The phase2 profile is deliberately absent. Its two database servers are the only integration
+    # containers whose start-up is measured in tens of minutes rather than seconds: the Oracle image is
+    # 13.6GB and its first boot creates the database from scratch. Destroying them on every reset makes
+    # Scenario 16 unusable as a local loop, and buys nothing, because their contents are guaranteed by
+    # New-Scenario16TestDatabase.ps1 rather than by their being new: it drops and recreates its whole
+    # schema, and a content hash of the generated script decides whether it needs to. A stale Scenario 16
+    # database is therefore not reachable. Everything else here stays ephemeral.
+    docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 --profile openldap --profile scim down -v --remove-orphans 2>&1 | Out-Null
 
     # Force-remove any leftover integration test containers by name.
     # This handles containers that were created under a different Docker Compose project name
     # (e.g., 'jim' instead of 'jim-integration') and are therefore not cleaned up by 'down -v'.
+    # The phase2 databases are excluded for the reason above.
     Write-Step "Removing any leftover integration test containers..."
-    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "sqlserver-hris-a", "oracle-hris-b", "postgres-target", "mysql-test")
+    $integrationContainers = @("samba-ad-primary", "samba-ad-source", "samba-ad-target", "openldap-primary", "postgres-target", "mysql-test")
     foreach ($container in $integrationContainers) {
         docker rm -f $container 2>&1 | Out-Null
     }
@@ -2236,7 +2244,8 @@ if (-not $SkipReset) {
     # Also remove any orphan integration test volumes that might have different names
     # This ensures a completely clean state even if volume naming has changed
     Write-Step "Removing any orphan integration test volumes..."
-    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { $_ -match 'jim-integration' }
+    $preservedVolumes = @("jim-integration-oracle-data", "jim-integration-sqlserver-data")
+    $orphanVolumes = docker volume ls --format '{{.Name}}' | Where-Object { $_ -match 'jim-integration' -and $preservedVolumes -notcontains $_ }
     foreach ($vol in $orphanVolumes) {
         docker volume rm $vol 2>&1 | Out-Null
     }

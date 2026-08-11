@@ -11,12 +11,6 @@
     capability row drives, and creates the inbound and outbound Synchronisation Rules the import-side and
     export-side rows need.
 
-    NOT YET EXECUTED. The JIM SQL Connector is registered in neither ConnectorFactory nor
-    SeedingServer.BuiltInConnectors (deliberately, until Phase 8), so no 'JIM SQL Connector' Connector
-    Definition exists to create a Connected System against and this script stops at Step 4. Everything
-    from Step 4 onwards is therefore written but unproven; treat a failure here as a bug in this script
-    until it has had one clean run.
-
     Two configuration choices here are load-bearing rather than incidental:
 
     The Database Time Zone is deliberately NOT UTC. At the UTC default every zone conversion is the
@@ -137,6 +131,20 @@ $schema = $config.Schema
 # The reference column is a self-reference: MANAGER_EMPLOYEE_ID carries another Person's anchor. That
 # is stated explicitly rather than inferred, which is the connector's contract; a foreign key would
 # only ever be a suggestion, and a view carries none at all.
+#
+# TWO ANCHOR CHOICES BELOW ARE WORKAROUNDS, NOT PREFERENCES. PersonView is anchored on EMAIL rather
+# than the view's own EMPLOYEE_ID, and the seeder starts APP_USERS' generated key at 1,000,000 rather
+# than 1. Both exist for the same reason: JIM resolves references against one flat per-Connected-System
+# lookup keyed only by the external ID value, with no Object Type dimension
+# (SyncImportTaskProcessor.BuildExternalIdLookups). Two Object Types whose anchors share a value space
+# therefore collide the moment either declares a reference, and the Full Import fails outright with
+# "Duplicate primary external ID int value '1' found for CSO ...". A view over a table shares its
+# table's keys by construction, and independent IDENTITY columns both start at 1, so this Connected
+# System hit it twice. Anchoring the view on a text column puts it in a different lookup dictionary,
+# and moving the generated keys out of the seeded employees' range separates the other pair.
+#
+# Both should be reverted once reference resolution is scoped by Object Type; until then the matrix
+# cannot prove that a table and a view over the same rows coexist in one Connected System.
 $objectTypesJson = @"
 {
   "objectTypes": [
@@ -174,14 +182,27 @@ $objectTypesJson = @"
       "name": "PersonView",
       "schema": "$schema",
       "table": "V_EMPLOYEES",
-      "anchorColumns": [ "EMPLOYEE_ID" ],
-      "watermarkColumn": "LAST_MODIFIED"
+      "anchorColumns": [ "EMAIL" ],
+      "watermarkColumn": "LAST_MODIFIED",
+      "changeLog": {
+        "schema": "$schema",
+        "table": "V_EMPLOYEES_CHANGE_LOG",
+        "anchorColumns": [ "EMAIL" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     },
     {
       "name": "AppUser",
       "schema": "$schema",
       "table": "APP_USERS",
       "anchorColumns": [ "ID" ],
+      "columns": [
+        { "name": "MANAGER_ID", "referencesObjectType": "AppUser" }
+      ],
       "relatedTables": [
         {
           "attributeName": "Roles",
@@ -190,20 +211,50 @@ $objectTypesJson = @"
           "valueColumn": "ROLE_NAME",
           "joinColumns": [ "USER_ID" ]
         }
-      ]
+      ],
+      "changeLog": {
+        "schema": "$schema",
+        "table": "APP_USERS_CHANGE_LOG",
+        "anchorColumns": [ "ID" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     },
     {
       "name": "NaturalKeyAccount",
       "schema": "$schema",
       "table": "APP_ACCOUNTS_NATURAL",
-      "anchorColumns": [ "ACCOUNT_CODE" ]
+      "anchorColumns": [ "ACCOUNT_CODE" ],
+      "changeLog": {
+        "schema": "$schema",
+        "table": "APP_ACCOUNTS_CHANGE_LOG",
+        "anchorColumns": [ "ACCOUNT_CODE" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     }$(if ($Provider -eq "Oracle") { @"
 ,
     {
       "name": "GuidKeyedPerson",
       "schema": "$schema",
       "table": "GUID_KEYED_PEOPLE",
-      "anchorColumns": [ "PERSON_ID" ]
+      "anchorColumns": [ "PERSON_ID" ],
+      "changeLog": {
+        "schema": "$schema",
+        "table": "GUID_PEOPLE_CHANGE_LOG",
+        "anchorColumns": [ "PERSON_ID" ],
+        "sequenceColumn": "CHANGED_AT",
+        "changeTypeColumn": "CHANGE_TYPE",
+        "createValues": [ "I" ],
+        "updateValues": [ "U" ],
+        "deleteValues": [ "D" ]
+      }
     }
 "@ })
   ]
@@ -251,13 +302,19 @@ else {
 }
 
 Write-TestStep "Step 7" "Applying settings (this performs the save-time connectivity test)"
-Set-JIMConnectedSystem -Id $system.id -SettingValues $settings | Out-Null
+
+# -ErrorAction Stop on every mutating call, rather than relying on this script's $ErrorActionPreference.
+# A cmdlet exported from a module reads the MODULE's preference variables, not the caller's, so a
+# Write-Error inside JIM.psd1 is non-terminating here however this script sets its own preference. That
+# is how the first run of this script printed "the live connectivity test passed" immediately after the
+# save had been refused, and then failed four steps later with an unrelated-looking message.
+Set-JIMConnectedSystem -Id $system.id -SettingValues $settings -ErrorAction Stop | Out-Null
 Write-Host "  OK Settings saved; the live connectivity test passed" -ForegroundColor Green
 
 # ─── Step 8: Schema discovery ──────────────────────────────────────────────────
 
 Write-TestStep "Step 8" "Discovering the schema"
-Import-JIMConnectedSystemSchema -Id $system.id | Out-Null
+Import-JIMConnectedSystemSchema -Id $system.id -ErrorAction Stop | Out-Null
 
 $objectTypes = Get-JIMConnectedSystem -Id $system.id -ObjectTypes
 $expectedTypes = @("Person", "PersonView", "AppUser", "NaturalKeyAccount")
@@ -279,7 +336,8 @@ Write-TestStep "Step 9" "Selecting Object Types and their attributes"
 # quietly anchoring on something else.
 $anchorColumns = @{
     Person            = "EMPLOYEE_ID"
-    PersonView        = "EMPLOYEE_ID"
+    # EMAIL, not EMPLOYEE_ID; see the Object Types document above for why.
+    PersonView        = "EMAIL"
     AppUser           = "ID"
     NaturalKeyAccount = "ACCOUNT_CODE"
     GuidKeyedPerson   = "PERSON_ID"
@@ -344,14 +402,17 @@ function Add-Scenario16MetaverseAttribute {
     )
 
     $attribute = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq $Name } | Select-Object -First 1
-    if (-not $attribute) {
-        $attribute = New-JIMMetaverseAttribute -Name $Name -Type $Type -Plurality SingleValued -PassThru
-        Write-Host "  Created Metaverse Attribute '$Name' ($Type)" -ForegroundColor Gray
+    if ($attribute) {
+        # Binding is idempotent from the caller's point of view: a second bind of the same attribute to
+        # the same Object Type is a no-op the API accepts, and the setup runs once per provider.
+        Add-JIMMetaverseObjectTypeAttribute -AttributeId $attribute.id -ObjectTypeId $mvUserType.id -ErrorAction SilentlyContinue | Out-Null
+        return $attribute
     }
 
-    # Binding is idempotent from the caller's point of view: a second bind of the same attribute to the
-    # same Object Type is a no-op the API accepts, and the setup runs once per provider.
-    Add-JIMMetaverseObjectTypeAttribute -AttributeId $attribute.id -ObjectTypeId $mvUserType.id -ErrorAction SilentlyContinue | Out-Null
+    # New-JIMMetaverseAttribute binds at creation via -ObjectTypeIds and returns the created attribute
+    # directly; it has no -PassThru, and its plurality parameter is -AttributePlurality.
+    $attribute = New-JIMMetaverseAttribute -Name $Name -Type $Type -AttributePlurality SingleValued -ObjectTypeIds @($mvUserType.id) -ErrorAction Stop
+    Write-Host "  Created Metaverse Attribute '$Name' ($Type), bound to the User Object Type" -ForegroundColor Gray
     return $attribute
 }
 
