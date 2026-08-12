@@ -1,0 +1,415 @@
+@using JIM.Models.Logic
+@using JIM.Models.Logic.DTOs
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The system-wide view of every attribute data flow in both directions (#1199). Pure discovery: nothing is edited *@
+@* here, rows link to the surface that owns the change. *@
+
+<MudText Typo="Typo.body1" Class="mud-text-secondary">
+    Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where
+    does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.
+</MudText>
+
+@* ─── Filters ─── *@
+@* Direction sits with the other filters and behaves like them (cleared means both), but it does more than filter: *@
+@* Inbound and Outbound carry different settings, so choosing one lets the table drop the columns that do not apply *@
+@* to it and name the one that does, instead of a catch-all header over two unrelated concepts. *@
+<MudStack Row="true" Spacing="3" Class="mt-6 flex-wrap" AlignItems="AlignItems.Center">
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="SyncRuleDirection?" Label="Direction" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_direction" ValueChanged="OnDirectionChangedAsync">
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Import)">Inbound</MudSelectItem>
+            <MudSelectItem T="SyncRuleDirection?" Value="@(SyncRuleDirection.Export)">Outbound</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="int?" Label="Connected System" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_connectedSystemId" ValueChanged="OnConnectedSystemChangedAsync">
+            @foreach (var option in _connectedSystemOptions)
+            {
+                <MudSelectItem T="int?" Value="@option.Key" @key="option.Key">@option.Value</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="int?" Label="Metaverse Object Type" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_metaverseObjectTypeId" ValueChanged="OnMetaverseObjectTypeChangedAsync">
+            @foreach (var option in _metaverseObjectTypeOptions)
+            {
+                <MudSelectItem T="int?" Value="@option.Key" @key="option.Key">@option.Value</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="int?" Label="Metaverse Attribute" Variant="Variant.Outlined" Dense="true" Clearable="true"
+                   Value="_metaverseAttributeId" ValueChanged="OnMetaverseAttributeChangedAsync">
+            @foreach (var option in _metaverseAttributeOptions)
+            {
+                <MudSelectItem T="int?" Value="@option.Key" @key="option.Key">@option.Value</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem>
+        <MudTooltip Text="Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronisation Rule. This is a normal arrangement; it is simply where the priority order decides which value wins." Arrow="true" Placement="Placement.Top">
+            <MudSwitch T="bool" Value="_multipleContributorsOnly" ValueChanged="OnMultipleContributorsOnlyChangedAsync" Color="Color.Primary">Multiple contributors</MudSwitch>
+        </MudTooltip>
+    </MudItem>
+</MudStack>
+
+@* Search scope lives here rather than as helper text under the toolbar box, which would overflow the toolbar's *@
+@* fixed height and sit on the header row beneath it. *@
+<MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+    Search matches Synchronisation Rules, Connected Systems, object types, attribute names on either side, and
+    expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an
+    expression's attribute references live in its text; search finds those.
+</MudText>
+
+@* CustomHeader lets HeaderContent supply the whole <thead>, so the column headings can carry a band row above
+   them naming the side each group belongs to. Without it MudTable renders HeaderContent inside a single row. *@
+<MudTable Items="@_flows" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-4 mb-5" SortLabel="Sort By"
+          Outlined="true" Elevation="0" Loading="@_loading" LoadingProgressColor="Color.Primary"
+          CustomHeader="true" HeaderClass="jim-dataflow-header"
+          RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
+    <ToolBarContent>
+        <TableDensityToggle @bind-Dense="_dense" />
+        <MudText Class="mx-2 mud-text-disabled">|</MudText>
+        <MudText Typo="Typo.body1">@_flows.Count @(_flows.Count == 1 ? "flow" : "flows")</MudText>
+        <MudSpacer />
+        <SearchField Value="@_search" ValueChanged="OnSearchChangedAsync" DebounceInterval="500" Class="mt-0" />
+    </ToolBarContent>
+    @* Columns are anchored to sides, not to source and target: those two swap sides between directions, so a
+       Source column means the Connected System on one row and the Metaverse on the next, and no column can be
+       learned. The Connected System block is always on the left and the Metaverse block always on the right; only
+       the arrow between them changes with direction. *@
+    <HeaderContent>
+        @* The band names each side, so the headings beneath it need not restate it and the two sides read
+           symmetrically. The trailing columns belong to neither side, and their band is deliberately unlabelled:
+           naming that group would assert a structure JIM does not have. *@
+        <MudTHeadRow Class="jim-header-band">
+            <MudTh colspan="3" Class="jim-band-cs">Connected System</MudTh>
+            <MudTh Class="jim-band-none"></MudTh>
+            <MudTh colspan="2" Class="jim-band-mv">Metaverse</MudTh>
+            <MudTh colspan="@(ShowPriorityColumn ? 3 : 2)" Class="jim-band-none"></MudTh>
+        </MudTHeadRow>
+        <MudTHeadRow>
+            <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">System</MudText></MudTableSortLabel></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.ConnectedSystemSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
+            <MudTh Style="width: 1%;"></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.MetaverseSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
+            @if (ShowPriorityColumn)
+            {
+                <MudTh>
+                    <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
+                        <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
+                    </MudTooltip>
+                </MudTh>
+            }
+            <MudTh><MudText Typo="Typo.button">@OptionsColumnHeader</MudText></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
+        </MudTHeadRow>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Connected System">
+            <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
+        </MudTd>
+        @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
+           wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
+        <MudTd DataLabel="Connected System Object Type"><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></MudTd>
+        <MudTd DataLabel="Connected System Attribute">
+            @if (context.Direction == SyncRuleDirection.Import)
+            {
+                @foreach (var source in context.Sources.OrderBy(s => s.Order))
+                {
+                    <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
+                                   Kind="@SourceKind(source)"
+                                   Name="@source.DisplayName"
+                                   Expression="@source.Expression" />
+                }
+            }
+            else
+            {
+                <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                               Name="@context.TargetConnectedSystemAttributeName"
+                               Href="@DataFlowDisplay.TargetHref(context)" />
+            }
+        </MudTd>
+        <MudTd Class="mud-text-secondary" Style="text-align: center;">
+            <MudTooltip Text="@($"{DataFlowDisplay.DirectionLabel(context.Direction)}: the value moves this way")" Arrow="true" Placement="Placement.Top">
+                <span>@DataFlowDisplay.DirectionArrow(context.Direction)</span>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Metaverse Object Type"><code class="jim-code-inline">@context.MetaverseObjectTypeName</code></MudTd>
+        <MudTd DataLabel="Metaverse Attribute">
+            @if (context.Direction == SyncRuleDirection.Import)
+            {
+                <AttributeChip Kind="AttributeChipKind.Metaverse"
+                               Name="@context.TargetMetaverseAttributeName"
+                               Href="@DataFlowDisplay.TargetHref(context)" />
+            }
+            else
+            {
+                @foreach (var source in context.Sources.OrderBy(s => s.Order))
+                {
+                    <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
+                                   Kind="@SourceKind(source)"
+                                   Name="@source.DisplayName"
+                                   Expression="@source.Expression" />
+                }
+            }
+        </MudTd>
+        @if (ShowPriorityColumn)
+        {
+            <MudTd DataLabel="Priority">
+                @{
+                    var priorityLabel = DataFlowDisplay.PriorityLabel(context);
+                    var isHighestPriorityContributor = DataFlowDisplay.IsHighestPriorityContributor(context);
+                }
+                @if (priorityLabel == null)
+                {
+                    <EmptyValue />
+                }
+                else
+                {
+                    <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string"
+                                 Variant="@(isHighestPriorityContributor ? Variant.Filled : Variant.Outlined)"
+                                 Color="@(isHighestPriorityContributor ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                    </MudTooltip>
+                }
+            </MudTd>
+        }
+        <MudTd DataLabel="@OptionsColumnHeader">
+            @if (context.NullIsValue == true)
+            {
+                <MudTooltip Text="This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor." Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Null is a value</MudChip>
+                </MudTooltip>
+            }
+            else if (context.EnforceState == true)
+            {
+                <MudTooltip Text="Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value." Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Enforce State</MudChip>
+                </MudTooltip>
+            }
+            else
+            {
+                <EmptyValue />
+            }
+        </MudTd>
+        <MudTd DataLabel="Synchronisation Rule">
+            <MudLink Href="@DataFlowDisplay.RuleHref(context)">@context.SyncRuleName</MudLink>
+            @if (!context.SyncRuleEnabled)
+            {
+                <MudTooltip Text="This Synchronisation Rule is disabled, so this flow is configured but moves no data." Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.PauseCircleOutline">Disabled</MudChip>
+                </MudTooltip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No data flows match these filters.</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager RowsPerPageString="Rows per page:" PageSizeOptions="@(new[] { 10, 25, 50, 100 })" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    private IList<DataFlowHeader> _flows = new List<DataFlowHeader>();
+    private bool _loading = true;
+    private bool _dense;
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
+
+    // Filter state. Held as fields rather than in a DataFlowQuery so each control can bind to one of them; the
+    // query is rebuilt per load, which keeps the portal's filters and the REST endpoint's identical by construction.
+    private SyncRuleDirection? _direction;
+    private int? _connectedSystemId;
+    private int? _metaverseObjectTypeId;
+    private int? _metaverseAttributeId;
+    private bool _multipleContributorsOnly;
+    private string? _search;
+
+    // Built once from the unfiltered set, so choosing a filter never removes options from the other drop-downs.
+    // Derived from the flows themselves rather than from the schema, so the lists only offer values that would
+    // actually match something.
+    private IReadOnlyList<KeyValuePair<int, string>> _connectedSystemOptions = [];
+    private IReadOnlyList<KeyValuePair<int, string>> _metaverseObjectTypeOptions = [];
+    private IReadOnlyList<KeyValuePair<int, string>> _metaverseAttributeOptions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(buildOptions: true);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
+                _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch (InvalidOperationException)
+            {
+                // JS interop is not available on the first server-side render; retried on the next one.
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit went away mid-render. There is no preference to load and nobody left to show it to.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads the flows matching the current filters. Every filter is evaluated server-side, including the free-text
+    /// search: doing it client-side would mean maintaining a second definition of what "matches" means, which would
+    /// drift from the REST endpoint's the first time either changed.
+    /// </summary>
+    private async Task LoadAsync(bool buildOptions = false)
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var flows = await jim.ConnectedSystems.GetDataFlowsAsync(BuildQuery());
+
+            if (buildOptions)
+                BuildFilterOptions(flows);
+
+            _flows = flows;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Whether the Priority column applies to what is on screen. Priority orders competing contributions into the
+    /// Metaverse, so an Outbound-only view would show a column of dashes; dropping it says the same thing without
+    /// spending a column on it. The "Both" view keeps it, because half its rows do have one.
+    /// </summary>
+    private bool ShowPriorityColumn => _direction != SyncRuleDirection.Export;
+
+    /// <summary>
+    /// The direction-appropriate name for the settings column. With a direction chosen, only one setting can appear
+    /// in it, so it is named outright rather than hidden behind a catch-all heading.
+    /// </summary>
+    private string OptionsColumnHeader => _direction switch
+    {
+        SyncRuleDirection.Import => "Null is a value",
+        SyncRuleDirection.Export => "Enforce State",
+        _ => "Options"
+    };
+
+    /// <summary>
+    /// Which side of the Metaverse a source sits on, read from the source itself rather than from the flow's
+    /// direction: the two always agree, and taking it from the data means a malformed row cannot be mislabelled
+    /// as belonging to the side its direction implies.
+    /// </summary>
+    private static AttributeChipKind SourceKind(DataFlowSource source)
+    {
+        if (source.IsExpression)
+            return AttributeChipKind.Expression;
+
+        return source.MetaverseAttributeId.HasValue ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem;
+    }
+
+    private DataFlowQuery BuildQuery() => new()
+    {
+        Direction = _direction,
+        ConnectedSystemId = _connectedSystemId,
+        MetaverseObjectTypeId = _metaverseObjectTypeId,
+        MetaverseAttributeId = _metaverseAttributeId,
+        MultipleContributorsOnly = _multipleContributorsOnly,
+        Search = string.IsNullOrWhiteSpace(_search) ? null : _search
+    };
+
+    private void BuildFilterOptions(IEnumerable<DataFlowHeader> flows)
+    {
+        var systems = new Dictionary<int, string>();
+        var objectTypes = new Dictionary<int, string>();
+        var attributes = new Dictionary<int, string>();
+
+        foreach (var flow in flows)
+        {
+            systems[flow.ConnectedSystemId] = flow.ConnectedSystemName;
+            objectTypes[flow.MetaverseObjectTypeId] = flow.MetaverseObjectTypeName;
+
+            // A Metaverse Attribute is a flow's target inbound and one of its sources outbound, so both sides have
+            // to be collected for the filter to offer every attribute that participates in any flow.
+            // Captured by the pattern rather than dereferenced after it: a nullable's null-state does not survive a
+            // property pattern for the analyser's purposes, and binding in the pattern removes the .Value entirely.
+            if (flow is { TargetMetaverseAttributeId: int targetId, TargetMetaverseAttributeName: string targetName })
+                attributes[targetId] = targetName;
+
+            // Filtered in the sequence rather than guarded in the body, per the CodeQL shapes in src/CLAUDE.md.
+            // Null-state does not flow through Where, hence the null-forgiving operators on an already-proven guard.
+            foreach (var source in flow.Sources.Where(s => s is { MetaverseAttributeId: not null, MetaverseAttributeName: not null }))
+            {
+                var sourceId = source.MetaverseAttributeId!.Value;
+                attributes[sourceId] = source.MetaverseAttributeName!;
+            }
+        }
+
+        _connectedSystemOptions = systems.OrderBy(o => o.Value).ToList();
+        _metaverseObjectTypeOptions = objectTypes.OrderBy(o => o.Value).ToList();
+        _metaverseAttributeOptions = attributes.OrderBy(o => o.Value).ToList();
+    }
+
+    private async Task OnDirectionChangedAsync(SyncRuleDirection? direction)
+    {
+        _direction = direction;
+        await LoadAsync();
+    }
+
+    private async Task OnConnectedSystemChangedAsync(int? connectedSystemId)
+    {
+        _connectedSystemId = connectedSystemId;
+        await LoadAsync();
+    }
+
+    private async Task OnMetaverseObjectTypeChangedAsync(int? metaverseObjectTypeId)
+    {
+        _metaverseObjectTypeId = metaverseObjectTypeId;
+        await LoadAsync();
+    }
+
+    private async Task OnMetaverseAttributeChangedAsync(int? metaverseAttributeId)
+    {
+        _metaverseAttributeId = metaverseAttributeId;
+        await LoadAsync();
+    }
+
+    private async Task OnMultipleContributorsOnlyChangedAsync(bool multipleContributorsOnly)
+    {
+        _multipleContributorsOnly = multipleContributorsOnly;
+        await LoadAsync();
+    }
+
+    private async Task OnSearchChangedAsync(string search)
+    {
+        _search = search;
+        await LoadAsync();
+    }
+
+    private async Task OnRowsPerPageChangedAsync(int rowsPerPage)
+    {
+        _rowsPerPage = rowsPerPage;
+        await PreferenceService.SetRowsPerPageAsync(rowsPerPage);
+    }
+}

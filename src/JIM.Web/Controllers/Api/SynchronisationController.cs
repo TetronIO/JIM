@@ -1157,9 +1157,15 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var currentSelection = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
+
+        // Exclusions are carried forward from the current selection rather than proposed: this endpoint cannot
+        // express them yet (#1255 Phase 5 adds them to the request alongside the write surfaces). Omitting them
+        // would preview the removal of every exclusion the Connected System carries, which is a change the caller
+        // did not ask for and would be counted as objects coming back into scope.
         var proposal = new ConnectedSystemScopeSelectionProposal(
             request.SelectedPartitionIds ?? currentSelection.SelectedPartitionIds,
-            request.SelectedContainerIds ?? currentSelection.SelectedContainerIds);
+            request.SelectedContainerIds ?? currentSelection.SelectedContainerIds,
+            currentSelection.ExcludedContainerIds);
 
         // An id naming nothing in this hierarchy is different in kind from a selection the preview disagrees with:
         // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to a

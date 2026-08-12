@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -126,15 +127,117 @@ public class ConnectedSystemScopeTests
         Assert.That(scope.Contains(2, "CN=Alice,OU=Archive,DC=example,DC=local"), Is.False);
     }
 
+    #region Exclusions (#1255)
+
+    // The preview and the import must answer alike, which is the whole reason this type exists. An exclusion the
+    // import honours and the preview does not is a preview stating a count the next import contradicts.
+
+    [Test]
+    public void Contains_ObjectWithinAnExcludedBranchOfASelectedContainer_ReturnsFalse()
+    {
+        var scope = ScopeOver(SystemWithContainers(), selectedPartitionIds: [1], selectedContainerIds: [10], excludedContainerIds: [11]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scope.Contains(1, "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local"), Is.False);
+            Assert.That(scope.Contains(1, "CN=Bob,OU=Corp,DC=example,DC=local"), Is.True);
+        }
+    }
+
+    [Test]
+    public void Contains_ExclusionProposedOnAContainerNotYetExcluded_HonoursTheProposal()
+    {
+        // The proposal is the parameter, not the Connected System's stored flags: every Container in
+        // SystemWithContainers is stored as Selected, and proposing to exclude one has to take effect here or the
+        // preview would report on the configuration the administrator is trying to move away from.
+        var scope = ScopeOver(SystemWithContainers(), selectedPartitionIds: [1], selectedContainerIds: [10], excludedContainerIds: [11]);
+
+        Assert.That(scope.Contains(1, "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local"), Is.False);
+    }
+
+    [Test]
+    public void Contains_ContainerExcludedOnTheConnectedSystemButSelectedInTheProposal_HonoursTheProposal()
+    {
+        // The mirror image: an administrator proposing to lift an existing exclusion.
+        var connectedSystem = SystemWithContainers();
+        var sales = connectedSystem.Partitions![0].Containers!.Single(c => c.Id == 10).ChildContainers.Single();
+        sales.Selected = false;
+        sales.Excluded = true;
+
+        var scope = ScopeOver(connectedSystem, selectedPartitionIds: [1], selectedContainerIds: [10, 11]);
+
+        Assert.That(scope.Contains(1, "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local"), Is.True);
+    }
+
+    [Test]
+    public void Contains_OnlyAnExclusionSelected_ReturnsFalse()
+    {
+        // An exclusion with nothing selected around it manages nothing, which is a determined answer.
+        var scope = ScopeOver(SystemWithContainers(), selectedPartitionIds: [1], selectedContainerIds: [], excludedContainerIds: [11]);
+
+        Assert.That(scope.Contains(1, "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local"), Is.False);
+    }
+
+    [Test]
+    public void Contains_ExcludedContainerInADeselectedPartition_IsNotConsulted()
+    {
+        // Containers are collected from selected partitions only, and an exclusion is no different: a partition
+        // nobody imports from decides nothing about the partition they do.
+        var scope = ScopeOver(SystemWithContainers(), selectedPartitionIds: [1], selectedContainerIds: [10], excludedContainerIds: [20]);
+
+        Assert.That(scope.Contains(1, "CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local"), Is.True);
+    }
+
+    [Test]
+    public void FromCurrentSelection_ContainerExcludedOnTheConnectedSystem_CarriesTheExclusion()
+    {
+        // What "no change" looks like, and the baseline every preview is evaluated against. An exclusion missing
+        // from the baseline reads as an exclusion the proposal is adding.
+        var connectedSystem = SystemWithContainers();
+        var sales = connectedSystem.Partitions![0].Containers!.Single(c => c.Id == 10).ChildContainers.Single();
+        sales.Selected = false;
+        sales.Excluded = true;
+
+        var current = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(current.ExcludedContainerIds, Is.EquivalentTo(new[] { 11 }));
+
+            // Every partition's Containers, not just the selected partitions': the baseline records the
+            // configuration as it stands, and ConnectedSystemScope.From is what narrows it to the partitions in
+            // play. Container 20 sits in the deselected partition and is still recorded here.
+            Assert.That(current.SelectedContainerIds, Is.EquivalentTo(new[] { 10, 12, 20 }));
+        }
+    }
+
+    [Test]
+    public void DescribesSameSelectionAs_SameSelectionButDifferentExclusions_ReturnsFalse()
+    {
+        // A preview an administrator is looking at stops answering their question when they change an exclusion,
+        // exactly as when they change a selection.
+        var withExclusion = new ConnectedSystemScopeSelectionProposal([1], [10], [11]);
+        var withoutExclusion = new ConnectedSystemScopeSelectionProposal([1], [10]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(withExclusion.DescribesSameSelectionAs(withoutExclusion), Is.False);
+            Assert.That(withExclusion.DescribesSameSelectionAs(new ConnectedSystemScopeSelectionProposal([1], [10], [11])), Is.True);
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ConnectedSystemScope ScopeOver(
         ConnectedSystem connectedSystem,
         IReadOnlyList<int> selectedPartitionIds,
-        IReadOnlyList<int> selectedContainerIds) =>
+        IReadOnlyList<int> selectedContainerIds,
+        IReadOnlyList<int>? excludedContainerIds = null) =>
         ConnectedSystemScope.From(
             connectedSystem,
-            new ConnectedSystemScopeSelectionProposal(selectedPartitionIds, selectedContainerIds),
+            new ConnectedSystemScopeSelectionProposal(selectedPartitionIds, selectedContainerIds, excludedContainerIds),
             DistinguishedNameContainment.Instance);
 
     /// <summary>

@@ -13,7 +13,7 @@ namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
 /// Unit tests for the Data Flow view's application logic (#1199): stamping each Import flow with how many
-/// contributors its target Metaverse Attribute has, and filtering to contested attributes on request. The repository
+/// contributors its target Metaverse Attribute has, and filtering to multiply-contributed attributes on request. The repository
 /// is mocked, so these exercise the counting and filtering rules rather than the query behind them; the query itself
 /// is covered by <see cref="DataFlowQueryDatabaseTests"/> against real PostgreSQL.
 /// </summary>
@@ -74,7 +74,7 @@ public class DataFlowTests
     }
 
     [Test]
-    public async Task GetDataFlowsAsync_MultipleContributorsOnly_KeepsOnlyContestedAttributesAsync()
+    public async Task GetDataFlowsAsync_MultipleContributorsOnly_KeepsOnlySharedAttributesAsync()
     {
         SetUpFlows(
             ImportFlow(mappingId: 1, DepartmentAttributeId, priority: 1),

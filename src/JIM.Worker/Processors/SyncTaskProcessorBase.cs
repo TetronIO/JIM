@@ -4185,10 +4185,10 @@ public abstract class SyncTaskProcessorBase
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
 
-        var contestedAttributeIds = recalledAttributeIds
+        var multiContributorAttributeIds = recalledAttributeIds
             .Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1)
             .ToList();
-        if (contestedAttributeIds.Count == 0)
+        if (multiContributorAttributeIds.Count == 0)
             return;
 
         // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
@@ -4204,7 +4204,7 @@ public abstract class SyncTaskProcessorBase
         var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
         var seen = new HashSet<(Guid CsoId, int RuleId)>();
 
-        foreach (var attributeId in contestedAttributeIds)
+        foreach (var attributeId in multiContributorAttributeIds)
         {
             // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
             // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.
