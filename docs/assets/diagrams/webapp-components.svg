@@ -3,6 +3,10 @@
 <!-- Inside the Web Application (Developer Guide > Architecture): requests -->
 <!-- enter through the authentication middleware and reach the Blazor pages -->
 <!-- or API controllers, which call the JimApplication facade. -->
+<!-- The boundary title is painted last (SVG paints in document order) so -->
+<!-- the spokes and any data packet pass behind it, not over it; the -->
+<!-- knockout stroke on .jimdg-hub-title clears the gaps between glyphs. -->
+<!-- Keep it the final element if you add anything to this file. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
 <!-- Visual language: engineering/DESIGN.md > Diagrams. -->
@@ -29,7 +33,6 @@
   </g>
   <g id="jimdg-wa-boundary">
     <rect class="jimdg-hub" x="90" y="150" width="980" height="330" rx="8"/>
-    <text class="jimdg-hub-title" x="580" y="186">JIM.Web</text>
   </g>
   <g id="jimdg-wa-middleware">
     <rect class="jimdg-stage" x="130" y="220" width="900" height="64" rx="8"/>
@@ -84,5 +87,8 @@
       <animateMotion dur="1.6s" begin="0.1s" repeatCount="indefinite" path="M830,286 L830,328"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="1.6s" begin="0.1s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  <g id="jimdg-wa-boundary-title">
+    <text class="jimdg-hub-title" x="580" y="186">JIM.Web</text>
   </g>
 </svg>

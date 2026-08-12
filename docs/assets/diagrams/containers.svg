@@ -57,19 +57,19 @@
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,225) rotate(90)"/>
     <line class="jimdg-spoke" x1="330" y1="96" x2="531.5" y2="219.8"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(540,225) rotate(31.6)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="455" y="180">web UI</text>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="447" y="194">web UI</text>
     <line class="jimdg-spoke" x1="580" y1="96" x2="580" y2="215"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,225) rotate(90)"/>
     <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="170">REST API</text>
     <line class="jimdg-spoke" x1="890" y1="96" x2="658.8" y2="220.3"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(650,225) rotate(151.7)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="745" y="180">OIDC</text>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="753" y="195">OIDC</text>
     <line class="jimdg-flow" x1="360" y1="265" x2="450" y2="265"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,265) rotate(0)"/>
     <text class="jimdg-flow-label" x="372" y="253">REST API</text>
     <line class="jimdg-flow" x1="640" y1="305" x2="821.5" y2="417.7"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(830,423) rotate(31.85)"/>
-    <text class="jimdg-flow-label jimdg-anchor-end" x="716" y="364">reads &amp; writes</text>
+    <text class="jimdg-flow-label jimdg-anchor-end" x="710" y="374">reads &amp; writes</text>
     <line class="jimdg-flow" x1="890" y1="305" x2="890" y2="410"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(890,420) rotate(90)"/>
     <text class="jimdg-flow-label" x="902" y="350">queues tasks</text>

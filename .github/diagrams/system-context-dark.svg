@@ -74,6 +74,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 .jim-diagram .jimdg-chip-label-planned { font-size: 12.5px; font-weight: 600; fill: var(--jimdg-chip-muted-text); }
 .jim-diagram .jimdg-chip-sub-planned   { font-size: 11px; fill: var(--jimdg-chip-muted-text); }
 .jim-diagram .jimdg-stage-label  { font-size: 16px; font-weight: 600; fill: var(--jimdg-node-text); }
+.jim-diagram .jimdg-owner-name   { font-size: 13px; font-weight: 600; fill: var(--jimdg-node-text); }
 .jim-diagram .jimdg-core-title   { font-size: 19px; font-weight: 700; fill: var(--jimdg-core-text); }
 .jim-diagram .jimdg-core-sub     { font-size: 13.5px; fill: var(--jimdg-core-text); opacity: 0.85; }
 .jim-diagram .jimdg-system-name  { font-size: 17px; font-weight: 600; fill: var(--jimdg-system-text); }
@@ -140,20 +141,20 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
   <g id="jimdg-sc-edges">
     <line class="jimdg-spoke" x1="260" y1="100" x2="491.4" y2="235"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(500,240) rotate(30.3)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="420" y="200">web UI · PowerShell</text>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="412" y="214">web UI · PowerShell</text>
     <line class="jimdg-spoke" x1="580" y1="100" x2="580" y2="230"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,240) rotate(90)"/>
     <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="170">REST API</text>
     <line class="jimdg-spoke" x1="900" y1="100" x2="668.6" y2="235"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(660,240) rotate(149.7)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="740" y="200">OIDC</text>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="748" y="214">OIDC</text>
     <line class="jimdg-spoke" x1="450.8" y1="383.9" x2="139.2" y2="516.1"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(130,520) rotate(157)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,380) rotate(-23)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="352" y="430">LDAP/LDAPS</text>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="291" y="477">LDAP/LDAPS</text>
     <line class="jimdg-spoke" x1="355" y1="520" x2="512.4" y2="386.5"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(520,380) rotate(-40.3)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="426" y="472">imports · CSV</text>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="434" y="481">imports · CSV</text>
     <line class="jimdg-spoke" x1="580" y1="390" x2="580" y2="510"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,380) rotate(-90)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,520) rotate(90)"/>
@@ -161,11 +162,11 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <line class="jimdg-spoke-planned" x1="647.6" y1="386.5" x2="797.4" y2="513.5"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(805,520) rotate(40.3)"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(640,380) rotate(220.3)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="688" y="430">SQL</text>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="726" y="481">SQL</text>
     <line class="jimdg-spoke" x1="709.2" y1="383.9" x2="1020.8" y2="516.1"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(1030,520) rotate(23)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,380) rotate(203)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="870" y="474">SCIM 2.0</text>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="869" y="477">SCIM 2.0</text>
   </g>
   <g id="jimdg-sc-packets">
     <circle class="jimdg-packet" r="4.5">

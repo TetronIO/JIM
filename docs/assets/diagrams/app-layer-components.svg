@@ -5,6 +5,10 @@
 <!-- the sync orchestration path used by the Worker's task processors. -->
 <!-- Simplified for legibility; SyncServer also uses ISyncRepository -->
 <!-- directly, and the deep-dive process diagrams carry the exact flows. -->
+<!-- The boundary title is painted last (SVG paints in document order) so -->
+<!-- the flow edges and any data packet pass behind it, not over it; the -->
+<!-- knockout stroke on .jimdg-hub-title clears the gaps between glyphs. -->
+<!-- Keep it the final element if you add anything to this file. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
 <!-- Visual language: engineering/DESIGN.md > Diagrams. -->
@@ -28,7 +32,6 @@
   </g>
   <g id="jimdg-al-boundary">
     <rect class="jimdg-hub" x="90" y="140" width="980" height="520" rx="8"/>
-    <text class="jimdg-hub-title" x="580" y="176">JIM.Application</text>
   </g>
   <g id="jimdg-al-entry">
     <rect class="jimdg-stage" x="270" y="210" width="310" height="70" rx="8"/>
@@ -109,5 +112,8 @@
       <animateMotion dur="2.4s" begin="-1.7s" repeatCount="indefinite" path="M840,614 L650,701"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.7s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  <g id="jimdg-al-boundary-title">
+    <text class="jimdg-hub-title" x="580" y="176">JIM.Application</text>
   </g>
 </svg>
