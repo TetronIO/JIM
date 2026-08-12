@@ -10,6 +10,12 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
 <div class="grid cards" markdown>
 
+-   **[Working with Lists](portal-lists.md)**
+
+    ---
+
+    How every list in the portal behaves: continuous scrolling instead of paging, object counts, search and sorting across the whole list, and links that open where you left off.
+
 -   **[Deployment](deployment.md)**
 
     ---

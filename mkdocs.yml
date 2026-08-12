@@ -118,6 +118,7 @@ nav:
       - Roles: configuration/roles.md
   - Administration:
       - administration/index.md
+      - Working with Lists: administration/portal-lists.md
       - Deployment: administration/deployment.md
       - SSO Setup:
           - administration/sso-setup.md
