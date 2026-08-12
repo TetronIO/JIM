@@ -1116,17 +1116,11 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 #### Scenario 17: Initial Password Provisioning
 
-**Status**: implemented, and **currently blocked from completing a run**. Samba AD only.
+**Status**: implemented and passing. Samba AD only.
 
-> **The blocker is in JIM, not in the scenario.** `Setup-Scenario17.ps1` has to remove Scenario 1's `userAccountControl` Attribute Flow, because the Initial Password's EnableAccount option writes the same attribute and the confirming import otherwise reports the export as unconfirmed ("Will attempt to reassert the change on the next export run"). Deleting a Synchronisation Rule Mapping currently fails with an Entity Framework tracking conflict on `SyncRuleMappingSource`, so setup stops at Step 2c. Switching EnableAccount off is not a way round it: `false` means "disable the account", not "leave it alone".
+> **Setup recovers the directory hierarchy before asserting anything.** `Setup-Scenario1.ps1` imports the hierarchy once and selects the Partition afterwards, and Containers are enumerated only for a Partition that is already selected, so a single import leaves none; it warns and carries on, and the failure resurfaces several steps later as an export refused with "selected partition(s) contain no enumerated containers". Step 2b of `Setup-Scenario17.ps1` drives the sequence to completion instead (import, select the Partition, import again, select the Container) and throws on the spot if any stage fails. The ordering belongs to Setup-Scenario1 and affects every scenario that composes it.
 >
-> Everything up to that point runs green, and the credential chain itself has been proven by hand against a live Samba AD domain controller on accounts JIM provisioned: the Initial Password binds as `MustChangePassword` (49/`773`), a wrong password as `InvalidCredentials` (49/`52e`), the account holder's own change succeeds, and the newly chosen password binds cleanly.
->
-> A second, softer issue is worked around rather than fixed: `Setup-Scenario1.ps1` imports the directory hierarchy *before* selecting the partition, and the import enumerates containers only for already-selected partitions, so the first import yields none and Setup-Scenario1 warns and carries on. The Connected System's exports are then refused several steps later with "selected partition(s) contain no enumerated containers". `Setup-Scenario17.ps1` Step 2b re-imports to recover; the ordering belongs to Setup-Scenario1 and affects every scenario that uses it.
-
-Closes the one gap that every other piece of JIM's password coverage leaves open: whether the account holder can actually sign in.
-
-The unit tests in `LdapConnectorPasswordTests` assert against a mocked `ILdapOperationExecutor`, so they prove that JIM *emits* a quoted UTF-16LE `unicodePwd` write and a `pwdLastSet` of zero, in that order. They cannot prove a directory accepts either, that the encoding is right, or that "must change at next sign-in" reaches the person holding the account. This scenario provisions an account through the ordinary path and then uses the credential.
+> **Setup also removes Scenario 1's `userAccountControl` Attribute Flow.** The Initial Password's EnableAccount option writes the same attribute, and leaving both in place gives one attribute two writers: the confirming import reports the export as unconfirmed and JIM records that it "will attempt to reassert the change on the next export run". Switching EnableAccount off is not an alternative, because `false` means "disable the account", not "leave it alone". Removing the flow is what an administrator provisioning through the Initial Password should do; the account's enabled state belongs to whichever mechanism sets the password, because Active Directory will not enable an account that does not already hold a policy-compliant one.
 
 **The chain, and why each link is needed:**
 
