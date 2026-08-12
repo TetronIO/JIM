@@ -234,7 +234,9 @@
     private int? _selectedObjectTypeId;
     private List<MetaverseObjectType> _objectTypes = new();
 
-    // Summary counts
+    // Summary counts. Taken across the whole match set by the server, not derived from the rows on screen: the
+    // list is virtualised and holds only a window of them, and even the paged predecessor of this page counted
+    // no further than its first hundred objects, so every card but the total under-reported beyond that.
     private int _totalCount;
     private int _deprovisioningCount;
     private int _awaitingGracePeriodCount;
@@ -260,21 +262,12 @@
     private async Task LoadSummaryAsync()
     {
         using var jim = JimFactory.Create();
-        // Get all pending to calculate summary
-        var result = await jim.Metaverse.GetMetaverseObjectsPendingDeletionAsync(1, 100, _selectedObjectTypeId);
-        var now = DateTime.UtcNow;
+        var summary = await jim.Metaverse.GetMetaverseObjectsPendingDeletionStateCountsAsync(_selectedObjectTypeId);
 
-        _totalCount = await jim.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(_selectedObjectTypeId);
-
-        // Calculate status counts
-        _deprovisioningCount = result.Results.Count(m => m.ConnectedSystemObjects.Any());
-        _readyForDeletionCount = result.Results.Count(m =>
-            !m.ConnectedSystemObjects.Any() &&
-            (!m.DeletionEligibleDate.HasValue || m.DeletionEligibleDate.Value <= now));
-        _awaitingGracePeriodCount = result.Results.Count(m =>
-            !m.ConnectedSystemObjects.Any() &&
-            m.DeletionEligibleDate.HasValue &&
-            m.DeletionEligibleDate.Value > now);
+        _totalCount = summary.Total;
+        _deprovisioningCount = summary.Deprovisioning;
+        _awaitingGracePeriodCount = summary.AwaitingGracePeriod;
+        _readyForDeletionCount = summary.ReadyForDeletion;
     }
 
     /// <summary>

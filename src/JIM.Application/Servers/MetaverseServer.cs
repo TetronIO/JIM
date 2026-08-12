@@ -1806,6 +1806,18 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// How the MVOs pending deletion divide between deprovisioning, awaiting their grace period and ready for
+    /// deletion, counted across the whole match set rather than a window of it. Shares its filter with
+    /// <see cref="GetMetaverseObjectsPendingDeletionRangeAsync"/>, so the figures describe exactly the objects
+    /// that list holds.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    public async Task<PendingDeletionStateCounts> GetMetaverseObjectsPendingDeletionStateCountsAsync(int? objectTypeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionStateCountsAsync(objectTypeId);
+    }
+
+    /// <summary>
     /// How many Metaverse Objects of a type a change to that type's deletion settings could affect (#1114): its
     /// projected objects carrying a disconnection mark.
     /// </summary>

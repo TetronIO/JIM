@@ -2881,32 +2881,16 @@ public class MetaverseRepository : IMetaverseRepository
         int count,
         bool includeTotalCount)
     {
-        // Build base query for MVOs pending deletion
-        var query = Repository.Database.MetaverseObjects
-            .AsSplitQuery()
-            .Include(mvo => mvo.Type)
-            .Include(mvo => mvo.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(mvo => mvo.ConnectedSystemObjects)
-            .Where(mvo =>
-                // Must have LastConnectorDisconnectedDate set (pending deletion)
-                mvo.LastConnectorDisconnectedDate != null &&
-                // Must be projected (not internal admin accounts)
-                mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
-                // (GetMetaverseObjectsEligibleForDeletionAsync): the page must show every MVO
-                // housekeeping will delete, including authoritative-source-scheduled MVOs that may
-                // retain target connectors during their grace period (#119)
-                mvo.Type != null &&
-                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
-                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
-
-        // Apply object type filter if specified
-        if (objectTypeId.HasValue)
-        {
-            var objectTypeIdValue = objectTypeId.Value;
-            query = query.Where(mvo => mvo.Type.Id == objectTypeIdValue);
-        }
+        // Build base query for MVOs pending deletion, sharing the filter with the count and summary reads so all
+        // three describe the same population (see FilterToPendingDeletion).
+        var query = FilterToPendingDeletion(
+            Repository.Database.MetaverseObjects
+                .AsSplitQuery()
+                .Include(mvo => mvo.Type)
+                .Include(mvo => mvo.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .Include(mvo => mvo.ConnectedSystemObjects),
+            objectTypeId);
 
         // Case-insensitive search over the display name (via the denormalised cache, the same column the
         // display-name sort uses, so a search can never match an object the sort would misplace) and the
@@ -2999,25 +2983,70 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
     {
-        var query = Repository.Database.MetaverseObjects
-            .Where(mvo =>
-                // Must have LastConnectorDisconnectedDate set (pending deletion)
-                mvo.LastConnectorDisconnectedDate != null &&
-                // Must be projected (not internal admin accounts)
-                mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
-                // and the listing query above (#119)
-                mvo.Type != null &&
-                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
-                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        return await FilterToPendingDeletion(Repository.Database.MetaverseObjects, objectTypeId).CountAsync();
+    }
 
-        // Apply object type filter if specified
+    /// <inheritdoc />
+    public async Task<PendingDeletionStateCounts> GetMetaverseObjectsPendingDeletionStateCountsAsync(int? objectTypeId = null)
+    {
+        var pending = FilterToPendingDeletion(Repository.Database.MetaverseObjects, objectTypeId);
+
+        // One instant for all three counts: taking DateTime.UtcNow per query would let an object's grace period
+        // elapse between two of them, and the states would then no longer sum to the total.
+        var now = DateTime.UtcNow;
+
+        var total = await pending.CountAsync();
+
+        // Still connected to something: the object is being deprovisioned and cannot be deleted yet, whatever its
+        // grace period says.
+        var deprovisioning = await pending.CountAsync(mvo => mvo.ConnectedSystemObjects.Any());
+
+        // Disconnected, with a grace period that has not run out. Expressed as the stored disconnection date plus
+        // the type's interval (which is what MetaverseObject.DeletionEligibleDate computes in memory), because the
+        // eligible date is not a column; the same arithmetic backs the list's "eligible" sort.
+        var awaitingGracePeriod = await pending.CountAsync(mvo =>
+            !mvo.ConnectedSystemObjects.Any() &&
+            mvo.Type.DeletionGracePeriod != null &&
+            mvo.Type.DeletionGracePeriod > TimeSpan.Zero &&
+            mvo.LastConnectorDisconnectedDate + mvo.Type.DeletionGracePeriod > now);
+
+        return new PendingDeletionStateCounts
+        {
+            Total = total,
+            Deprovisioning = deprovisioning,
+            AwaitingGracePeriod = awaitingGracePeriod,
+            // The three states partition the match set, so the remainder is exactly the objects housekeeping will
+            // delete next pass: disconnected, and either past their grace period or given none. Derived rather
+            // than counted so the four figures on the page can never disagree with each other.
+            ReadyForDeletion = total - deprovisioning - awaitingGracePeriod
+        };
+    }
+
+    /// <summary>
+    /// Narrows a Metaverse Object query to those awaiting deletion, and to one Metaverse Object Type where asked.
+    /// Every pending-deletion read shares this filter, so the list, its total and its summary always describe the
+    /// same population; it matches the housekeeping eligibility rule set, including authoritative-source-scheduled
+    /// objects that may retain target connectors during their grace period (#119).
+    /// </summary>
+    private static IQueryable<MetaverseObject> FilterToPendingDeletion(IQueryable<MetaverseObject> source, int? objectTypeId)
+    {
+        var query = source.Where(mvo =>
+            // Must have LastConnectorDisconnectedDate set (pending deletion)
+            mvo.LastConnectorDisconnectedDate != null &&
+            // Must be projected (not internal admin accounts)
+            mvo.Origin == MetaverseObjectOrigin.Projected &&
+            // Must have an automatic deletion rule
+            mvo.Type != null &&
+            (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+             mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+
         if (objectTypeId.HasValue)
         {
-            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
+            var objectTypeIdValue = objectTypeId.Value;
+            query = query.Where(mvo => mvo.Type.Id == objectTypeIdValue);
         }
 
-        return await query.CountAsync();
+        return query;
     }
 
     /// <inheritdoc />

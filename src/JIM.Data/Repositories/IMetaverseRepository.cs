@@ -380,6 +380,15 @@ public interface IMetaverseRepository
     public Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null);
 
     /// <summary>
+    /// How the Metaverse Objects pending deletion divide between deprovisioning, awaiting their grace period and
+    /// ready for deletion, counted across the whole match set. Shares its filter with
+    /// <see cref="GetMetaverseObjectsPendingDeletionRangeAsync"/>, so the totals it returns describe exactly the
+    /// objects that list holds.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    public Task<PendingDeletionStateCounts> GetMetaverseObjectsPendingDeletionStateCountsAsync(int? objectTypeId = null);
+
+    /// <summary>
     /// How many Metaverse Objects of a type carry a disconnection mark, and are therefore the population a change
     /// to that type's deletion settings could affect (#1114). Objects without a mark cannot become eligible under
     /// any settings, so this is the whole population, not a subset of it.
