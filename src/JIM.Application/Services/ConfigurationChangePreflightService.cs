@@ -268,19 +268,39 @@ public class ConfigurationChangePreflightService
         var label = ancestorLabels.Count == 0 ? name : string.Join(" > ", ancestorLabels.Append(name));
         var added = node.ChangeType == ConfigurationDiffChangeType.Added;
 
+        // An item that arrives stating an exclusion is not an addition in any sense the administrator cares about,
+        // and the act has to be read from what the item states rather than from the fact that it arrived. Described
+        // the other way, the confirmation says a Container was "Added" over prose about objects coming into scope,
+        // at the moment they are leaving it.
+        var carvesOut = StatesAnExclusion(node);
+        var key = carvesOut ? ExcludedKey : node.Key;
+
         return new ConfigurationChangePreflightItem
         {
-            Key = node.Key,
+            Key = key,
             Label = label,
-            Class = ConfigurationChangeClassifier.ClassifyKey(objectType, node.Key, objectKey, node.ChangeType),
+            Class = ConfigurationChangeClassifier.ClassifyKey(objectType, key, objectKey, node.ChangeType),
             ChangeType = node.ChangeType,
             IsCollectionItem = true,
-            // The consequence copy is direction-aware off the value pair, so the item's name stands in for the value
-            // on whichever side it exists: present before and gone after is a removal, and the reverse an addition.
-            Consequence = ConfigurationChangeConsequences.For(objectType, node.Key,
-                added ? null : name, added ? name : null)
+            CollectionItemVerb = carvesOut ? (added ? "Excluded" : "Included") : null,
+            // The consequence copy is direction-aware off the value pair, so the item's name (or, for an exclusion,
+            // the flag it states) stands in for the value on whichever side it exists: present before and gone after
+            // is a removal, and the reverse an addition.
+            Consequence = carvesOut
+                ? ConfigurationChangeConsequences.For(objectType, key, added ? null : TrueValue, added ? TrueValue : null)
+                : ConfigurationChangeConsequences.For(objectType, node.Key, added ? null : name, added ? name : null)
         };
     }
+
+    private const string ExcludedKey = "excluded";
+    private const string TrueValue = "true";
+
+    /// <summary>
+    /// Whether a collection item that joined or left the snapshot did so stating that it is carved out of a
+    /// selection above it, rather than selected into one.
+    /// </summary>
+    private static bool StatesAnExclusion(ConfigurationDiffNode node) =>
+        node.Children?.Any(c => c.Key == ExcludedKey && (c.NewValue ?? c.OldValue) == TrueValue) ?? false;
 
     // Booleans are snapshotted as raw "true"/"false" with no display form, which reads like a debug dump next to
     // every other value's friendly rendering. Secrets carry neither, and are reported as changed without a value.

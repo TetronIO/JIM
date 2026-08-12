@@ -403,6 +403,12 @@ public class ConnectedSystemContainerDto
     public bool Selected { get; set; }
 
     /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported.
+    /// </summary>
+    public bool Excluded { get; set; }
+
+    /// <summary>
     /// How far beneath this Container objects are imported from, when it is selected.
     /// </summary>
     public ConnectedSystemContainerScope Scope { get; set; }
@@ -421,6 +427,7 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Excluded = entity.Excluded,
             Scope = entity.Scope,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,

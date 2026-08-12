@@ -1059,10 +1059,12 @@ public class SynchronisationController(
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Container details.</returns>
     /// <response code="200">Container updated successfully.</response>
+    /// <response code="400">The request would leave the Container both selected and excluded.</response>
     /// <response code="404">Connected System or Container not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/containers/{containerId:int}", Name = "UpdateConnectedSystemContainer")]
     [ProducesResponseType(typeof(ConnectedSystemContainerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemContainerAsync(int connectedSystemId, int containerId, [FromBody] UpdateConnectedSystemContainerRequest request)
@@ -1091,9 +1093,25 @@ public class SynchronisationController(
         if (!belongsToSystem)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in Connected System {connectedSystemId}."));
 
+        // A Container states one thing about itself, and "manage this" and "do not manage this" cannot both be it.
+        // The portal keeps the two apart by construction, so this is the only surface that can ask for both, and it
+        // refuses rather than picking one: guessing which half the caller meant is how a branch ends up imported
+        // that an administrator excluded. Evaluated against the state the request would leave behind, because a
+        // request naming one half against a stored other is just as contradictory as one naming both.
+        var wouldBeSelected = request.Selected ?? container.Selected;
+        var wouldBeExcluded = request.Excluded ?? container.Excluded;
+        if (wouldBeSelected && wouldBeExcluded)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Container with ID {containerId} cannot be both selected and excluded. Send Selected as false in the same request to replace the selection with an exclusion, or Excluded as false to replace the exclusion with a selection."));
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             container.Selected = request.Selected.Value;
+
+        if (request.Excluded.HasValue)
+            container.Excluded = request.Excluded.Value;
 
         if (request.Scope.HasValue)
             container.Scope = request.Scope.Value;

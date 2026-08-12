@@ -47,6 +47,16 @@ else
             <span class="jim-scope-stat-value">@SelectedPartitionCount of @ConnectedSystem.Partitions.Count</span>
             <span class="jim-scope-stat-label">@(ConnectedSystem.Partitions.Count == 1 ? "Partition" : "Partitions") managed</span>
         </div>
+        @* Only where there are any: a permanent "0 excluded" would sit on every Connected System that has never
+           carved anything out, which is most of them, saying nothing. Where there are exclusions the selected count
+           alone overstates what is imported, so the figure has to appear beside it. *@
+        @if (ExcludedContainerCount > 0)
+        {
+            <div class="jim-scope-stat" data-testid="jim-scope-excluded">
+                <span class="jim-scope-stat-value">@ExcludedContainerCount</span>
+                <span class="jim-scope-stat-label">@(ExcludedContainerCount == 1 ? "Container" : "Containers") excluded</span>
+            </div>
+        }
     </div>
 
     @* ─── Guidance, demoted: the timestamp is the useful part, the caveat is read once ─── *@
@@ -405,6 +415,10 @@ else
     /// <summary>How many Containers across every partition are selected, for the summary above the tree.</summary>
     private int SelectedContainerCount =>
         (ConnectedSystem.Partitions ?? []).Sum(ContainerSelectionEditor.CountSelected);
+
+    /// <summary>How many Containers are carved out of a selection, across every partition.</summary>
+    private int ExcludedContainerCount =>
+        (ConnectedSystem.Partitions ?? []).Sum(ContainerSelectionEditor.CountExcluded);
 
     private int TotalContainerCount =>
         (ConnectedSystem.Partitions ?? []).Sum(ContainerSelectionEditor.CountAll);

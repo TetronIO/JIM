@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ A Container can now be **excluded** from a selection made above it: select `OU=Corp` and carve `OU=Service Accounts` out of it, rather than ticking eleven sibling OUs and hoping nobody adds a twelfth. Exclusions nest, and survive a rename. (#1255)
+
 - ✨ A new **Data Flow** view under **Administration → Schema** lists every attribute data flow configured across all Connected Systems, in both directions, so "where does this attribute's value come from, and what writes it out?" can be answered in one place rather than by opening each Synchronisation Rule in turn. Filter by direction, Connected System, Metaverse Object Type or Metaverse Attribute, search across rules, systems, object types, attributes and expression text, or switch on **Multiple contributors** to see just the inbound flows whose Attribute Priority order actually decides something. Each row reads from the Connected System side to the Metaverse side, whichever way the value travels, and shows the setting that applies in its direction ("Null is a value" inbound, Enforce State outbound), the flow's position in its attribute's priority order, and the Synchronisation Rule that owns it. It is a discovery view: nothing is edited here. Available to automation as `Get-JIMDataFlow` and `GET api/v1/synchronisation/data-flows`. (#1199)
 - ✨ How long an account stays owed its initial password is now set per Connected System, instead of a fixed seven days everywhere. Raise it before taking a system out of service for longer, and accounts provisioned meanwhile still get a password when it returns. (#1316)
 

@@ -1,10 +1,10 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Doing (Phases 1-3 complete; portal next)
+- **Status:** Doing (Phases 1-5 complete, and Phase 6's classification half; preview counting and Advanced Mode outstanding)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
 - **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
-- **Last Updated**: 2026-08-11
+- **Last Updated**: 2026-08-12
 
 ## Overview
 
@@ -88,7 +88,10 @@ The picker already computes coverage and disables a Container that an ancestor's
 | Selected | (scope control) | Whole subtree / This level |
 | Covered by an ancestor | "Covered by *X*" | **Exclude** |
 | Excluded | "Excluded from *X*" | **Include** |
+| Excluded by an ancestor | "Excluded by *X*" | tick box |
 | Neither | (Container count) | tick box |
+
+*(The fourth row was added during Phase 4. Rendered plain, a Container inside a carve-out reads as "nothing has been decided here" when something has, and ticking it is meaningful where ticking a covered one is not: it brings the branch back into scope.)*
 
 An exclusion beneath a `OneLevel` parent is inert, and falls out of the design for free: such a row is not Covered, so it is never offered Exclude.
 
@@ -126,14 +129,22 @@ Connector-side honouring via the shared predicate (full import, delta paths, exp
 
 *Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone. `ou=Corp` selected as a subtree imported 4 objects; excluding `ou=Service Accounts` beneath it imported 2 and logged "Discarded 2 entries read from excluded Containers across 1 exclusion(s)" attributed to that Container; selecting `ou=App1` beneath the exclusion brought its service account back, importing 3 and discarding 1.*
 
-**Phase 4: Portal.**
+**Phase 4: Portal.** ✅
 The four row states above in `ScopedHierarchyPicker`, with the selection rules themselves in `ContainerSelectionEditor` where they stay unit-testable without rendering, plus bUnit coverage of the state transitions.
 
-**Phase 5: Surface parity.**
+*Landed, as **five** row states rather than four. The model's `ExcludedByAncestor` needed one of its own: a Container inside a carve-out rendered plain reads as "nothing has been decided here" when something has, and ticking it is meaningful (it brings the branch back), which is what separates it from a covered row. Both actions sit in the column the scope control already occupies, so no row grows a sixth column and the actions line up down the tree. **Exclude** appears on hover and on keyboard focus, because every Container beneath a selected branch is a candidate for it; **Include** stays at rest, because an exclusion is a deliberate configuration that should be reversible without discovering a hover. An excluded row's tick box is disabled: ticking it would clear the exclusion by a second route meaning something different from the Include beside it. `ContainerSelectionEditor.DecidingAncestor` names the Container that decided a row, walking the hierarchy the way `ApplyContainerInclusion` does so a row can never name one Container while another governs it, and the scope summary reports how many Containers are excluded where there are any.*
+
+**Phase 5: Surface parity.** ✅
 `Excluded` on `UpdateConnectedSystemContainerRequest` and the read DTOs; `Set-JIMConnectedSystemContainer -Excluded` with Pester coverage; docs for both.
 
-**Phase 6: Change classification, consequences and preview.**
+*Landed with Phase 4 rather than after it, per the surface-parity rule: portal-only editing would have left administrators unable to script the thing they most often script. Both surfaces refuse the contradiction with a 400, evaluated against the state the request would leave behind, so naming one half against a stored other is refused too and stating both halves is how a Container moves from a selection to an exclusion. This is the API-boundary rejection Phase 2 deferred to the phase that first exposes the field.*
+
+**Phase 6: Change classification, consequences and preview.** (partly landed)
 An `"excluded"` key in `ConfigurationChangeConsequences` classified as a scope reduction (as the `"scope"` narrowing already is); the preview counts objects leaving scope through an exclusion; `SyncImportTaskProcessor`'s "Container Scope" unresolved-reference cause covers exclusions in its prose.
+
+*The classification and consequences half landed with Phases 4 and 5, because shipping settable exclusions without it meant an administrator could carve out a branch and save in silence while narrowing a Container to One Level warned. It could not be done in isolation: the configuration snapshot captured selected Containers only, so an exclusion left no trace in the change history at all, and the same filter dropped any Container captured only as the route to a statement below it (losing a selection on a nested Container, and every re-inclusion inside an exclusion). Containers are now captured when they state something or hold something that does, with selection and exclusion both recorded by presence. A collection item can also carry a truer word than "Added" for what it did, because an exclusion arrives in the snapshot as a whole node exactly as a selection does, and the confirmation otherwise described a carve-out as an addition over prose about objects coming into scope.*
+
+*Still outstanding here: the preview's count of objects leaving scope through an exclusion, the unresolved-reference prose, and the per-exclusion discard count on the Activity that Phase 3 deferred.*
 
 **Phase 7: Advanced Mode.**
 Parser and canonical text projection, wildcard support, resolution against the hierarchy with hard errors on unresolvable paths, the itemised lossy-downgrade confirmation, and parity across all three surfaces.

@@ -348,6 +348,10 @@ Describe 'Set-JIMConnectedSystemContainer' {
             $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $validateSet.ValidValues | Should -Be @('Subtree', 'OneLevel')
         }
+
+        It 'Should have an Excluded parameter' {
+            $command.Parameters['Excluded'] | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Request body composition' {
@@ -394,6 +398,48 @@ Describe 'Set-JIMConnectedSystemContainer' {
 
         It 'Rejects a scope value outside the ValidateSet' {
             { Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'Bogus' -Confirm:$false -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Sends excluded in the PUT body when -Excluded is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Service Accounts' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Excluded $true -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.excluded -eq $true -and -not $Body.ContainsKey('selected')
+                }
+            }
+        }
+
+        It 'Omits excluded from the PUT body when -Excluded is not specified' {
+            # A caller changing scope must not silently hand an excluded branch back into scope.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Service Accounts' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'OneLevel' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('excluded')
+                }
+            }
+        }
+
+        It 'Sends both halves when a selection is replaced with an exclusion' {
+            # The API rejects a request that would leave a Container both selected and excluded, so stating both is
+            # how a caller moves one from a selection to an exclusion.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Service Accounts' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Selected $false -Excluded $true -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.selected -eq $false -and $Body.excluded -eq $true
+                }
+            }
         }
     }
 }
