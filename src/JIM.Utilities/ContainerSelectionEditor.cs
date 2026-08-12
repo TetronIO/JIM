@@ -103,6 +103,30 @@ public static class ContainerSelectionEditor
     }
 
     /// <summary>
+    /// The Container above this one whose statement decides its fate: the nearest ancestor that says something about
+    /// itself and whose statement reaches this far. Null where nothing above has an opinion.
+    /// </summary>
+    /// <remarks>
+    /// This is what a row names when it says "Covered by ou=Corp" or "Excluded from ou=Service Accounts", and it has
+    /// to agree with <see cref="ConnectedSystemUtilities.ApplyContainerInclusion"/>, which is what actually set the
+    /// row's state. Two rules follow from that walk: an ancestor stating nothing is skipped, and so is one whose
+    /// statement is OneLevel, because such a statement reaches the objects held directly in that Container and no
+    /// Container beneath it, leaving whatever came from further up still governing.
+    /// </remarks>
+    public static ConnectedSystemContainer? DecidingAncestor(ConnectedSystemContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+
+        for (var ancestor = container.ParentContainer; ancestor != null; ancestor = ancestor.ParentContainer)
+        {
+            if ((ancestor.Selected || ancestor.Excluded) && ancestor.Scope == ConnectedSystemContainerScope.Subtree)
+                return ancestor;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Recalculates every Container's coverage flag in a partition from the current selections and scopes.
     /// </summary>
     public static void RecalculateCoverage(ConnectedSystemPartition partition) =>
@@ -128,6 +152,11 @@ public static class ContainerSelectionEditor
     /// How many Containers in a partition are selected, at any depth.
     /// </summary>
     public static int CountSelected(ConnectedSystemPartition partition) => Flatten(partition).Count(c => c.Selected);
+
+    /// <summary>
+    /// How many Containers in a partition are excluded, at any depth.
+    /// </summary>
+    public static int CountExcluded(ConnectedSystemPartition partition) => Flatten(partition).Count(c => c.Excluded);
 
     /// <summary>
     /// How many Containers a partition holds, at any depth.

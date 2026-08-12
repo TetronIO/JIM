@@ -3338,10 +3338,43 @@ html[lang] .jim-password-guidance .mud-alert-position {
     background-color: var(--mud-palette-primary-hover);
 }
 
-/* A Container a selected ancestor already covers: still readable, plainly not actionable. */
+/* A Container an ancestor has already spoken for, whether by covering it or by carving it out: still readable,
+   plainly not stating anything itself. */
 .jim-picker-row-covered .jim-picker-name,
 .jim-picker-row-covered .jim-picker-meta {
     opacity: 0.6;
+}
+
+/* A Container carved out of a selection above it. Tinted like a selected row is, because both are deliberate
+   statements an administrator made; the colour is what says which one, so the label carries it too. */
+.jim-picker-row-excluded {
+    background-color: var(--mud-palette-warning-hover);
+}
+
+.jim-picker-row-excluded .jim-picker-meta-excluded {
+    color: var(--mud-palette-warning);
+}
+
+/* Exclude and Include. Include shows at rest; Exclude appears on hover and on keyboard focus, because every
+   Container beneath a selected branch is a candidate for it and a large directory would otherwise carry hundreds of
+   buttons at rest. :focus-within rather than :focus-visible on the button itself: MudBlazor's ripple sits over the
+   label, so the focus lands on the button element while the rule has to reach the whole cell. */
+.jim-picker-row-covered .jim-picker-action {
+    visibility: hidden;
+}
+
+.jim-picker-row:hover .jim-picker-action,
+.jim-picker-row:focus-within .jim-picker-action {
+    visibility: visible;
+}
+
+.jim-picker-action.mud-button-root {
+    padding: 0 0.5rem;
+    min-width: 0;
+    font-size: 0.65rem;
+    line-height: 1.3rem;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 /* Reserves the expander column on rows without children, so every name starts at the same x. */

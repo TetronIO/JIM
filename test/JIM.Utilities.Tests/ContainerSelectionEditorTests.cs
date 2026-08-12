@@ -250,6 +250,19 @@ public class ContainerSelectionEditorTests
     }
 
     [Test]
+    public void CountExcluded_CountsExcludedContainersAtEveryDepth()
+    {
+        // The summary above the tree answers "what does this system import?", and a carve-out changes that answer.
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [Container("App1", excluded: true)]),
+            Container("Sales")
+        ]));
+
+        Assert.That(ContainerSelectionEditor.CountExcluded(partition), Is.EqualTo(2));
+    }
+
+    [Test]
     public void ClearSelection_DeselectsEveryContainerAndClearsCoverage()
     {
         var sales = Container("Sales");
@@ -497,6 +510,62 @@ public class ContainerSelectionEditorTests
             Assert.That(serviceAccounts.Included, Is.False);
             Assert.That(serviceAccounts.ExcludedByAncestor, Is.False);
         }
+    }
+
+    #endregion
+
+    #region Naming the Container that decided a row (#1255)
+
+    [Test]
+    public void DecidingAncestor_ForACoveredContainer_IsTheSelectionThatCoversIt()
+    {
+        var partition = PartitionWith(Container("Corp", selected: true, children: [Container("Sales")]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var deciding = ContainerSelectionEditor.DecidingAncestor(Child(partition, "Corp", "Sales"));
+
+        Assert.That(deciding?.Name, Is.EqualTo("Corp"));
+    }
+
+    [Test]
+    public void DecidingAncestor_ForAContainerInsideAnExclusion_IsTheExclusionRatherThanTheSelectionAboveIt()
+    {
+        // The row has to name what actually decided it. Naming Corp here would tell an administrator their objects
+        // are imported when the exclusion beneath it is what governs them.
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [Container("App1")])
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var app1 = Child(Child(partition, "Corp", "Service Accounts"), "App1");
+
+        Assert.That(ContainerSelectionEditor.DecidingAncestor(app1)?.Name, Is.EqualTo("Service Accounts"));
+    }
+
+    [Test]
+    public void DecidingAncestor_SkipsAnAncestorWhoseStatementReachesOnlyItsOwnLevel()
+    {
+        // A OneLevel statement reaches the objects held directly in that Container and no Container beneath it, so
+        // whatever reached it from above is still what governs its descendants.
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Regions", selected: true, scope: ConnectedSystemContainerScope.OneLevel, children: [Container("EMEA")])
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var emea = Child(Child(partition, "Corp", "Regions"), "EMEA");
+
+        Assert.That(ContainerSelectionEditor.DecidingAncestor(emea)?.Name, Is.EqualTo("Corp"));
+    }
+
+    [Test]
+    public void DecidingAncestor_WhereNothingAboveStatesAnything_IsNull()
+    {
+        var partition = PartitionWith(Container("Corp", children: [Container("Sales")]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        Assert.That(ContainerSelectionEditor.DecidingAncestor(Child(partition, "Corp", "Sales")), Is.Null);
     }
 
     #endregion
