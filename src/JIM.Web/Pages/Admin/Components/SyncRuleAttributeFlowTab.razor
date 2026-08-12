@@ -118,36 +118,19 @@
                     {
                         if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
                         {
-                            <MudTooltip Text="@($"Connected System: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                           Name="@source.ConnectedSystemAttribute.Name"
+                                           Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, source.ConnectedSystemAttribute.Type, source.ConnectedSystemAttribute.AttributePlurality)" />
                         }
                         else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
                         {
-                            <MudTooltip Text="@($"Metaverse: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
+                            <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                           Name="@source.MetaverseAttribute.Name"
+                                           Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, source.MetaverseAttribute.Type, source.MetaverseAttribute.AttributePlurality)" />
                         }
                         else if (!string.IsNullOrWhiteSpace(source.Expression))
                         {
-                            <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium" Class="jim-expr-chip">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
-                                </MudChip>
-                            </MudTooltip>
+                            <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
                         }
                     }
                 </MudTd>
@@ -156,25 +139,15 @@
                     <div class="d-flex align-center flex-wrap">
                         @if (SyncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
                         {
-                            <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
+                            <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                           Name="@context.TargetMetaverseAttribute.Name"
+                                           Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, context.TargetMetaverseAttribute.Type, context.TargetMetaverseAttribute.AttributePlurality)" />
                         }
                         else if (SyncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
                         {
-                            <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                           Name="@context.TargetConnectedSystemAttribute.Name"
+                                           Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, context.TargetConnectedSystemAttribute.Type, context.TargetConnectedSystemAttribute.AttributePlurality)" />
                             @if (context.InitialExportOnly)
                             {
                                 <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
@@ -260,14 +233,9 @@
                     @if (SyncRule.Direction == SyncRuleDirection.Import)
                     {
                         <div class="d-flex align-center flex-wrap">
-                            <MudChip T="string" Size="Size.Medium">
-                                <AvatarContent>
-                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
-                            </MudChip>
+                            <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                           Name="@attributeFlowRule.TargetMetaverseAttribute?.Name"
+                                           Tooltip="@DescribeMetaverseAttribute(attributeFlowRule.TargetMetaverseAttribute)" />
 
                             <MudText Class="mud-text-secondary mx-1">→</MudText>
 
@@ -275,25 +243,13 @@
                             {
                                 if (source.ConnectedSystemAttribute != null)
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                   Name="@source.ConnectedSystemAttribute.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, source.ConnectedSystemAttribute.Type, source.ConnectedSystemAttribute.AttributePlurality)" />
                                 }
                                 else if (!string.IsNullOrWhiteSpace(source.Expression))
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
                                 }
 
                                 <!-- some thought needs to be given to how we handle specifying constant values -->
@@ -307,25 +263,13 @@
                             {
                                 if (source.MetaverseAttribute != null)
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                   Name="@source.MetaverseAttribute.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, source.MetaverseAttribute.Type, source.MetaverseAttribute.AttributePlurality)" />
                                 }
                                 else if (!string.IsNullOrWhiteSpace(source.Expression))
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
                                 }
 
                                 <!-- some thought needs to be given to how we handle specifying constant values -->
@@ -333,14 +277,9 @@
 
                             <MudText Class="mud-text-secondary mx-1">→</MudText>
 
-                            <MudChip T="string" Size="Size.Medium">
-                                <AvatarContent>
-                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>
-                            </MudChip>
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                           Name="@attributeFlowRule.TargetConnectedSystemAttribute?.Name"
+                                           Tooltip="@DescribeConnectedSystemAttribute(attributeFlowRule.TargetConnectedSystemAttribute)" />
 
                             @if (attributeFlowRule.InitialExportOnly)
                             {
@@ -624,6 +563,20 @@
 </MudDialog>
 
 @code {
+    /// <summary>
+    /// Tooltip for a Metaverse Attribute that the markup reaches through a nullable navigation. Falls back to the
+    /// chip's own default when the navigation is not loaded, rather than showing a tooltip asserting a data type
+    /// nobody read.
+    /// </summary>
+    private static string? DescribeMetaverseAttribute(MetaverseAttribute? attribute) =>
+        attribute == null ? null : Helpers.DescribeAttribute(AttributeChipKind.Metaverse, attribute.Type, attribute.AttributePlurality);
+
+    /// <summary>
+    /// The Connected System sibling of <see cref="DescribeMetaverseAttribute"/>.
+    /// </summary>
+    private static string? DescribeConnectedSystemAttribute(ConnectedSystemObjectTypeAttribute? attribute) =>
+        attribute == null ? null : Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, attribute.Type, attribute.AttributePlurality);
+
     [Parameter]
     public SyncRule SyncRule { get; set; } = null!;
 

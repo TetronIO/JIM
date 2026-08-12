@@ -13,6 +13,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Logic;
 using JIM.Utilities;
+using JIM.Web.Shared;
 using JIM.Web.Causality;
 using JIM.Web.Models;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -35,6 +36,21 @@ public enum ExternalIdStatus
 
 public static class Helpers
 {
+    /// <summary>
+    /// Describes an attribute for an <c>AttributeChip</c> tooltip: which side of the Metaverse it belongs to, its
+    /// data type and its plurality.
+    /// </summary>
+    /// <remarks>
+    /// Built here rather than inline so the Attribute Flow tab's eleven chips cannot drift apart again; two of its
+    /// clusters previously disagreed, one carrying this detail and the other only a generic label.
+    /// </remarks>
+    public static string DescribeAttribute(AttributeChipKind kind, AttributeDataType type, AttributePlurality plurality)
+    {
+        var side = kind == AttributeChipKind.Metaverse ? "Metaverse" : "Connected System";
+        var valued = plurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued";
+        return $"{side}: {type.ToString().SplitOnCapitalLetters()}, {valued}";
+    }
+
     /// <summary>
     /// Converts a string to a format that can be used as a Url parameter.
     /// </summary>
