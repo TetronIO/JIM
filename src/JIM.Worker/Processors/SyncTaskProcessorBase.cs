@@ -1436,10 +1436,17 @@ public abstract class SyncTaskProcessorBase
         // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
-            // Get the inbound Synchronisation Rules for this CSO type
-            var inboundSyncRules = activeSyncRules
-                .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
-                .ToList();
+            // Get the inbound Synchronisation Rules for this CSO type that this CSO is in scope for (#1199).
+            // Scope is per rule, not per Connected System: a system may hold several import rules over the same
+            // object type with different Scoping Criteria, which is the mechanism behind fine-grained authority
+            // (a narrowly scoped rule taking authority for a subset of objects; see the worked example in
+            // engineering/plans/doing/ATTRIBUTE_PRIORITY.md). Flowing every rule regardless of its own scope
+            // would let a rule the object is explicitly excluded from contribute anyway, which both corrupts the
+            // Attribute Priority resolution for that attribute and silently ignores the administrator's scope.
+            // inScopeImportRules is already filtered to this CSO's type and direction (it derives from
+            // importSyncRules above) and treats an unscoped rule as in scope, so the common single-rule
+            // topology is unaffected.
+            var inboundSyncRules = inScopeImportRules;
 
             // process Synchronisation Rules to see if we need to flow any attribute updates from the CSO to the MVO.
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
@@ -4141,10 +4148,10 @@ public abstract class SyncTaskProcessorBase
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
 
-        var contestedAttributeIds = recalledAttributeIds
+        var multiContributorAttributeIds = recalledAttributeIds
             .Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1)
             .ToList();
-        if (contestedAttributeIds.Count == 0)
+        if (multiContributorAttributeIds.Count == 0)
             return;
 
         // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
@@ -4160,7 +4167,7 @@ public abstract class SyncTaskProcessorBase
         var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
         var seen = new HashSet<(Guid CsoId, int RuleId)>();
 
-        foreach (var attributeId in contestedAttributeIds)
+        foreach (var attributeId in multiContributorAttributeIds)
         {
             // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
             // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.

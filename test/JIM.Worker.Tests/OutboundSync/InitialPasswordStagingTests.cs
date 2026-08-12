@@ -147,6 +147,47 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
+    /// The staged expiry follows the Connected System's own time to live, so a system known to be going out of
+    /// service for longer than a week can be given a window that outlasts the outage.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SystemWithATimeToLive_StagesTheExpiryAgainstItAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        system.InitialPasswordTimeToLive = TimeSpan.FromDays(30);
+
+        var before = DateTime.UtcNow;
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+        var after = DateTime.UtcNow;
+
+        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        Assert.That(staged.ExpiresAt, Is.InRange(before.AddDays(30), after.AddDays(30)));
+    }
+
+    /// <summary>
+    /// A Connected System that says nothing keeps the seven days every deployment has had, so upgrading changes
+    /// nothing until somebody sets a value.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SystemWithNoTimeToLive_StagesTheExpiryAgainstTheDefaultAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        var before = DateTime.UtcNow;
+        await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+        var after = DateTime.UtcNow;
+
+        var staged = SyncRepo.PendingInitialPasswords.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(system.InitialPasswordTimeToLive, Is.Null);
+            Assert.That(staged.ExpiresAt, Is.InRange(
+                before.Add(PendingInitialPassword.DefaultTimeToLive),
+                after.Add(PendingInitialPassword.DefaultTimeToLive)));
+        }
+    }
+
+    /// <summary>
     /// A Synchronisation Rule that provisions but does not ask for an initial password stages nothing at all.
     /// <para>
     /// This is what keeps the work list proportional to the deployments using the feature rather than to how

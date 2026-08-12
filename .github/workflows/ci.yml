@@ -29,6 +29,13 @@ jobs:
     - name: Test .NET
       run: dotnet test JIM.sln --no-build --verbosity normal
 
+    # Every source file must carry the Tetron copyright notice. .editorconfig
+    # only ever covered .cs (and only as a suggestion), so this is the gate for
+    # .razor, .ps1, .psm1, .psd1 and .sh.
+    - name: Lint copyright headers
+      shell: pwsh
+      run: pwsh -File ./scripts/Lint-CopyrightHeaders.ps1
+
     # PowerShell Pester Tests for the JIM PowerShell module
     - name: Install Pester
       shell: pwsh
@@ -306,7 +313,7 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@a2983b8bed1923f44751c5c43237f479442827b3  # v3.37.4
+      uses: github/codeql-action/upload-sarif@c4dd10e44af883a891fe31ced449bcb4a6728b9b  # v3.37.6
       with:
         sarif_file: trivy-results.sarif
         # Category is keyed by image repository (stable), not Dockerfile line

@@ -17,8 +17,9 @@ namespace JIM.Web.Models.Api;
 /// way that carries it.
 /// </para>
 /// <para>
-/// <b>Carries no password, and never will.</b> Passwords are generated at the moment they are set and are not
-/// stored, so there is nothing here to return.
+/// <b>Carries no password.</b> A generated password is produced at the moment it is set and stored nowhere; the
+/// one static password JIM does store (#1273) is write-only on every surface, so this reports only that one
+/// exists and when it last changed.
 /// </para>
 /// </summary>
 public class SyncRuleInitialPasswordResponse
@@ -49,6 +50,25 @@ public class SyncRuleInitialPasswordResponse
     /// Whether the account is enabled once the password is set.
     /// </summary>
     public bool EnableAccount { get; set; }
+
+    /// <summary>
+    /// Whether one password is stored for every account this rule provisions.
+    /// <para>
+    /// The password itself is never returned, so this and <see cref="StaticPasswordSetAt"/> are what a caller has
+    /// to work with: enough to tell that a rule set to the static source is not going to park everything, and
+    /// enough to script a rotation check.
+    /// </para>
+    /// </summary>
+    public bool StaticPasswordSet { get; set; }
+
+    /// <summary>
+    /// When the static password was last changed, in UTC, or null where none is set.
+    /// <para>
+    /// Reported precisely because the password is not. A shared password wants changing whenever somebody who
+    /// knew it leaves, and nothing else in JIM can say how long the current one has been in use.
+    /// </para>
+    /// </summary>
+    public DateTime? StaticPasswordSetAt { get; set; }
 
     /// <summary>
     /// How many accounts this rule provisioned are waiting on a change to these settings, and what the target
@@ -94,6 +114,8 @@ public class SyncRuleInitialPasswordResponse
             CustomPolicy = PasswordGenerationPolicyDto.FromEntity(entity.CustomPolicy),
             ExpiryBehaviour = entity.ExpiryBehaviour,
             EnableAccount = entity.EnableAccount,
+            StaticPasswordSet = !string.IsNullOrEmpty(entity.StaticPasswordEncryptedValue),
+            StaticPasswordSetAt = entity.StaticPasswordSetAt,
             ParkedReasons = parkedReasons?.Select(InitialPasswordRejectionDto.FromEntity).ToList() ?? [],
             ParkedAccountCount = attention?.ParkedCount ?? 0,
             ExpiredAccountCount = attention?.ExpiredCount ?? 0
@@ -170,6 +192,23 @@ public class UpdateSyncRuleInitialPasswordRequest
     /// Whether the account is enabled once the password is set.
     /// </summary>
     public bool? EnableAccount { get; set; }
+
+    /// <summary>
+    /// The one password to set on every account this Synchronisation Rule provisions, used when <c>Source</c> is
+    /// <c>Static</c>.
+    /// <para>
+    /// <b>Write-only.</b> It is stored encrypted and cannot be shown to anybody again; the response reports only
+    /// that one is set and when. Omit it (or send null) to leave the stored password unchanged, which is what
+    /// makes changing another setting safe: re-encrypting an unchanged password would read as a change and
+    /// release every account parked against this rule for nothing.
+    /// </para>
+    /// <para>
+    /// <b>Not recommended.</b> Every account the rule provisions shares this password until each person changes
+    /// it, so anybody who learns of this can sign in as any new starter who has not.
+    /// </para>
+    /// </summary>
+    [StringLength(256, MinimumLength = 4)]
+    public string? StaticPassword { get; set; }
 
     /// <summary>
     /// An optional reason for the change, recorded against this Synchronisation Rule's change history.

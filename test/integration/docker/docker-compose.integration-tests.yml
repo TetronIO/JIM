@@ -190,13 +190,15 @@ services:
           cpus: ${SAMBA_TARGET_CPUS_RESERVED:-0.5}
           memory: ${SAMBA_TARGET_MEMORY_RESERVED:-512M}
 
-  # Phase 2 - Scenario 4: Multi-Source (SQL Server - HRIS A)
+  # Phase 2 - Scenario 16: JIM SQL Connector matrix (Microsoft SQL Server provider)
   sqlserver-hris-a:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver-hris-a
     environment:
       - ACCEPT_EULA=Y
-      - SA_PASSWORD=Test@123!
+      # MSSQL_SA_PASSWORD is the supported name; the unprefixed SA_PASSWORD is deprecated and the
+      # container logs a warning for it on every start.
+      - MSSQL_SA_PASSWORD=${SQL_SA_PASSWORD:-Test@123!}
       - MSSQL_PID=Developer
     # No ports exposed - internal to Docker network only for testing
     volumes:
@@ -206,19 +208,44 @@ services:
     profiles:
       - phase2
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "Test@123!", "-Q", "SELECT 1"]
-      interval: 30s
+      # The 2022 image ships mssql-tools18, so /opt/mssql-tools/bin/sqlcmd does not exist, and sqlcmd is
+      # not on PATH at all; the fully qualified tools18 path is the only one that resolves. -C trusts the
+      # self-signed certificate SQL Server generates for itself, which tools18 refuses by default (it
+      # encrypts by default, where the older tools did not), so without it the check fails on every
+      # interval no matter how healthy the server is.
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-C", "-S", "localhost", "-U", "sa", "-P", "Test@123!", "-Q", "SELECT 1"]
+      interval: 10s
       timeout: 10s
-      retries: 5
+      retries: 10
       start_period: 60s
+    # Sized for the Scenario 16 scale run (500,000 rows). SQL Server refuses to start with less than
+    # 2GB and pages hard against a 500,000-row keyset scan at that floor.
+    deploy:
+      resources:
+        limits:
+          cpus: ${SQLSERVER_CPUS:-4.0}
+          memory: ${SQLSERVER_MEMORY:-6G}
+        reservations:
+          cpus: ${SQLSERVER_CPUS_RESERVED:-1.0}
+          memory: ${SQLSERVER_MEMORY_RESERVED:-2G}
 
-  # Phase 2 - Scenario 4: Multi-Source (Oracle - HRIS B)
+  # Phase 2 - Scenario 16: JIM SQL Connector matrix (Oracle Database provider)
+  #
+  # Oracle Database Free 23ai, not the retired Express 21c image. Free 23ai pulls anonymously from
+  # Oracle's own registry (no docker login, no licence click-through), so no third-party Docker Hub
+  # redistribution is needed and the image is Oracle's own build. Note what changes from 21c XE:
+  # the CDB service is FREE rather than XE, and the pluggable database JIM actually connects to is
+  # FREEPDB1. Connect to the PDB, never the CDB: application schemas live in the PDB, and a CDB
+  # connection cannot see them.
   oracle-hris-b:
-    image: container-registry.oracle.com/database/express:21c-slim
+    image: container-registry.oracle.com/database/free:23.9.0.0
     container_name: oracle-hris-b
     environment:
-      - ORACLE_PWD=Test@123!
+      - ORACLE_PWD=${ORACLE_SYS_PASSWORD:-Test@123!}
       - ORACLE_CHARACTERSET=AL32UTF8
+      # Named explicitly rather than left to the image's default so the service name the scenario
+      # connects to is stated in one place instead of inferred from the image's conventions.
+      - ORACLE_PDB=FREEPDB1
     # No ports exposed - internal to Docker network only for testing
     volumes:
       - oracle-data:/opt/oracle/oradata
@@ -227,13 +254,36 @@ services:
     profiles:
       - phase2
     healthcheck:
-      test: ["CMD", "sh", "-c", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s sys/Test@123!@localhost/XE as sysdba"]
-      interval: 60s
+      # The image's own status script, deliberately in preference to a hand-written sqlplus one-liner.
+      # It authenticates as SYSDBA through operating-system authentication (`sqlplus -s /`), so no
+      # password appears in the healthcheck at all: that is the durable fix for the credential quoting
+      # the previous check got wrong (the password contains '@', which EZConnect reads as the
+      # host separator, and '!', which some shells expand as history). It also checks more than a
+      # one-liner can, failing while the pluggable database is still MOUNTED rather than open READ
+      # WRITE, which is precisely the window in which a connection attempt would fail confusingly.
+      test: ["CMD-SHELL", "/opt/oracle/checkDBStatus.sh >/dev/null || exit 1"]
+      interval: 15s
       timeout: 30s
       retries: 10
-      start_period: 300s
+      # First start creates the database from scratch, which is minutes rather than seconds. Subsequent
+      # starts reuse the oracle-data volume and are far quicker, but the slow path is what has to fit.
+      start_period: 600s
+    # Oracle needs materially more than the directory containers, and 23ai refuses to start under
+    # about 2GB. The scale run (500,000 rows) is what the upper limit is sized for.
+    deploy:
+      resources:
+        limits:
+          cpus: ${ORACLE_CPUS:-4.0}
+          memory: ${ORACLE_MEMORY:-8G}
+        reservations:
+          cpus: ${ORACLE_CPUS_RESERVED:-1.0}
+          memory: ${ORACLE_MEMORY_RESERVED:-2G}
+    # Oracle uses System V shared memory for the SGA and Docker's 64MB default /dev/shm is far too
+    # small; the instance fails to start with ORA-00845 without this.
+    shm_size: 2gb
 
-  # Phase 2 - Scenario 5: Database Target
+  # Phase 2 - PostgreSQL, staged for the JIM SQL Connector's priority 2 providers. Not used by
+  # Scenario 16, which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
   postgres-test:
     image: postgres:16
     container_name: postgres-target
@@ -350,7 +400,8 @@ services:
           cpus: ${OPENLDAP_PRIMARY_CPUS_RESERVED:-0.5}
           memory: ${OPENLDAP_PRIMARY_MEMORY_RESERVED:-512M}
 
-  # Phase 2 - MySQL testing
+  # Phase 2 - MySQL, staged for the JIM SQL Connector's priority 2 providers. Not used by Scenario 16,
+  # which covers the priority 1 providers (Microsoft SQL Server and Oracle Database).
   mysql-test:
     image: mysql:8
     container_name: mysql-test

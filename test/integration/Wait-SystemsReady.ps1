@@ -148,7 +148,8 @@ fi
     }
 )
 
-# Phase 2 adds these systems
+# Phase 2 adds these systems. All four carry healthchecks in the compose file, so health status is the
+# readiness signal for each and none needs an additional check on top.
 $phase2Systems = @(
     @{
         Name = "sqlserver-hris-a"
@@ -157,8 +158,23 @@ $phase2Systems = @(
         AdditionalCheck = $null
     },
     @{
+        # Oracle is the slow one: its healthcheck waits for the pluggable database to open READ WRITE,
+        # and a first start against an empty volume creates the database before that can happen. The
+        # default -TimeoutSeconds 600 is enough for a warm start; pass more for a cold one.
+        Name = "oracle-hris-b"
+        Description = "Oracle Database Free HRIS B"
+        HasHealthCheck = $true
+        AdditionalCheck = $null
+    },
+    @{
         Name = "postgres-target"
         Description = "PostgreSQL Target"
+        HasHealthCheck = $true
+        AdditionalCheck = $null
+    },
+    @{
+        Name = "mysql-test"
+        Description = "MySQL Test"
         HasHealthCheck = $true
         AdditionalCheck = $null
     }

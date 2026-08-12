@@ -2,10 +2,10 @@
 @using JIM.Models.Enums
 @using JIM.Utilities
 
-@if (Changes == null || !Changes.Any())
-
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@if (Changes == null || !Changes.Any())
 {
     <MudText Class="mud-text-secondary pa-1">No change history available.</MudText>
 }

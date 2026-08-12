@@ -510,6 +510,155 @@ function Get-DirectoryConfig {
     }
 }
 
+function Get-DatabaseConfig {
+    <#
+    .SYNOPSIS
+        Get provider-specific configuration for the JIM SQL Connector integration tests
+
+    .DESCRIPTION
+        The Get-DirectoryConfig analogue for databases. Returns a hashtable carrying everything a
+        Scenario 16 setup or scenario script needs to talk to one database server: how to reach it from
+        inside the Docker network (which is what JIM uses), how to run SQL against it from the test host
+        (which is what the seeder uses), and the dialect's spellings for the column types the matrix
+        deliberately exercises.
+
+        Parameterising by provider is what lets one scenario implementation run once per supported
+        database server, which is the PRD's Testing Requirements contract: adding a provider extends the
+        matrix rather than duplicating scenario code.
+
+    .PARAMETER Provider
+        Which database server to configure for (SqlServer or Oracle). These are the connector's
+        priority 1 providers; PostgreSQL and MySQL are staged in the compose file but not yet covered.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("SqlServer", "Oracle")]
+        [string]$Provider
+    )
+
+    # The password every integration test container shares. It contains '@' and '!' deliberately: a
+    # credential that survives connect-string parsing and shell history expansion here is one that will
+    # survive a customer's, and the old Oracle healthcheck's failure on exactly this password is why
+    # those characters are worth keeping rather than quietly simplifying away.
+    $password = "Test@123!"
+
+    $configs = @{
+        SqlServer = @{
+            Provider            = "SqlServer"
+            DisplayName         = "Microsoft SQL Server"
+            ContainerName       = "sqlserver-hris-a"
+            ComposeProfiles     = @("phase2")
+
+            # The host JIM connects to, which is the container's name on jim-network. No port is
+            # published to the test host; everything reaches these containers over that network.
+            Host                = "sqlserver-hris-a"
+            Port                = 1433
+
+            # The Database Type drop-down value, matching SqlConnectorConstants.DatabaseTypeSqlServer.
+            DatabaseTypeSetting = "Microsoft SQL Server"
+            DatabaseName        = "JIMTEST"
+            ServiceName         = $null
+            Username            = "sa"
+            Password            = $password
+            Schema              = "hr"
+
+            # How the seeder runs a script inside the container. The 2022 image ships mssql-tools18 only
+            # (the unsuffixed path does not exist and sqlcmd is not on PATH), and tools18 encrypts by
+            # default, so -C is required to accept the server's self-signed certificate. -b makes
+            # sqlcmd exit non-zero on a SQL error, without which a failed seed looks like a success.
+            SqlCommand          = @("/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", $password)
+            ScriptArgument      = "-i"
+
+            # Dialect spellings for the column types the matrix exercises. Kept here so the seeder's
+            # table definitions differ in one place rather than throughout.
+            Types = @{
+                Anchor          = "int IDENTITY(1,1)"
+                NaturalAnchor   = "nvarchar(32)"
+                Text            = "nvarchar(100)"
+                Integer         = "int"
+                BigInteger      = "bigint"
+                Decimal         = "decimal(9,4)"
+                Boolean         = "bit"
+                ZonelessDate    = "datetime2(3)"
+                OffsetDate      = "datetimeoffset(3)"
+                Guid            = "uniqueidentifier"
+                Binary          = "varbinary(64)"
+            }
+
+            # SQL Server has no third date/time shape to test; Oracle does, and it is the one the matrix
+            # cares most about. Null means "this provider has no such column".
+            LocalZoneDateColumn = $null
+            GeneratedKeyStyle   = "Identity"
+        }
+
+        Oracle = @{
+            Provider            = "Oracle"
+            DisplayName         = "Oracle Database"
+            ContainerName       = "oracle-hris-b"
+            ComposeProfiles     = @("phase2")
+
+            Host                = "oracle-hris-b"
+            Port                = 1521
+
+            DatabaseTypeSetting = "Oracle Database"
+            DatabaseName        = $null
+
+            # Free 23ai names its pluggable database FREEPDB1; the container database is FREE. Connect
+            # to the pluggable database: application schemas live there, and a container-database
+            # connection cannot see them.
+            ServiceName         = "FREEPDB1"
+            Username            = "JIMTEST"
+            Password            = $password
+            Schema              = "JIMTEST"
+
+            # The password is double-quoted inside the connect string because it contains '@', which
+            # EZConnect otherwise reads as the separator before the host. Getting this wrong is what
+            # made the original Oracle healthcheck fail on every interval.
+            SqlCommand          = @("sqlplus", "-s", "system/`"$password`"@//localhost:1521/FREEPDB1")
+            ScriptArgument      = "@"
+
+            Types = @{
+                Anchor          = "NUMBER(10)"
+                NaturalAnchor   = "VARCHAR2(32)"
+                Text            = "VARCHAR2(100)"
+                Integer         = "NUMBER(10)"
+                BigInteger      = "NUMBER(19)"
+
+                # Precision and scale are stated deliberately. ODP.NET chooses the CLR type it returns
+                # from a NUMBER's declared precision and scale, not from the value, so NUMBER(9,4) and
+                # NUMBER(5,2) come back as genuinely different types.
+                Decimal         = "NUMBER(9,4)"
+
+                # Mapped to Boolean only when the Connected System opts in via "Treat NUMBER(1) Columns
+                # as Boolean"; Decimal otherwise. The matrix sets that option.
+                Boolean         = "NUMBER(1)"
+                ZonelessDate    = "TIMESTAMP(3)"
+                OffsetDate      = "TIMESTAMP(3) WITH TIME ZONE"
+
+                # Mapped to Guid only when the Connected System opts in via "Treat RAW(16) Columns as
+                # Guid"; Binary otherwise. The matrix sets that option.
+                Guid            = "RAW(16)"
+                Binary          = "RAW(64)"
+            }
+
+            # Oracle's third date/time shape, and the one the matrix exists to pin down. Its catalogue
+            # name reads as though it carried an offset, but ODP.NET returns a zoneless DateTime for it,
+            # already converted into the session's time zone. The connector therefore classifies it as
+            # zoneless in both directions and pins the session to the Connected System's Database Time
+            # Zone as each connection opens; those two together are what make a value written here read
+            # back as the same instant, whichever host the Worker happens to run on.
+            LocalZoneDateColumn = "TIMESTAMP(3) WITH LOCAL TIME ZONE"
+            GeneratedKeyStyle   = "Sequence"
+        }
+    }
+
+    if (-not $configs.ContainsKey($Provider)) {
+        throw "Unknown database provider: $Provider. Valid values: SqlServer, Oracle"
+    }
+
+    return $configs[$Provider]
+}
+
 # Script-level cache for name data (loaded once)
 $script:TestNameData = $null
 

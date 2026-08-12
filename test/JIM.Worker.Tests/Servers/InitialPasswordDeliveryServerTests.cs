@@ -8,6 +8,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Worker.Tests.Services;
 using Moq;
 using SyncRepository = JIM.InMemoryData.SyncRepository;
 
@@ -36,7 +37,7 @@ public class InitialPasswordDeliveryServerTests
     public void Setup()
     {
         _syncRepo = new SyncRepository();
-        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService());
+        _server = new InitialPasswordDeliveryServer(_syncRepo, new PasswordGeneratorService(), () => new TestCredentialProtection());
 
         _connectedSystem = new ConnectedSystem
         {
@@ -492,6 +493,237 @@ public class InitialPasswordDeliveryServerTests
 
     #endregion
 
+    #region assessing a configuration before it is saved
+
+    /// <summary>
+    /// A rule with no initial-password configuration at all has nothing that could be wrong with it. This is the
+    /// state every Synchronisation Rule starts in, so a caller must be able to ask about it without a guard.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithNoConfiguration_FindsNothingToFix()
+    {
+        Assert.That(_server.AssessConfiguration(null, null), Is.Empty);
+    }
+
+    /// <summary>
+    /// Settings that are switched off are not settings that will run, so they are nobody's problem to fix. A rule
+    /// carrying an unusable configuration it does not use must still be savable, or turning the feature off would
+    /// not be a way out of an unsatisfiable one.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithTheFeatureOff_FindsNothingToFix()
+    {
+        var configuration = new SyncRuleInitialPassword
+        {
+            Enabled = false,
+            Source = InitialPasswordSource.Custom,
+            CustomPolicy = UnsatisfiablePolicy()
+        };
+
+        Assert.That(_server.AssessConfiguration(configuration, null), Is.Empty);
+    }
+
+    /// <summary>
+    /// A rule set to give every account one password, with no password to give, would park every account it
+    /// provisions. That is the same class of fault as an unsatisfiable generator configuration and is reported
+    /// the same way, before it is saved rather than one account at a time afterwards.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithAStaticSourceAndNoPasswordSet_ReportsThatNoPasswordHasBeenSet()
+    {
+        var configuration = new SyncRuleInitialPassword { Enabled = true, Source = InitialPasswordSource.Static };
+
+        var problems = _server.AssessConfiguration(configuration, null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(problems, Has.Count.EqualTo(1));
+            Assert.That(problems[0], Does.Contain("no password has been set"));
+        }
+    }
+
+    /// <summary>
+    /// A stored password needs no re-checking: it was assessed when it was set, and it is never decrypted to be
+    /// looked at again.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithAStaticSourceAndAPasswordSet_FindsNothingToFix()
+    {
+        var configuration = new SyncRuleInitialPassword
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Static,
+            StaticPasswordEncryptedValue = "an-encrypted-value",
+            // Deliberately unsatisfiable, and deliberately ignored: no password is generated for a static source.
+            CustomPolicy = UnsatisfiablePolicy()
+        };
+
+        Assert.That(_server.AssessConfiguration(configuration, null), Is.Empty);
+    }
+
+    /// <summary>
+    /// A generator configuration that cannot produce a password is reported in the generator's own words, so the
+    /// administrator is told what to change rather than that something is wrong.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithAnUnsatisfiableCustomPolicy_ReportsWhatTheGeneratorFound()
+    {
+        var configuration = new SyncRuleInitialPassword
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Custom,
+            CustomPolicy = UnsatisfiablePolicy()
+        };
+
+        Assert.That(_server.AssessConfiguration(configuration, null), Is.Not.Empty);
+    }
+
+    /// <summary>
+    /// The discovered source generates from settings derived from the target, not from the custom policy sitting
+    /// beside it, so an unusable custom policy must not be reported against a rule that is not using it.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithTheDiscoveredSource_IgnoresTheCustomPolicyItIsNotUsing()
+    {
+        var configuration = new SyncRuleInitialPassword
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Discovered,
+            CustomPolicy = UnsatisfiablePolicy()
+        };
+
+        Assert.That(_server.AssessConfiguration(configuration, null), Is.Empty);
+    }
+
+    /// <summary>
+    /// The target's own policy is part of the question: a configuration JIM can satisfy but the target would
+    /// refuse parks every account just as surely as one JIM cannot satisfy at all.
+    /// </summary>
+    [Test]
+    public void AssessConfiguration_WithACustomPolicyTheTargetWouldRefuse_ReportsIt()
+    {
+        var configuration = new SyncRuleInitialPassword
+        {
+            Enabled = true,
+            Source = InitialPasswordSource.Custom,
+            CustomPolicy = new PasswordGenerationPolicy { Style = PasswordGenerationStyle.RandomCharacters, Length = 12 }
+        };
+
+        var problems = _server.AssessConfiguration(configuration, new ConnectedSystemPasswordPolicy { MinimumLength = 20 });
+
+        Assert.That(problems, Is.Not.Empty, "the target requires more characters than this configuration can produce");
+    }
+
+    /// <summary>
+    /// A passphrase of no words cannot be generated, and is the shortest way to express an unsatisfiable
+    /// configuration without depending on any particular target policy.
+    /// </summary>
+    private static PasswordGenerationPolicy UnsatisfiablePolicy() =>
+        new() { Style = PasswordGenerationStyle.Words, WordCount = 0 };
+
+    #endregion
+
+    #region Trimming terminal work records
+
+    /// <summary>
+    /// A Parked or Expired record is retained so somebody can see what happened, which means something has to
+    /// age it out; nothing did before, so a rule provisioning into a directory that refuses its passwords grew
+    /// one retained row per account, for ever.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_TerminalAndOlderThanTheCutoff_AreRemovedAsync()
+    {
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Parked, DateTime.UtcNow.AddDays(-100));
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Expired, DateTime.UtcNow.AddDays(-100));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(2));
+            Assert.That(_syncRepo.PendingInitialPasswords, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// A record still being worked is not history and is never trimmed, however old it is. An account owed a
+    /// password that a long outage has held up must still get one when the directory comes back.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_PendingRecord_IsLeftAloneAsync()
+    {
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Pending, DateTime.UtcNow.AddDays(-100));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.Zero);
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A terminal record inside the retention period is what an administrator is meant to be looking at, so it
+    /// stays until it has had its time.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_TerminalButWithinRetention_IsLeftAloneAsync()
+    {
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Parked, DateTime.UtcNow.AddDays(-2));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.Zero);
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// The batch cap bounds one pass, so a deployment that has accumulated a very large backlog drains it over
+    /// several housekeeping cycles rather than in one long-running transaction.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_MoreThanTheBatchCap_RemovesOnlyTheCapAsync()
+    {
+        for (var i = 0; i < 5; i++)
+            await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Expired, DateTime.UtcNow.AddDays(-100));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(2));
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(3));
+        }
+    }
+
+    /// <summary>
+    /// A record's age runs from the last thing that happened to it, not from when the account was provisioned.
+    /// A row parked for months and released and re-parked yesterday is current work, and trimming it would
+    /// discard the reason an administrator is about to read.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_AgeRunsFromTheLastAttempt_NotFromCreationAsync()
+    {
+        await SeedTerminalRecordAsync(
+            PendingInitialPasswordStatus.Parked,
+            lastAttemptedAt: DateTime.UtcNow.AddDays(-1),
+            createdAt: DateTime.UtcNow.AddDays(-200));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.Zero);
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
@@ -519,6 +751,36 @@ public class InitialPasswordDeliveryServerTests
         ]);
 
         return cso;
+    }
+
+    /// <summary>
+    /// Stages one account in the given state, with its clock wound back so the retention cutoff has something
+    /// to bite on.
+    /// </summary>
+    private async Task SeedTerminalRecordAsync(
+        PendingInitialPasswordStatus status,
+        DateTime? lastAttemptedAt = null,
+        DateTime? createdAt = null)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ConnectedSystemId,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+        _syncRepo.SeedConnectedSystemObject(cso);
+
+        await _syncRepo.StageInitialPasswordsAsync([
+            new PendingInitialPassword
+            {
+                ConnectedSystemObjectId = cso.Id,
+                ConnectedSystemId = ConnectedSystemId,
+                SyncRuleId = SyncRuleId,
+                Status = status,
+                CreatedAt = createdAt ?? lastAttemptedAt ?? DateTime.UtcNow,
+                LastAttemptedAt = lastAttemptedAt
+            }
+        ]);
     }
 
     /// <summary>

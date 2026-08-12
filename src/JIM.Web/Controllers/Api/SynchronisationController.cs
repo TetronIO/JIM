@@ -1442,6 +1442,9 @@ public class SynchronisationController(
         if (request.MaxExportParallelism.HasValue)
             connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
 
+        if (request.InitialPasswordTimeToLive.HasValue)
+            connectedSystem.InitialPasswordTimeToLive = request.InitialPasswordTimeToLive.Value;
+
         if (request.UnresolvedReferenceHandling.HasValue)
             connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
 
@@ -2247,6 +2250,49 @@ public class SynchronisationController(
 
     #endregion
 
+    #region Data Flow
+
+    /// <summary>
+    /// List attribute data flows
+    /// </summary>
+    /// <remarks>
+    /// A system-wide map of every attribute data flow, in both directions: what contributes each Metaverse Attribute,
+    /// and what each Connected System attribute is written from. One flow per Synchronisation Rule mapping.
+    /// <para>
+    /// An Import flow reads Connected System attributes and writes a single Metaverse Attribute, so it carries
+    /// <c>targetMetaverseAttribute*</c>, its <c>priority</c> and its <c>nullIsValue</c> flag. An Export flow reads
+    /// Metaverse Attributes and writes a single Connected System attribute, so it carries
+    /// <c>targetConnectedSystemAttribute*</c> and the owning rule's <c>enforceState</c>. The fields that do not apply
+    /// to a flow's direction are null rather than defaulted, so a caller never has to guess which are meaningful.
+    /// </para>
+    /// <para>
+    /// Import flows also carry <c>contributorCount</c>: how many flows contribute to the same Metaverse Attribute,
+    /// counted across the whole configuration rather than the filtered results, so filtering to one Connected System
+    /// does not make a shared attribute look like a sole contributor.
+    /// </para>
+    /// </remarks>
+    /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
+    /// <param name="filter">Direction, Connected System, object type, attribute and free-text filters.</param>
+    /// <returns>A paginated list of attribute data flows.</returns>
+    [HttpGet("data-flows", Name = "GetDataFlows")]
+    [ProducesResponseType(typeof(PaginatedResponse<DataFlowHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetDataFlowsAsync([FromQuery] PaginationRequest pagination, [FromQuery] DataFlowFilterRequest filter)
+    {
+        _logger.LogTrace("Requested attribute data flows (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
+
+        var flows = await _application.ConnectedSystems.GetDataFlowsAsync(filter.ToQuery());
+
+        var result = flows
+            .AsQueryable()
+            .ApplySortAndFilter(pagination)
+            .ToPaginatedResponse(pagination);
+
+        return Ok(result);
+    }
+
+    #endregion
+
     #region Synchronisation Rules
 
     /// <summary>
@@ -2499,6 +2545,10 @@ public class SynchronisationController(
     /// replaces the generator settings as a set rather than merging field by field, because they only make
     /// sense together.
     ///
+    /// `staticPassword` is write-only: it is encrypted before it is stored and is never returned. Omit it to
+    /// leave the stored password as it is. A rule using the `Static` source with no password stored is refused,
+    /// because delivery would park every account it provisions.
+    ///
     /// Only Export rules that provision can set an initial password: only an account JIM has just created has
     /// never had one, and resetting an existing account's password is not something a Synchronisation Rule does.
     /// </remarks>
@@ -2544,6 +2594,24 @@ public class SynchronisationController(
         if (request.EnableAccount.HasValue)
             configuration.EnableAccount = request.EnableAccount.Value;
 
+        // Assessed before it is stored, and against the same discovered policy the generator is checked against.
+        // One static password goes to every account this rule provisions, so a value the target refuses is not
+        // one account's problem, and the administrator sending it is the person who can fix it.
+        if (!string.IsNullOrEmpty(request.StaticPassword))
+        {
+            var suppliedAssessment = _application.PasswordGenerator.AssessSupplied(
+                request.StaticPassword,
+                await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId));
+
+            // The assessment's problems never quote the password, which is what makes them safe to return here.
+            if (!suppliedAssessment.IsUsable)
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"This password cannot be used: {string.Join(" ", suppliedAssessment.Problems)}"));
+
+            configuration.StaticPasswordEncryptedValue = _application.InitialPasswords.ProtectStaticPassword(request.StaticPassword);
+            configuration.StaticPasswordSetAt = DateTime.UtcNow;
+        }
+
         // Refused rather than silently accepted: a rule that never creates an account has nothing to give a
         // first password to, and storing the setting anyway would have it do nothing while reading as configured.
         if (configuration.Enabled && !(syncRule.Direction == SyncRuleDirection.Export && syncRule.ProvisionToConnectedSystem == true))
@@ -2551,19 +2619,14 @@ public class SynchronisationController(
                 "An initial password can only be set by an Export Synchronisation Rule that provisions to the Connected System."));
 
         // Checked here rather than left to fail per account: an unsatisfiable configuration parks every account
-        // it touches, and the administrator saving it is the person who can fix it.
-        if (configuration.Enabled)
-        {
-            var discoveredPolicy = await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId);
-            var policy = configuration.Source == InitialPasswordSource.Custom
-                ? configuration.CustomPolicy
-                : _application.PasswordGenerator.DeriveFrom(discoveredPolicy);
+        // it touches, and the administrator saving it is the person who can fix it. The same assessment gates
+        // the portal's Save, so the two surfaces accept and refuse exactly the same settings.
+        var problems = _application.InitialPasswords.AssessConfiguration(
+            configuration, await _application.ConnectedSystems.GetPasswordPolicyAsync(syncRule.ConnectedSystemId));
 
-            var assessment = _application.PasswordGenerator.Assess(policy, discoveredPolicy);
-            if (!assessment.IsUsable)
-                return BadRequest(ApiErrorResponse.BadRequest(
-                    $"These password settings cannot be satisfied: {string.Join(" ", assessment.Problems)}"));
-        }
+        if (problems.Count > 0)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"These password settings cannot be satisfied: {string.Join(" ", problems)}"));
 
         var apiKey = await GetCurrentApiKeyAsync();
         var success = apiKey != null

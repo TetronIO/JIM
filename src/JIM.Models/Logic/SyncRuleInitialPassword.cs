@@ -53,6 +53,41 @@ public class SyncRuleInitialPassword
     public PasswordGenerationPolicy CustomPolicy { get; set; } = new();
 
     /// <summary>
+    /// The password to set on every account this rule provisions, encrypted at rest, used when
+    /// <see cref="Source"/> is <see cref="InitialPasswordSource.Static"/>.
+    /// <para>
+    /// <b>This is the only password value JIM stores anywhere.</b> Every other password it handles is generated
+    /// at the moment it is delivered and dropped; a static password has to survive until the next account is
+    /// provisioned, so it cannot be. It is encrypted through <c>ICredentialProtectionService</c>, exactly as a
+    /// Connected System's bind credential is, and is never returned by the portal, the REST API or PowerShell.
+    /// Configuration change history records a keyed hash of it rather than the value.
+    /// </para>
+    /// <para>
+    /// <b>Replaced only when a new plaintext is supplied.</b> Encryption is non-deterministic, so re-encrypting
+    /// an unchanged password produces different ciphertext; a save that re-encrypted every time would read as a
+    /// change to <see cref="WouldDeliverTheSameAs"/> and release the accounts parked against this rule for
+    /// nothing. An empty password field on the way in therefore means "leave this as it is", which is also what
+    /// lets the field be write-only without a special case anywhere.
+    /// </para>
+    /// </summary>
+    public string? StaticPasswordEncryptedValue { get; set; }
+
+    /// <summary>
+    /// When the static password was last changed, or null where none has been set.
+    /// <para>
+    /// A shared password should be changed whenever somebody who knew it leaves, and nothing else in JIM can
+    /// say how long the current one has been in use. Reported by every surface precisely because the password
+    /// itself is not.
+    /// </para>
+    /// <para>
+    /// Deliberately not part of <see cref="WouldDeliverTheSameAs"/>: it records when a change happened rather
+    /// than being an input to what gets delivered, and it moves only when
+    /// <see cref="StaticPasswordEncryptedValue"/> does, which the comparison already notices.
+    /// </para>
+    /// </summary>
+    public DateTime? StaticPasswordSetAt { get; set; }
+
+    /// <summary>
     /// What should happen to the password once set: whether the account holder must choose a new one at first
     /// sign-in, whether it ages normally, or whether it never expires.
     /// <para>
@@ -96,6 +131,7 @@ public class SyncRuleInitialPassword
             Source = Source,
             ExpiryBehaviour = ExpiryBehaviour,
             EnableAccount = EnableAccount,
+            StaticPasswordEncryptedValue = StaticPasswordEncryptedValue,
             CustomPolicy = new PasswordGenerationPolicy
             {
                 Style = CustomPolicy.Style,
@@ -143,6 +179,13 @@ public class SyncRuleInitialPassword
 
         if (left.Enabled != right.Enabled || left.Source != right.Source ||
             left.ExpiryBehaviour != right.ExpiryBehaviour || left.EnableAccount != right.EnableAccount)
+            return false;
+
+        // Ciphertext, compared as an opaque string. That is sound only because the stored value is replaced
+        // exclusively when a new plaintext is supplied: encryption is non-deterministic, so re-encrypting an
+        // unchanged password on every save would make each one look like a change and release the parked
+        // accounts for nothing. Compared whatever the Source says, for the same reason the policy below is.
+        if (!string.Equals(left.StaticPasswordEncryptedValue, right.StaticPasswordEncryptedValue, StringComparison.Ordinal))
             return false;
 
         // Compared whatever the Source says, deliberately. An administrator can correct the custom settings

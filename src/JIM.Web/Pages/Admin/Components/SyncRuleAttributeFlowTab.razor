@@ -493,6 +493,54 @@
                         }
                     </MudSelect>
 
+                    @* ─── Attribute Priority context (#91, Surface 1: read-only; managed on the Object Type page) ─── *@
+                    @* The target is captured by the pattern rather than dereferenced, so the markup never reads *@
+                    @* through a nullable the analyser cannot see is guarded by the method above it. *@
+                    @if (ShowAttributePriorityContext() && _attributeFlowMapping.TargetMetaverseAttribute is { } targetAttribute)
+                    {
+                        var alreadyContributes = MappingAlreadyContributesToSelectedAttribute();
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+                            <MudText Typo="Typo.body1">
+                                @if (alreadyContributes)
+                                {
+                                    @($"More than one Synchronisation Rule contributes {targetAttribute.Name}. Its priority order decides which value wins.")
+                                }
+                                else
+                                {
+                                    @($"{targetAttribute.Name} already has contributors. This mapping is added at the lowest priority and will not win resolution until it is promoted.")
+                                }
+                            </MudText>
+                            <div class="mt-3">
+                                <AttributePriorityList MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
+                                                       MetaverseAttributeId="targetAttribute.Id"
+                                                       MetaverseAttributeName="@targetAttribute.Name"
+                                                       ReadOnly="true"
+                                                       HighlightMappingId="@(alreadyContributes ? _attributeFlowMapping.Id : null)"
+                                                       PendingContributorSystemName="@(alreadyContributes ? null : SyncRule.ConnectedSystem?.Name)"
+                                                       PendingContributorNullIsValue="_attributeFlowMapping.NullIsValue" />
+                            </div>
+                            <MudText Typo="Typo.body2" Class="mt-3">
+                                <MudLink Href="@($"/admin/schema/object-types/{SyncRule.MetaverseObjectTypeId}")" Target="_blank">
+                                    Manage priority on the @(SyncRule.MetaverseObjectType?.Name ?? "Metaverse") Object Type page
+                                </MudLink>
+                            </MudText>
+                        </MudAlert>
+                    }
+
+                    @* ─── Null is a value (#91) ─── *@
+                    <MudCheckBox T="bool" Dense="true" Class="mt-5"
+                        @bind-Value="_attributeFlowMapping.NullIsValue"
+                        Label="Null is a value" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        When this Synchronisation Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.
+                    </MudText>
+                    @if (_attributeFlowMapping.NullIsValue)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                            Wherever this Synchronisation Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.
+                        </MudAlert>
+                    }
+
                     @* ─── Inbound value processing (#843) ─── *@
                     @if (_attributeFlowMapping.TargetMetaverseAttribute?.Type == AttributeDataType.Text)
                     {
@@ -583,7 +631,63 @@
     public EventCallback OnChanged { get; set; }
 
     private bool _addAttributeFlowRuleDialogVisible;
-    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    // Medium rather than the default Small: the dialog carries the attribute priority list (#91 Surface 1), whose
+    // Connected System and Synchronisation Rule names wrap onto three lines each at 600px and are unreadable.
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium };
+
+    // ─── Attribute Priority context (#91 Surface 1) ───
+
+    /// <summary>Import contributor count per Metaverse attribute, so the dialog knows when priority is in play.</summary>
+    private Dictionary<int, int> _attributeContributorCounts = new();
+
+    /// <summary>The target this mapping had when the dialog opened; null for a new mapping.</summary>
+    private int? _originalTargetMetaverseAttributeId;
+
+    /// <summary>
+    /// Loads the per-attribute import contributor counts for this rule's Metaverse Object Type. One aggregate,
+    /// refreshed each time the dialog opens so it reflects mappings other rules have gained since the page loaded.
+    /// Import rules only; priority is an inbound concern.
+    /// </summary>
+    private async Task LoadAttributeContributorCountsAsync()
+    {
+        if (SyncRule.Direction != SyncRuleDirection.Import || SyncRule.MetaverseObjectTypeId <= 0)
+        {
+            _attributeContributorCounts = new Dictionary<int, int>();
+            return;
+        }
+
+        using var jim = JimFactory.Create();
+        _attributeContributorCounts = await jim.ConnectedSystems.GetAttributeContributorCountsAsync(SyncRule.MetaverseObjectTypeId);
+    }
+
+    /// <summary>
+    /// Whether the mapping being edited is already a persisted contributor to the attribute currently selected.
+    /// False for a new mapping, and false once an existing mapping is retargeted, because it is then arriving at a
+    /// list it is not yet part of.
+    /// </summary>
+    private bool MappingAlreadyContributesToSelectedAttribute()
+    {
+        var selected = _attributeFlowMapping?.TargetMetaverseAttribute?.Id;
+        return _isEditingAttributeFlow && selected.HasValue && _originalTargetMetaverseAttributeId == selected.Value;
+    }
+
+    /// <summary>
+    /// Whether to show the read-only priority context for the selected target attribute. It earns its space only
+    /// when priority actually decides something: another Synchronisation Rule already contributes to the attribute.
+    /// A mapping that is itself one of the counted contributors does not count towards that.
+    /// </summary>
+    private bool ShowAttributePriorityContext()
+    {
+        if (SyncRule.Direction != SyncRuleDirection.Import)
+            return false;
+
+        var selected = _attributeFlowMapping?.TargetMetaverseAttribute?.Id;
+        if (!selected.HasValue)
+            return false;
+
+        var contributors = _attributeContributorCounts.GetValueOrDefault(selected.Value);
+        return MappingAlreadyContributesToSelectedAttribute() ? contributors > 1 : contributors > 0;
+    }
     private SyncRuleMapping? _attributeFlowMapping;
     private IReadOnlyCollection<SyncRuleMappingSourcesType> _selectedMappingTypes = new List<SyncRuleMappingSourcesType>();
     private IReadOnlyCollection<AttributeDataType> _selectedDataTypes = new List<AttributeDataType>();
@@ -633,19 +737,27 @@
         _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
         _attributeFlowMappingSourceType = null;
         _isEditingAttributeFlow = false;
+        _originalTargetMetaverseAttributeId = null;
         await LoadStandardMappingHintsAsync();
+        await LoadAttributeContributorCountsAsync();
         _addAttributeFlowRuleDialogVisible = true;
     }
 
     private async Task HandleEditAttributeFlowRuleAsync(SyncRuleMapping mapping)
     {
         await LoadStandardMappingHintsAsync();
+        await LoadAttributeContributorCountsAsync();
         HandleEditAttributeFlowRule(mapping);
     }
 
     private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
     {
         _attributeFlowMapping = mapping;
+
+        // Remember what this mapping targeted when the dialog opened. The priority context has to distinguish a
+        // mapping that already sits in the attribute's list from one arriving at it, and the picker below mutates
+        // the mapping in place, so the persisted target is unrecoverable from the mapping itself once it changes.
+        _originalTargetMetaverseAttributeId = mapping.TargetMetaverseAttribute?.Id ?? mapping.TargetMetaverseAttributeId;
         _attributeFlowMappingSource = mapping.Sources.FirstOrDefault();
 
         var sourceType = mapping.GetSourceType();

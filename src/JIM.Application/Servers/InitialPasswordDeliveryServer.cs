@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Interfaces;
@@ -22,9 +23,10 @@ namespace JIM.Application.Servers;
 /// right granted or a directory brought back online is picked up by the next run that happens anyway.
 /// </para>
 /// <para>
-/// <b>No password value leaves this class, or is written anywhere.</b> Each one is generated at the moment of
-/// delivery, handed to the Connector, and dropped. What is recorded is that a password was owed, how many
-/// times JIM has tried, and what the target said when it refused.
+/// <b>No password value leaves this class, or is written anywhere.</b> A generated password is produced at the
+/// moment of delivery, handed to the Connector and dropped; a rule set to use one static password decrypts it
+/// here and drops it the same way. What is recorded is that a password was owed, how many times JIM has tried,
+/// and what the target said when it refused.
 /// </para>
 /// </summary>
 public class InitialPasswordDeliveryServer
@@ -40,12 +42,22 @@ public class InitialPasswordDeliveryServer
     public const int MaximumAccountsPerPass = 1000;
 
     private readonly ISyncRepository _syncRepo;
-    private readonly InitialPasswordDeliveryService _deliveryService;
+    private readonly IPasswordGeneratorService _passwordGenerator;
+    private readonly Func<ICredentialProtectionService> _credentialProtection;
 
-    internal InitialPasswordDeliveryServer(ISyncRepository syncRepository, IPasswordGeneratorService passwordGenerator)
+    /// <param name="credentialProtection">
+    /// How to reach credential protection, resolved when a pass runs rather than now. The hosts set
+    /// <see cref="JimApplication.CredentialProtection"/> after constructing the facade, so anything captured here
+    /// would capture the null that precedes it.
+    /// </param>
+    internal InitialPasswordDeliveryServer(
+        ISyncRepository syncRepository,
+        IPasswordGeneratorService passwordGenerator,
+        Func<ICredentialProtectionService> credentialProtection)
     {
         _syncRepo = syncRepository;
-        _deliveryService = new InitialPasswordDeliveryService(passwordGenerator);
+        _passwordGenerator = passwordGenerator;
+        _credentialProtection = credentialProtection;
     }
 
     /// <summary>
@@ -101,6 +113,11 @@ public class InitialPasswordDeliveryServer
             outstanding.Where(p => p.SyncRuleId.HasValue).Select(p => p.SyncRuleId!.Value).Distinct().ToList());
         var discoveredPolicy = await _syncRepo.GetDiscoveredPasswordPolicyAsync(connectedSystem.Id);
 
+        // Built per pass rather than held, because credential protection is only reachable once the host has set
+        // it, and built here rather than at the top so a pass with nothing to do never asks for it. The service
+        // holds no state, so this costs nothing.
+        var deliveryService = new InitialPasswordDeliveryService(_passwordGenerator, _credentialProtection());
+
         var delivered = new List<Guid>();
         var attempts = new List<PendingInitialPassword>();
 
@@ -129,7 +146,7 @@ public class InitialPasswordDeliveryServer
                     ? found
                     : null;
 
-                var outcome = await _deliveryService.DeliverAsync(
+                var outcome = await deliveryService.DeliverAsync(
                     passwordConnector, pending.ConnectedSystemObject, configuration, discoveredPolicy, cancellationToken);
 
                 Record(pending, outcome, result, delivered, attempts);
@@ -158,6 +175,76 @@ public class InitialPasswordDeliveryServer
     }
 
     /// <summary>
+    /// Encrypts the one password an administrator chose for every account a Synchronisation Rule provisions, ready
+    /// to be stored on the rule (issue #1273).
+    /// <para>
+    /// Here rather than at each surface so the portal, the REST API and PowerShell cannot encrypt it three
+    /// slightly different ways, and so no surface has to decide what to do when credential protection is not
+    /// reachable. The answer to that is never "store the plaintext", and keeping it in one place is what
+    /// guarantees it.
+    /// </para>
+    /// </summary>
+    /// <returns>The encrypted value to store. The plaintext is not retained.</returns>
+    public string ProtectStaticPassword(string password)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+
+        // Protect returns null only for a null or empty input, which the guard above has already ruled out.
+        return _credentialProtection().Protect(password)!;
+    }
+
+    /// <summary>
+    /// What is wrong with a Synchronisation Rule's initial-password settings, in language meant for the
+    /// administrator reading it. Empty means there is nothing to fix.
+    /// <para>
+    /// Asked before the settings are saved rather than left to fail per account: an unsatisfiable configuration
+    /// parks every account the rule provisions, and the administrator saving it is the person who can fix it.
+    /// </para>
+    /// <para>
+    /// Here rather than at each surface so that the portal and the REST API cannot disagree about what is
+    /// savable. They did: the API refused an unsatisfiable generator configuration while the portal saved it
+    /// happily, so the same settings were accepted or rejected depending on which surface you used.
+    /// </para>
+    /// </summary>
+    /// <param name="configuration">
+    /// The settings to assess, as they would be saved. Null, or settings that are switched off, have nothing that
+    /// could be wrong with them: a rule that will not deliver an initial password cannot fail to deliver one.
+    /// </param>
+    /// <param name="discoveredPolicy">
+    /// The password policy JIM discovered on the target, so that a configuration the target would refuse is
+    /// reported as well as one JIM itself cannot satisfy.
+    /// </param>
+    public IReadOnlyList<string> AssessConfiguration(
+        SyncRuleInitialPassword? configuration,
+        ConnectedSystemPasswordPolicy? discoveredPolicy)
+    {
+        if (configuration is not { Enabled: true })
+            return [];
+
+        // A stored static password is never decrypted to be looked at again, so the only question left about one
+        // is whether it is there. It was assessed against this same target policy when it was set.
+        if (configuration.Source == InitialPasswordSource.Static)
+            return string.IsNullOrEmpty(configuration.StaticPasswordEncryptedValue)
+                ? [StaticPasswordMissingProblem]
+                : [];
+
+        var policy = configuration.Source == InitialPasswordSource.Custom
+            ? configuration.CustomPolicy
+            : _passwordGenerator.DeriveFrom(discoveredPolicy);
+
+        return _passwordGenerator.Assess(policy, discoveredPolicy).Problems;
+    }
+
+    /// <summary>
+    /// What an administrator is told when a rule is set to use one password for every account and has none. Held
+    /// as a constant so the portal and the REST API say the same thing, and so a test can pin the wording that
+    /// tells somebody how to get out of it.
+    /// </summary>
+    public const string StaticPasswordMissingProblem =
+        "This Synchronisation Rule is set to use one password for every account it provisions, but no password " +
+        "has been set. Set one, or choose a different source.";
+
+    /// <summary>
     /// Sets a Synchronisation Rule's parked accounts retrying, and returns how many were released.
     /// <para>
     /// This is the other half of parking. A policy rejection stops the retry loop because the same generator
@@ -183,6 +270,33 @@ public class InitialPasswordDeliveryServer
                 "have been released and will be attempted again on its Connected System's next export run", released, syncRuleId);
 
         return released;
+    }
+
+    /// <summary>
+    /// Removes initial-password records that reached a terminal state long enough ago to have had their
+    /// retention period, and returns how many were removed.
+    /// <para>
+    /// Parked and Expired records are kept on purpose, so that an account provisioned without a working password
+    /// says so rather than disappearing. Kept for ever, though, they are unbounded growth: one row per account
+    /// a misconfigured Synchronisation Rule ever provisioned, in a table nobody is watching. This is the other
+    /// end of that decision, and it is deliberately the only thing that removes a record JIM did not resolve.
+    /// </para>
+    /// <para>
+    /// Called from housekeeping alongside the change-history trims, under its own retention period
+    /// (<see cref="Constants.SettingKeys.InitialPasswordRetentionPeriod"/>) and the shared cleanup batch size.
+    /// </para>
+    /// </summary>
+    /// <param name="olderThan">The retention cutoff; records last touched before this are eligible.</param>
+    /// <param name="maxRecords">The most to remove in one pass.</param>
+    public async Task<int> DeleteExpiredWorkRecordsAsync(DateTime olderThan, int maxRecords)
+    {
+        var deleted = await _syncRepo.DeleteTerminalInitialPasswordsAsync(olderThan, maxRecords);
+
+        if (deleted > 0)
+            Log.Information("DeleteExpiredWorkRecordsAsync: Removed {Count} initial-password records that had been " +
+                "parked or expired since before {OlderThan}", deleted, olderThan);
+
+        return deleted;
     }
 
     /// <summary>

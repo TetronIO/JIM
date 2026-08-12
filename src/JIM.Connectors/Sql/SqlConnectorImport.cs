@@ -325,10 +325,14 @@ internal sealed class SqlConnectorImport
         var changeLog = RequireChangeLog(plan);
         var keysetColumns = BuildChangeLogKeysetColumns(plan, changeLog);
 
-        var selectColumns = keysetColumns.Select(keysetColumn => keysetColumn.Name)
-            .Append(changeLog.ChangeTypeColumn)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        // The change log's own sequence and change-type columns are not part of the Connected System's
+        // schema, so JIM has no attribute type for them; its anchor columns carry the object type's own.
+        var readColumns = keysetColumns.Select(keysetColumn => new SqlReadColumn(keysetColumn.Name, keysetColumn.Type))
+            .Append(new SqlReadColumn(changeLog.ChangeTypeColumn, null))
+            .DistinctBy(readColumn => readColumn.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        var selectColumns = readColumns.Select(readColumn => readColumn.Name).ToList();
 
         var request = new SqlKeysetPageRequest
         {
@@ -342,7 +346,7 @@ internal sealed class SqlConnectorImport
             ChangeParameterName = watermark == null ? null : WatermarkParameterName
         };
 
-        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, selectColumns);
+        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, readColumns);
         var changes = CollapseChanges(plan, changeLog, rows, selectColumns);
 
         // A deletion has no row left to read, and a change type the configuration does not account for
@@ -531,7 +535,7 @@ internal sealed class SqlConnectorImport
                     command.Parameters.Add(_provider.CreateParameter(JoinParameterName(anchorIndex, columnIndex), batch[anchorIndex][columnIndex]));
             }
 
-            rows.AddRange(await ReadRowsAsync(command, plan.SelectColumns));
+            rows.AddRange(await ReadRowsAsync(command, plan.ReadColumns, plan.Name));
         }
 
         return rows;
@@ -614,7 +618,7 @@ internal sealed class SqlConnectorImport
             RelatedChangeSources = [.. relatedChanges.Select(relatedChange => relatedChange.Source)]
         };
 
-        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, plan.SelectColumns, relatedChanges);
+        var rows = await ReadDeltaPageAsync(plan, request, page, watermark, plan.ReadColumns, relatedChanges);
 
         var importObjects = BuildImportObjects(plan, rows, out var anchorKeys);
         await GatherRelatedAttributesAsync(plan, rows, importObjects, anchorKeys);
@@ -703,6 +707,13 @@ internal sealed class SqlConnectorImport
     /// divergence to hide behind the provider seam: an aggregate over a source is the same statement in
     /// both, built from the same quoting the seam already provides.
     /// </summary>
+    /// <remarks>
+    /// The value is read straight rather than through
+    /// <see cref="Providers.ISqlProvider.ConvertFromDriverValue"/>, and deliberately so. That seam exists
+    /// because ODP.NET answers a <i>bound parameter</i> with a wrapper struct of its own; a query result
+    /// is a different matter, and measured against Oracle Database Free 23ai this call answers with
+    /// ordinary CLR types. Routing it through the seam anyway would suggest the two cases were the same.
+    /// </remarks>
     private async Task<object?> ReadHighestValueAsync(string source, string column)
     {
         using var command = _provider.CreateCommand(_connection, $"SELECT MAX({_provider.QuoteIdentifier(column)}) FROM {source}");
@@ -855,7 +866,7 @@ internal sealed class SqlConnectorImport
         SqlKeysetPageRequest request,
         SqlDeltaPagePosition page,
         SqlDeltaValue? watermark,
-        IReadOnlyList<string> columns,
+        IReadOnlyList<SqlReadColumn> columns,
         IReadOnlyList<SqlRelatedChange>? relatedChanges = null)
     {
         using var command = _provider.CreateCommand(_connection, _provider.BuildKeysetPageCommandText(request));
@@ -870,7 +881,7 @@ internal sealed class SqlConnectorImport
         for (var index = 0; index < page.Position.Count; index++)
             command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindDeltaValue(plan, page.Position[index], "pagination token")));
 
-        return await ReadRowsAsync(command, columns);
+        return await ReadRowsAsync(command, columns, plan.Name);
     }
 
     /// <summary>
@@ -979,10 +990,12 @@ internal sealed class SqlConnectorImport
             .ToList();
 
         // The anchor is always read, whether or not it is selected: it orders the page and positions the
-        // next one.
-        var selectColumns = anchorColumns.Select(column => column.Name)
-            .Concat(attributes.Select(attribute => attribute.Name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        // next one. Each column is carried with the attribute type it maps to, because that is what
+        // decides how its value is read from the driver.
+        var readColumns = anchorColumns
+            .Concat(attributes)
+            .Select(column => new SqlReadColumn(column.Name, column.Type))
+            .DistinctBy(readColumn => readColumn.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         var relatedTables = configuration.RelatedTables
@@ -995,7 +1008,7 @@ internal sealed class SqlConnectorImport
                     : ResolveReferencedAnchorType(configuration, relatedTable.ReferencesObjectType, $"related table attribute '{relatedTable.AttributeName}'")))
             .ToList();
 
-        return new SqlImportPlan(configuration, anchorColumns, attributes, selectColumns, referenceColumns, relatedTables, composedAnchorName);
+        return new SqlImportPlan(configuration, anchorColumns, attributes, readColumns, referenceColumns, relatedTables, composedAnchorName);
     }
 
     private static AttributeDataType RequireAttributeType(
@@ -1105,25 +1118,30 @@ internal sealed class SqlConnectorImport
         for (var index = 0; index < page.LastAnchor.Count; index++)
             command.Parameters.Add(_provider.CreateParameter(AnchorParameterName(index), BindAnchorValue(plan, index, page.LastAnchor[index])));
 
-        return await ReadRowsAsync(command, plan.SelectColumns);
+        return await ReadRowsAsync(command, plan.ReadColumns, plan.Name);
     }
 
     /// <summary>
     /// Materialises a result set as rows in the caller's column order, so that everything downstream
     /// addresses a row by the position it asked for rather than by whatever ordinal the driver used.
     /// </summary>
-    private async Task<List<object?[]>> ReadRowsAsync(DbCommand command, IReadOnlyList<string> columns)
+    /// <remarks>
+    /// Each value is read as the attribute type its column maps to rather than as whatever CLR type the
+    /// driver inferred, which is what keeps an exact decimal exact; see <see cref="SqlValueReader"/>.
+    /// </remarks>
+    private async Task<List<object?[]>> ReadRowsAsync(DbCommand command, IReadOnlyList<SqlReadColumn> columns, string objectTypeName)
     {
         var rows = new List<object?[]>();
 
         using var reader = await command.ExecuteReaderAsync(_cancellationToken);
-        var ordinals = columns.Select(reader.GetOrdinal).ToArray();
+        var ordinals = columns.Select(column => reader.GetOrdinal(column.Name)).ToArray();
+        var values = new SqlValueReader(reader, objectTypeName);
 
         while (await reader.ReadAsync(_cancellationToken))
         {
             var row = new object?[ordinals.Length];
             for (var index = 0; index < ordinals.Length; index++)
-                row[index] = reader.IsDBNull(ordinals[index]) ? null : reader.GetValue(ordinals[index]);
+                row[index] = reader.IsDBNull(ordinals[index]) ? null : values.Read(ordinals[index], columns[index].Name, columns[index].Type);
 
             rows.Add(row);
         }
@@ -1308,13 +1326,41 @@ internal sealed class SqlConnectorImport
     }
 
     /// <summary>
-    /// Converts to decimal without routing through double, which would drop digits. FLOAT and REAL
-    /// columns are the exception the PRD documents: they are approximate binary types, so the conversion
-    /// from what the driver hands back is not bit-exact, and mapping them to Text instead would
-    /// reintroduce lexicographic comparison of numbers.
+    /// The last step of a Decimal column's value, and deliberately a narrow one.
     /// </summary>
-    private static decimal ToDecimal(object value) =>
-        value as decimal? ?? Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+    /// <remarks>
+    /// <para>
+    /// An exact numeric column has already been read as a decimal by <see cref="SqlValueReader"/>, so
+    /// this is a cast for it and nothing more. That is where the guarantee lives: not in this conversion,
+    /// which cannot recover digits a driver has already spent, but in having asked the driver for the
+    /// column as a decimal in the first place.
+    /// </para>
+    /// <para>
+    /// The conversion therefore only does work for the approximate binary types (FLOAT, REAL,
+    /// BINARY_FLOAT, BINARY_DOUBLE), which no driver will hand over as a decimal because they are not
+    /// one. The PRD documents that their round trip is not bit-exact; mapping them to Text instead would
+    /// reintroduce lexicographic comparison of numbers, which is what the Decimal attribute type was
+    /// introduced to fix.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="OverflowException">The value is beyond what a CLR decimal holds, reported with the same advice an exact numeric column's overflow carries.</exception>
+    private static decimal ToDecimal(object value)
+    {
+        if (value is decimal alreadyExact)
+            return alreadyExact;
+
+        try
+        {
+            return Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+        }
+        catch (OverflowException ex)
+        {
+            // Reported here rather than left as the framework's message, which names neither the limit
+            // nor anything an administrator could change. The column and the object are added by the
+            // caller that catches this.
+            throw new OverflowException(SqlValueReader.DecimalRangeAdvice, ex);
+        }
+    }
 
     /// <summary>
     /// Normalises a date and time to UTC, which is the only way JIM stores one.
@@ -1417,6 +1463,7 @@ internal sealed class SqlConnectorImport
         }
 
         using var reader = await command.ExecuteReaderAsync(_cancellationToken);
+        var values = new SqlValueReader(reader, plan.Name);
 
         var joinOrdinals = configuration.JoinColumns.Select(reader.GetOrdinal).ToArray();
         var valueOrdinal = reader.GetOrdinal(configuration.ValueColumn);
@@ -1426,7 +1473,7 @@ internal sealed class SqlConnectorImport
             if (reader.IsDBNull(valueOrdinal))
                 continue;
 
-            var anchorKey = ComposeRelatedAnchorKey(plan, reader, joinOrdinals);
+            var anchorKey = ComposeRelatedAnchorKey(plan, reader, values, joinOrdinals);
             if (anchorKey == null || !importObjectsByAnchor.TryGetValue(anchorKey, out var importObject))
                 continue;
 
@@ -1434,7 +1481,7 @@ internal sealed class SqlConnectorImport
 
             try
             {
-                AddRelatedValue(importObject, relatedTable, column, reader.GetValue(valueOrdinal));
+                AddRelatedValue(importObject, relatedTable, column, values.Read(valueOrdinal, configuration.ValueColumn, relatedTable.AttributeType));
             }
             catch (Exception ex) when (IsValueConversionFailure(ex))
             {
@@ -1465,7 +1512,7 @@ internal sealed class SqlConnectorImport
     /// The parent this related row belongs to, rendered exactly as the parent's own anchor was so the
     /// two match. Null where a join column is NULL, which can never identify a parent.
     /// </summary>
-    private string? ComposeRelatedAnchorKey(SqlImportPlan plan, DbDataReader reader, int[] joinOrdinals)
+    private string? ComposeRelatedAnchorKey(SqlImportPlan plan, DbDataReader reader, SqlValueReader values, int[] joinOrdinals)
     {
         var parts = new string[joinOrdinals.Length];
 
@@ -1474,7 +1521,8 @@ internal sealed class SqlConnectorImport
             if (reader.IsDBNull(joinOrdinals[index]))
                 return null;
 
-            parts[index] = SqlAnchorValue.ToTokenString(_provider, reader.GetValue(joinOrdinals[index]), plan.AnchorColumns[index].Type);
+            var anchorColumn = plan.AnchorColumns[index];
+            parts[index] = SqlAnchorValue.ToTokenString(_provider, values.Read(joinOrdinals[index], anchorColumn.Name, anchorColumn.Type), anchorColumn.Type);
         }
 
         return string.Join(SqlConnectorSchema.ComposedAnchorSeparator, parts);
@@ -1512,6 +1560,18 @@ internal sealed class SqlConnectorImport
 internal sealed record SqlImportColumn(string Name, AttributeDataType Type);
 
 /// <summary>
+/// A column of a result set as it is read: its name, and the JIM attribute type it maps to where JIM has
+/// one for it.
+/// </summary>
+/// <remarks>
+/// The type is what decides how the value is taken from the driver, so it travels with the column rather
+/// than being looked up at the point of reading; see <see cref="SqlValueReader"/>. It is nullable because
+/// a change-log table's own sequence and change-type columns are not part of the Connected System's
+/// schema and have no attribute type to be read as.
+/// </remarks>
+internal sealed record SqlReadColumn(string Name, AttributeDataType? Type);
+
+/// <summary>
 /// A related table an import gathers, with the types its values arrive as.
 /// </summary>
 internal sealed record SqlImportRelatedTable(SqlRelatedTableConfiguration Configuration, AttributeDataType AttributeType, AttributeDataType? ReferencedAnchorType);
@@ -1528,7 +1588,7 @@ internal sealed class SqlImportPlan
         SqlObjectTypeConfiguration configuration,
         IReadOnlyList<SqlImportColumn> anchorColumns,
         IReadOnlyList<SqlImportColumn> attributes,
-        IReadOnlyList<string> selectColumns,
+        IReadOnlyList<SqlReadColumn> readColumns,
         IReadOnlyDictionary<string, AttributeDataType> referenceColumns,
         IReadOnlyList<SqlImportRelatedTable> relatedTables,
         string? composedAnchorName)
@@ -1536,14 +1596,15 @@ internal sealed class SqlImportPlan
         Configuration = configuration;
         AnchorColumns = anchorColumns;
         Attributes = attributes;
-        SelectColumns = selectColumns;
+        ReadColumns = readColumns;
+        SelectColumns = [.. readColumns.Select(readColumn => readColumn.Name)];
         ReferenceColumns = referenceColumns;
         RelatedTables = relatedTables;
         ComposedAnchorName = composedAnchorName;
 
-        _columnIndexes = selectColumns
-            .Select((columnName, index) => (columnName, index))
-            .ToDictionary(column => column.columnName, column => column.index, StringComparer.OrdinalIgnoreCase);
+        _columnIndexes = readColumns
+            .Select((readColumn, index) => (readColumn.Name, index))
+            .ToDictionary(column => column.Name, column => column.index, StringComparer.OrdinalIgnoreCase);
     }
 
     internal SqlObjectTypeConfiguration Configuration { get; }
@@ -1560,6 +1621,15 @@ internal sealed class SqlImportPlan
 
     internal IReadOnlyList<SqlImportColumn> Attributes { get; }
 
+    /// <summary>
+    /// Every column a page reads, with the attribute type it maps to, which is what decides how its
+    /// value is read from the driver.
+    /// </summary>
+    internal IReadOnlyList<SqlReadColumn> ReadColumns { get; }
+
+    /// <summary>
+    /// The same columns by name alone, which is what a generated statement and a keyset lookup need.
+    /// </summary>
     internal IReadOnlyList<string> SelectColumns { get; }
 
     internal IReadOnlyDictionary<string, AttributeDataType> ReferenceColumns { get; }

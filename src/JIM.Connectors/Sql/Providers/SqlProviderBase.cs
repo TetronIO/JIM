@@ -110,6 +110,14 @@ internal abstract class SqlProviderBase : ISqlProvider
     {
     }
 
+    /// <summary>
+    /// Nothing by default: a dialect whose values do not depend on session state has nothing to pin, and
+    /// only Oracle Database currently does.
+    /// </summary>
+    public virtual void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings)
+    {
+    }
+
     public virtual DbCommand CreateCommand(DbConnection connection, string commandText)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -448,6 +456,17 @@ internal abstract class SqlProviderBase : ISqlProvider
     #endregion
 
     #region Values
+
+    /// <summary>
+    /// A pass-through, beyond normalising the two ways ADO.NET states "nothing" into one. That is right
+    /// for any driver that materialises a parameter's value as a CLR type, which is every driver except
+    /// ODP.NET; a dialect whose driver hands back wrappers of its own overrides this and unwraps them
+    /// there, so those types are never named outside that provider.
+    /// </summary>
+    public virtual object? ConvertFromDriverValue(object? value)
+    {
+        return value == null || value == DBNull.Value ? null : value;
+    }
 
     public abstract Guid ConvertToGuid(object value);
 

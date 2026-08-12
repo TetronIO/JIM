@@ -57,6 +57,22 @@ internal sealed record SqlConnectionSettings
     internal int? ConnectionTimeoutSeconds { get; init; }
 
     /// <summary>
+    /// The time zone a zoneless date and time column records its values in, as the administrator
+    /// declared it in the Database Time Zone setting.
+    /// <para>
+    /// A connection setting rather than only an interpretation rule applied afterwards, because one
+    /// dialect converts before JIM ever sees a value: Oracle returns a <c>TIMESTAMP WITH LOCAL TIME
+    /// ZONE</c> column in the <i>session's</i> time zone, so the session has to be pinned to this zone
+    /// as the connection opens or the reading depends on which host the Worker ran on. See
+    /// <see cref="OracleProvider.ConfigureOpenedConnection"/>.
+    /// </para>
+    /// <para>
+    /// UTC by default, matching the setting's own default and the one zone that needs no interpreting.
+    /// </para>
+    /// </summary>
+    internal TimeZoneInfo DatabaseTimeZone { get; init; } = TimeZoneInfo.Utc;
+
+    /// <summary>
     /// A file holding the one server certificate this connection may accept in addition to whatever the
     /// operating system's bundle already vouches for. Null on every ordinary connection.
     /// <para>
@@ -70,6 +86,6 @@ internal sealed record SqlConnectionSettings
 
     public override string ToString()
     {
-        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), Encryption = {Encryption}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, PinnedServerCertificatePath = {PinnedServerCertificatePath} }}";
+        return $"{nameof(SqlConnectionSettings)} {{ Host = {Host}, Port = {Port?.ToString() ?? "(default)"}, DatabaseName = {DatabaseName}, ServiceName = {ServiceName}, Sid = {Sid}, Username = {Username}, Password = (redacted), Encryption = {Encryption}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, DatabaseTimeZone = {DatabaseTimeZone.Id}, PinnedServerCertificatePath = {PinnedServerCertificatePath} }}";
     }
 }

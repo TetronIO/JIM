@@ -1,10 +1,12 @@
 @page "/admin/schema"
 @page "/admin/schema/attributes"
+@page "/admin/schema/data-flow"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
+@using JIM.Web.Pages.Admin.Components
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavigationManager
@@ -15,9 +17,9 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Schema</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@(_activeTabIndex == 0 ? "Object Types" : "Attributes")</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@TabTitle</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes.</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.</MudText>
 
 <NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-5" Class="mt-5">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
@@ -199,10 +201,24 @@
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="mt-5" />
         }
     </MudTabPanel>
+    <MudTabPanel Text="Data Flow" Icon="@Icons.Material.Filled.SwapHoriz">
+        <DataFlowTab />
+    </MudTabPanel>
 </NavigableMudTabs>
 
 @code {
     private int _activeTabIndex;
+
+    /// <summary>
+    /// The active tab's name, appended to the page heading. Indexed rather than switched on a slug because the
+    /// tab strip is the source of truth for the order.
+    /// </summary>
+    private string TabTitle => _activeTabIndex switch
+    {
+        0 => "Object Types",
+        1 => "Attributes",
+        _ => "Data Flow"
+    };
     private IList<MetaverseObjectTypeHeader>? _metaverseObjectTypeHeaders;
     private MudTable<MetaverseAttributeHeader>? _attributeTable;
     private string _searchString = "";

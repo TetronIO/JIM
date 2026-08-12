@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Servers;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -211,6 +212,163 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
             Assert.That(await verify.ConnectedSystemContainers.CountAsync(), Is.EqualTo(1));
             Assert.That(await verify.ConnectedSystemPartitions.CountAsync(), Is.EqualTo(1));
             Assert.That(await verify.ConnectorDefinitions.CountAsync(), Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A Container moved to the partition root by a hierarchy refresh persists in its new home, keeping its
+    /// selection (#1318).
+    /// </summary>
+    /// <remarks>
+    /// The reparent has to clear the parent-container foreign key as it sets the partition one, and vice versa;
+    /// only top-level Containers carry a partition and only nested ones carry a parent. A stale scalar left behind
+    /// has the row claim two homes, which the in-memory provider is happy to accept and PostgreSQL is not. The
+    /// merge is run against a graph loaded in one scope and saved in another, matching the portal.
+    /// </remarks>
+    [Test]
+    public async Task MergeHierarchy_ContainerMovedToThePartitionRoot_PersistsItsNewParentageAsync()
+    {
+        var systemId = await SeedAsync();
+
+        await using (var seedContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(seedContext);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+            var partition = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system,
+                ExternalId = "dc=example,dc=org",
+                Name = "example.org",
+                Selected = true,
+                Containers = []
+            };
+            var corp = new ConnectedSystemContainer
+            {
+                Partition = partition,
+                ExternalId = "ou=corp,dc=example,dc=org",
+                Name = "corp",
+                StableId = "corp-stable-id"
+            };
+            corp.AddChildContainer(new ConnectedSystemContainer
+            {
+                ExternalId = "ou=sales,ou=corp,dc=example,dc=org",
+                Name = "sales",
+                StableId = "sales-stable-id",
+                Selected = true
+            });
+            partition.Containers.Add(corp);
+            system.Partitions ??= [];
+            system.Partitions.Add(partition);
+
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        // Load detached, exactly as the portal does, then merge in a discovery that reports sales at the root.
+        ConnectedSystem detachedSystem;
+        await using (var loadContext = NewContext())
+        {
+            var loadRepository = new PostgresDataRepository(loadContext);
+            detachedSystem = (await loadRepository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+        }
+
+        ConnectedSystemServer.MergeHierarchy(
+            detachedSystem,
+            [
+                new ConnectorPartition
+                {
+                    Id = "dc=example,dc=org",
+                    Name = "example.org",
+                    Containers =
+                    [
+                        new ConnectorContainer("ou=corp,dc=example,dc=org", "corp") { StableId = "corp-stable-id" },
+                        new ConnectorContainer("ou=sales,dc=example,dc=org", "sales") { StableId = "sales-stable-id" }
+                    ]
+                }
+            ]);
+
+        await using (var saveContext = NewContext())
+        {
+            var saveRepository = new PostgresDataRepository(saveContext);
+            await saveRepository.ConnectedSystems.UpdateConnectedSystemAsync(detachedSystem);
+        }
+
+        await using var verify = NewContext();
+        var persistedPartition = await verify.ConnectedSystemPartitions.SingleAsync();
+        var sales = await verify.ConnectedSystemContainers.SingleAsync(c => c.Name == "sales");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemContainers.CountAsync(), Is.EqualTo(2), "the moved Container must not have been deleted");
+            Assert.That(sales.Selected, Is.True, "and must keep its selection");
+            Assert.That(sales.ParentContainerId, Is.Null, "it no longer sits under corp");
+            Assert.That(sales.PartitionId, Is.EqualTo(persistedPartition.Id), "it now sits at the partition root");
+            Assert.That(sales.ExternalId, Is.EqualTo("ou=sales,dc=example,dc=org"));
+        }
+    }
+
+    /// <summary>
+    /// A Container's scope statement survives a round trip through the database, including the exclusion added for
+    /// #1255.
+    /// </summary>
+    /// <remarks>
+    /// The in-memory provider would pass this whatever the EF model said, because it maps whatever the type has. A
+    /// column silently absent from the real schema (a mapping annotation on the wrong property, a migration that
+    /// never reached the model snapshot) shows up only here, as a value that reads back as its default. Reading the
+    /// exclusion back as <c>false</c> is precisely the failure that would import a branch an administrator had
+    /// deliberately carved out.
+    /// </remarks>
+    [Test]
+    public async Task UpdateConnectedSystemAsync_ContainerWithAnExclusion_PersistsTheExclusionAndScopeAsync()
+    {
+        var systemId = await SeedAsync();
+
+        await using (var firstContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(firstContext);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+            var partition = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system,
+                ExternalId = "dc=example,dc=org",
+                Name = "example.org",
+                Selected = true,
+                Containers = []
+            };
+            partition.Containers.Add(new ConnectedSystemContainer
+            {
+                Partition = partition,
+                ExternalId = "ou=corp,dc=example,dc=org",
+                Name = "corp",
+                Selected = true,
+                Scope = ConnectedSystemContainerScope.Subtree
+            });
+            partition.Containers.Add(new ConnectedSystemContainer
+            {
+                Partition = partition,
+                ExternalId = "ou=service accounts,ou=corp,dc=example,dc=org",
+                Name = "service accounts",
+                Excluded = true,
+                Scope = ConnectedSystemContainerScope.OneLevel
+            });
+            system.Partitions ??= [];
+            system.Partitions.Add(partition);
+
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        await using var verify = NewContext();
+        var corp = await verify.ConnectedSystemContainers.SingleAsync(c => c.Name == "corp");
+        var serviceAccounts = await verify.ConnectedSystemContainers.SingleAsync(c => c.Name == "service accounts");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(corp.Selected, Is.True);
+            Assert.That(corp.Excluded, Is.False);
+            Assert.That(corp.Scope, Is.EqualTo(ConnectedSystemContainerScope.Subtree));
+            Assert.That(serviceAccounts.Excluded, Is.True, "the exclusion must survive the round trip, or the branch is imported after all");
+            Assert.That(serviceAccounts.Selected, Is.False);
+            Assert.That(serviceAccounts.Scope, Is.EqualTo(ConnectedSystemContainerScope.OneLevel),
+                "Scope says how far a Container's statement reaches, whether that statement is a selection or an exclusion");
         }
     }
 }
