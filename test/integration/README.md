@@ -98,6 +98,7 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 - **Scenario 13: Relative-Date Outbound Scoping** - Staged downstream provisioning released via the Temporal Scope Reconciler's outbound lane
 - **Scenario 14: Attribute Priority** - Multi-source winner resolution across two contributing import Synchronisation Rules (OpenLDAP only)
 - **Scenario 15: SCIM 2.0 Client Connector** - End-to-end drive against the containerised SCIM test service provider over HTTPS
+- **Scenario 17: Initial Password Provisioning** - the Initial Password JIM sets on a provisioned account, proven from the account holder's side: sign in with it (Active Directory answers `773`, "correct password, must change"), contrast against a wrong password (`52e`), change it as the account holder, then sign in with the newly chosen one. Samba AD only, because "must change at next sign-in" has no portable equivalent elsewhere; `-Template` is ignored, since the scenario asserts against a single account. This is the only coverage that drives the password channel against a real directory: the connector unit tests assert against a mocked LDAP executor, so they prove what JIM sends and nothing about what a directory does with it
 
 ### Phase 2 Scenarios
 - **Scenario 16: JIM SQL Connector Matrix** - the connector's provider x capability matrix driven against Microsoft SQL Server and Oracle Database ([#170](https://github.com/TetronIO/JIM/issues/170)). Accepts `-Provider SqlServer|Oracle|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import. `-Template` is ignored; the scenario seeds its own rows.
@@ -117,6 +118,8 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Generate-TestCSV.ps1` | test/integration/ | Generate HR CSV files |
 | `Setup-Scenario1.ps1` | test/integration/ | Configure JIM for Scenario 1 |
 | `Invoke-Scenario1-HRToIdentityDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
+| `Setup-Scenario17.ps1` | test/integration/ | Configure JIM for Scenario 17 (composes Setup-Scenario1, then enables the Initial Password) |
+| `Invoke-Scenario17-InitialPasswordProvisioning.ps1` | test/integration/scenarios/ | Run Scenario 17 tests (sign in with the Initial Password, change it, sign in again) |
 | `Get-HostFingerprint.ps1` | test/integration/ | Capture hardware profile for cross-host performance comparison |
 | `Stream-WorkerLogs.ps1` | test/integration/ | Stream diagnostic logs to Metrics API during test runs (background job) |
 | `Submit-TestResults.ps1` | test/integration/ | Submit end-of-run summary to Metrics API |
