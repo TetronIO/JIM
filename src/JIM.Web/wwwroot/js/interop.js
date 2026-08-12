@@ -137,9 +137,24 @@ window.jimVirtualList = {
         if (entry.observer) entry.observer.disconnect();
         delete window.jimVirtualList._fitted[selector];
     },
+    // The height a rendered row actually occupies, which is what an index has to be derived from. The grid tells
+    // the virtualiser an ItemSize, but that is an estimate: padding, a chip, a two-line cell and the theme's own
+    // spacing all land on top of it, and a row set out at 50 renders at 56. Deriving an index from the estimate
+    // put every deep link and every restored position out by the difference (a twelfth of the list, and growing
+    // with how far down it was). Measured off a real row, falling back to the estimate before any row exists.
+    measuredRowHeight: function (element, estimate) {
+        var rows = element.querySelectorAll('tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var height = rows[i].getBoundingClientRect().height;
+            // A virtualiser brackets its rows with spacer rows sized to the scroll area, so anything absurdly
+            // tall is the spacer rather than a row; anything at zero is not laid out yet.
+            if (height > 8 && height < 400) return height;
+        }
+        return estimate;
+    },
     // Reports the index of the first visible row back to .NET as the reader scrolls, debounced so a flick
-    // through a long list produces one call rather than hundreds. Row height is fixed by the grid's ItemSize,
-    // which is what makes an index derivable from scrollTop at all.
+    // through a long list produces one call rather than hundreds. Every row is the same height, which is what
+    // makes an index derivable from scrollTop at all; see measuredRowHeight for where that height comes from.
     observe: function (selector, dotNetRef, rowHeight, debounceMs) {
         window.jimVirtualList.stop(selector);
         var element = document.querySelector(selector);
@@ -149,7 +164,7 @@ window.jimVirtualList = {
         entry.handler = function () {
             if (entry.timer) window.clearTimeout(entry.timer);
             entry.timer = window.setTimeout(function () {
-                var row = Math.max(0, Math.round(element.scrollTop / rowHeight));
+                var row = Math.max(0, Math.round(element.scrollTop / window.jimVirtualList.measuredRowHeight(element, rowHeight)));
                 // The circuit can go away between the scroll and the timer firing; there is nothing to recover
                 // from that, and throwing here would surface in the browser console for no one's benefit.
                 dotNetRef.invokeMethodAsync('OnFirstVisibleRowChanged', row).catch(function () { });
@@ -174,11 +189,13 @@ window.jimVirtualList = {
     scrollToRow: async function (selector, row, rowHeight, timeoutMs) {
         if (!rowHeight) return false;
 
-        var target = row * rowHeight;
         var deadline = Date.now() + (timeoutMs || 5000);
 
         for (;;) {
             var element = document.querySelector(selector);
+            // Measured per attempt, not once: the first attempts run before any row is laid out, when there is
+            // nothing to measure and the estimate is all there is.
+            var target = element ? row * window.jimVirtualList.measuredRowHeight(element, rowHeight) : 0;
             if (element && target <= element.scrollHeight - element.clientHeight) {
                 element.scrollTop = target;
                 return true;
