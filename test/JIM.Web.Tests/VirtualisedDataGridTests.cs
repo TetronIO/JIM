@@ -213,6 +213,29 @@ public class VirtualisedDataGridTests : JimComponentTestContext
     }
 
     [Test]
+    public void VirtualisedDataGrid_ShowSearchFalse_RendersNoSearchBoxButKeepsTheCount()
+    {
+        // A list that is small by construction (the queued steps of one Schedule Execution) says nothing more for
+        // being searchable, and a box per group is clutter; the count still says how many there are.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 3)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "small-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Steps")
+            .Add(c => c.ShowSearch, false));
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.HasComponent<SearchField>(), Is.False);
+                Assert.That(cut.HasComponent<TableObjectCount>(), Is.True);
+            }
+        });
+    }
+
+    [Test]
     public async Task VirtualisedDataGrid_WhenDisposed_ReleasesItsViewportFit()
     {
         var cut = RenderGrid();

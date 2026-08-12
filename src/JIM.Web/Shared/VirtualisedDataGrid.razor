@@ -66,9 +66,12 @@
             <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
                               SingularName="@SingularName" PluralName="@PluralName"
                               Class="mr-3" />
-            @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
-               filtered by a term the reader cannot see. *@
-            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+            @if (ShowSearch)
+            {
+                @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
+                   filtered by a term the reader cannot see. *@
+                <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+            }
         </ToolBarContent>
         <Columns>
             @Columns
@@ -169,6 +172,14 @@
     /// </summary>
     [Parameter]
     public bool Embedded { get; set; }
+
+    /// <summary>
+    /// Whether this grid offers a search box. Set false where the list is small by construction and searching it
+    /// says nothing a glance does not: the queued steps of one Schedule Execution, a handful of Roles. A box that
+    /// narrows four rows is a control asking to be used for no benefit, and repeated per group it is clutter.
+    /// </summary>
+    [Parameter]
+    public bool ShowSearch { get; set; } = true;
 
     /// <summary>
     /// Whether this grid keeps its search, sort and scroll position in the address bar. A grid in a dialog sets
