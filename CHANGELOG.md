@@ -86,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔒 Attributes holding credential material, such as `unicodePwd` and `userPassword`, can no longer be imported, selected for management, or used in an Attribute Flow. Any that a deployment had already selected are deselected and locked rather than deleted, leaving Synchronisation Rules intact.
 - 🔒 JIM no longer depends on the third-party DNParser library for LDAP Distinguished Name parsing; DN handling is now performed by a small, self-contained parser built into the LDAP Connector. This removes a Code Project Open License (CPOL) dependency, which software composition scanners commonly flag and which is not OSI-approved, along with an unmaintained package from the supply chain, in keeping with JIM's self-contained, air-gap-deployable design.
 
+### Changed
+
+- 🔄 A Connected System whose external system is temporarily unreachable no longer loses its Schema, Partitions & Containers and Matching tabs. Those tabs are gated on the settings being complete, which is a fact about the configuration; saving any change during an outage previously recorded the settings as invalid and locked them until someone re-saved the Settings tab. Saving settings still tests the connection and reports what it finds.
+
 ### Added
 
 - ✨ A Container can now be **excluded** from a selection made above it: select `OU=Corp` and carve `OU=Service Accounts` out of it, rather than ticking eleven sibling OUs and hoping nobody adds a twelfth. Exclusions nest, and survive a rename. (#1255)

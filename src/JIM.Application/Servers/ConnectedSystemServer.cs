@@ -529,8 +529,7 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
@@ -565,8 +564,7 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
 
@@ -608,8 +606,7 @@ public class ConnectedSystemServer
         // caller sent, which closes any route that sets Selected outside the validated per-attribute endpoints.
         QuarantineCredentialAttributes(connectedSystem);
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
@@ -638,8 +635,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -652,8 +648,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -666,8 +661,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -679,8 +673,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
@@ -692,8 +685,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
@@ -1343,6 +1335,30 @@ public class ConnectedSystemServer
     /// Checks that all setting values are valid, according to business rules.
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    /// <summary>
+    /// Whether a Connected System's settings are complete and well-formed: every required setting has a value, and
+    /// every required-group and required-when constraint declared in the setting metadata is satisfied. Asked of the
+    /// values alone, and never of the target system.
+    /// </summary>
+    /// <remarks>
+    /// This is what <see cref="ConnectedSystem.SettingValuesValid"/> carries, and it is deliberately narrower than
+    /// <see cref="ValidateConnectedSystemSettings"/>. That method also asks the Connector, whose own validation is a
+    /// live probe: the LDAP Connector binds to the directory, the File Connector looks for the file. Persisting the
+    /// answer to a live probe as a property of the configuration means an unreachable target marks stored settings
+    /// invalid, and the portal gates the Schema, Partitions &amp; Containers and Matching tabs on this flag, so saving
+    /// anything at all during a directory outage locked an administrator out of three tabs until somebody re-saved
+    /// the Settings tab. It also put a network round trip on the path of every unrelated save.
+    ///
+    /// Whether the target answers is still reported, where it is actionable: the Settings tab and the settings-writing
+    /// REST endpoint both call <see cref="ValidateConnectedSystemSettings"/> and surface what it finds.
+    /// </remarks>
+    public static bool AreSettingValuesComplete(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        return ConnectorSettingValidator.Validate(connectedSystem.SettingValues).All(r => r.IsValid);
+    }
+
     public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
     {
         ValidateConnectedSystemParameter(connectedSystem);
