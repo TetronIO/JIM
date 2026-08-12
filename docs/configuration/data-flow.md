@@ -17,18 +17,23 @@ The target is therefore always a single attribute, while the source side may be 
 
 ## 📊 Reading the columns
 
-| Column | Shows |
-|--------|-------|
-| **Direction** | Inbound (into the Metaverse) or Outbound (out of it) |
-| **Connected System** | The system the rule belongs to, with the Connected System object type beneath it |
-| **Object Type** | The Metaverse Object Type the flow applies to |
-| **Source** | The attribute or attributes supplying the value; a computed source is shown as **Expression**, with the expression text in its tooltip |
-| **Target** | The attribute the flow writes, linked to where it can be inspected |
-| **Priority** | The flow's position in its target's [Attribute Priority](../concepts/attribute-priority.md) order. Inbound only |
-| **Options** | **Null is a value** on an inbound flow, **Enforce State** on an outbound one |
-| **Synchronisation Rule** | The owning rule, linked to its Attribute Flow tab. A disabled rule is marked as such: its flows are still listed, because they remain configuration you are reasoning about, but they move no data |
+The columns are grouped into two bands, one per side of the Metaverse. The **Connected System** band is always on the left and the **Metaverse** band always on the right, whichever way the value travels; only the arrow between them changes. So a row reads as a sentence: this system, this object type, this attribute, flowing into (or out of) this Metaverse Object Type's attribute.
 
-Priority and "Null is a value" apply to inbound flows only, and Enforce State to outbound flows only, so the cell is blank where the concept does not apply rather than showing a value that would imply it does.
+| Band | Column | Shows |
+|------|--------|-------|
+| Connected System | **System** | The system the rule belongs to |
+| Connected System | **Object Type** | The Connected System object type, as the system itself names it |
+| Connected System | **Attribute** | The system's attribute: the source inbound, the target outbound. A computed value is shown as an **Ex** chip carrying the expression |
+| | **→ / ←** | Which way the value moves. It points right on an inbound flow and left on an outbound one |
+| Metaverse | **Object Type** | The Metaverse Object Type the flow applies to |
+| Metaverse | **Attribute** | The Metaverse Attribute: the target inbound, the source outbound |
+| | **Priority** | The flow's position in its target's [Attribute Priority](../concepts/attribute-priority.md) order, with the number of contributors it is one of. Inbound only |
+| | **Null is a value** / **Enforce State** | The setting that applies in the chosen direction. With no direction chosen the column is headed **Options** and carries whichever applies per row |
+| | **Synchronisation Rule** | The owning rule, linked to its Attribute Flow tab. A disabled rule is marked as such: its flows are still listed, because they remain configuration you are reasoning about, but they move no data |
+
+Attributes carry a **CS** or **MV** marker naming the side they belong to, reinforcing the bands.
+
+Priority and "Null is a value" apply to inbound flows only, and Enforce State to outbound flows only. Choose a direction and the table drops the column that does not apply rather than showing you a column of blanks.
 
 ### 🥇 Priority at a glance
 
