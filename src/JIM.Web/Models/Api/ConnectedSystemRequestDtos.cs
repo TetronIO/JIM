@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 
 namespace JIM.Web.Models.Api;
@@ -145,6 +146,18 @@ public class UpdateConnectedSystemAttributeRequest
     /// Indicates if this attribute is used as a secondary identifier by the Connected System (e.g., DN in LDAP).
     /// </summary>
     public bool? IsSecondaryExternalId { get; set; }
+
+    /// <summary>
+    /// Overrides the data type schema discovery inferred for this attribute.
+    /// </summary>
+    /// <remarks>
+    /// Accepted only where the Connector declares that its schema cannot state a type definitively
+    /// (<c>SupportsUserSelectedAttributeTypes</c>): a delimited file names no types at all, and Oracle
+    /// has a single numeric type, so a <c>NUMBER</c> column may be a whole number, a counter or a
+    /// fractional figure. Refused once the attribute is referenced by a Synchronisation Rule or holds
+    /// values, because changing the type would reinterpret data already imported under the old one.
+    /// </remarks>
+    public AttributeDataType? Type { get; set; }
 }
 
 /// <summary>

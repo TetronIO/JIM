@@ -41,6 +41,19 @@ function Set-JIMConnectedSystemAttribute {
         Whether this attribute is a secondary external identifier (Single mode).
         This is typically used for attributes like distinguishedName (DN) in LDAP systems.
 
+    .PARAMETER Type
+        Overrides the data type schema discovery inferred for the attribute (Single mode).
+
+        Accepted only where the Connector declares that its schema cannot state a type definitively:
+        a delimited file names no types at all, and Oracle has a single numeric type, so a NUMBER
+        column may be a whole number, a counter or a fractional figure. Refused once the attribute is
+        referenced by a Synchronisation Rule or holds values, because changing the type would
+        reinterpret data already imported under the old one.
+
+        'Integer' is the friendly name for the Number data type, matching New-JIMMetaverseAttribute.
+
+        There is no bulk equivalent: the bulk endpoint refuses a request carrying a data type.
+
     .PARAMETER PassThru
         If specified, returns the updated attribute(s).
 
@@ -89,6 +102,12 @@ function Set-JIMConnectedSystemAttribute {
 
         Selects all attributes on an object type using the bulk update API.
 
+    .EXAMPLE
+        Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 10 -Type Integer
+
+        Corrects an Oracle NUMBER column that schema discovery read as a Decimal, so it can flow into
+        a built-in whole-number Metaverse Attribute such as Employee Number without an expression.
+
     .LINK
         Get-JIMConnectedSystem
         Set-JIMConnectedSystemObjectType
@@ -119,6 +138,10 @@ function Set-JIMConnectedSystemAttribute {
 
         [Parameter(ParameterSetName = 'Single')]
         [bool]$IsSecondaryExternalId,
+
+        [Parameter(ParameterSetName = 'Single')]
+        [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
+        [string]$Type,
 
         [switch]$PassThru
     )
@@ -185,6 +208,12 @@ function Set-JIMConnectedSystemAttribute {
 
             if ($PSBoundParameters.ContainsKey('IsSecondaryExternalId')) {
                 $body.isSecondaryExternalId = $IsSecondaryExternalId
+            }
+
+            if ($PSBoundParameters.ContainsKey('Type')) {
+                # The ValidateSet exposes 'Integer' as a friendly alias for the AttributeDataType member
+                # 'Number'; the API takes the enum member name.
+                $body.type = if ($Type -eq 'Integer') { 'Number' } else { $Type }
             }
 
             if ($body.Count -eq 0) {

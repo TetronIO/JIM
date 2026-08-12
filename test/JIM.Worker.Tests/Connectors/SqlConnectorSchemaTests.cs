@@ -619,7 +619,7 @@ public class SqlConnectorSchemaTests
     }
 
     [Test]
-    public async Task GetSchemaAsync_OracleNumber1WithTheOptInOff_MapsToDecimalAsync()
+    public async Task GetSchemaAsync_OracleNumber1WithTheOptInOff_StaysNumericAsync()
     {
         var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
         provider.Catalogue.AddTable("HR", "EMPLOYEES",
@@ -628,8 +628,33 @@ public class SqlConnectorSchemaTests
 
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
-        Assert.That(AttributeType(schema.ObjectTypes.Single(), "IS_ACTIVE"), Is.EqualTo(AttributeDataType.Decimal),
-            "Reinterpreting a number as a flag is never inferred, only opted into.");
+        Assert.That(AttributeType(schema.ObjectTypes.Single(), "IS_ACTIVE"), Is.EqualTo(AttributeDataType.Number),
+            "Reinterpreting a number as a flag is never inferred, only opted into. Without the opt-in it stays numeric, and one digit with no scale is a whole number (#1354).");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_OracleWholeNumberAnchor_MapsToLongNumberAsync()
+    {
+        // The ordinary Oracle sequence-backed primary key. Ten digits reach 9,999,999,999, which
+        // overflows a 32-bit whole number, so LongNumber is the narrowest type that always holds it.
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("HEADCOUNT", "NUMBER", Precision: 19, Scale: 0),
+            new FakeCatalogueColumn("FTE", "NUMBER", Precision: 9, Scale: 4));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
+        var objectType = schema.ObjectTypes.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AttributeType(objectType, "EMPLOYEE_ID"), Is.EqualTo(AttributeDataType.LongNumber),
+                "NUMBER(10,0) exceeds a 32-bit whole number but fits a 64-bit one.");
+            Assert.That(AttributeType(objectType, "HEADCOUNT"), Is.EqualTo(AttributeDataType.Decimal),
+                "NUMBER(19,0) straddles long.MaxValue, so narrowing it is not safe.");
+            Assert.That(AttributeType(objectType, "FTE"), Is.EqualTo(AttributeDataType.Decimal),
+                "NUMBER(9,4) is genuinely fractional.");
+        }
     }
 
     [Test]
