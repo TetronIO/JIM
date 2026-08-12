@@ -168,9 +168,18 @@
   // for a diagram only slightly taller than the stage, which is every concept
   // SVG -- a 1160x640 diagram on a 2.01-aspect stage opens with its bottom 10%
   // quietly cut off, looking whole rather than looking panable. So contain by
-  // default, and fall back to fit-to-width only when containing would cost more
-  // than MIN_CONTAIN_SCALE of the width.
-  var MIN_CONTAIN_SCALE = 0.6;
+  // default, and fall back to fit-to-width only when containing would leave the
+  // diagram narrower than MIN_CONTAIN_SCALE of the stage.
+  //
+  // The threshold is set from the two populations, measured on the worst
+  // realistic stage (a 1440x620 window, stage aspect 2.72): contained, the
+  // tallest concept diagrams fill 51% and 57% of the stage, which is 674px and
+  // 755px of a 1160-unit diagram and perfectly readable; a Mermaid flowchart
+  // fills 7%, a 98px thumbnail. Anything between the two is a safe cut. It also
+  // errs the right way, because the overlay has zoom controls: a diagram shown
+  // whole but small can be zoomed into, whereas a cropped one only helps a
+  // reader who notices it pans.
+  var MIN_CONTAIN_SCALE = 0.4;
 
   function initView(svg) {
     var base = parseViewBox(svg);
