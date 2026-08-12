@@ -101,6 +101,9 @@ public class CausalEdgePersistenceDatabaseTests
             CauseConnectedSystemObjectId = causeCsoId,
             CausePendingExportId = causePendingExportId,
             CauseDisplayName = "Tina Adams (S8-99)",
+            CauseObjectTypeName = "User",
+            CauseObjectTypePluralName = "Users",
+            EffectAttributeName = "Static Members",
             EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
             ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
             ConnectedSystemId = 7,
@@ -131,6 +134,11 @@ public class CausalEdgePersistenceDatabaseTests
             Assert.That(persisted.CausePendingExportId, Is.EqualTo(causePendingExportId),
                 "the Pending Export identifies which export cycle a confirmation confirms; losing it reintroduces the wrong-cycle attribution");
             Assert.That(persisted.CauseDisplayName, Is.EqualTo("Tina Adams (S8-99)"));
+            Assert.That(persisted.CauseObjectTypeName, Is.EqualTo("User"));
+            Assert.That(persisted.CauseObjectTypePluralName, Is.EqualTo("Users"),
+                "both nouns are snapshotted because the edge cannot know whether it lands in a cohort of one or ten");
+            Assert.That(persisted.EffectAttributeName, Is.EqualTo("Static Members"),
+                "the relationship noun comes from the schema, so the chain can name which reference was lost");
             Assert.That(persisted.EdgeType, Is.EqualTo(CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval));
             Assert.That(persisted.ReasonCode, Is.EqualTo(CausalReasonCode.AuthoritativeSourceDisconnected));
             Assert.That(persisted.ConnectedSystemId, Is.EqualTo(7));
@@ -178,6 +186,9 @@ public class CausalEdgePersistenceDatabaseTests
             Assert.That(persisted.CauseConnectedSystemObjectId, Is.Null);
             Assert.That(persisted.CausePendingExportId, Is.Null);
             Assert.That(persisted.CauseDisplayName, Is.Null);
+            Assert.That(persisted.CauseObjectTypeName, Is.Null);
+            Assert.That(persisted.CauseObjectTypePluralName, Is.Null);
+            Assert.That(persisted.EffectAttributeName, Is.Null);
             Assert.That(persisted.ConnectedSystemId, Is.Null);
             Assert.That(persisted.ConnectedSystemName, Is.Null);
             Assert.That(persisted.SyncRuleId, Is.Null);

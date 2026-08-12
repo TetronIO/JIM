@@ -57,6 +57,40 @@ public class CausalChainCohort
     public string? SyncRuleName { get; init; }
 
     /// <summary>
+    /// The Metaverse Object Type of this cohort's causes, singular and plural, as curated on the type.
+    /// </summary>
+    /// <remarks>
+    /// The type is part of the grouping key, so a cohort's causes are all of one type and this noun is always
+    /// correct for them. Without that a cohort could mix a User and a Contractor, and no single noun would be
+    /// right; in practice a deletion cascade is type-homogeneous, so it rarely forks on this element.
+    ///
+    /// Both forms are carried because the caller picks by <see cref="MemberCount"/>: "1 User" against
+    /// "10 Users". Never derived from one another by rule; see <see cref="CausalEdge.CauseObjectTypeName"/>.
+    /// </remarks>
+    public string? ObjectTypeName { get; init; }
+
+    /// <inheritdoc cref="ObjectTypeName"/>
+    public string? ObjectTypePluralName { get; init; }
+
+    /// <summary>
+    /// The reference attribute the causes acted through, where there was one: the relationship noun the
+    /// chain reads back ("removed from Project Diamond's Static Members"). Null where the effect was not a
+    /// reference removal.
+    /// </summary>
+    public string? AttributeName { get; init; }
+
+    /// <summary>
+    /// The noun to use for this cohort, singular or plural according to how many causes it speaks for.
+    /// </summary>
+    /// <remarks>
+    /// Falls back to the singular where no plural was curated, and to null where neither was recorded, so a
+    /// caller renders slightly stiff English rather than a guessed plural or an empty noun.
+    /// </remarks>
+    public string? ObjectNoun => MemberCount == 1
+        ? ObjectTypeName
+        : ObjectTypePluralName ?? ObjectTypeName;
+
+    /// <summary>
     /// The individual causes in this cohort. Always populated, so an expanded cohort can name its members
     /// rather than only counting them.
     /// </summary>

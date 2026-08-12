@@ -1847,6 +1847,21 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
         => Task.FromResult(_connectedSystems.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Name));
 
+    /// <summary>
+    /// Metaverse Attribute names for causal edge wording (#1223). Seeded by tests via
+    /// <see cref="SeedMetaverseAttributeName"/>; empty otherwise, which the seams treat as "no name known"
+    /// rather than as an error.
+    /// </summary>
+    public Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync()
+        => Task.FromResult(new Dictionary<int, string>(_metaverseAttributeNames));
+
+    private readonly Dictionary<int, string> _metaverseAttributeNames = new();
+
+    /// <summary>
+    /// Test hook: registers a Metaverse Attribute's name so reference-recall wording can be asserted.
+    /// </summary>
+    public void SeedMetaverseAttributeName(int attributeId, string name) => _metaverseAttributeNames[attributeId] = name;
+
     #endregion
 
     #region Settings

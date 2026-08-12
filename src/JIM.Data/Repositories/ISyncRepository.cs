@@ -778,6 +778,18 @@ public interface ISyncRepository
     /// </summary>
     Task<Dictionary<int, string>> GetConnectedSystemNamesAsync();
 
+    /// <summary>
+    /// Every Metaverse Attribute id and its name, for snapshotting the relationship noun a causal edge reads
+    /// back (#1223): "removed from Project Diamond's <b>Static Members</b>".
+    /// </summary>
+    /// <remarks>
+    /// A tiny table read at most once per run profile execution and cached by the worker, in the manner of
+    /// <see cref="GetConnectedSystemNamesAsync"/>. The name has to be snapshotted rather than resolved at read
+    /// time because the attribute can be renamed or removed, and because the wording rule takes the
+    /// relationship noun from the schema rather than from the object type.
+    /// </remarks>
+    Task<Dictionary<int, string>> GetMetaverseAttributeNamesAsync();
+
     #endregion
 
     #region Change Tracker Management

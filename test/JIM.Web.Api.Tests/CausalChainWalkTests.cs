@@ -267,6 +267,103 @@ public class CausalChainWalkTests
     }
 
     /// <summary>
+    /// The object type joins the grouping key, so a cohort's noun is always right for every member. Without
+    /// it a cohort could mix a User and a Contractor, and no single noun would be correct for the statement
+    /// the cohort renders.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_CausesOfDifferentObjectTypes_DoNotShareACohortAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var outcomeId = Guid.NewGuid();
+        var user = NewEdge(itemId, effectOutcomeId: outcomeId, causeName: "Tina Adams");
+        user.CauseObjectTypeName = "User";
+        user.CauseObjectTypePluralName = "Users";
+        var contractor = NewEdge(itemId, effectOutcomeId: outcomeId, causeName: "Sam Reed");
+        contractor.CauseObjectTypeName = "Contractor";
+        contractor.CauseObjectTypePluralName = "Contractors";
+        SeedEdges(itemId, user, contractor);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts, Has.Count.EqualTo(2),
+            "one noun cannot describe a mixed cohort, so the type has to separate them");
+        Assert.That(chain.Cohorts.Select(c => c.ObjectNoun), Is.EquivalentTo(new[] { "User", "Contractor" }));
+    }
+
+    /// <summary>
+    /// Two removals through different reference attributes are different statements: the chain names the
+    /// attribute each removal happened on, so one cohort cannot speak for both.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_CausesOnDifferentAttributes_DoNotShareACohortAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var outcomeId = Guid.NewGuid();
+        var members = NewEdge(itemId, effectOutcomeId: outcomeId, causeName: "Tina Adams");
+        members.EffectAttributeName = "Static Members";
+        var owners = NewEdge(itemId, effectOutcomeId: outcomeId, causeName: "Tina Adams");
+        owners.EffectAttributeName = "Owners";
+        SeedEdges(itemId, members, owners);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts, Has.Count.EqualTo(2));
+        Assert.That(chain.Cohorts.Select(c => c.AttributeName), Is.EquivalentTo(new[] { "Static Members", "Owners" }));
+    }
+
+    /// <summary>
+    /// The noun follows the count, and neither form is derived from the other. English pluralisation is
+    /// unreliable on administrator-authored type names, so both are snapshotted and the cohort simply picks.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_CohortNoun_FollowsTheMemberCountAsync()
+    {
+        var singleItemId = Guid.NewGuid();
+        var single = NewEdge(singleItemId, causeName: "Tina Adams");
+        single.CauseObjectTypeName = "Person";
+        single.CauseObjectTypePluralName = "People";
+        SeedEdges(singleItemId, single);
+
+        var manyItemId = Guid.NewGuid();
+        SeedEdges(manyItemId, Enumerable.Range(0, 3).Select(i =>
+        {
+            var edge = NewEdge(manyItemId, causeName: $"Member {i}");
+            edge.CauseObjectTypeName = "Person";
+            edge.CauseObjectTypePluralName = "People";
+            return edge;
+        }).ToArray());
+
+        var singleChain = await _application.Activities.GetCausalChainAsync(singleItemId);
+        var manyChain = await _application.Activities.GetCausalChainAsync(manyItemId);
+
+        Assert.That(singleChain.Cohorts.Single().ObjectNoun, Is.EqualTo("Person"));
+        Assert.That(manyChain.Cohorts.Single().ObjectNoun, Is.EqualTo("People"),
+            "the curated plural is used verbatim; a rule would have produced \"Persons\"");
+    }
+
+    /// <summary>
+    /// A type with no curated plural falls back to the singular rather than to a guess or to nothing. Slightly
+    /// stiff English beats a wrong word, and beats a sentence with a hole in it.
+    /// </summary>
+    [Test]
+    public async Task GetCausalChain_NoCuratedPlural_FallsBackToTheSingularAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var edge = NewEdge(itemId, causeName: "Kit A");
+        edge.CauseObjectTypeName = "Equipment";
+        edge.CauseObjectTypePluralName = null;
+        var second = NewEdge(itemId, causeName: "Kit B");
+        second.CauseObjectTypeName = "Equipment";
+        second.CauseObjectTypePluralName = null;
+        SeedEdges(itemId, edge, second);
+
+        var chain = await _application.Activities.GetCausalChainAsync(itemId);
+
+        Assert.That(chain.Cohorts.Single().ObjectNoun, Is.EqualTo("Equipment"));
+    }
+
+    /// <summary>
     /// One query per level, not one per cause. A cascade cohort can hold thousands of members, and a walk that
     /// queried per member would issue thousands of round trips to render one panel.
     /// </summary>

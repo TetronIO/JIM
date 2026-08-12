@@ -672,13 +672,20 @@ public class ActivityServer
     private static List<CausalChainCohort> GroupIntoCohorts(List<CausalEdge> edges)
     {
         return edges
-            .GroupBy(e => (e.EffectSyncOutcomeId, e.EdgeType, e.ReasonCode, e.ConnectedSystemId, e.SyncRuleId))
+            // The object type and the attribute join the key so the rendered sentence is always correct for
+            // every member: a cohort that mixed a User and a Contractor would have no right noun, and one
+            // that mixed Static Members with Owners would name the wrong relationship for half its members.
+            .GroupBy(e => (e.EffectSyncOutcomeId, e.EdgeType, e.ReasonCode, e.ConnectedSystemId, e.SyncRuleId,
+                e.CauseObjectTypeName, e.EffectAttributeName))
             .Select(g => new CausalChainCohort
             {
                 EffectSyncOutcomeId = g.Key.EffectSyncOutcomeId,
                 EdgeType = g.Key.EdgeType,
                 ReasonCode = g.Key.ReasonCode,
                 ConnectedSystemId = g.Key.ConnectedSystemId,
+                ObjectTypeName = g.Key.CauseObjectTypeName,
+                ObjectTypePluralName = g.First().CauseObjectTypePluralName,
+                AttributeName = g.Key.EffectAttributeName,
                 // Names come off the first edge in the group: they are snapshots of the same system and rule,
                 // so any member carries the same value, and taking one avoids implying they could differ.
                 ConnectedSystemName = g.First().ConnectedSystemName,

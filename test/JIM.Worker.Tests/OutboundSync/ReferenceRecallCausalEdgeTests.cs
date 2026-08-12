@@ -128,26 +128,85 @@ public class ReferenceRecallCausalEdgeTests
     }
 
     /// <summary>
-    /// The same member deleted on two pages (a group referenced through more than one attribute, or a retried
-    /// page) must be recorded once. A cohort that double-counts its members reports "12 users removed" for ten,
-    /// which is worse than reporting nothing.
+    /// The same member staged twice for the same attribute is one cause. A retried page, or a member reached
+    /// twice through the same reference, must not double-count: a cohort reporting twelve removals for ten is
+    /// worse than reporting none.
     /// </summary>
     [Test]
-    public async Task FlushDeferredRecallRpeis_SameMemberStagedTwice_WritesOneEdgeAsync()
+    public async Task FlushDeferredRecallRpeis_SameMemberAndAttributeStagedTwice_WritesOneEdgeAsync()
     {
         var processor = CreateProcessor(out _);
         processor.SetRecallExportEvaluationCache(BuildRecallExportEvaluationCache(TargetSystemId, "Target LDAP"));
         var groupCso = SeedGroupCso("cn=Engineering,ou=Groups,dc=corp", "group");
-        var duplicated = NewCause("Tina Adams (S8-99)");
+        var duplicated = NewCause("Tina Adams (S8-99)", attributeName: "Static Members");
 
         processor.CallStageDeferredRecallRpei(BuildRecallPendingExport(groupCso.Id, 1), "Engineering", [duplicated]);
         processor.CallStageDeferredRecallRpei(BuildRecallPendingExport(groupCso.Id, 1), "Engineering",
-            [NewCause("Tina Adams (S8-99)", duplicated.MetaverseObjectId)]);
+            [NewCause("Tina Adams (S8-99)", duplicated.MetaverseObjectId, attributeName: "Static Members")]);
 
         await processor.CallFlushDeferredRecallRpeisAsync();
 
         Assert.That(SyncRepo.CausalEdges, Has.Count.EqualTo(1),
-            "the same deleted object staged twice is one cause, not two");
+            "the same deleted object on the same attribute staged twice is one cause, not two");
+    }
+
+    /// <summary>
+    /// The same member removed from TWO reference attributes is two causes, not one.
+    ///
+    /// A Group can reference the same User through Static Members and Owners; JIM's built-in Group carries
+    /// three reference attributes precisely so this is ordinary rather than exotic. Both references are
+    /// genuinely removed, and the chain names the attribute each removal happened on, so deduplicating on the
+    /// object alone would report one removal where two happened and attribute it to whichever attribute
+    /// happened to be staged last.
+    /// </summary>
+    [Test]
+    public async Task FlushDeferredRecallRpeis_SameMemberOnTwoAttributes_WritesAnEdgeForEachAsync()
+    {
+        var processor = CreateProcessor(out _);
+        processor.SetRecallExportEvaluationCache(BuildRecallExportEvaluationCache(TargetSystemId, "Target LDAP"));
+        var groupCso = SeedGroupCso("cn=Engineering,ou=Groups,dc=corp", "group");
+        var memberId = Guid.NewGuid();
+
+        processor.CallStageDeferredRecallRpei(BuildRecallPendingExport(groupCso.Id, 2), "Engineering",
+        [
+            NewCause("Tina Adams (S8-99)", memberId, attributeName: "Static Members"),
+            NewCause("Tina Adams (S8-99)", memberId, attributeName: "Owners")
+        ]);
+
+        await processor.CallFlushDeferredRecallRpeisAsync();
+
+        var edges = SyncRepo.CausalEdges.ToList();
+        Assert.That(edges, Has.Count.EqualTo(2),
+            "two references were removed, so two removals happened; collapsing them would under-report the change");
+        Assert.That(edges.Select(e => e.EffectAttributeName), Is.EquivalentTo(new[] { "Static Members", "Owners" }));
+    }
+
+    /// <summary>
+    /// The nouns the chain reads back are snapshotted, never derived. Both forms are stored because the edge
+    /// cannot know whether it will end up in a cohort of one ("1 User") or ten ("10 Users"): cohort size is
+    /// computed at read time across edges.
+    /// </summary>
+    [Test]
+    public async Task FlushDeferredRecallRpeis_Cause_SnapshotsBothObjectNounsAndTheAttributeAsync()
+    {
+        var processor = CreateProcessor(out _);
+        processor.SetRecallExportEvaluationCache(BuildRecallExportEvaluationCache(TargetSystemId, "Target LDAP"));
+        var groupCso = SeedGroupCso("cn=Engineering,ou=Groups,dc=corp", "group");
+
+        processor.CallStageDeferredRecallRpei(BuildRecallPendingExport(groupCso.Id, 1), "Engineering",
+            [NewCause("Tina Adams (S8-99)", attributeName: "Static Members")]);
+
+        await processor.CallFlushDeferredRecallRpeisAsync();
+
+        var edge = SyncRepo.CausalEdges.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(edge.CauseObjectTypeName, Is.EqualTo("User"));
+            Assert.That(edge.CauseObjectTypePluralName, Is.EqualTo("Users"),
+                "the plural is curated on the Metaverse Object Type and copied; deriving it by rule would be wrong on non-English, already-plural and uncountable type names");
+            Assert.That(edge.EffectAttributeName, Is.EqualTo("Static Members"),
+                "the relationship noun comes from the schema, so the chain can say which reference was lost");
+        });
     }
 
     /// <summary>
@@ -193,12 +252,15 @@ public class ReferenceRecallCausalEdgeTests
         Assert.That(SyncRepo.CausalEdges, Is.Empty);
     }
 
-    private static CausalCause NewCause(string displayName, Guid? metaverseObjectId = null)
+    private static CausalCause NewCause(string displayName, Guid? metaverseObjectId = null, string? attributeName = null)
     {
         return new CausalCause
         {
             MetaverseObjectId = metaverseObjectId ?? Guid.NewGuid(),
             DisplayName = displayName,
+            ObjectTypeName = "User",
+            ObjectTypePluralName = "Users",
+            EffectAttributeName = attributeName,
             ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected,
             ConnectedSystemId = SourceSystemId,
             ConnectedSystemName = "Yellowstone APAC"

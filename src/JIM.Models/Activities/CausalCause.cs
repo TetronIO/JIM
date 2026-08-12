@@ -53,6 +53,20 @@ public class CausalCause
     public string? DisplayName { get; init; }
 
     /// <summary>
+    /// The cause's Metaverse Object Type, singular and plural, as curated on the type. Both are carried
+    /// because the edge cannot know which the reader will need; see <see cref="CausalEdge.CauseObjectTypeName"/>.
+    /// </summary>
+    public string? ObjectTypeName { get; init; }
+
+    /// <inheritdoc cref="ObjectTypeName"/>
+    public string? ObjectTypePluralName { get; init; }
+
+    /// <summary>
+    /// The reference attribute on the effect that this cause acted through, where the seam knows one.
+    /// </summary>
+    public string? EffectAttributeName { get; init; }
+
+    /// <summary>
     /// Why the cause produced its effect. Part of the attribution tuple cohorts group on.
     /// </summary>
     public CausalReasonCode ReasonCode { get; init; }
@@ -98,6 +112,9 @@ public class CausalCause
             CauseConnectedSystemObjectId = ConnectedSystemObjectId,
             CausePendingExportId = PendingExportId,
             CauseDisplayName = DisplayName,
+            CauseObjectTypeName = ObjectTypeName,
+            CauseObjectTypePluralName = ObjectTypePluralName,
+            EffectAttributeName = EffectAttributeName,
             EdgeType = edgeType,
             ReasonCode = ReasonCode,
             ConnectedSystemId = ConnectedSystemId,

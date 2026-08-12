@@ -972,6 +972,10 @@ public class Worker : BackgroundService
             // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
             // "<guid> was deleted" for an unnamed object.
             DisplayName = mvo.Name,
+            // Both nouns, curated on the type rather than derived: the chain says "1 User" or "10 Users"
+            // depending on a cohort size computed at read time, which this edge cannot know.
+            ObjectTypeName = mvo.Type?.Name,
+            ObjectTypePluralName = mvo.Type?.PluralName,
             ReasonCode = policySnapshot?.ReasonCode ?? CausalReasonCode.NotSet,
             // Prefer the snapshot's triggering system: it is the decision-time fact, whereas the object's own
             // marker fields are cleared by a cancelled deletion and re-set by a later one.

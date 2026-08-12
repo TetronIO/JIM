@@ -136,6 +136,40 @@ public class CausalEdge
     public Guid? CausePendingExportId { get; set; }
 
     /// <summary>
+    /// The Metaverse Object Type of the cause, singular, as it was named at the time.
+    /// </summary>
+    /// <remarks>
+    /// Snapshotted for the same reason the display name is: the object is routinely deleted, and its type
+    /// can be deleted too. Both the singular and the plural are stored because a single edge cannot know
+    /// which it will need. Cohort size is computed at read time across edges, so the edge that says "1 User"
+    /// and the one that says "10 Users" are the same edge.
+    ///
+    /// Never derived by rule from the other. English pluralisation is unreliable on exactly the names this
+    /// field holds: Metaverse Object Types are authored by administrators, so they can be non-English
+    /// ("Mitarbeiter"), already plural ("Staff"), uncountable ("Equipment") or compound ("Attorney General").
+    /// The correct value is curated on the type itself, so it is copied rather than guessed.
+    /// </remarks>
+    public string? CauseObjectTypeName { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object Type of the cause, plural, as it was named at the time. See
+    /// <see cref="CauseObjectTypeName"/> for why both are stored and neither is derived.
+    /// </summary>
+    public string? CauseObjectTypePluralName { get; set; }
+
+    /// <summary>
+    /// The reference attribute on the effect that the cause acted through, as it was named at the time: the
+    /// relationship noun the chain reads back ("removed from Project Diamond's Static Members").
+    /// </summary>
+    /// <remarks>
+    /// Taken from the schema rather than from the object type, per the PRD's wording requirement. JIM's
+    /// built-in Group carries three reference attributes, so a rule keyed on the type would be wrong on two
+    /// of the three, and a customer-defined type can carry any number. Snapshotted because the attribute can
+    /// be renamed or removed, and because the Pending Export naming it is deleted on confirmation.
+    /// </remarks>
+    public string? EffectAttributeName { get; set; }
+
+    /// <summary>
     /// How the cause was named at the time, so a chain still reads sensibly after the cause itself
     /// has been purged. Without this a truncated chain could only say that something unidentifiable
     /// used to be here.

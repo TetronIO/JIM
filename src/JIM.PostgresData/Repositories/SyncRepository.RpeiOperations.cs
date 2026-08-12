@@ -783,7 +783,7 @@ public partial class SyncRepository
         if (edges.Count == 0)
             return;
 
-        const int columnsPerRow = 16;
+        const int columnsPerRow = 19;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         // One builder reused across chunks rather than one per iteration; a deletion cascade can produce many.
@@ -800,7 +800,7 @@ public partial class SyncRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14}, @p{offset + 15})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13}, @p{offset + 14}, @p{offset + 15}, @p{offset + 16}, @p{offset + 17}, @p{offset + 18})");
 
                 var edge = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = edge.Id });
@@ -812,13 +812,16 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CauseConnectedSystemObjectId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)edge.CausePendingExportId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseDisplayName ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.EdgeType });
-                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.ReasonCode });
-                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.ConnectedSystemId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.ConnectedSystemName ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 15}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseObjectTypeName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.CauseObjectTypePluralName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.EffectAttributeName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.EdgeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)edge.ReasonCode });
+                parameters.Add(new NpgsqlParameter($"p{offset + 14}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.ConnectedSystemId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 15}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.ConnectedSystemName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 16}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)edge.SyncRuleId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 17}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)edge.SyncRuleName ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 18}", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = edge.Created });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

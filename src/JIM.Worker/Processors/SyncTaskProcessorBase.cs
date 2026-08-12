@@ -149,9 +149,9 @@ public abstract class SyncTaskProcessorBase
     // referencing target CSO id and then by deleted Metaverse Object id (#1223). Unlike the Pending Export
     // above, these ACCUMULATE across pages: the coalesced Pending Export carries every page's removals, so
     // every page's deleted members are causes of the one RPEI emitted for the group. The inner dictionary
-    // deduplicates a member staged more than once (a group referencing it through two attributes), so the
-    // cohort counts each removal exactly once.
-    private readonly Dictionary<Guid, Dictionary<Guid, CausalCause>> _deferredRecallCausesByCsoId = new();
+    // is keyed by object AND attribute: a Group referencing the same deleted User through two attributes
+    // loses two distinct references, and the chain names the attribute each removal happened on.
+    private readonly Dictionary<Guid, Dictionary<(Guid MetaverseObjectId, string? AttributeName), CausalCause>> _deferredRecallCausesByCsoId = new();
 
     // Why each Metaverse Object queued for deletion this run is being deleted, as the machine-readable code the
     // attribution tuple groups on (#1223), keyed by Metaverse Object id. Captured at decision time because that
@@ -223,6 +223,11 @@ public abstract class SyncTaskProcessorBase
     // Lazily fetched at most ONCE per run profile execution (a tiny table); source system names must
     // never cost per-object queries on the hot path. Null until first needed.
     private Dictionary<int, string>? _connectedSystemNamesById;
+
+    // Metaverse Attribute id to name, for the relationship noun a causal edge reads back (#1223). Fetched at
+    // most once per run profile execution, like the Connected System names above; the table is tiny and a
+    // per-object query on the deletion path would not be acceptable.
+    private Dictionary<int, string>? _metaverseAttributeNamesById;
 
     // Deferred MVO→RPEI mappings for newly projected MVOs whose ID is Guid.Empty at registration time.
     // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
@@ -3327,18 +3332,26 @@ public abstract class SyncTaskProcessorBase
                 // rejoin caused nothing.
                 var deletedMvoIdSet = deletedMvoIds.ToHashSet();
                 var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
+
+                // The relationship noun the chain reads back comes from the schema, so the attribute's name is
+                // resolved here and snapshotted onto each cause. Fetched at most once per run.
+                _metaverseAttributeNamesById ??= await _syncRepo.GetMetaverseAttributeNamesAsync();
+
+                // Keyed on the candidate rather than on the referenced object: one deleted object referenced
+                // through two attributes is two distinct removals, and each names its own attribute.
                 var causesByReferencingMvoId = referenceRecallContext.Candidates
                     .Where(c => deletedMvoIdSet.Contains(c.ReferencedMetaverseObjectId))
                     .GroupBy(c => c.ReferencingMetaverseObjectId)
                     .ToDictionary(
                         g => g.Key,
-                        g => g.Select(c => c.ReferencedMetaverseObjectId).Distinct()
-                            .Select(id =>
+                        g => g.Select(c => (c.ReferencedMetaverseObjectId, c.MetaverseAttributeId)).Distinct()
+                            .Select(pair =>
                             {
-                                deletionCandidatesByMvoId.TryGetValue(id, out var deletedMvo);
-                                mvoDeletedNodes.TryGetValue(id, out var node);
+                                deletionCandidatesByMvoId.TryGetValue(pair.ReferencedMetaverseObjectId, out var deletedMvo);
+                                mvoDeletedNodes.TryGetValue(pair.ReferencedMetaverseObjectId, out var node);
                                 return deletedMvo != null
-                                    ? BuildDeletionCause(deletedMvo, node.Rpei, node.Outcome)
+                                    ? BuildDeletionCause(deletedMvo, node.Rpei, node.Outcome,
+                                        _metaverseAttributeNamesById.GetValueOrDefault(pair.MetaverseAttributeId))
                                     : null;
                             })
                             .Where(cause => cause != null)
@@ -3512,10 +3525,13 @@ public abstract class SyncTaskProcessorBase
     /// <param name="deletedMvo">The object being deleted.</param>
     /// <param name="rpei">The execution item recording the deletion, where outcome tracking recorded one.</param>
     /// <param name="outcome">The <c>MvoDeleted</c> outcome node, where one was recorded.</param>
+    /// <param name="effectAttributeName">The reference attribute the cause acted through, where the seam knows
+    /// one. Null on the deprovisioning path, which removes an account rather than a reference.</param>
     private CausalCause BuildDeletionCause(
         MetaverseObject deletedMvo,
         ActivityRunProfileExecutionItem? rpei,
-        ActivityRunProfileExecutionItemSyncOutcome? outcome)
+        ActivityRunProfileExecutionItemSyncOutcome? outcome,
+        string? effectAttributeName = null)
     {
         return new CausalCause
         {
@@ -3525,6 +3541,11 @@ public abstract class SyncTaskProcessorBase
             // Name, not NameOrId: the id is carried above, and the fallback would render the chain as
             // "<guid> was deleted" for an unnamed object.
             DisplayName = deletedMvo.Name,
+            // Both nouns, curated on the type rather than derived: the chain says "1 User" or "10 Users"
+            // depending on a cohort size computed at read time, which this edge cannot know.
+            ObjectTypeName = deletedMvo.Type?.Name,
+            ObjectTypePluralName = deletedMvo.Type?.PluralName,
+            EffectAttributeName = effectAttributeName,
             ReasonCode = _mvoDeletionReasonCodes.GetValueOrDefault(deletedMvo.Id, CausalReasonCode.NotSet),
             // The system whose disconnection triggered the Deletion Rule, set on both the immediate and
             // grace-period paths by MarkMvoForDeletionAsync. This is the attribution an administrator cohorts
@@ -3577,9 +3598,12 @@ public abstract class SyncTaskProcessorBase
         // same call but have opposite merge rules, and getting this wrong is silent: the final page's Pending
         // Export already carries every earlier page's removals, so last-write-wins is right for it, whereas
         // each page contributes different deleted members and keeping only the last page's causes would
-        // attribute a ten-member removal to whichever handful was processed last. Deduplicated by Metaverse
-        // Object id, because a group referenced through more than one attribute stages the same member twice
-        // and a cohort that double-counts reports more removals than happened.
+        // attribute a ten-member removal to whichever handful was processed last.
+        //
+        // Deduplicated by object AND attribute, not by object alone. A Group that references the same deleted
+        // User through both Static Members and Owners loses two distinct references, and the chain names the
+        // attribute each removal happened on, so collapsing them on object id would report one removal where
+        // two happened and attribute it to whichever attribute was staged last.
         if (!_deferredRecallCausesByCsoId.TryGetValue(csoId, out var accumulated))
         {
             accumulated = [];
@@ -3587,7 +3611,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         foreach (var cause in causes.Where(c => c.MetaverseObjectId.HasValue))
-            accumulated[cause.MetaverseObjectId!.Value] = cause;
+            accumulated[(cause.MetaverseObjectId!.Value, cause.EffectAttributeName)] = cause;
     }
 
     /// <summary>
