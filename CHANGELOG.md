@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Partition discovery against Active Directory and Samba AD no longer fails with an access denial on a connection that is authenticated and working. A directory can return a referral to another server alongside a search's results, and the platform LDAP client was following it on a new connection carrying none of the credentials JIM bound with. Any directory that refuses anonymous reads, which Active Directory does by default, then refused that read, and the refusal surfaced against the original search rather than against the referral, so the error named the wrong thing. JIM now declines referrals outright, and the LDAP Connector documentation says so. Following them properly, on connections JIM authenticates and reports, is tracked as its own feature. (#1352)
 - 🔒 The container images now build on patched .NET 10 base images, clearing CVE-2026-62901.
 - 🐛 Deleting an Attribute Flow from a Synchronisation Rule over the REST API or with `Remove-JIMSyncRuleMapping` now works. Every attempt failed with an internal error, so an Attribute Flow could only be removed from the portal.
 - 🐛 Moving a Container in a Connected System no longer removes it from JIM along with its selection, which took the objects beneath it out of scope and obsoleted them on the next Full Import. A moved Container is now filed under its new parent. (#1318)
