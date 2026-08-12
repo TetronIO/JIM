@@ -125,6 +125,16 @@ A Connected System manages one domain today. During Partition discovery on Activ
 
 If you select a Partition for a domain the connected domain controller does not host, the import fails fast with an error naming the Partition and the domain controller, rather than silently returning zero objects. To manage more than one domain, create a separate Connected System per domain, each with its Host setting pointing at that domain's own domain controllers.
 
+### Referrals
+
+**JIM does not follow LDAP referrals.** A referral is the directory's way of saying "the objects you asked for live on another server"; JIM ignores it and works only with what the connected server returns directly.
+
+This is deliberate. The platform LDAP client will follow a referral, but it does so on a new connection that carries none of the credentials JIM bound with, making the follow-up read anonymous. Active Directory refuses anonymous reads by default, so a chased referral fails, and it fails against the original search rather than against the referral. The result is an access-denied error on a connection that is authenticated and healthy, which is a considerably worse outcome than not following the referral at all.
+
+In practice this affects Partition discovery on Active Directory and Samba AD, where the search for the forest's domain list can return referrals alongside its results. JIM takes the results and discards the referrals.
+
+**What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects today; following referrals with JIM's own credentials, so that the follow-up read is authenticated and every server followed is recorded, is planned.
+
 ### Container Scope
 
 Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Partitions & Containers** tab:
