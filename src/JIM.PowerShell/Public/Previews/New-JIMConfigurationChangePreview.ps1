@@ -50,6 +50,14 @@ function New-JIMConfigurationChangePreview {
         scope; pass the containers that would carry a tick. Read the current selection with
         Get-JIMConnectedSystemPartition.
 
+    .PARAMETER ExcludedContainerIds
+        The containers that would be carved out of the selection around them. Omitted previews the
+        exclusions currently in force, so a proposal changing only the selection need not restate them;
+        an empty array previews lifting every exclusion, which brings those branches back into scope.
+
+        A container states one or the other, so an id passed here must not also appear in
+        -SelectedContainerIds; a proposal naming both is refused rather than resolved.
+
     .PARAMETER DeletionRule
         The proposed deletion rule. Omitted previews the stored rule.
         - Manual: objects are never automatically deleted
@@ -120,6 +128,15 @@ function New-JIMConfigurationChangePreview {
         Object, and how many Metaverse Objects would then become eligible for automatic deletion.
 
     .EXAMPLE
+        $current = Get-JIMConnectedSystemPartition -ConnectedSystemId 2
+        $carveOut = $current.containers | Where-Object name -eq 'Service Accounts'
+        New-JIMConfigurationChangePreview -ConnectedSystemId 2 -ExcludedContainerIds $carveOut.id -Wait
+
+        Reports what excluding the Service Accounts container would do. Its parent stays selected, so
+        nothing else in the branch moves; the objects inside the carve-out are the ones that leave import
+        scope, and the ones already joined would disconnect from their Metaverse Objects.
+
+    .EXAMPLE
         $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedPartitionIds 5 -Wait
         $preview.ImpactCounts | Where-Object transitionType -eq 'WouldBecomeDeletionEligible'
 
@@ -163,6 +180,10 @@ function New-JIMConfigurationChangePreview {
         [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
         [int[]]$SelectedContainerIds,
 
+        [Parameter(ParameterSetName = 'ConnectedSystemScopeSelection')]
+        [AllowEmptyCollection()]
+        [int[]]$ExcludedContainerIds,
+
         [Parameter()]
         [switch]$FullDataSet,
 
@@ -191,6 +212,10 @@ function New-JIMConfigurationChangePreview {
 
             if ($PSBoundParameters.ContainsKey('SelectedContainerIds')) {
                 $body.selectedContainerIds = @($SelectedContainerIds)
+            }
+
+            if ($PSBoundParameters.ContainsKey('ExcludedContainerIds')) {
+                $body.excludedContainerIds = @($ExcludedContainerIds)
             }
         }
 

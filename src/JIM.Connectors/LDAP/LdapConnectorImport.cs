@@ -66,11 +66,11 @@ internal class LdapConnectorImport
     private readonly Lazy<List<ConnectedSystemContainer>> _scopeDecidingContainers;
 
     /// <summary>
-    /// How many entries each excluded Container caused to be discarded on the way in, keyed by the Container's
-    /// external id. Client-side filtering means these entries were read from the directory and thrown away, and
-    /// the design accepted that cost on condition it is reported rather than hidden (#1255).
+    /// How many entries each excluded Container caused to be discarded on the way in. Client-side filtering means
+    /// these entries were read from the directory and thrown away, and the design accepted that cost on condition
+    /// it is reported rather than hidden (#1255).
     /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _entriesDiscardedByExclusion = new();
+    private readonly ExclusionDiscardTally _entriesDiscardedByExclusion = new();
 
     internal LdapConnectorImport(
         ConnectedSystem connectedSystem,
@@ -471,7 +471,8 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Reports how many entries each excluded Container caused this import call to read and discard.
+    /// Reports how many entries each excluded Container caused this import call to read and discard, onto the
+    /// result and into the log.
     /// </summary>
     /// <remarks>
     /// Client-side filtering is the deliberate choice (#1255): a directory cannot express "this subtree except
@@ -479,19 +480,35 @@ internal class LdapConnectorImport
     /// recently the hierarchy was refreshed. The cost is entries transferred only to be thrown away, and the
     /// design accepted that cost on condition it is visible: these counts are the evidence for revisiting the
     /// decision if an exclusion turns out to sit in front of a large branch.
+    ///
+    /// Both channels, not one. The log is where an engineer reading a run's output finds it; the result is what
+    /// carries it to the Activity, which is where the administrator who configured the exclusion will look.
     /// </remarks>
-    internal void LogEntriesDiscardedByExclusion()
+    internal void ReportEntriesDiscardedByExclusion(ConnectedSystemImportResult result)
     {
+        ArgumentNullException.ThrowIfNull(result);
+
         if (_entriesDiscardedByExclusion.IsEmpty)
             return;
 
-        var total = _entriesDiscardedByExclusion.Values.Sum();
-        _logger.Information("LdapConnectorImport: Discarded {DiscardedCount} entries read from excluded Containers across {ContainerCount} exclusion(s)",
-            total, _entriesDiscardedByExclusion.Count);
+        var counts = _entriesDiscardedByExclusion.ToCounts();
+        result.EntriesDiscardedByExclusion = counts;
 
-        foreach (var (containerExternalId, discarded) in _entriesDiscardedByExclusion.OrderByDescending(entry => entry.Value))
+        _logger.Information("LdapConnectorImport: Discarded {DiscardedCount} entries read from excluded Containers across {ContainerCount} exclusion(s)",
+            _entriesDiscardedByExclusion.Total, counts.Count);
+
+        // Named by Distinguished Name in the log even though the count travels by id: the log is read by a person,
+        // and a Container id says nothing to one.
+        var containersById = _scopeDecidingContainers.Value.ToDictionary(container => container.Id);
+        var named = counts.Select(count => (
+            ExternalId: containersById.TryGetValue(count.ContainerId, out var container)
+                ? container.ExternalId
+                : $"Container {count.ContainerId}",
+            count.EntriesDiscarded));
+
+        foreach (var (externalId, discarded) in named)
             _logger.Information("LdapConnectorImport: Excluded Container '{Container}' discarded {DiscardedCount} entries",
-                LogSanitiser.Sanitise(containerExternalId), discarded);
+                LogSanitiser.Sanitise(externalId), discarded);
     }
 
     /// <summary>
@@ -518,7 +535,7 @@ internal class LdapConnectorImport
 
         var excludedBy = LdapConnectorUtilities.ResolveMostSpecificContainerScope(distinguishedName, scopeDecidingContainers);
         if (excludedBy is { Excluded: true })
-            _entriesDiscardedByExclusion.AddOrUpdate(excludedBy.ExternalId, 1, (_, count) => count + 1);
+            _entriesDiscardedByExclusion.RecordDiscard(excludedBy);
 
         return false;
     }

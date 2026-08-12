@@ -1710,6 +1710,31 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
 
+    public Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
+    {
+        if (entriesDiscardedByContainerId.Count == 0)
+            return Task.CompletedTask;
+
+        var counts = _exclusionDiscardCounts.TryGetValue(activityId, out var existing)
+            ? existing
+            : _exclusionDiscardCounts[activityId] = new Dictionary<int, long>();
+
+        // Accumulated rather than replaced, matching the real repository's upsert: a caller reporting per page
+        // must reach the same total as one reporting once.
+        foreach (var (containerId, discarded) in entriesDiscardedByContainerId)
+            counts[containerId] = counts.GetValueOrDefault(containerId) + discarded;
+
+        return Task.CompletedTask;
+    }
+
+    private readonly Dictionary<Guid, Dictionary<int, long>> _exclusionDiscardCounts = new();
+
+    /// <summary>
+    /// Entries discarded through an exclusion so far, keyed by Activity then by excluded Container id, for tests
+    /// asserting what a run reported about the cost of its carve-outs (#1255).
+    /// </summary>
+    public IReadOnlyDictionary<Guid, Dictionary<int, long>> ExclusionDiscardCounts => _exclusionDiscardCounts;
+
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
         _activities[activity.Id] = activity;

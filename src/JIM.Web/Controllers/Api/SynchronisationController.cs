@@ -1176,14 +1176,13 @@ public class SynchronisationController(
 
         var currentSelection = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
 
-        // Exclusions are carried forward from the current selection rather than proposed: this endpoint cannot
-        // express them yet (#1255 Phase 5 adds them to the request alongside the write surfaces). Omitting them
-        // would preview the removal of every exclusion the Connected System carries, which is a change the caller
-        // did not ask for and would be counted as objects coming back into scope.
+        // An omitted list means "leave this half of the selection as it stands", for all three: a caller changing
+        // only the containers has not asked to lift every exclusion, and reading silence that way would preview
+        // objects flooding back into scope. An explicitly empty list is a different statement and is honoured.
         var proposal = new ConnectedSystemScopeSelectionProposal(
             request.SelectedPartitionIds ?? currentSelection.SelectedPartitionIds,
             request.SelectedContainerIds ?? currentSelection.SelectedContainerIds,
-            currentSelection.ExcludedContainerIds);
+            request.ExcludedContainerIds ?? currentSelection.ExcludedContainerIds);
 
         // An id naming nothing in this hierarchy is different in kind from a selection the preview disagrees with:
         // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to a
@@ -1218,7 +1217,7 @@ public class SynchronisationController(
 
     /// <summary>
     /// The error response for a proposal naming a partition or container this Connected System does not have, or
-    /// null when every id resolves.
+    /// stating that one Container is both managed and carved out, or null when the proposal is coherent.
     /// </summary>
     private static ApiErrorResponse? UnknownScopeSelectionIds(
         ConnectedSystem connectedSystem, ConnectedSystemScopeSelectionProposal proposal)
@@ -1237,11 +1236,28 @@ public class SynchronisationController(
                 $"Partition ID(s) {string.Join(", ", unknownPartitions)} do not belong to Connected System {connectedSystem.Id}.");
         }
 
-        var unknownContainers = proposal.SelectedContainerIds.Where(id => !knownContainerIds.Contains(id)).ToList();
+        var proposedExclusions = proposal.ExcludedContainerIds ?? [];
+        var unknownContainers = proposal.SelectedContainerIds
+            .Concat(proposedExclusions)
+            .Where(id => !knownContainerIds.Contains(id))
+            .Distinct()
+            .ToList();
+
         if (unknownContainers.Count > 0)
         {
             return ApiErrorResponse.BadRequest(
                 $"Container ID(s) {string.Join(", ", unknownContainers)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        // A Container is managed or carved out, never both (#1255). The write endpoints refuse the contradiction
+        // rather than resolving it, and a preview has even less business picking a winner: it would go on to state
+        // a confident object count for a configuration that could not be saved.
+        var contradictory = proposedExclusions.Intersect(proposal.SelectedContainerIds).ToList();
+        if (contradictory.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Container ID(s) {string.Join(", ", contradictory)} are named as both selected and excluded. " +
+                "A Container states one or the other, so name it in one list only.");
         }
 
         return null;

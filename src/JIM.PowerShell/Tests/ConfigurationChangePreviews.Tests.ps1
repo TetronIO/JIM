@@ -68,6 +68,69 @@ Describe 'New-JIMConfigurationChangePreview' {
             }
         }
 
+        It 'Sends the proposed exclusions, so a carve-out can be previewed before it is made' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedContainerIds 21 -ExcludedContainerIds 23 | Out-Null
+
+                $script:capturedBody.excludedContainerIds | Should -Be @(23)
+            }
+        }
+
+        It 'Sends a single excluded id as a JSON array rather than a bare number' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 2 -ExcludedContainerIds 23 | Out-Null
+
+                $script:capturedBody.excludedContainerIds -is [array] | Should -BeTrue
+            }
+        }
+
+        It 'Omits the exclusions the caller did not supply, so the stored carve-outs stay in force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedContainerIds 21 | Out-Null
+
+                # Sending an empty list instead would preview lifting every exclusion, which is a change the
+                # caller did not ask for and reads as objects flooding back into scope.
+                $script:capturedBody.ContainsKey('excludedContainerIds') | Should -BeFalse
+            }
+        }
+
+        It 'Sends an explicitly empty exclusion list, because lifting every carve-out is a real proposal' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+                Mock Invoke-JIMApi {
+                    $script:capturedBody = $Body
+                    [PSCustomObject]@{ ActivityId = [guid]::NewGuid(); IsBlocked = $false; Failed = $false; ValidationFindings = @() }
+                }
+
+                New-JIMConfigurationChangePreview -ConnectedSystemId 2 -ExcludedContainerIds @() | Out-Null
+
+                $script:capturedBody.ContainsKey('excludedContainerIds') | Should -BeTrue
+                $script:capturedBody.excludedContainerIds.Count | Should -Be 0
+            }
+        }
+
         It 'Asks for the full data set only when -FullDataSet is supplied' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
