@@ -117,7 +117,13 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
-ENV JIM_OPENAPI_GENERATE=true \
+# DOTNET_gcServer=0 for the same reason scripts/Generate-OpenApiDoc.ps1 sets it: generation
+# allocates hard and briefly, and Server GC's per-core heaps grow to tens of gigabytes when
+# nothing pushes back (measured 11.3 GB, against 1.28 GB under Workstation GC, for the same
+# 1 MB document). This stage is discarded after the document is copied out, so the setting
+# never reaches the shipped image, which keeps Server GC.
+ENV DOTNET_gcServer=0 \
+    JIM_OPENAPI_GENERATE=true \
     JIM_OPENAPI_OUTPUT_PATH=/app/publish/wwwroot/api/openapi/v1.json \
     JIM_LOG_LEVEL=Warning \
     JIM_LOG_PATH=/tmp \
