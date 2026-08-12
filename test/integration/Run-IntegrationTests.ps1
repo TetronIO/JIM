@@ -265,7 +265,12 @@ param(
     # The full matrix including the 500,000-row scale import. Off by default because the scale row
     # alone is the bulk of the runtime; -Quick is the representative subset for the regular gate.
     [Parameter(Mandatory=$false)]
-    [switch]$FullMatrix
+    [switch]$FullMatrix,
+
+    # Runs the suite from a linked git worktree, which the preflight below otherwise refuses. Only
+    # correct when no other JIM stack is running on this host; see the preflight for why.
+    [Parameter(Mandatory=$false)]
+    [switch]$AllowWorktree
 )
 
 Set-StrictMode -Version Latest
@@ -285,6 +290,11 @@ $NC = "$ESC[0m"
 # Script root
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
+
+# Preflight: refuse to run from a linked git worktree, because the reset below removes the JIM volumes
+# by their global names and would take the primary checkout's instance with them.
+. "$repoRoot/scripts/Assert-PrimaryCheckout.ps1"
+Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "the integration suite"
 
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
