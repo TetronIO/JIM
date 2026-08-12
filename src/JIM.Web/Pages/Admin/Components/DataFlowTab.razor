@@ -69,8 +69,11 @@
     expression's attribute references live in its text; search finds those.
 </MudText>
 
+@* CustomHeader lets HeaderContent supply the whole <thead>, so the column headings can carry a band row above
+   them naming the side each group belongs to. Without it MudTable renders HeaderContent inside a single row. *@
 <MudTable Items="@_flows" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-4 mb-5" SortLabel="Sort By"
           Outlined="true" Elevation="0" Loading="@_loading" LoadingProgressColor="Color.Primary"
+          CustomHeader="true" HeaderClass="jim-dataflow-header"
           RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
@@ -84,22 +87,33 @@
        learned. The Connected System block is always on the left and the Metaverse block always on the right; only
        the arrow between them changes with direction. *@
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">Connected System</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.ConnectedSystemSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
-        <MudTh Style="width: 1%;"></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Metaverse Object Type</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.MetaverseSideName)"><MudText Typo="Typo.button">Metaverse Attribute</MudText></MudTableSortLabel></MudTh>
-        @if (ShowPriorityColumn)
-        {
-            <MudTh>
-                <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
-                    <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
-                </MudTooltip>
-            </MudTh>
-        }
-        <MudTh><MudText Typo="Typo.button">@OptionsColumnHeader</MudText></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
+        @* The band names each side, so the headings beneath it need not restate it and the two sides read
+           symmetrically. The trailing columns belong to neither side, and their band is deliberately unlabelled:
+           naming that group would assert a structure JIM does not have. *@
+        <MudTHeadRow Class="jim-header-band">
+            <MudTh colspan="3" Class="jim-band-cs">Connected System</MudTh>
+            <MudTh Class="jim-band-none"></MudTh>
+            <MudTh colspan="2" Class="jim-band-mv">Metaverse</MudTh>
+            <MudTh colspan="@(ShowPriorityColumn ? 3 : 2)" Class="jim-band-none"></MudTh>
+        </MudTHeadRow>
+        <MudTHeadRow>
+            <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">System</MudText></MudTableSortLabel></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.ConnectedSystemSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
+            <MudTh Style="width: 1%;"></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.MetaverseSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
+            @if (ShowPriorityColumn)
+            {
+                <MudTh>
+                    <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
+                        <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
+                    </MudTooltip>
+                </MudTh>
+            }
+            <MudTh><MudText Typo="Typo.button">@OptionsColumnHeader</MudText></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
+        </MudTHeadRow>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Connected System">
@@ -107,8 +121,8 @@
         </MudTd>
         @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
            wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
-        <MudTd DataLabel="Object Type"><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></MudTd>
-        <MudTd DataLabel="Attribute">
+        <MudTd DataLabel="Connected System Object Type"><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></MudTd>
+        <MudTd DataLabel="Connected System Attribute">
             @if (context.Direction == SyncRuleDirection.Import)
             {
                 @foreach (var source in context.Sources.OrderBy(s => s.Order))
