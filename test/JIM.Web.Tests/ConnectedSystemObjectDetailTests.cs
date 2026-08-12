@@ -68,7 +68,9 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
         _navigation = Services.GetRequiredService<NavigationManager>();
     }
 
-    private void SetupAttributeValues(List<ConnectedSystemObjectAttributeValue> values)
+    private void SetupAttributeValues(
+        List<ConnectedSystemObjectAttributeValue> values,
+        Dictionary<string, int>? totalCounts = null)
     {
         _connectedSystems
             .Setup(r => r.GetConnectedSystemObjectDetailAsync(
@@ -84,11 +86,28 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
                     Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                     AttributeValues = values
                 },
-                AttributeValueTotalCounts = values
+                AttributeValueTotalCounts = totalCounts ?? values
                     .GroupBy(v => v.Attribute.Name)
                     .ToDictionary(g => g.Key, g => g.Count()),
                 ChangeCount = 0
             });
+    }
+
+    /// <summary>
+    /// Serves one attribute's values as the repository's range read does, which is what the "+n more" dialog reads
+    /// from once it is open.
+    /// </summary>
+    private void SetupAttributeValueRange(string attributeName, IReadOnlyList<ConnectedSystemObjectAttributeValue> values)
+    {
+        _connectedSystems
+            .Setup(r => r.GetAttributeValuesRangeAsync(ConnectedSystemObjectId, attributeName,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<ConnectedSystemObjectAttributeValue>
+                {
+                    Results = values.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? values.Count : null
+                });
     }
 
     private void SetupPendingExport(int changeCount)
@@ -134,6 +153,27 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
                     AttributePlurality = AttributePlurality.SingleValued
                 },
                 StringValue = $"{name}-value"
+            })
+            .ToList();
+
+    /// <summary>
+    /// One multi-valued attribute holding <paramref name="count"/> values, which is the shape that gives one grid
+    /// row carrying more values than a row can show.
+    /// </summary>
+    private static List<ConnectedSystemObjectAttributeValue> BuildMultiValuedAttribute(string name, int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = 1,
+                Attribute = new ConnectedSystemObjectTypeAttribute
+                {
+                    Id = 1,
+                    Name = name,
+                    Type = AttributeDataType.Text,
+                    AttributePlurality = AttributePlurality.MultiValued
+                },
+                StringValue = $"{name}-value-{i:D3}"
             })
             .ToList();
 
@@ -315,6 +355,114 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
                     "a search that matched nothing has a way out, and the empty state must offer it");
             }
         });
+    }
+
+    // ─── One line per row ───
+
+    /// <summary>
+    /// The virtualiser positions every row arithmetically from one fixed row height, so a row that renders taller
+    /// than that height puts the scroll position, the row index written to the URL and the space reserved for the
+    /// rows below it out of step with what is on screen. A single-valued attribute is one line already and must
+    /// keep rendering exactly as it did, with nothing offered to open.
+    /// </summary>
+    [Test]
+    public void CsoDetail_SingleValuedAttribute_RendersItsValueInlineWithNothingToOpen()
+    {
+        SetupAttributeValues(BuildAttributeValues("department"));
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("department-value"), "the one value is shown in the cell");
+                Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Empty,
+                    "there is nothing more to reach, so an affordance would be a dead one");
+            }
+        });
+    }
+
+    [Test]
+    public void CsoDetail_MultiValuedAttribute_RendersOneValueAndAnAffordanceForTheRest()
+    {
+        SetupAttributeValues(BuildMultiValuedAttribute("member", 4));
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("member-value-000"), "the first value still reads in the row");
+                Assert.That(cut.Markup, Does.Not.Contain("member-value-001"),
+                    "a row is one line, so the remaining values must not be stacked into the cell");
+                Assert.That(cut.FindAll(".jim-attr-expand-btn"), Has.Count.EqualTo(1));
+                Assert.That(cut.Find(".jim-attr-expand-btn").TextContent, Does.Contain("+3 more"),
+                    "the affordance must account for every value the row is not showing");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The row cannot show the values, so the affordance has to reach them, and what it opens has to be able to
+    /// carry all of them: a group with half a million members is the case this whole shape exists for.
+    /// </summary>
+    [Test]
+    public void CsoDetail_MultiValuedAffordance_OpensADialogHoldingEveryValue()
+    {
+        var values = BuildMultiValuedAttribute("member", 500);
+        SetupAttributeValues(values.Take(10).ToList(), new Dictionary<string, int> { ["member"] = 500 });
+        SetupAttributeValueRange("member", values);
+
+        var provider = Render<MudBlazor.MudDialogProvider>();
+        var cut = RenderPage();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Not.Empty));
+
+        cut.Find(".jim-attr-expand-btn").Click();
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.HasComponent<CsoMvaDialog>(), Is.True,
+                "the affordance must open the values, not merely say how many there are"));
+        provider.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(provider.HasComponent<CsoMvaTable>(), Is.True);
+                Assert.That(provider.Markup, Does.Contain("member-value-000"));
+                Assert.That(provider.HasComponent<MudBlazor.MudTablePager>(), Is.False,
+                    "the dialog's list is virtualised, so every value stays reachable however many there are");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The two settings that make the shared grid work inside a dialog at all. Without the stated ceiling it
+    /// measures where the page footer lands behind the overlay; without the URL opt-out it writes a search and
+    /// scroll position into an address bar that no deep link can reopen the dialog from.
+    /// </summary>
+    [Test]
+    public void CsoDetail_MvaDialogGrid_StatesItsOwnHeightAndKeepsItsStateOutOfTheUrl()
+    {
+        var values = BuildMultiValuedAttribute("member", 40);
+        SetupAttributeValues(values.Take(10).ToList(), new Dictionary<string, int> { ["member"] = 40 });
+        SetupAttributeValueRange("member", values);
+
+        var provider = Render<MudBlazor.MudDialogProvider>();
+        var cut = RenderPage();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Not.Empty));
+
+        cut.Find(".jim-attr-expand-btn").Click();
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.HasComponent<VirtualisedDataGrid<ConnectedSystemObjectAttributeValue>>(), Is.True));
+
+        var grid = provider.FindComponent<VirtualisedDataGrid<ConnectedSystemObjectAttributeValue>>().Instance;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(grid.MaxHeight, Is.Not.Null.And.Not.Empty);
+            Assert.That(grid.TrackUrlState, Is.False);
+        }
     }
 
     [Test]

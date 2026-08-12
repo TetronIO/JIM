@@ -7,11 +7,11 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Inline, searchable, virtualised table of a single Connected System Object attribute's values. Used directly
-   in the attributes table's value cell for multi-valued attributes whose value count exceeds the inline cap,
-   so all values are browsable in place without a dialog. The scrolling, the search box, the count and the
-   density all belong to the shared grid; this component only says how a value renders and how a window of
-   values is read. *@
+@* Searchable, virtualised table of a single Connected System Object attribute's values. It is the content of
+   the dialog a multi-valued attribute's "+n more" opens, rather than something rendered into a row: a row in a
+   virtualised table is one line tall, so a table inside one puts every row below it at an offset the virtualiser
+   cannot know about. The scrolling, the search box, the count and the density all belong to the shared grid;
+   this component only says how a value renders and how a window of values is read. *@
 
 <div class="jim-mva-dialog-table">
 @if (_isReferenceAttribute)
@@ -20,6 +20,8 @@
                          ContainerId="@($"cso-mva-{_slug}-references")"
                          UrlParameterPrefix="@($"{_slug}-")"
                          StateKey="@AttributeName"
+                         MaxHeight="@MaxHeight"
+                         TrackUrlState="@TrackUrlState"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -95,6 +97,8 @@ else
                          ContainerId="@($"cso-mva-{_slug}-values")"
                          UrlParameterPrefix="@($"{_slug}-")"
                          StateKey="@AttributeName"
+                         MaxHeight="@MaxHeight"
+                         TrackUrlState="@TrackUrlState"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
                          SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
@@ -166,6 +170,22 @@ else
     /// </summary>
     [Parameter]
     public bool Dense { get; set; }
+
+    /// <summary>
+    /// An explicit height ceiling for the values grid, passed straight through. A host whose container is not the
+    /// page (a dialog) has to state one, because the grid's default ceiling is measured from where the page footer
+    /// lands, which describes the page behind the dialog rather than the box the table is in.
+    /// </summary>
+    [Parameter]
+    public string? MaxHeight { get; set; }
+
+    /// <summary>
+    /// Whether the values grid keeps its search, sort and scroll position in the address bar. A host that is a
+    /// dialog passes false: that state would outlive the dialog that owns it, and a deep link cannot reopen the
+    /// dialog to put it back.
+    /// </summary>
+    [Parameter]
+    public bool TrackUrlState { get; set; } = true;
 
     /// <summary>
     /// The sort key standing for "the order the application layer returned them in". The range read takes no sort

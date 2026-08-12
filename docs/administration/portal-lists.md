@@ -50,6 +50,8 @@ The same behaviour applies to the tables that live inside a page, not just the l
 
 This matters most for group membership: a group with half a million members is read by scrolling it, and narrowed by typing into its search box, rather than by working through pages ten values at a time.
 
+Where a multi-valued attribute appears as one row of a scrolling table (a Connected System Object's attributes, a Pending Export's Attribute Changes), the row shows the attribute's first value and a **+n more** beside it. Every row of a scrolling table is one line tall, which is what lets the table place a row without having drawn the rows above it; **+n more** opens the whole set in a dialog, which scrolls in exactly the same way, so no value is out of reach however many there are.
+
 ## Automation
 
 Continuous scrolling is a portal behaviour only. The REST API and the PowerShell module are paged, and are unchanged: see [Rate Limiting](../api/rate-limiting.md) for the API's retrieval limits, and use `-All` on the paginated `Get-JIM*` cmdlets to page through a full result set.

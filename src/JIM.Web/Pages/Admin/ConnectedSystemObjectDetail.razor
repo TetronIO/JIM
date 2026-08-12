@@ -261,31 +261,22 @@
                             <VirtualisedSortHeader Title="Value" Name="value" />
                         </HeaderTemplate>
                         <CellTemplate>
-                            @if (context.Item.Values.Count == 1)
-                            {
-                                <CsoAttributeValue Value="@context.Item.Values[0]" />
-                            }
-                            else if (context.Item.TotalCount <= MvaInlineThreshold)
-                            {
-                                <div class="jim-attr-expanded">
-                                    @foreach (var val in context.Item.Values)
-                                    {
-                                        <div class="jim-attr-expanded-item">
-                                            <CsoAttributeValue Value="@val" />
-                                        </div>
-                                    }
-                                </div>
-                            }
-                            else if (ConnectedSystemObject != null)
-                            {
-                                @* Captured before the guard rather than dereferenced through it in the markup:
-                                   a chained dereference under an @if is what CodeQL reads as a possible null. *@
-                                var connectedSystemObjectId = ConnectedSystemObject.Id;
-                                <CsoMvaTable @key="context.Item.AttributeName"
-                                             AttributeName="@context.Item.AttributeName"
-                                             ConnectedSystemObjectId="@connectedSystemObjectId"
-                                             IsReferenceAttribute="@context.Item.IsReference" />
-                            }
+                            @* A row in a virtualised table is one line: the virtualiser positions every row from
+                               one fixed ItemSize, so a cell that stacks its values (or nests a whole table) puts
+                               everything below it at an offset nothing on the page agrees with. A multi-valued
+                               attribute therefore shows its first value and sends the rest to a dialog, which
+                               holds a virtualised grid of them so none is out of reach however many there are. *@
+                            @{ var group = context.Item; }
+                            <div class="jim-attr-single-line">
+                                <span class="jim-attr-single-line-value"><CsoAttributeValue Value="@group.Values[0]" /></span>
+                                @if (group.TotalCount > 1)
+                                {
+                                    <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                               OnClick="@(() => OpenMvaDialogAsync(group))">
+                                        +@((group.TotalCount - 1).ToString("N0")) more
+                                    </MudButton>
+                                }
+                            </div>
                         </CellTemplate>
                     </TemplateColumn>
                     <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-attr-header-type" CellClass="jim-attr-type">
@@ -650,7 +641,38 @@
         };
     }
 
-    private const int MvaInlineThreshold = 10;
+    /// <summary>
+    /// Opens the whole set of one multi-valued attribute's values, which the grid's own row cannot show: a row is
+    /// one line tall, so the cell shows the first value and this dialog carries the rest, virtualised, so a group
+    /// with half a million members is still reachable in full.
+    /// </summary>
+    private async Task OpenMvaDialogAsync(AttributeGroup group)
+    {
+        if (ConnectedSystemObject == null)
+            return;
+
+        // Captured before it is handed to the dialog rather than dereferenced through the guard in an initialiser:
+        // a chained dereference under an @if is what CodeQL reads as a possible null (JIM.Web/CLAUDE.md).
+        var connectedSystemObjectId = ConnectedSystemObject.Id;
+
+        var parameters = new DialogParameters<CsoMvaDialog>
+        {
+            { x => x.AttributeName, group.AttributeName },
+            { x => x.ConnectedSystemObjectId, connectedSystemObjectId },
+            { x => x.IsReferenceAttribute, group.IsReference },
+            { x => x.TotalCount, group.TotalCount }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<CsoMvaDialog>(group.AttributeName, parameters, options);
+    }
 
     /// <summary>
     /// One row of the attributes grid: an attribute and the values of it this object holds. Public so the grid's

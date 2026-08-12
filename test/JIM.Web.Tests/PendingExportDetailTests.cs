@@ -15,6 +15,7 @@ using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using JIM.Web.Models;
 using JIM.Web.Pages.Admin;
 using JIM.Web.Shared;
@@ -101,6 +102,40 @@ public class PendingExportDetailTests : JimComponentTestContext
                 StringValue = $"{name}-value"
             })
             .ToList();
+
+    /// <summary>
+    /// One attribute carrying <paramref name="count"/> queued changes, which is the shape that gives one grid row
+    /// carrying more changes than a row can show.
+    /// </summary>
+    private static List<PendingExportAttributeValueChange> BuildMultiValuedChanges(string attributeName, int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = 1,
+                Attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = attributeName },
+                ChangeType = PendingExportAttributeChangeType.Add,
+                Status = PendingExportAttributeChangeStatus.Pending,
+                StringValue = $"{attributeName}-value-{i:D3}"
+            })
+            .ToList();
+
+    /// <summary>
+    /// Serves one attribute's queued changes as the repository's range read does, which is what the "+n more"
+    /// dialog reads from once it is open.
+    /// </summary>
+    private void SetupChangeRange(string attributeName, IReadOnlyList<PendingExportAttributeValueChange> changes)
+    {
+        _connectedSystems
+            .Setup(r => r.GetPendingExportAttributeChangesRangeAsync(PendingExportId, attributeName,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<PendingExportAttributeValueChange>
+                {
+                    Results = changes.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? changes.Count : null
+                });
+    }
 
     private IRenderedComponent<PendingExportDetail> RenderPage(string query = "")
     {
@@ -212,6 +247,88 @@ public class PendingExportDetailTests : JimComponentTestContext
                 "the search matches the attribute name, case-insensitively, as the paged table's filter did");
             Assert.That(byValue.Items.Select(g => g.AttributeName), Is.EqualTo(new[] { "title" }),
                 "the search also matches a change's value, as the paged table's filter did");
+        }
+    }
+
+    // ─── One line per row ───
+
+    /// <summary>
+    /// The virtualiser positions every row arithmetically from one fixed row height, so a row that renders taller
+    /// than that height puts the scroll position, the row index written to the URL and the space reserved for the
+    /// rows below it out of step with what is on screen. An attribute carrying one change is one line already and
+    /// must keep rendering exactly as it did, with nothing offered to open.
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_AttributeWithOneChange_RendersItsValueInlineWithNothingToOpen()
+    {
+        SetupChanges(BuildChanges("department"));
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("department-value"));
+                Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Empty,
+                    "there is nothing more to reach, so an affordance would be a dead one");
+            }
+        });
+    }
+
+    [Test]
+    public void PendingExportDetail_AttributeWithSeveralChanges_RendersOneValueAndAnAffordanceForTheRest()
+    {
+        SetupChanges(BuildMultiValuedChanges("member", 4));
+
+        var cut = RenderPage();
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.Markup, Does.Contain("member-value-000"), "the first value still reads in the row");
+                Assert.That(cut.Markup, Does.Not.Contain("member-value-001"),
+                    "a row is one line, so the remaining changes must not be stacked into the cell");
+                Assert.That(cut.FindAll(".jim-attr-expand-btn"), Has.Count.EqualTo(1));
+                Assert.That(cut.Find(".jim-attr-expand-btn").TextContent, Does.Contain("+3 more"),
+                    "the affordance must account for every change the row is not showing");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The row cannot show the changes, so the affordance has to reach them, and what it opens has to be able to
+    /// carry all of them: a group with half a million members is the case this whole shape exists for. The dialog's
+    /// grid also has to state its own height ceiling (its container is not the page) and keep its state out of the
+    /// address bar (no deep link can reopen a dialog to put it back).
+    /// </summary>
+    [Test]
+    public void PendingExportDetail_SeveralChangesAffordance_OpensAVirtualisedDialogOverEveryChange()
+    {
+        var changes = BuildMultiValuedChanges("member", 500);
+        SetupChanges(changes.Take(10).ToList(), new Dictionary<string, int> { ["member"] = 500 });
+        SetupChangeRange("member", changes);
+
+        var provider = Render<MudBlazor.MudDialogProvider>();
+        var cut = RenderPage();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Not.Empty));
+
+        cut.Find(".jim-attr-expand-btn").Click();
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.HasComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>(), Is.True,
+                "the affordance must open the changes, not merely say how many there are"));
+
+        var grid = provider.FindComponent<VirtualisedDataGrid<PendingExportAttributeValueChange>>().Instance;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.HasComponent<PendingExportMvaDialog>(), Is.True);
+            Assert.That(provider.HasComponent<MudBlazor.MudTablePager>(), Is.False,
+                "the dialog's list is virtualised, so every change stays reachable however many there are");
+            Assert.That(grid.MaxHeight, Is.Not.Null.And.Not.Empty);
+            Assert.That(grid.TrackUrlState, Is.False);
         }
     }
 

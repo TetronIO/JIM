@@ -1691,6 +1691,31 @@ html[lang] .jim-schema-change-table td {
     align-self: flex-start;
 }
 
+/* A multi-valued attribute's cell inside a virtualised grid. The virtualiser positions every row from one fixed
+   ItemSize, so the cell has to stay exactly one line however many values the attribute holds: the first value is
+   shown, clipped rather than wrapped, and the "+n more" affordance beside it opens the whole set in a dialog. */
+.jim-attr-single-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.jim-attr-single-line-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* The shared affordance button is authored for the old stacked layout, where it sat under the values and so
+   aligned to the start of a column. On this one-line row it has to sit beside the value, and it must not be the
+   thing that gives way when the value is long. */
+.jim-attr-single-line .jim-attr-expand-btn {
+    align-self: center;
+    flex-shrink: 0;
+}
+
 .jim-attr-expanded {
     display: flex;
     flex-direction: column;
