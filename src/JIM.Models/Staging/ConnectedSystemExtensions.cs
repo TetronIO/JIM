@@ -272,6 +272,52 @@ public static class ConnectedSystemExtensions
             .Where(c => !string.IsNullOrEmpty(c.ExternalId))
             .Select(c => c.ExternalId)];
 
+    /// <summary>
+    /// Every container stating something about scope beneath every selected partition: the selections and the
+    /// exclusions alike.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="GetSelectedContainers"/>, and the distinction matters (#1255).
+    /// <see cref="GetSelectedContainers"/> answers "where may JIM search, and where may it write?", which only a
+    /// selection can license. This answers "which container decides an object's fate?", which an exclusion decides
+    /// as much as a selection does. Handing the selections alone to a scope decision silently drops every
+    /// exclusion, and an exclusion that decides nothing carves nothing out: every object in the excluded branch
+    /// comes back in scope, imported and exported exactly as though the administrator had never excluded it.
+    ///
+    /// The whole hierarchy is walked rather than stopping at the outermost statement, because an exclusion always
+    /// sits beneath the selection it carves into, and a re-inclusion beneath that.
+    /// </remarks>
+    public static List<ConnectedSystemContainer> GetScopeDecidingContainers(this ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var deciding = new List<ConnectedSystemContainer>();
+        if (connectedSystem.Partitions == null)
+            return deciding;
+
+        foreach (var container in connectedSystem.Partitions
+                     .Where(p => p.Selected && p.Containers != null)
+                     .SelectMany(p => p.Containers!))
+            CollectScopeDecidingContainers(container, deciding);
+
+        return deciding;
+    }
+
+    /// <summary>
+    /// Every container stating something about scope within one partition, for callers working a partition at a
+    /// time (an import run targeting one). <see cref="GetScopeDecidingContainers(ConnectedSystem)"/> for the rest.
+    /// </summary>
+    public static List<ConnectedSystemContainer> GetScopeDecidingContainers(this ConnectedSystemPartition connectedSystemPartition)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemPartition);
+
+        var deciding = new List<ConnectedSystemContainer>();
+        foreach (var container in connectedSystemPartition.Containers ?? [])
+            CollectScopeDecidingContainers(container, deciding);
+
+        return deciding;
+    }
+
     private static void CollectSelectedContainers(ConnectedSystemContainer container, List<ConnectedSystemContainer> selected)
     {
         if (container.Selected)
@@ -279,6 +325,15 @@ public static class ConnectedSystemExtensions
 
         foreach (var child in container.ChildContainers)
             CollectSelectedContainers(child, selected);
+    }
+
+    private static void CollectScopeDecidingContainers(ConnectedSystemContainer container, List<ConnectedSystemContainer> deciding)
+    {
+        if (container.Selected || container.Excluded)
+            deciding.Add(container);
+
+        foreach (var child in container.ChildContainers)
+            CollectScopeDecidingContainers(child, deciding);
     }
 
     /// <summary>

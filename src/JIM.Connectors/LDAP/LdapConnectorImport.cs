@@ -58,6 +58,20 @@ internal class LdapConnectorImport
     private LdapConnectorRootDse? _previousRootDse;
     private LdapConnectorRootDse? _currentRootDse;
 
+    /// <summary>
+    /// Every Container stating something about scope for this run, held once because every entry the searches
+    /// return is tested against it. Lazy because it depends on the Run Profile's target partitions, and
+    /// thread-safe because the parallel combos convert their entries concurrently.
+    /// </summary>
+    private readonly Lazy<List<ConnectedSystemContainer>> _scopeDecidingContainers;
+
+    /// <summary>
+    /// How many entries each excluded Container caused to be discarded on the way in, keyed by the Container's
+    /// external id. Client-side filtering means these entries were read from the directory and thrown away, and
+    /// the design accepted that cost on condition it is reported rather than hidden (#1255).
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _entriesDiscardedByExclusion = new();
+
     internal LdapConnectorImport(
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
@@ -86,6 +100,7 @@ internal class LdapConnectorImport
         _logger = logger;
         _cancellationToken = cancellationToken;
         _progress = progress;
+        _scopeDecidingContainers = new Lazy<List<ConnectedSystemContainer>>(() => GetScopeDecidingContainers(GetTargetPartitions()));
 
         // Get search timeout from settings, defaulting to 5 minutes
         var searchTimeoutSetting = connectedSystem.SettingValues
@@ -396,7 +411,7 @@ internal class LdapConnectorImport
                 previousChangeNumber);
 
             await _progress.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {previousChangeNumber:N0}...");
-            var changelogTargetContainers = GetTargetContainers(GetTargetPartitions());
+            var changelogTargetContainers = GetScopeDecidingContainers(GetTargetPartitions());
             await ReportObjectsReadByAsync(result,
                 () => GetDeltaResultsUsingChangelog(result, previousChangeNumber, changelogTargetContainers));
         }
@@ -432,18 +447,80 @@ internal class LdapConnectorImport
     }
 
     /// <summary>
-    /// Returns the Containers a full import would search, across the partitions this run targets, each carrying
-    /// its own scope.
+    /// Returns every Container stating something about scope across the partitions this run targets: the
+    /// selections and the exclusions alike.
     /// </summary>
     /// <remarks>
-    /// The full import and the AD USN delta search from each of these as a base, so the directory applies the
-    /// selection server-side. The changelog and accesslog delta paths cannot: they read one directory-wide log
-    /// and have to decide per entry whether the changed object is one this Connected System imports. This list
-    /// is what they decide against, so that a delta import sees the same objects a full import would.
+    /// This is what decides an object's fate, and it is deliberately a different list from the search roots
+    /// (<see cref="ConnectedSystemUtilities.GetTopLevelSelectedContainers"/>), which say only where to search
+    /// from. A Subtree search of a selected Container returns everything beneath it, including any branch the
+    /// administrator has excluded (#1255), so an exclusion adds no search root of its own and the entries a
+    /// search returns are filtered against this list on the way through. Decomposing the searches to avoid
+    /// excluded branches server-side was rejected in the design: it would make import scope depend on how
+    /// recently the hierarchy was refreshed, so a new Container beneath a selected parent would be silently
+    /// skipped and its objects obsoleted.
+    ///
+    /// Four paths ask this question and all must reach the same answer, or a delta import sees objects a full
+    /// import would not: the full import and the AD USN delta, filtering the entries their searches return; and
+    /// the changelog and accesslog deltas, which read one directory-wide log and have to decide per entry whether
+    /// the changed object is one this Connected System imports.
     /// </remarks>
-    private List<ConnectedSystemContainer> GetTargetContainers(IEnumerable<ConnectedSystemPartition> targetPartitions)
+    private List<ConnectedSystemContainer> GetScopeDecidingContainers(IEnumerable<ConnectedSystemPartition> targetPartitions)
     {
-        return targetPartitions.SelectMany(ConnectedSystemUtilities.GetTopLevelSelectedContainers).ToList();
+        return targetPartitions.SelectMany(partition => partition.GetScopeDecidingContainers()).ToList();
+    }
+
+    /// <summary>
+    /// Reports how many entries each excluded Container caused this import call to read and discard.
+    /// </summary>
+    /// <remarks>
+    /// Client-side filtering is the deliberate choice (#1255): a directory cannot express "this subtree except
+    /// that branch" in one search, and decomposing the searches instead would make import scope depend on how
+    /// recently the hierarchy was refreshed. The cost is entries transferred only to be thrown away, and the
+    /// design accepted that cost on condition it is visible: these counts are the evidence for revisiting the
+    /// decision if an exclusion turns out to sit in front of a large branch.
+    /// </remarks>
+    internal void LogEntriesDiscardedByExclusion()
+    {
+        if (_entriesDiscardedByExclusion.IsEmpty)
+            return;
+
+        var total = _entriesDiscardedByExclusion.Values.Sum();
+        _logger.Information("LdapConnectorImport: Discarded {DiscardedCount} entries read from excluded Containers across {ContainerCount} exclusion(s)",
+            total, _entriesDiscardedByExclusion.Count);
+
+        foreach (var (containerExternalId, discarded) in _entriesDiscardedByExclusion.OrderByDescending(entry => entry.Value))
+            _logger.Information("LdapConnectorImport: Excluded Container '{Container}' discarded {DiscardedCount} entries",
+                LogSanitiser.Sanitise(containerExternalId), discarded);
+    }
+
+    /// <summary>
+    /// Whether an entry a search returned is one this Connected System imports, counting it against the excluded
+    /// Container that carved it out where it is not.
+    /// </summary>
+    /// <remarks>
+    /// Applied to every entry converted, on the full import and both delta paths alike, because a directory
+    /// cannot express "this subtree except that branch" in a single search. Where no Container has been excluded
+    /// this is the same answer the search itself gave, at the cost of one containment test per entry against a
+    /// list bounded by the number of selected Containers.
+    /// </remarks>
+    private bool IsWithinImportScope(string? distinguishedName)
+    {
+        var scopeDecidingContainers = _scopeDecidingContainers.Value;
+
+        // No Container-level opinion to apply: the partition selection alone governs, as it did before Containers
+        // could be excluded.
+        if (scopeDecidingContainers.Count == 0)
+            return true;
+
+        if (LdapConnectorUtilities.IsDnInScope(distinguishedName, scopeDecidingContainers))
+            return true;
+
+        var excludedBy = LdapConnectorUtilities.ResolveMostSpecificContainerScope(distinguishedName, scopeDecidingContainers);
+        if (excludedBy is { Excluded: true })
+            _entriesDiscardedByExclusion.AddOrUpdate(excludedBy.ExternalId, 1, (_, count) => count + 1);
+
+        return false;
     }
 
     /// <summary>
@@ -1395,7 +1472,7 @@ internal class LdapConnectorImport
                 // Filter by Container scope — the changelog is directory-wide, so it reports changes to objects
                 // this Connected System does not import. A full import only reads the selected Containers, each
                 // to its own scope; without this, a delta import would bring in objects a full import never would.
-                if (!LdapConnectorUtilities.IsDnWithinAnyContainerScope(targetDn, targetContainers))
+                if (!LdapConnectorUtilities.IsDnInScope(targetDn, targetContainers))
                 {
                     skippedOutOfScope++;
                     continue;
@@ -1480,7 +1557,7 @@ internal class LdapConnectorImport
         // Partition filtering alone is not the same selection a full import makes: within a partition, only the
         // selected Containers are imported from, and each carries its own scope. Applying that here keeps a delta
         // import to the objects a full import would have returned.
-        var targetContainers = GetTargetContainers(targetPartitions);
+        var targetContainers = GetScopeDecidingContainers(targetPartitions);
 
         while (iterations < maxIterations)
         {
@@ -1565,7 +1642,7 @@ internal class LdapConnectorImport
 
                 // Filter by Container scope — the entry is within a selected partition, but the administrator
                 // selects Containers within it, and a OneLevel Container excludes everything below its own level.
-                if (!LdapConnectorUtilities.IsDnWithinAnyContainerScope(reqDn, targetContainers))
+                if (!LdapConnectorUtilities.IsDnInScope(reqDn, targetContainers))
                 {
                     skippedOutOfScope++;
                     continue;
@@ -1801,6 +1878,13 @@ internal class LdapConnectorImport
                 _logger.Information("ConvertLdapResults: Cancellation requested. Stopping.");
                 return importObjects;
             }
+
+            // Discard entries an excluded Container carves out. A Subtree search returns everything beneath its
+            // base, so the directory cannot apply an exclusion for us and every path that converts entries has to
+            // apply it here instead (#1255). Nothing beyond this point knows about Containers, so a discarded
+            // entry never becomes an import object, is never staged, and cannot be exported to.
+            if (!IsWithinImportScope(searchResult.DistinguishedName))
+                continue;
 
             // start to build the object that will represent the object in the Connected System. we will pass this back to JIM
             var importObject = new ConnectedSystemImportObject
