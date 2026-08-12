@@ -654,6 +654,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         connection.SessionOptions.ProtocolVersion = 3;
         connection.Timeout = timeout;
 
+        // Every connection JIM opens, not just the primary one: a referral can be returned to any search, and a
+        // parallel import connection chasing one anonymously fails exactly as the primary would.
+        LdapConnectorUtilities.DisableReferralChasing(connection, logger);
+
         // Configure LDAPS if enabled
         if (useSsl)
         {
