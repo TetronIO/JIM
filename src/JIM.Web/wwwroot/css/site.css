@@ -354,31 +354,57 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     background-color: var(--mud-palette-surface);
 }
 
-/* Operations Queue: hide task rows when their schedule group is collapsed */
-.jim-queue-collapsed-row {
-    display: none !important;
+/* ─── Operations Queue: one block per Schedule Execution ───
+   The queue is a grid per group rather than one grouped table (MudBlazor cannot group and virtualise at once),
+   so each Schedule Execution's header is an ordinary block that has to join the grid beneath it into one box:
+   it carries the top corners and leaves its bottom edge to the grid's own top border. */
+.jim-queue-group-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom: none;
+    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
 }
 
-/* Operations Queue: collapse empty group header rows for standalone tasks */
-.jim-queue-standalone-group {
-    padding: 0 !important;
-    height: 0 !important;
-    border: none !important;
-    line-height: 0 !important;
-    font-size: 0 !important;
+/* The block leading the queue sits under the worker status bar, which already draws the box's top edge. */
+.jim-queue-group-header--joined {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
-/* Operations Queue: visible separator before standalone tasks to delineate from schedule groups */
-.jim-queue-standalone-separator {
-    height: 3px !important;
-    background-color: var(--mud-palette-lines-default);
+/* Collapsed, the header is the whole box: it closes itself off rather than opening onto nothing. */
+.jim-queue-group-header--collapsed {
+    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom-left-radius: var(--jim-container-radius);
+    border-bottom-right-radius: var(--jim-container-radius);
 }
 
-/* Operations Queue: remove top border radius when worker activity bar connects */
-.jim-queue-table-active.mud-table-outlined {
-    border-top-left-radius: 0 !important;
-    border-top-right-radius: 0 !important;
-    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+/* The Schedule's name and position, which is also what collapses the group. */
+.jim-queue-group-toggle {
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+
+/* Pushed right so the Schedule's actions land over the Actions column of the rows beneath. */
+.jim-queue-group-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* Every cell hangs from the top of its row, so the progress rails line up across the grid rather than floating
+   at a height that shifts with each cell's contents. Scoped to the queue's own grids. */
+.jim-queue-grid td {
+    vertical-align: top;
+}
+
+/* Joined to the block directly above it (its Schedule Execution's header, or the worker status bar), so the two
+   read as one box. Qualified past MudBlazor's own outlined-table rule, which loads after this sheet. */
+html[lang] .jim-queue-grid--joined.mud-table-outlined {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
 /* Worker activity indicator bar — shown above queue table when tasks are processing */
@@ -2800,13 +2826,6 @@ html[lang] .jim-schema-change-table td {
    poll, which is about once a second while a run is in flight. */
 .jim-queue-progress-count {
     font-variant-numeric: tabular-nums;
-}
-
-/* Every cell hangs from the top of the row, so the rails line up across the table rather than
-   floating at a height that shifts with each cell's contents. Scoped to the queue's own table so
-   no other table's vertical centring is disturbed. */
-.jim-queue-table-active td {
-    vertical-align: top;
 }
 
 /* ─── A Schedule Execution's steps in a queue group header (#1162) ───

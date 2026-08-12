@@ -60,6 +60,12 @@ Every row of a scrolling table is one line tall, which is what lets the table pl
 
 **Secondary text reads after the value rather than under it.** A setting's description, an attribute's data type and plurality, and the pattern behind a previewed change now follow what they qualify on the same line, low-lighted. Hovering shows both in full.
 
+## The Operations queue
+
+The queue is a table per block rather than one long table: each Schedule Execution's steps scroll within their own, underneath the header that names the Schedule, draws its rail and carries **View execution** and the option to cancel it. Everything running outside a Schedule scrolls in a table of its own at the end. Each table states how many Worker Tasks it holds, and is bounded in height, so a Schedule with twenty steps in it cannot push the rest of the queue off the screen; click a Schedule's header to put its steps away entirely.
+
+There is no search box on these, because a search over one Schedule's handful of steps says nothing a glance does not.
+
 ## Automation
 
 Continuous scrolling is a portal behaviour only. The REST API and the PowerShell module are paged, and are unchanged: see [Rate Limiting](../api/rate-limiting.md) for the API's retrieval limits, and use `-All` on the paginated `Get-JIM*` cmdlets to page through a full result set.

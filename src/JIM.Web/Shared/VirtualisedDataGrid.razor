@@ -36,7 +36,7 @@
                  FixedHeader="true" ItemSize="@RowHeight"
                  Hover="true" Dense="@_dense" Outlined="true" Elevation="0" SortMode="SortMode.Single"
                  RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
-                 RowClick="HandleRowClick" Class="mt-5">
+                 RowClick="HandleRowClick" Class="@GridClass">
         <ToolBarContent>
             @* The toolbar has two anchored ends and nothing loose in between. Left: how the table is displayed,
                then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
@@ -188,6 +188,15 @@
     /// </summary>
     [Parameter]
     public bool TrackUrlState { get; set; } = true;
+
+    /// <summary>
+    /// Classes for the grid itself. The default is the standing gap between a grid and whatever page chrome sits
+    /// above it, which is nearly always what a list page wants. A grid that is joined to the block directly above
+    /// it (each Schedule Execution's header in the Operations queue) replaces it, so the two read as one box
+    /// rather than as a header floating over a table.
+    /// </summary>
+    [Parameter]
+    public string GridClass { get; set; } = "mt-5";
 
     /// <summary>
     /// An explicit height ceiling (any CSS length, e.g. "400px"), for a grid whose container is not the page: a

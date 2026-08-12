@@ -236,6 +236,30 @@ public class VirtualisedDataGridTests : JimComponentTestContext
     }
 
     [Test]
+    public void VirtualisedDataGrid_GridClassGiven_ReplacesTheStandingTopMargin()
+    {
+        // The default margin is the gap between a grid and the page chrome above it. A grid joined to the block
+        // directly above it (a Schedule Execution's header in the Operations queue) has no such gap to leave, and
+        // must be able to say so: keeping the margin as well would draw the header and its own rows as two boxes.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "joined-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.GridClass, "jim-queue-grid"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var grid = cut.FindComponent<MudBlazor.MudDataGrid<string>>().Instance;
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(grid.Class, Is.EqualTo("jim-queue-grid"));
+                Assert.That(grid.Class, Does.Not.Contain("mt-5"), "the caller's classes replace the default margin rather than adding to it");
+            }
+        });
+    }
+
+    [Test]
     public async Task VirtualisedDataGrid_WhenDisposed_ReleasesItsViewportFit()
     {
         var cut = RenderGrid();

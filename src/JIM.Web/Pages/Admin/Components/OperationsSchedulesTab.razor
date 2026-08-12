@@ -38,11 +38,18 @@
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
-                <MudText Typo="Typo.body1">@schedule.Name</MudText>
-                @if (!string.IsNullOrEmpty(schedule.Description))
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@schedule.Description</MudText>
-                }
+                @* One line: a virtualised row is a fixed height, so a description stacked under the name is
+                   clipped on the Schedules that have one and leaves dead space on the Schedules that do not.
+                   The name holds its width and the description is what gives way. *@
+                <div class="jim-attr-single-line">
+                    <MudText Typo="Typo.body1">@schedule.Name</MudText>
+                    @if (!string.IsNullOrEmpty(schedule.Description))
+                    {
+                        <MudTooltip Text="@schedule.Description" Arrow="true" Placement="Placement.Top" RootClass="jim-attr-single-line-value">
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary jim-attr-single-line-value">@schedule.Description</MudText>
+                        </MudTooltip>
+                    }
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="ScheduleHeader" Title="Steps" Sortable="false">
@@ -103,29 +110,31 @@
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
-                @if (schedule.LastRunTime.HasValue)
-                {
-                    var lastRunTime = schedule.LastRunTime.Value;
-                    <MudTooltip Text="@lastRunTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <MudText Typo="Typo.body1">@lastRunTime.ToLocalTime().ToRelativeTime()</MudText>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
-                }
-                @* When it last ran is only half the story: a Schedule failing every night looks identical to a
-                   healthy one without its outcome. A failed run also says which step it stopped on. *@
-                @if (schedule.LastExecutionStatus.HasValue)
-                {
-                    var lastExecutionStatus = schedule.LastExecutionStatus.Value;
-                    <div>
-                        <MudChip T="string" Variant="Variant.Text" Class="ml-0"
+                @* One line: the outcome sits beside the timestamp rather than under it, because a virtualised
+                   row is a fixed height and a stacked chip is clipped on exactly the rows that have run. *@
+                <div class="jim-attr-single-line">
+                    @if (schedule.LastRunTime.HasValue)
+                    {
+                        var lastRunTime = schedule.LastRunTime.Value;
+                        <MudTooltip Text="@lastRunTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <MudText Typo="Typo.body1">@lastRunTime.ToLocalTime().ToRelativeTime()</MudText>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
+                    }
+                    @* When it last ran is only half the story: a Schedule failing every night looks identical to a
+                       healthy one without its outcome. A failed run also says which step it stopped on. *@
+                    @if (schedule.LastExecutionStatus.HasValue)
+                    {
+                        var lastExecutionStatus = schedule.LastExecutionStatus.Value;
+                        <MudChip T="string" Variant="Variant.Text" Class="ma-0 jim-attr-single-line-value"
                                  Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)">
                             @GetLastOutcomeLabel(schedule)
                         </MudChip>
-                    </div>
-                }
+                    }
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="ScheduleHeader" Title="Status" Sortable="false">

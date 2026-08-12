@@ -13,7 +13,9 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
+@* mt-5 rather than a tab-panel padding: the Operations page hands its tabs no top padding of their own, because
+   the Schedules tab opens straight onto a grid that already supplies this same gap. *@
+<MudText Typo="Typo.h6" Class="mt-5 mb-3">Execution History</MudText>
 
 @* Filter Controls *@
 <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap mb-4">
