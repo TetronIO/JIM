@@ -133,7 +133,11 @@ foreach ($staleName in @($primarySystemName, $secondarySystemName)) {
     $stale = $existingSystems | Where-Object { $_.name -eq $staleName }
     if ($stale) {
         Write-Host "  Removing existing '$staleName' Connected System..." -ForegroundColor Gray
-        Remove-JIMConnectedSystem -Id $stale.id | Out-Null
+        # -Force, not the script's $ConfirmPreference: preference variables do not flow into module
+        # scope, so Remove-JIMConnectedSystem (ConfirmImpact High) still prompts. With no interactive
+        # host the prompt fails outright ("Exception calling ShouldProcess"), taking setup down before
+        # it reaches anything this scenario is about.
+        Remove-JIMConnectedSystem -Id $stale.id -Force | Out-Null
         Write-Host "  OK Removed existing '$staleName'" -ForegroundColor Green
     }
 }
