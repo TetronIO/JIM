@@ -508,7 +508,7 @@ public class ActivityRepository : IActivityRepository
 
         var offset = (page - 1) * pageSize;
         var (results, grossCount) = await QueryChildActivitiesByRangeAsync(
-            parentActivityId, offset, pageSize, includeTotalCount: true);
+            parentActivityId, offset, pageSize, searchQuery: null, includeTotalCount: true);
 
         var pagedResultSet = new PagedResultSet<Activity>
         {
@@ -537,6 +537,7 @@ public class ActivityRepository : IActivityRepository
         Guid parentActivityId,
         int offset,
         int count,
+        string? searchQuery = null,
         bool includeTotalCount = true)
     {
         if (count < 1)
@@ -549,7 +550,7 @@ public class ActivityRepository : IActivityRepository
             count = MaxActivityWindowSize;
 
         var (results, grossCount) = await QueryChildActivitiesByRangeAsync(
-            parentActivityId, offset, count, includeTotalCount);
+            parentActivityId, offset, count, searchQuery, includeTotalCount);
 
         return new RangeResultSet<Activity>
         {
@@ -568,10 +569,25 @@ public class ActivityRepository : IActivityRepository
         Guid parentActivityId,
         int offset,
         int count,
+        string? searchQuery,
         bool includeTotalCount)
     {
-        var query = Repository.Database.Activities
-            .Where(a => a.ParentActivityId == parentActivityId)
+        var children = Repository.Database.Activities
+            .Where(a => a.ParentActivityId == parentActivityId);
+
+        // Case-insensitive search over what the table shows for a child: what it acted on, and what it said.
+        // ToLower/Contains rather than ILike so the shared core stays executable on the in-memory provider the
+        // unit tier uses.
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            children = children.Where(a =>
+                (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
+                (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)) ||
+                (a.Message != null && a.Message.ToLower().Contains(searchLower)));
+        }
+
+        var query = children
             .OrderBy(a => a.Created)
             // Deterministic tie-break: Skip/Take windows are only stable under a total order, and a run that
             // spawns its children in one batch gives them all the same created time. Without it, PostgreSQL may

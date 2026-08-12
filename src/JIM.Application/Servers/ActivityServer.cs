@@ -418,10 +418,11 @@ public class ActivityServer
         Guid parentActivityId,
         int offset,
         int count,
+        string? searchQuery = null,
         bool includeTotalCount = true)
     {
         return await Application.Repository.Activity.GetChildActivitiesRangeAsync(
-            parentActivityId, offset, count, includeTotalCount);
+            parentActivityId, offset, count, searchQuery, includeTotalCount);
     }
 
     /// <summary>

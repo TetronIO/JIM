@@ -258,6 +258,61 @@ public class ChildActivityRangeTests
         }
     }
 
+
+    [Test]
+    public async Task GetChildActivitiesRangeAsync_SearchQuery_ReturnsOnlyMatchingChildrenAsync()
+    {
+        // The child Activities table carries a search box like every other list, and a search must run over all
+        // the children rather than the window on screen; the page cannot filter what it has not fetched.
+        var parentId = await SeedChildrenAsync(30);
+
+        var result = await _repository.Activity.GetChildActivitiesRangeAsync(parentId, 0, 10, searchQuery: "Child 007");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Child 007" }));
+            Assert.That(result.TotalResults, Is.EqualTo(1), "the total must describe the match set, not every child");
+        }
+    }
+
+    [Test]
+    public async Task GetChildActivitiesRangeAsync_SearchQuery_IsCaseInsensitiveAsync()
+    {
+        var parentId = await SeedChildrenAsync(3);
+
+        var result = await _repository.Activity.GetChildActivitiesRangeAsync(parentId, 0, 10, searchQuery: "cHiLd 002");
+
+        Assert.That(result.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Child 002" }));
+    }
+
+    [Test]
+    public async Task GetChildActivitiesRangeAsync_SearchQueryMatchingNothing_ReturnsAnEmptyWindowAndAZeroTotalAsync()
+    {
+        // Zero here is a real answer, unlike the null a skipped count returns.
+        var parentId = await SeedChildrenAsync(5);
+
+        var result = await _repository.Activity.GetChildActivitiesRangeAsync(parentId, 0, 10, searchQuery: "nothing matches this");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Results, Is.Empty);
+            Assert.That(result.TotalResults, Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task GetChildActivitiesRangeAsync_SearchQueryWindowed_PagesTheMatchSetNotTheChildrenAsync()
+    {
+        // Offsets address the match set: the second window of a search must continue that search, not resume
+        // the unfiltered list at the same index.
+        await SeedChildrenAsync(5, "Other");
+        var parentId = await SeedChildrenAsync(30);
+
+        var result = await _repository.Activity.GetChildActivitiesRangeAsync(parentId, 1, 2, searchQuery: "Child 01");
+
+        Assert.That(result.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Child 011", "Child 012" }));
+    }
+
     /// <summary>
     /// Seeds a parent Activity with <paramref name="count"/> direct children named "Child 001", "Child 002", ...
     /// with creation times staggered in that order, so the oldest-first order yields numeric name order.

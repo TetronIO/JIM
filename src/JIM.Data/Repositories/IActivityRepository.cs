@@ -53,6 +53,7 @@ public interface IActivityRepository
         Guid parentActivityId,
         int offset,
         int count,
+        string? searchQuery = null,
         bool includeTotalCount = true);
 
     /// <summary>

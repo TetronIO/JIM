@@ -1093,7 +1093,6 @@
     /// will serve (larger requests are clamped there), so a short chunk reliably means the end of the children
     /// rather than a silently truncated request.
     /// </summary>
-    private const int ChildActivityScanChunkSize = 500;
 
     // Object type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<string> _selectedObjectTypes = new List<string>();
@@ -1350,49 +1349,20 @@
     }
 
     /// <summary>
-    /// Loads one window of this Activity's direct Child Activities. The range read offers no sort and no search
-    /// of its own, so the grid's search term is applied here over the children as they stream in; the scan is
-    /// only paid while a search is active, and the set is one Activity's direct children.
+    /// Loads one window of this Activity's direct Child Activities, search included: the read searches the whole
+    /// set in the database, so a term matches children this window has never fetched.
     /// </summary>
     private async Task<VirtualisedWindow<Activity>> LoadChildActivityWindowAsync(
         VirtualisedWindowRequest request, CancellationToken cancellationToken)
     {
         using var jim = JimFactory.Create();
+        var result = await jim.Activities.GetChildActivitiesRangeAsync(
+            Id, request.StartIndex, request.Count, request.SearchText, request.IncludeTotalCount);
 
-        if (string.IsNullOrWhiteSpace(request.SearchText))
-        {
-            var result = await jim.Activities.GetChildActivitiesRangeAsync(
-                Id, request.StartIndex, request.Count, includeTotalCount: request.IncludeTotalCount);
-            return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
-        }
-
-        var matches = new List<Activity>();
-        for (var offset = 0; ; offset += ChildActivityScanChunkSize)
-        {
-            var chunk = await jim.Activities.GetChildActivitiesRangeAsync(
-                Id, offset, ChildActivityScanChunkSize, includeTotalCount: false);
-            matches.AddRange(chunk.Results.Where(child => MatchesChildActivitySearch(child, request.SearchText)));
-
-            // A short chunk is the last one; asking for the next would only cost a round trip to learn that.
-            if (chunk.Results.Count < ChildActivityScanChunkSize)
-                break;
-        }
-
-        return matches.ToWindow(request);
+        // A null total means the count was not asked for, never that nothing matched; it is passed through as
+        // null so the grid keeps the total it already holds.
+        return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
     }
-
-    /// <summary>
-    /// Whether a Child Activity matches the grid's search term, over the fields the grid shows as text.
-    /// </summary>
-    private static bool MatchesChildActivitySearch(Activity activity, string searchText) =>
-        Contains(activity.TargetName, searchText)
-        || Contains(activity.TargetContext, searchText)
-        || Contains(activity.Message, searchText)
-        || Contains(activity.TargetType.ToString().SplitOnCapitalLetters(), searchText)
-        || Contains(activity.Status.ToString().SplitOnCapitalLetters(), searchText);
-
-    private static bool Contains(string? value, string searchText) =>
-        value != null && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether any Run Profile Execution Item chip filter has been narrowed from its default, so the empty state
