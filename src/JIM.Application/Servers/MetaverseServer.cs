@@ -1618,6 +1618,33 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets a window of one attribute's values on a Metaverse Object addressed by absolute offset and count, for
+    /// a virtualised (infinite-scroll) multi-valued attribute on the object's detail page. Ordered by value id,
+    /// and shares its query core with <see cref="GetAttributeValuesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="metaverseObjectId">The Metaverse Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the referenced
+    /// object's own values.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetAttributeValuesRangeAsync(
+            metaverseObjectId, attributeName, offset, count, searchText, includeTotalCount);
+    }
+
+    /// <summary>
     /// Marks MVOs as disconnected that will become orphaned when the specified Connected System is deleted,
     /// applying the same mode-aware trigger semantics as the sync engine's disconnect evaluation (#119).
     /// This sets LastConnectorDisconnectedDate so housekeeping will delete them after the grace period, and

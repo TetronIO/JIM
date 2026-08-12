@@ -496,6 +496,29 @@ public interface IMetaverseRepository
         int page,
         int pageSize,
         string? searchText = null);
+
+    /// <summary>
+    /// Gets a window of one attribute's values on a Metaverse Object addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for a virtualised (infinite-scroll) multi-valued
+    /// attribute on the object's detail page. Ordered by value id, and shares its query core with
+    /// <see cref="GetAttributeValuesPagedAsync"/> so the two reads can never disagree on which values match.
+    /// </summary>
+    /// <param name="metaverseObjectId">The Metaverse Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the referenced
+    /// object's own values.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
     #endregion
 
     #region attributes

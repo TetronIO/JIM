@@ -4057,6 +4057,33 @@ public class ConnectedSystemServer
             connectedSystemObjectId, attributeName, page, pageSize, searchText);
     }
 
+    /// <summary>
+    /// Gets a window of one attribute's values on a Connected System Object addressed by absolute offset and
+    /// count, for a virtualised (infinite-scroll) multi-valued attribute on the object's detail page. Ordered by
+    /// value id, and shares its query core with <see cref="GetAttributeValuesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value, the unresolved
+    /// reference and the referenced object's own values.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeValuesRangeAsync(
+            connectedSystemObjectId, attributeName, offset, count, searchText, includeTotalCount);
+    }
+
     public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page = 1,
@@ -6569,6 +6596,33 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
             pendingExportId, attributeName, page, pageSize, searchText);
+    }
+
+    /// <summary>
+    /// Gets a window of one attribute's changes on a Pending Export addressed by absolute offset and count, for
+    /// a virtualised (infinite-scroll) multi-valued attribute. Ordered by change id, and shares its query core
+    /// with <see cref="GetPendingExportAttributeChangesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the unresolved
+    /// reference.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportAttributeChangesRangeAsync(
+            pendingExportId, attributeName, offset, count, searchText, includeTotalCount);
     }
 
     /// <summary>
