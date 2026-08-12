@@ -26,7 +26,7 @@ public class DataGeneratorTemplateAttributePassTests
             Pattern = "dummy-value"
         };
 
-        Assert.DoesNotThrow(subject.Validate);
+        Assert.That(subject.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -39,7 +39,7 @@ public class DataGeneratorTemplateAttributePassTests
             Expression = "Lower(mv[\"First Name\"]) + \".\" + Lower(mv[\"Last Name\"]) + \"@example.io\""
         };
 
-        Assert.DoesNotThrow(subject.Validate);
+        Assert.That(subject.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -51,7 +51,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
-        Assert.DoesNotThrow(subject.Validate);
+        Assert.That(subject.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -63,7 +63,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 1,
             Pattern = "dummy-value"
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -71,7 +71,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 50,
             Pattern = "dummy-value"
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -79,7 +79,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -92,7 +92,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MinNumber = 1
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -100,7 +100,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MaxNumber = 50
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -108,7 +108,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MaxNumber = 100
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
 
         var subject4 = new ExampleDataTemplateAttribute
         {
@@ -116,7 +116,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             SequentialNumbers = true
         };
-        Assert.DoesNotThrow(subject4.Validate);
+        Assert.That(subject4.Validate, Throws.Nothing);
 
         var subject5 = new ExampleDataTemplateAttribute
         {
@@ -125,7 +125,7 @@ public class DataGeneratorTemplateAttributePassTests
             SequentialNumbers = true,
             MinNumber = 1
         };
-        Assert.DoesNotThrow(subject5.Validate);
+        Assert.That(subject5.Validate, Throws.Nothing);
 
         var subject6 = new ExampleDataTemplateAttribute
         {
@@ -134,7 +134,7 @@ public class DataGeneratorTemplateAttributePassTests
             SequentialNumbers = true,
             MinNumber = 1
         };
-        Assert.DoesNotThrow(subject6.Validate);
+        Assert.That(subject6.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -148,7 +148,7 @@ public class DataGeneratorTemplateAttributePassTests
             RandomNumbers = true,
             MinNumber = 1
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -157,7 +157,7 @@ public class DataGeneratorTemplateAttributePassTests
             RandomNumbers = true,
             MaxNumber = 50
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -167,7 +167,7 @@ public class DataGeneratorTemplateAttributePassTests
             MinNumber = 0,
             MaxNumber = 100
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -181,7 +181,7 @@ public class DataGeneratorTemplateAttributePassTests
             RandomNumbers = true,
             MinNumber = 1
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -190,7 +190,7 @@ public class DataGeneratorTemplateAttributePassTests
             RandomNumbers = true,
             MaxNumber = 50
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -200,7 +200,7 @@ public class DataGeneratorTemplateAttributePassTests
             MinNumber = 0,
             MaxNumber = 100
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
 
         var subject4 = new ExampleDataTemplateAttribute
         {
@@ -209,7 +209,7 @@ public class DataGeneratorTemplateAttributePassTests
             SequentialNumbers = true,
             MinNumber = 1
         };
-        Assert.DoesNotThrow(subject4.Validate);
+        Assert.That(subject4.Validate, Throws.Nothing);
 
         var subject5 = new ExampleDataTemplateAttribute
         {
@@ -218,7 +218,7 @@ public class DataGeneratorTemplateAttributePassTests
             SequentialNumbers = true,
             MaxNumber = 50
         };
-        Assert.DoesNotThrow(subject5.Validate);
+        Assert.That(subject5.Validate, Throws.Nothing);
 
         var subject6 = new ExampleDataTemplateAttribute
         {
@@ -228,7 +228,7 @@ public class DataGeneratorTemplateAttributePassTests
             MinNumber = 0,
             MaxNumber = 100
         };
-        Assert.DoesNotThrow(subject6.Validate);
+        Assert.That(subject6.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -240,7 +240,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             BoolShouldBeRandom = true
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -248,7 +248,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             BoolShouldBeRandom = false
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -256,7 +256,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             BoolTrueDistribution = 1
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
 
         var subject4 = new ExampleDataTemplateAttribute
         {
@@ -264,7 +264,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             BoolTrueDistribution = 50
         };
-        Assert.DoesNotThrow(subject4.Validate);
+        Assert.That(subject4.Validate, Throws.Nothing);
 
         var subject5 = new ExampleDataTemplateAttribute
         {
@@ -272,7 +272,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             BoolTrueDistribution = 100
         };
-        Assert.DoesNotThrow(subject5.Validate);
+        Assert.That(subject5.Validate, Throws.Nothing);
 
         var subject6 = new ExampleDataTemplateAttribute
         {
@@ -281,7 +281,7 @@ public class DataGeneratorTemplateAttributePassTests
             BoolTrueDistribution = 100,
             BoolShouldBeRandom = true
         };
-        Assert.DoesNotThrow(subject6.Validate);
+        Assert.That(subject6.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -292,7 +292,7 @@ public class DataGeneratorTemplateAttributePassTests
             MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.DateTime },
             PopulatedValuesPercentage = 100
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -300,7 +300,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MinDate = DateTime.UtcNow
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -308,7 +308,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MaxDate = DateTime.UtcNow
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
 
         var subject4 = new ExampleDataTemplateAttribute
         {
@@ -317,7 +317,7 @@ public class DataGeneratorTemplateAttributePassTests
             MinDate = DateTime.UtcNow,
             MaxDate = DateTime.UtcNow.AddDays(10)
         };
-        Assert.DoesNotThrow(subject4.Validate);
+        Assert.That(subject4.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -329,7 +329,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             Pattern = "dummy-value"
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -337,7 +337,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new() }
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -355,7 +355,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100
         };
 
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -370,7 +370,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new() }
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -378,7 +378,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new(), new() }
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -387,7 +387,7 @@ public class DataGeneratorTemplateAttributePassTests
             ExampleDataSetInstances = new List<ExampleDataSetInstance> { new(), new() },
             Pattern = "{0} {1}"
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -398,7 +398,7 @@ public class DataGeneratorTemplateAttributePassTests
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Guid },
             PopulatedValuesPercentage = 100
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -410,7 +410,7 @@ public class DataGeneratorTemplateAttributePassTests
             ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { new() },
             PopulatedValuesPercentage = 100
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -423,7 +423,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MvaRefMinAssignments = 10
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
@@ -432,7 +432,7 @@ public class DataGeneratorTemplateAttributePassTests
             PopulatedValuesPercentage = 100,
             MvaRefMaxAssignments = 10
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
 
         var subject3 = new ExampleDataTemplateAttribute
         {
@@ -442,7 +442,7 @@ public class DataGeneratorTemplateAttributePassTests
             MvaRefMinAssignments = 10,
             MvaRefMaxAssignments = 100
         };
-        Assert.DoesNotThrow(subject3.Validate);
+        Assert.That(subject3.Validate, Throws.Nothing);
     }
 
     [Test]
@@ -453,13 +453,13 @@ public class DataGeneratorTemplateAttributePassTests
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 50
         };
-        Assert.DoesNotThrow(subject1.Validate);
+        Assert.That(subject1.Validate, Throws.Nothing);
 
         var subject2 = new ExampleDataTemplateAttribute
         {
             ConnectedSystemObjectTypeAttribute = new ConnectedSystemObjectTypeAttribute { Type = AttributeDataType.Reference, Name = Constants.BuiltInAttributes.Manager },
             ManagerDepthPercentage = 95
         };
-        Assert.DoesNotThrow(subject2.Validate);
+        Assert.That(subject2.Validate, Throws.Nothing);
     }
 }

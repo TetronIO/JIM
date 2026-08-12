@@ -119,7 +119,7 @@ public class PaginationDepthActionFilterTests
         // A parameter that happens to be named "page" but is not an int must not break the request.
         var context = BuildContext(new Dictionary<string, object?> { ["page"] = "not-a-number" });
 
-        Assert.DoesNotThrow(() => new PaginationDepthActionFilter().OnActionExecuting(context));
+        Assert.That(() => new PaginationDepthActionFilter().OnActionExecuting(context), Throws.Nothing);
         Assert.That(context.Result, Is.Null);
     }
 

@@ -261,7 +261,7 @@ public class SecurityDescriptorParserTests
         foreach (var (description, bytes) in cases)
         {
             object? result = null;
-            Assert.DoesNotThrow(() => result = SecurityDescriptorParser.TryParse(bytes), $"Threw on input {description}.");
+            Assert.That(() => result = SecurityDescriptorParser.TryParse(bytes), Throws.Nothing, $"Threw on input {description}.");
             Assert.That(result, Is.Null, $"Should not have parsed input {description}.");
         }
     }
@@ -281,7 +281,7 @@ public class SecurityDescriptorParserTests
         bytes[daclOffset + 4] = 50;
 
         object? result = null;
-        Assert.DoesNotThrow(() => result = SecurityDescriptorParser.TryParse(bytes));
+        Assert.That(() => result = SecurityDescriptorParser.TryParse(bytes), Throws.Nothing);
         Assert.That(result, Is.Null);
     }
 
@@ -299,7 +299,7 @@ public class SecurityDescriptorParserTests
         bytes[firstAceOffset + 3] = 0;
 
         object? result = null;
-        Assert.DoesNotThrow(() => result = SecurityDescriptorParser.TryParse(bytes));
+        Assert.That(() => result = SecurityDescriptorParser.TryParse(bytes), Throws.Nothing);
         Assert.That(result, Is.Null);
     }
 

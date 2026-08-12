@@ -341,7 +341,7 @@ public class ReferenceRecallStagingDatabaseTests
         Assert.That(result.PendingExportsStaged, Is.EqualTo(1));
 
         // The tracking context must survive a subsequent save (raw-SQL write discipline).
-        Assert.DoesNotThrowAsync(() => ctx.SaveChangesAsync(),
+        Assert.That(() => ctx.SaveChangesAsync(), Throws.Nothing,
             "SaveChangesAsync after fast-path staging must not throw: tracked instances of the " +
             "replaced Pending Export must have been detached by the delete-then-create persistence");
 

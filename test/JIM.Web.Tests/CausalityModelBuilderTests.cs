@@ -487,7 +487,7 @@ public class CausalityModelBuilderTests
         foreach (var outcomeType in Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>())
             CausalityTestData.AddOutcome(item, outcomeType, parent: null, ordinal: (int)outcomeType);
 
-        Assert.DoesNotThrow(() => CausalityModelBuilder.Build(item, CausalityTestData.EmptyContext()));
+        Assert.That(() => CausalityModelBuilder.Build(item, CausalityTestData.EmptyContext()), Throws.Nothing);
     }
 
     [Test]

@@ -215,8 +215,8 @@ public class ActivityServerValidationTests
             .Returns(Task.CompletedTask);
 
         // Act - should succeed because ApiKey overload sets all required properties
-        Assert.DoesNotThrowAsync(async () =>
-            await _application.Activities.CreateActivityAsync(activity, apiKey));
+        Assert.That(async () =>
+            await _application.Activities.CreateActivityAsync(activity, apiKey), Throws.Nothing);
 
         // Assert
         Assert.That(capturedActivity, Is.Not.Null);
