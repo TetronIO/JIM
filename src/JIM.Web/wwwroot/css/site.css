@@ -596,42 +596,6 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     word-break: break-all;
 }
 
-/* Only the two side blocks' headings are held on one line. Applying this to every heading widened the long
-   columns enough to squeeze the Connected System name into three lines per row, which costs far more height than
-   it saves: a wrapped heading is paid once, a wrapped cell is paid on every row. */
-.jim-dataflow-header .jim-side-heading {
-    white-space: nowrap;
-}
-
-/* Data Flow header band (#1199). The table's columns form two groups, one per side of the Metaverse, and a
-   single header row cannot say so: "Object Type" alone does not tell you which side it belongs to. The band spans
-   each group and names it, which is what lets the column headings below stay short and symmetrical. Quieter than
-   the column headings themselves, because it labels a group rather than a sortable column. */
-.jim-header-band .mud-table-cell {
-    text-align: center;
-    font-weight: 600;
-    letter-spacing: .01em;
-    padding-top: 8px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--mud-palette-table-lines);
-}
-
-.jim-header-band .jim-band-cs {
-    background-color: var(--mud-palette-background-grey);
-}
-
-.jim-header-band .jim-band-mv {
-    background-color: var(--mud-palette-primary-hover);
-    color: var(--mud-palette-primary-text-hover, var(--mud-palette-primary));
-}
-
-/* The trailing columns belong to neither side. Deliberately unlabelled: naming that group would assert a
-   structure JIM does not have. */
-.jim-header-band .jim-band-none {
-    background-color: transparent;
-    border-bottom-color: transparent;
-}
-
 /* Inline code styling - similar to markdown code blocks */
 .jim-code-inline {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
