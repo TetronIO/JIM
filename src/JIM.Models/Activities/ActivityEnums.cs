@@ -213,5 +213,20 @@ public enum ActivityStatDimension
     NoChangeReason = 3,
 
     /// <summary>Counts per <see cref="ActivityRunProfileExecutionItemSyncOutcomeType"/> across the Activity's sync outcome rows (key: the enum's integer value).</summary>
-    OutcomeType = 4
+    OutcomeType = 4,
+
+    /// <summary>
+    /// Entries an import read from the Connected System and discarded because an excluded Container carved them
+    /// out (#1255), keyed by that Container's id.
+    /// </summary>
+    /// <remarks>
+    /// The one dimension that is <b>not</b> derived from Run Profile Execution Items, and the only reason it is
+    /// here rather than in a table of its own: a discarded entry produced no item, by definition. It has the same
+    /// shape as every other counter, is written by the same incremental upsert (which matters, because an import
+    /// reports these per page), and is read by the same query. What it costs is that finalisation can no longer
+    /// recompute the whole counter set from the item tables, so
+    /// <see cref="RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems"/> names the dimensions it owns
+    /// and leaves this one alone.
+    /// </remarks>
+    ExcludedContainer = 5
 }

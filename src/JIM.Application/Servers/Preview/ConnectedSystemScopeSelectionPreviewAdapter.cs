@@ -359,6 +359,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
     {
         var partitionIds = proposal.SelectedPartitionIds.ToHashSet();
         var containerIds = proposal.SelectedContainerIds.ToHashSet();
+        var excludedIds = (proposal.ExcludedContainerIds ?? []).ToHashSet();
 
         return new ConnectedSystem
         {
@@ -373,28 +374,39 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
                     Name = partition.Name,
                     ExternalId = partition.ExternalId,
                     Selected = partitionIds.Contains(partition.Id),
-                    Containers = partition.Containers == null ? null : CloneWithSelection(partition.Containers, containerIds)
+                    Containers = partition.Containers == null
+                        ? null
+                        : CloneWithSelection(partition.Containers, containerIds, excludedIds)
                 })
             ]
         };
     }
 
     private static HashSet<ConnectedSystemContainer> CloneWithSelection(
-        IEnumerable<ConnectedSystemContainer> containers, IReadOnlySet<int> selectedContainerIds) =>
-        [.. containers.Select(container => CloneWithSelection(container, selectedContainerIds))];
+        IEnumerable<ConnectedSystemContainer> containers,
+        IReadOnlySet<int> selectedContainerIds,
+        IReadOnlySet<int> excludedContainerIds) =>
+        [.. containers.Select(container => CloneWithSelection(container, selectedContainerIds, excludedContainerIds))];
 
     private static ConnectedSystemContainer CloneWithSelection(
-        ConnectedSystemContainer container, IReadOnlySet<int> selectedContainerIds)
+        ConnectedSystemContainer container,
+        IReadOnlySet<int> selectedContainerIds,
+        IReadOnlySet<int> excludedContainerIds)
     {
+        // Both halves of the proposal are carried, not just the selections. No helper reading this view asks about
+        // exclusions today, and a clone that silently dropped half of what a selection says is the kind of thing a
+        // later reader takes at face value.
         var clone = new ConnectedSystemContainer
         {
             Id = container.Id,
             Name = container.Name,
             ExternalId = container.ExternalId,
-            Selected = selectedContainerIds.Contains(container.Id)
+            Selected = selectedContainerIds.Contains(container.Id),
+            Excluded = excludedContainerIds.Contains(container.Id)
         };
 
-        clone.ChildContainers.UnionWith(CloneWithSelection(container.ChildContainers, selectedContainerIds));
+        clone.ChildContainers.UnionWith(
+            CloneWithSelection(container.ChildContainers, selectedContainerIds, excludedContainerIds));
         return clone;
     }
 
@@ -415,15 +427,22 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
     }
 
     /// <summary>
-    /// Whether the proposal selects a partition or container that is not selected today, which is what makes JIM
-    /// discover objects it has never imported.
+    /// Whether the proposal brings scope in that JIM does not import today, which is what makes it discover
+    /// objects it has never held.
     /// </summary>
+    /// <remarks>
+    /// Three ways in, not two: a newly selected partition, a newly selected container, and an exclusion the
+    /// proposal lifts (#1255). The third is easy to overlook because no tick box moves, and it is the one that can
+    /// bring the most in at once: a carve-out sits inside a branch that is already selected, so lifting it exposes
+    /// everything beneath it in a single step.
+    /// </remarks>
     private static bool SelectsSomethingNew(
         ConnectedSystem connectedSystem, ConnectedSystemScopeSelectionProposal proposal)
     {
         var current = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
         return proposal.SelectedPartitionIds.Except(current.SelectedPartitionIds).Any() ||
-               proposal.SelectedContainerIds.Except(current.SelectedContainerIds).Any();
+               proposal.SelectedContainerIds.Except(current.SelectedContainerIds).Any() ||
+               (current.ExcludedContainerIds ?? []).Except(proposal.ExcludedContainerIds ?? []).Any();
     }
 
     private async Task<ConnectedSystem> GetConnectedSystemAsync(PreviewContext context)

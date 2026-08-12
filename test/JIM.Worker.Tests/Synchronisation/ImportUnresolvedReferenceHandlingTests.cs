@@ -133,6 +133,14 @@ public class ImportUnresolvedReferenceHandlingTests
         Assert.That(errorItem, Is.Not.Null, "Expected an error item for the unresolved reference.");
         Assert.That(errorItem!.ErrorMessage, Does.Contain(unresolvedMemberRef), "Expected the error message to mention the unresolved reference value.");
         Assert.That(errorItem!.ErrorMessage, Does.Contain("Container Scope"), "Expected the existing error message text to be preserved.");
+
+        // An exclusion (#1255) takes an object out of scope just as surely as never selecting its Container does,
+        // and it is the harder of the two to spot: the branch above the referenced object *is* selected, so an
+        // administrator reading "make sure Container Scope includes it" checks the tick box, finds it ticked, and
+        // has been told nothing. The cause has to name both ways scope can exclude an object.
+        Assert.That(errorItem!.ErrorMessage, Does.Contain("exclude"),
+            "Expected the error message to name an exclusion as a possible cause, not only an unselected Container.");
+
         Assert.That(activity.WarningMessage, Is.Null.Or.Empty, "Error mode must not set the Activity warning message.");
     }
 
@@ -162,6 +170,8 @@ public class ImportUnresolvedReferenceHandlingTests
         Assert.That(activity.WarningMessage, Is.Not.Null.And.Not.Empty, "Expected the Activity warning message to be set.");
         Assert.That(activity.WarningMessage, Does.Contain("1 reference value"), "Expected the warning message to include the unresolved reference count.");
         Assert.That(activity.WarningMessage, Does.Contain("Container Scope"), "Expected the warning message to explain the likely cause.");
+        Assert.That(activity.WarningMessage, Does.Contain("exclude"),
+            "Expected the warning summary to name an exclusion as a possible cause, not only an unselected Container.");
     }
 
     /// <summary>

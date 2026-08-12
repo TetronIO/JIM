@@ -3077,6 +3077,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds)
+    {
+        ArgumentNullException.ThrowIfNull(containerIds);
+
+        if (containerIds.Count == 0)
+            return [];
+
+        // A projection, not a load: GetConnectedSystemContainerAsync pulls the partition, the Connected System
+        // and the children, all of which a caller that only wants to name a Container would throw away.
+        return await Repository.Database.ConnectedSystemContainers
+            .AsNoTracking()
+            .Where(c => containerIds.Contains(c.Id))
+            .Select(c => new ConnectedSystemContainerSummary(c.Id, c.Name, c.ExternalId))
+            .ToListAsync();
+    }
+
     public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
     {
         var container = await Repository.Database.ConnectedSystemContainers

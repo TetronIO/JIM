@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -1050,6 +1051,13 @@ public class ActivityRepository : IActivityRepository
         public Dictionary<ActivityRunProfileExecutionItemErrorType, int> ErrorTypeCounts { get; } = new();
         public Dictionary<NoChangeReason, int> NoChangeReasonCounts { get; } = new();
         public Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int> OutcomeTypeCounts { get; } = new();
+
+        /// <summary>
+        /// Entries an import read and discarded through an exclusion, keyed by the excluded Container's id
+        /// (#1255). Only ever populated from the counter rows: there are no execution items to aggregate it
+        /// from, which is the whole reason the count has to be written as the import runs.
+        /// </summary>
+        public Dictionary<int, int> ExclusionDiscardCounts { get; } = new();
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
@@ -1199,6 +1207,9 @@ public class ActivityRepository : IActivityRepository
                 case ActivityStatDimension.OutcomeType when int.TryParse(counter.Key, out var outcomeType):
                     aggregation.OutcomeTypeCounts[(ActivityRunProfileExecutionItemSyncOutcomeType)outcomeType] = count;
                     break;
+                case ActivityStatDimension.ExcludedContainer when int.TryParse(counter.Key, out var containerId):
+                    aggregation.ExclusionDiscardCounts[containerId] = count;
+                    break;
             }
         }
 
@@ -1214,6 +1225,17 @@ public class ActivityRepository : IActivityRepository
         var aggregation = new ActivityStatAggregation();
         var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
             .Where(q => q.Activity.Id == activityId);
+
+        // The one dimension this source cannot answer, read from its counter rows so that an aggregation is a
+        // complete answer whichever path built it. A discarded entry produced no execution item to aggregate,
+        // which is exactly why the import writes the count as it runs (#1255).
+        var exclusionCounters = await Repository.Database.ActivityStatCounters
+            .AsNoTracking()
+            .Where(c => c.ActivityId == activityId && c.Dimension == ActivityStatDimension.ExcludedContainer)
+            .ToListAsync();
+        foreach (var counter in exclusionCounters.Where(c => int.TryParse(c.Key, CultureInfo.InvariantCulture, out _)))
+            aggregation.ExclusionDiscardCounts[int.Parse(counter.Key, CultureInfo.InvariantCulture)] =
+                (int)Math.Min(counter.Count, int.MaxValue);
 
         var changeTypeData = await rpeiQuery
             .GroupBy(q => new { q.ObjectChangeType, q.NoChangeReason })
@@ -1288,7 +1310,13 @@ public class ActivityRepository : IActivityRepository
         var ownTransaction = database.CurrentTransaction == null ? await database.BeginTransactionAsync() : null;
         try
         {
-            await database.ExecuteSqlRawAsync(@"DELETE FROM ""ActivityStatCounters"" WHERE ""ActivityId"" = {0}", activityId);
+            // Only the dimensions this aggregation recomputes. Counters that cannot be derived from the execution
+            // items (the exclusion discard counts, #1255: a discarded entry produced no item) would otherwise be
+            // deleted and never rewritten, so the Activity would lose them the moment it completed.
+            await database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ActivityStatCounters"" WHERE ""ActivityId"" = {0} AND ""Dimension"" = ANY({1})",
+                activityId,
+                RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems.Select(d => (int)d).ToArray());
             await ActivityStatCounterWriter.UpsertDeltasAsync(Repository.Database, deltas);
             if (alsoPersistFinalisedFlag)
                 await database.ExecuteSqlRawAsync(@"UPDATE ""Activities"" SET ""RunProfileExecutionStatsFinalised"" = TRUE WHERE ""Id"" = {0}", activityId);
@@ -1422,6 +1450,7 @@ public class ActivityRepository : IActivityRepository
             TotalObjectTypes = totalObjectTypes,
             ObjectTypeCounts = objectTypeCounts,
             ErrorTypeCounts = errorTypeCounts,
+            EntriesDiscardedByExcludedContainer = aggregation.ExclusionDiscardCounts,
 
             // Import stats
             TotalCsoAdds = totalCsoAdds,

@@ -171,13 +171,18 @@ Excluding is not the same as selecting the siblings you want. Ticking eleven of 
 !!! warning "Excluding a Container takes objects out of scope"
     Objects already imported from an excluded branch become obsolete on the next Import Run Profile, and whatever they are joined to is deprovisioned on the next synchronisation, exactly as narrowing a Container does. Preview the change before saving.
 
-An exclusion is honoured everywhere the selection is: on Full Import, on the delta paths, and on export, where a write into an excluded branch is refused for the same reason it is refused outside the selected Containers entirely. It is enforced as entries arrive rather than by searching around the branch, so an import that discarded entries says how many, per exclusion, in its summary; a branch of 500,000 objects carved out of a 510,000-object parent shows up as a number you can act on rather than as an unexplained slow import.
+An exclusion is honoured everywhere the selection is: on Full Import, on the delta paths, and on export, where a write into an excluded branch is refused for the same reason it is refused outside the selected Containers entirely.
+
+It is enforced as entries arrive rather than by searching around the branch, so an exclusion inside a selected branch costs a transfer that produces nothing. **That cost is reported rather than hidden.** An import that discarded entries carries an **Entries Discarded by Container Scope** panel on its Activity, breaking the figure down per excluded Container, and the same counts are in the run's log. A branch of 500,000 objects carved out of a 510,000-object parent then shows up as a number you can act on, by moving the excluded branch outside the selected one, rather than as an unexplained slow import.
+
+!!! note "Why not just search around the excluded branch?"
+    JIM could replace one subtree search with a search per sibling and skip the excluded one, and it deliberately does not. The set of siblings comes from the last **Retrieve Hierarchy**, so a Container created since would be missing from it: its objects would never be searched, never imported, and marked obsolete on the next Full Import. Import scope must not depend on how recently the hierarchy was refreshed, so the transfer cost is accepted and reported instead.
 
 An exclusion survives a rename or a move of the Container, because it is keyed on the directory's own immutable identifier (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP) rather than on the Distinguished Name.
 
 A Container can be selected or excluded, never both. An exclusion beneath a **This level** selection is inert, since such a selection reaches no Container beneath it, and the tree therefore never offers one there.
 
-Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer).
+Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer), and previewable before they are made with `excludedContainerIds` on the scope-selection preview endpoint or [`New-JIMConfigurationChangePreview -ExcludedContainerIds`](../powershell/previews.md#new-jimconfigurationchangepreview).
 
 ### Credentials
 

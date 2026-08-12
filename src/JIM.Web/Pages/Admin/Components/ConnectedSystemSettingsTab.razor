@@ -139,7 +139,7 @@
                     <MudSelect T="UnresolvedReferenceHandling"
                                Label="Unresolved Reference Handling"
                                @bind-Value="ConnectedSystem.UnresolvedReferenceHandling"
-                               HelperText="Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object is outside the configured Container Scope."
+                               HelperText="Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object sits outside the configured Container Scope, or inside a Container it excludes."
                                Variant="Variant.Outlined">
                         <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Error">Error (default): record an error on each affected object</MudSelectItem>
                         <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Warn">Warn: complete with a warning summary</MudSelectItem>

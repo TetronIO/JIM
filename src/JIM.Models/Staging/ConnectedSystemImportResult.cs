@@ -40,4 +40,23 @@ public class ConnectedSystemImportResult
     /// this categorises the warning for filtering and integration test assertions.
     /// </summary>
     public ActivityRunProfileExecutionItemErrorType? WarningErrorType { get; set; }
+
+    /// <summary>
+    /// How many entries this import call read from the Connected System and discarded because an excluded
+    /// Container carved them out (#1255), one entry per excluded Container that discarded anything.
+    /// </summary>
+    /// <remarks>
+    /// A Connector that cannot express "this subtree except that branch" in a single search has to read the
+    /// excluded entries and throw them away, which is the deliberate choice made in #1255: decomposing the
+    /// searches instead would make import scope depend on how recently the hierarchy was refreshed, and silently
+    /// skip a Container created since. The design accepted the transfer cost on the condition that it is
+    /// reported rather than hidden, and this is how a Connector reports it. Deliberately not a
+    /// <see cref="WarningMessage"/>: an exclusion doing exactly what it was configured to do is not a warning,
+    /// and flagging every exclusion-configured import as warned would train administrators to ignore the field.
+    ///
+    /// Empty is the ordinary case, including on a Connected System that carries exclusions but read nothing
+    /// inside them. A Connector whose searches can honour an exclusion server-side leaves this empty and is
+    /// reporting the truth: nothing was transferred to be discarded.
+    /// </remarks>
+    public List<ExclusionDiscardCount> EntriesDiscardedByExclusion { get; set; } = [];
 }
