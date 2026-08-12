@@ -27,7 +27,8 @@
     }
     else if (_model != null && _summary != null)
     {
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()"
+                              TechnicalNames="_technicalNames">
             <Actions>
                 @if (AvailableViews.Count > 1)
                 {

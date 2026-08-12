@@ -124,7 +124,7 @@ public static class CausalityModelBuilder
     {
         return outcomeType switch
         {
-            // Import-side record events: what came in
+            // Import-side record events: what happened
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted

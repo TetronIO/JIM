@@ -28,6 +28,13 @@
         <MudText Typo="Typo.h3" Class="mb-2"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
         <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
+        @* The item's own story (what it did, why, and what it changed) is one subject; the Pending Export
+           it created or failed on is another, with its own status, retries and attribute table. Keeping
+           both inline made the page a scroll rather than an answer, so each has its own tab. The Pending
+           Export tab appears only where there is one. *@
+        <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-5">
+        <MudTabPanel Text="Overview">
+
         @* Summary Section *@
         <MudText Typo="Typo.h6" Class="mb-2">
             Execution Summary
@@ -723,170 +730,45 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                             </MudAlert>
                         }
 
-                        @* Error and Pending Export sections. The Pending Export panel is not error-only: an
-                           informational Pending Export item (a deprovisioning delete or a membership recall staged
-                           by a synchronisation run, or by housekeeping) has no error but is exactly the item whose
-                           staged export the administrator came here to see. *@
-                        @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet
-                             || _pendingExport != null)
+                        @* An error is part of the item's own story, so it stays here; the Pending Export it
+                           produced is a separate subject and has its own tab. *@
+                        @if (_activityRunProfileExecutionItem.ErrorType is { } errorType
+                             and not ActivityRunProfileExecutionItemErrorType.NotSet)
                         {
-                            @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-                            {
-                                <MudText Typo="Typo.h6" Class="mb-3">
-                                    Error Details
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                Error Details
+                            </MudText>
+
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                    @errorType.ToString().SplitOnCapitalLetters()
                                 </MudText>
-
-                                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
-                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                        @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
-                                    </MudText>
-                                    @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
-                                    {
-                                        <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
-                                    }
-                                </MudAlert>
-
-                                <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
-                            }
-
-                            @* Pending Export Details - shown for PendingExport items and export-related errors *@
-                            @if (_pendingExport != null)
-                            {
-                                <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                                    @if (_pendingExport.ChangeType == PendingExportChangeType.Delete
-                                         && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
-                                    {
-                                        <text>This object is staged for deletion in the Connected System. Any attribute values below are carried on the
-                                            Pending Export so the delete can still be performed once the Connected System Object is gone.</text>
-                                    }
-                                    else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport
-                                         && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
-                                    {
-                                        <text>The following attribute changes are staged and awaiting export to the Connected System.</text>
-                                    }
-                                    else if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
-                                    {
-                                        <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
-                                            next export run.</text>
-                                    }
-                                    else
-                                    {
-                                        <text>The following attribute changes failed to export after multiple attempts and may require manual
-                                            intervention.</text>
-                                    }
-                                </MudText>
-
-                                        <MudPaper Class="pa-4 mb-4" Outlined="true">
-                                            <MudGrid Spacing="3">
-                                                <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
-                                                    <MudText>
-                                                        @if (_pendingExport.ConnectedSystem != null)
-                                                        {
-                                                            <MudLink Href="@($"/admin/connected-systems/{_pendingExport.ConnectedSystemId}")">@_pendingExport.ConnectedSystem.Name</MudLink>
-                                                        }
-                                                        else
-                                                        {
-                                                            <text>-</text>
-                                                        }
-                                                    </MudText>
-                                                </MudItem>
-                                                <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText><br />
-                                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)"
-                                                             Class="ml-0">
-                                                        @_pendingExport.ChangeType
-                                                    </MudChip>
-                                                </MudItem>
-                                                <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />
-                                                    <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)"
-                                                             Class="ml-0">
-                                                        @_pendingExport.Status.ToString().SplitOnCapitalLetters()
-                                                    </MudChip>
-                                                </MudItem>
-                                                <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Retry Count</MudText>
-                                                    <MudText>
-                                                        @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
-                                                        @if (_pendingExport.ErrorCount >= _pendingExport.MaxRetries)
-                                                        {
-                                                            <MudChip T="string" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
-                                                        }
-                                                    </MudText>
-                                                </MudItem>
-                                                <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Last Attempted</MudText>
-                                                    <MudText>@(_pendingExport.LastAttemptedAt?.ToLocalTime().ToRelativeTime() ?? "-")</MudText>
-                                                </MudItem>
-                                                <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Created</MudText>
-                                                    <MudText>@_pendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
-                                                </MudItem>
-                                            </MudGrid>
-                                        </MudPaper>
-
-                                        @if (_pendingExport.AttributeValueChanges.Count > 0)
-                                        {
-                                            <MudText Typo="Typo.subtitle1" Class="mb-2">
-                                                Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count.ToString("N0"))
-                                            </MudText>
-                                            <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0"
-                                                      Class="mb-5">
-                                                <HeaderContent>
-                                                    <MudTh Style="width: 1%; white-space: nowrap;">
-                                                        <MudText Typo="Typo.button">Attribute</MudText>
-                                                    </MudTh>
-                                                    <MudTh Style="width: 1%; white-space: nowrap;">
-                                                        <MudText Typo="Typo.button">Change Type</MudText>
-                                                    </MudTh>
-                                                    <MudTh Style="width: 1%; white-space: nowrap;">
-                                                        <MudText Typo="Typo.button">Status</MudText>
-                                                    </MudTh>
-                                                    <MudTh>
-                                                        <MudText Typo="Typo.button">Value</MudText>
-                                                    </MudTh>
-                                                </HeaderContent>
-                                                <RowTemplate>
-                                                    <MudTd DataLabel="Attribute">
-                                                        <MudText Class="mud-text-secondary">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
-                                                    </MudTd>
-                                                    <MudTd DataLabel="Change Type">
-                                                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)"
-                                                                 Class="ml-0">
-                                                            @context.ChangeType
-                                                        </MudChip>
-                                                    </MudTd>
-                                                    <MudTd DataLabel="Status">
-                                                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)"
-                                                                 Class="ml-0">
-                                                            @context.Status.ToString().SplitOnCapitalLetters()
-                                                        </MudChip>
-                                                    </MudTd>
-                                                    <MudTd DataLabel="Value"><TextValueDisplay Value="@GetPendingExportAttributeValue(context)" /></MudTd>
-                                                </RowTemplate>
-                                                <NoRecordsContent>
-                                                    <MudText Class="pa-4">No attribute changes recorded.</MudText>
-                                                </NoRecordsContent>
-                                            </MudTable>
-                                        }
-
-                                        @* Link to full Pending Export details *@
-                                        @if (_connectedSystemHeader != null)
-                                        {
-                                            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
-                                                       Href="@($"/admin/connected-systems/{_connectedSystemHeader.Id}/pending-exports/{_pendingExport.Id}")">
-                                                View Full Pending Export Details
-                                            </MudButton>
-                                        }
-                                    }
+                                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
+                                {
+                                    <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
                                 }
-                            }
-                            else
-                            {
-                                <MudProgressCircular Indeterminate="true" />
-                            }
+                            </MudAlert>
+
+                            <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
+                        }
+        </MudTabPanel>
+
+        @* Shown only where there is one: an empty tab invites a click that answers nothing. *@
+        @if (_pendingExport != null)
+        {
+            <MudTabPanel Text="Pending Export">
+                <ActivityItemPendingExportPanel PendingExport="_pendingExport"
+                                                ItemErrorType="@(_activityRunProfileExecutionItem.ErrorType ?? ActivityRunProfileExecutionItemErrorType.NotSet)"
+                                                ItemObjectChangeType="_activityRunProfileExecutionItem.ObjectChangeType"
+                                                ConnectedSystemId="_connectedSystemHeader?.Id" />
+            </MudTabPanel>
+        }
+        </NavigableMudTabs>
+    }
+    else
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
 
 @code {
     [Parameter]
@@ -1507,65 +1389,4 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             _ => "The following Metaverse Object attributes were modified during this synchronisation operation."
         };
     }
-
-    #region Pending Export Helpers
-
-    private static Color GetPendingExportStatusColor(PendingExportStatus status)
-    {
-        return status switch
-        {
-            PendingExportStatus.Pending => Color.Default,
-            PendingExportStatus.Executing => Color.Info,
-            PendingExportStatus.Exported => Color.Success,
-            PendingExportStatus.ExportNotConfirmed => Color.Warning,
-            PendingExportStatus.Failed => Color.Error,
-            _ => Color.Default,
-        };
-    }
-
-    private static Color GetPendingExportChangeTypeColor(PendingExportAttributeChangeType changeType)
-    {
-        return changeType switch
-        {
-            PendingExportAttributeChangeType.Add => Color.Primary,
-            PendingExportAttributeChangeType.Update => Color.Info,
-            PendingExportAttributeChangeType.Remove => Color.Warning,
-            PendingExportAttributeChangeType.RemoveAll => Color.Error,
-            _ => Color.Default,
-        };
-    }
-
-    private static Color GetPendingExportAttributeStatusColor(PendingExportAttributeChangeStatus status)
-    {
-        return status switch
-        {
-            PendingExportAttributeChangeStatus.Pending => Color.Default,
-            PendingExportAttributeChangeStatus.ExportedPendingConfirmation => Color.Info,
-            PendingExportAttributeChangeStatus.ExportedNotConfirmed => Color.Warning,
-            PendingExportAttributeChangeStatus.Failed => Color.Error,
-            _ => Color.Default,
-        };
-    }
-
-    private static string GetPendingExportAttributeValue(PendingExportAttributeValueChange change)
-    {
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
-
-        if (change.StringValue != null)
-            return change.StringValue;
-
-        if (change.DateTimeValue.HasValue)
-            return change.DateTimeValue.Value.ToLocalTime().ToFriendlyDate();
-
-        if (change.IntValue.HasValue)
-            return change.IntValue.Value.ToString();
-
-        if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
-
-        return "[null]";
-    }
-
-    #endregion
 }

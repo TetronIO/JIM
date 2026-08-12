@@ -28,11 +28,10 @@
 
     @if (HasMeta)
     {
+        @* Chips lead the row and the reason follows them: the chips are fixed-shape tokens an eye can
+           skip down a chain, whereas the reason is a variable-length sentence fragment that pushed them
+           to a different horizontal position on every hop when it came first. *@
         <div class="cb-meta">
-            @if (Reason != null)
-            {
-                <span class="cb-reason">@Reason</span>
-            }
             @if (Cohort.ConnectedSystemId is { } connectedSystemId && !string.IsNullOrWhiteSpace(Cohort.ConnectedSystemName))
             {
                 <CausalityEntityChip Label="@Cohort.ConnectedSystemName"
@@ -44,6 +43,10 @@
                 <CausalityEntityChip Label="@Cohort.SyncRuleName"
                                      Href="@($"/admin/sync-rules/{syncRuleId}")"
                                      Kind="CausalityEntityKind.SynchronisationRule" />
+            }
+            @if (Reason != null)
+            {
+                <span class="cb-reason">@Reason</span>
             }
             @if (SoleCause != null && LinkFor(SoleCause) is { } soleHref)
             {

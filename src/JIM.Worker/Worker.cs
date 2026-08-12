@@ -737,7 +737,7 @@ public class Worker : BackgroundService
 
         var activity = new Activity
         {
-            TargetName = "Metaverse Object Housekeeping",
+            TargetName = "Scheduled Identity Deletion",
             TargetType = ActivityTargetType.MetaverseObjectHousekeeping,
             TargetOperationType = ActivityTargetOperationType.Execute,
             ObjectsToProcess = mvosToDelete.Count

@@ -40,11 +40,13 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
-An execution item's detail page opens with a causality panel that answers "what happened to this object, and what did it cause?" without any digging. A summary band leads with a single plain-English sentence describing the run's effect on the object, with every entity mentioned (Connected Systems, Identities, Synchronisation Rules) highlighted as a clickable token, and a strip of colour-coded outcome pills beneath it summarising the outcomes at a glance (for example "Identity created", "11 attributes flowed", "Export queued").
+An execution item's detail page is split over tabs. **Overview** carries the item's own story: the execution summary, the record it processed, the causality panel and what caused it, and any error. Where the item created or failed on a Pending Export, that gets its own **Pending Export** tab, because a queued export is a separate subject with its own status, retry count and staged attribute changes; the tab appears only where there is one.
+
+The Overview tab opens with a causality panel that answers "what happened to this object, and what did it cause?" without any digging. A summary band leads with a single plain-English sentence describing the run's effect on the object, with every entity mentioned (Connected Systems, Identities, Synchronisation Rules) highlighted as a clickable token, and a strip of colour-coded outcome pills beneath it summarising the outcomes at a glance (for example "Identity created", "11 attributes flowed", "Export queued").
 
 Below the summary, the same chain of outcomes can be explored in three switchable views; the view you choose is remembered for your next visit:
 
-- **Flow**<br /> A left-to-right pipeline showing what came in, what JIM did, and what it caused, with downstream effects grouped per Connected System. The best starting point for understanding a typical import or synchronisation.
+- **Flow**<br /> A left-to-right pipeline showing what happened, what JIM did, and what it caused, with downstream effects grouped per Connected System. The best starting point for understanding a typical import or synchronisation.
 - **Timeline**<br /> A vertical narrative read from top to bottom, with attribute change detail expanding inline beneath each event. Useful when you want the whole story, every attribute included, in one scroll.
 - **Graph**<br /> A node-and-edge rendering of the underlying outcome tree. Useful for seeing the branching structure of a complex causal chain in one picture.
 
@@ -73,15 +75,15 @@ Everything a step says was captured at the moment it happened: the causing objec
 
 The chain always says why it ends, because the three reasons mean entirely different things:
 
-- **End of the recorded chain**: nothing caused this. It is the whole story.
+- **End of the recorded causality chain**: nothing caused this. It is the whole story.
 - **What caused this is no longer retained**: the causing record has aged out of Activity retention. This is expected rather than exceptional on a deployment that has been live longer than one retention window, and is shown calmly rather than as an error; the cause itself is still named, from the wording recorded at the time.
 - **More causes exist beyond this point**: the walk stopped at its depth bound, not at a real end. A chain that hit the bound anywhere says so at the top as well.
 
 A cause that was recorded on a different execution item links to it, so a long chain can be walked one page at a time. A cause recorded on the item you are already looking at is shown without a link.
 
-## Metaverse Object Housekeeping
+## Scheduled Identity Deletion
 
-When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it, queues deletes for any accounts covered by an export Synchronisation Rule whose [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) is Delete, and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Metaverse Object Housekeeping** activity, with an execution item per deleted Metaverse Object, per staged membership-removal Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. Deprovisioning deletes are reported on the deleted object's own item, nested beneath its **MVO Deleted** outcome, exactly as on a synchronisation run. A quiet housekeeping pass with nothing to delete records no activity.
+When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it, queues deletes for any accounts covered by an export Synchronisation Rule whose [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) is Delete, and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Scheduled Identity Deletion** activity, with an execution item per deleted Metaverse Object, per staged membership-removal Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. Deprovisioning deletes are reported on the deleted object's own item, nested beneath its **MVO Deleted** outcome, exactly as on a synchronisation run. A quiet housekeeping pass with nothing to delete records no activity.
 
 The activity's detail page shows the batch like a Run Profile execution: summary cards (Metaverse Objects Deleted, Recall Pending Exports, Object Types, Errors) above a searchable, filterable table listing each deleted object by name and type, with any per-object errors alongside.
 

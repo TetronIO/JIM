@@ -82,7 +82,7 @@ public static class CausalityCauseWording
     {
         return resolution switch
         {
-            CausalChainResolution.NoFurtherCauses => "End of the recorded chain",
+            CausalChainResolution.NoFurtherCauses => "End of the recorded causality chain",
             CausalChainResolution.CauseNotRetained => "What caused this is no longer retained",
             CausalChainResolution.DepthLimitReached => "More causes exist beyond this point",
             _ => null

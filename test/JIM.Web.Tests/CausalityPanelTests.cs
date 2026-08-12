@@ -285,6 +285,24 @@ public class CausalityPanelTests
     }
 
     [Test]
+    public void TechnicalNamesToggle_AlsoRewordsTheSummarySentence()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        Assert.That(cut.Find(".summary-sentence").TextContent, Does.Contain("processed the record for"));
+
+        cut.Find(".toggle-line").Click();
+
+        // The toggle governs the whole panel, not just the views: the summary is the first sentence
+        // read, and leaving "record" and "Identity" in it made the toggle look like it had not worked.
+        var sentence = cut.Find(".summary-sentence").TextContent;
+        Assert.Multiple(() =>
+        {
+            Assert.That(sentence, Does.Contain("processed the Connected System Object"));
+            Assert.That(sentence, Does.Not.Contain("the record"));
+        });
+    }
+
+    [Test]
     public void CausalChain_NotResolvedByThePage_RendersNoCausedBySection()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());

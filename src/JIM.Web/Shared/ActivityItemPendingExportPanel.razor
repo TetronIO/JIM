@@ -1,0 +1,235 @@
+@using JIM.Models.Activities
+@using JIM.Models.Enums
+@using JIM.Models.Transactional
+@using JIM.Utilities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Pending Export a Run Profile Execution Item created or failed on: its status, its staged attribute
+   changes, and a link to the queue entry itself. Extracted from the item detail page when that page grew
+   tabs (#1223); it is the whole content of the Pending Export tab, so the page no longer carries a second
+   subject's markup inline. The opening sentence names which of the four situations the reader is in,
+   because "staged for deletion", "awaiting export", "exported but unconfirmed" and "failed after retries"
+   look identical in the table beneath and mean entirely different things. *@
+
+<MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+    @if (PendingExport.ChangeType == PendingExportChangeType.Delete
+         && ItemErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+    {
+        <text>This object is staged for deletion in the Connected System. Any attribute values below are carried on the
+            Pending Export so the delete can still be performed once the Connected System Object is gone.</text>
+    }
+    else if (ItemObjectChangeType == ObjectChangeType.PendingExport
+             && ItemErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+    {
+        <text>The following attribute changes are staged and awaiting export to the Connected System.</text>
+    }
+    else if (ItemErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
+    {
+        <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
+            next export run.</text>
+    }
+    else
+    {
+        <text>The following attribute changes failed to export after multiple attempts and may require manual
+            intervention.</text>
+    }
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Outlined="true">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
+            <MudText>
+                @if (PendingExport.ConnectedSystem != null)
+                {
+                    <MudLink Href="@($"/admin/connected-systems/{PendingExport.ConnectedSystemId}")">@PendingExport.ConnectedSystem.Name</MudLink>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText><br />
+            <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(PendingExport.ChangeType)"
+                     Class="ml-0">
+                @PendingExport.ChangeType
+            </MudChip>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />
+            <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(PendingExport.Status)" Class="ml-0">
+                @PendingExport.Status.ToString().SplitOnCapitalLetters()
+            </MudChip>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Retry Count</MudText>
+            <MudText>
+                @PendingExport.ErrorCount / @PendingExport.MaxRetries
+                @if (PendingExport.ErrorCount >= PendingExport.MaxRetries)
+                {
+                    <MudChip T="string" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
+                }
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Last Attempted</MudText>
+            <MudText>
+                @if (PendingExport.LastAttemptedAt is { } lastAttemptedAt)
+                {
+                    @lastAttemptedAt.ToLocalTime().ToRelativeTime()
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudText Typo="Typo.button" Class="mud-text-secondary">Created</MudText>
+            <MudText>@PendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (PendingExport.AttributeValueChanges.Count > 0)
+{
+    <MudText Typo="Typo.subtitle1" Class="mb-2">
+        Pending Attribute Changes (@PendingExport.AttributeValueChanges.Count.ToString("N0"))
+    </MudText>
+    <MudTable Items="@PendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0"
+              Class="mb-5">
+        <HeaderContent>
+            <MudTh Style="width: 1%; white-space: nowrap;">
+                <MudText Typo="Typo.button">Attribute</MudText>
+            </MudTh>
+            <MudTh Style="width: 1%; white-space: nowrap;">
+                <MudText Typo="Typo.button">Change Type</MudText>
+            </MudTh>
+            <MudTh Style="width: 1%; white-space: nowrap;">
+                <MudText Typo="Typo.button">Status</MudText>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Value</MudText>
+            </MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Attribute">
+                <MudText Class="mud-text-secondary">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Change Type">
+                <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)"
+                         Class="ml-0">
+                    @context.ChangeType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Variant="Variant.Text" Color="GetAttributeStatusColor(context.Status)"
+                         Class="ml-0">
+                    @context.Status.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Value"><TextValueDisplay Value="@GetAttributeValue(context)" /></MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="pa-4">No attribute changes recorded.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@* Link to full Pending Export details *@
+@if (ConnectedSystemId is { } connectedSystemId)
+{
+    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
+               Href="@($"/admin/connected-systems/{connectedSystemId}/pending-exports/{PendingExport.Id}")">
+        View Full Pending Export Details
+    </MudButton>
+}
+
+@code {
+    /// <summary>
+    /// The Pending Export to describe.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public PendingExport PendingExport { get; set; } = null!;
+
+    /// <summary>
+    /// The execution item's error type, which decides which of the four opening sentences applies: the same
+    /// Pending Export means "staged and waiting" on a clean item and "failed after retries" on a failed one.
+    /// </summary>
+    [Parameter]
+    public ActivityRunProfileExecutionItemErrorType ItemErrorType { get; set; }
+
+    /// <summary>
+    /// The execution item's object change type; see <see cref="ItemErrorType"/>.
+    /// </summary>
+    [Parameter]
+    public ObjectChangeType ItemObjectChangeType { get; set; }
+
+    /// <summary>
+    /// The Connected System the record belongs to, used to build the link to the queue entry itself. Null
+    /// renders no link rather than a broken one, since Pending Export lookups are scoped by both ids.
+    /// </summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    private static Color GetStatusColor(PendingExportStatus status)
+    {
+        return status switch
+        {
+            PendingExportStatus.Pending => Color.Default,
+            PendingExportStatus.Executing => Color.Info,
+            PendingExportStatus.Exported => Color.Success,
+            PendingExportStatus.ExportNotConfirmed => Color.Warning,
+            PendingExportStatus.Failed => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    private static Color GetAttributeChangeTypeColor(PendingExportAttributeChangeType changeType)
+    {
+        return changeType switch
+        {
+            PendingExportAttributeChangeType.Add => Color.Primary,
+            PendingExportAttributeChangeType.Update => Color.Info,
+            PendingExportAttributeChangeType.Remove => Color.Warning,
+            PendingExportAttributeChangeType.RemoveAll => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    private static Color GetAttributeStatusColor(PendingExportAttributeChangeStatus status)
+    {
+        return status switch
+        {
+            PendingExportAttributeChangeStatus.Pending => Color.Default,
+            PendingExportAttributeChangeStatus.ExportedPendingConfirmation => Color.Info,
+            PendingExportAttributeChangeStatus.ExportedNotConfirmed => Color.Warning,
+            PendingExportAttributeChangeStatus.Failed => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    private static string GetAttributeValue(PendingExportAttributeValueChange change)
+    {
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+
+        if (change.StringValue != null)
+            return change.StringValue;
+
+        if (change.DateTimeValue.HasValue)
+            return change.DateTimeValue.Value.ToLocalTime().ToFriendlyDate();
+
+        if (change.IntValue.HasValue)
+            return change.IntValue.Value.ToString();
+
+        if (change.ByteValue != null)
+            return $"[Binary data: {change.ByteValue.Length} bytes]";
+
+        return "[null]";
+    }
+}

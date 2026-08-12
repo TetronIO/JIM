@@ -227,7 +227,7 @@ public class CausalityCausedByTests : JimComponentTestContext
             Is.EqualTo(new[] { "Yellowstone APAC", "Group Outbound" }));
     }
 
-    [TestCase(CausalChainResolution.NoFurtherCauses, "End of the recorded chain")]
+    [TestCase(CausalChainResolution.NoFurtherCauses, "End of the recorded causality chain")]
     [TestCase(CausalChainResolution.CauseNotRetained, "What caused this is no longer retained")]
     [TestCase(CausalChainResolution.DepthLimitReached, "More causes exist beyond this point")]
     public void CausedBy_TerminalCause_SaysWhyTheChainStopsThere(CausalChainResolution resolution, string expected)

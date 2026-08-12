@@ -97,10 +97,15 @@ public enum ActivityTargetType
     Authentication = 22,
 
     /// <summary>
-    /// A Metaverse Object Housekeeping batch (issue #1020): the worker's idle-time deletion of Metaverse Objects
+    /// A Scheduled Identity Deletion batch (issue #1020): the worker's idle-time deletion of Metaverse Objects
     /// whose deletion grace period has expired, including the reference-recall Pending Exports staged for objects
     /// (for example groups) that referenced them. Created only when a batch actually has work to do; a quiet idle
     /// tick records no Activity at all.
+    /// <para>
+    /// The member name says "Housekeeping" because this is a persisted enum stored by ordinal and its members are
+    /// append-only; the user-facing name is "Scheduled Identity Deletion", which says what the batch does rather
+    /// than which internal process does it. Never derive display text from the member name.
+    /// </para>
     /// </summary>
     MetaverseObjectHousekeeping = 23,
 
