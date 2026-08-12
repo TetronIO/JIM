@@ -394,12 +394,48 @@
     return t ? t.textContent.trim() : "";
   }
 
-  // Strip ids from the clone so the copies never collide with the originals.
-  // Safe for these diagrams: the ids exist only for aria-labelledby, and none
-  // of them are referenced internally via url(#...) or <mpath>.
+  // Rewrite the clone's ids rather than stripping them, so the copy never
+  // collides with the original *and* keeps resolving its own internal
+  // references. Diagrams whose edge labels sit on the line carry a
+  // <mask id="...-labelcut"> that the edge group points at with
+  // mask="url(#...)"; stripping ids leaves that reference dangling, and a
+  // dangling mask reference renders unmasked, so the lines would be drawn
+  // straight through the labels in the overlay. It happens to survive today
+  // only because the in-page copy is still in the document for the reference
+  // to land on -- which stops being true the moment two diagrams share an id,
+  // or the page copy is removed. Suffix everything instead.
+  var cloneCounter = 0;
+
   function cloneForOverlay(svg) {
     var copy = svg.cloneNode(true);
-    copy.querySelectorAll("[id]").forEach(function (n) { n.removeAttribute("id"); });
+    var suffix = "-dgz" + (++cloneCounter);
+    var renamed = Object.create(null);
+
+    copy.querySelectorAll("[id]").forEach(function (n) {
+      var oldId = n.getAttribute("id");
+      renamed[oldId] = oldId + suffix;
+      n.setAttribute("id", renamed[oldId]);
+    });
+
+    // Repoint every reference that could name one of those ids: url(#id) in a
+    // presentation attribute or inline style, and href="#id" (<use>, <mpath>).
+    if (Object.keys(renamed).length) {
+      copy.querySelectorAll("*").forEach(function (n) {
+        Array.prototype.slice.call(n.attributes).forEach(function (attr) {
+          var value = attr.value;
+          if (value.indexOf("#") === -1) return;
+          var next = value.replace(/url\(\s*#([^)\s"']+)\s*\)/g, function (whole, id) {
+            return renamed[id] ? "url(#" + renamed[id] + ")" : whole;
+          });
+          if (attr.name === "href" || attr.name === "xlink:href") {
+            var target = value.charAt(0) === "#" ? value.slice(1) : null;
+            if (target && renamed[target]) next = "#" + renamed[target];
+          }
+          if (next !== value) n.setAttribute(attr.name, next);
+        });
+      });
+    }
+
     copy.removeAttribute("id");
     copy.removeAttribute("aria-labelledby");
     copy.setAttribute("aria-hidden", "true");

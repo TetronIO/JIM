@@ -17,6 +17,13 @@
 <svg class="jim-diagram" viewBox="0 0 1160 630" role="img" aria-labelledby="jimdg-wa-title jimdg-wa-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-wa-title">Inside the Web Application</title>
   <desc id="jimdg-wa-desc">Administrators use the Blazor admin pages and automation clients call the REST API controllers; every request enters through the authentication middleware, which validates OIDC sign-in against the Identity Provider and API keys. Both the pages and the controllers call the JimApplication facade, the Application Layer's single entry point.</desc>
+  <defs>
+    <mask id="jimdg-wa-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="630">
+      <rect x="0" y="0" width="1160" height="630" fill="#ffffff"/>
+      <rect x="889.4" y="117" width="41.2" height="18" rx="3" fill="#000000"/>
+      <rect x="274.6" y="303" width="110.8" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
   <g id="jimdg-wa-people">
     <rect class="jimdg-stage" x="140" y="20" width="220" height="64" rx="8"/>
     <circle class="jimdg-person-glyph" cx="160" cy="41" r="6"/>
@@ -52,6 +59,7 @@
     <text class="jimdg-stage-label" x="580" y="566">JimApplication facade</text>
     <text class="jimdg-system-sub" x="580" y="587">Application Layer entry point</text>
   </g>
+  <g mask="url(#jimdg-wa-labelcut)">
   <g id="jimdg-wa-edges">
     <line class="jimdg-spoke" x1="250" y1="84" x2="250" y2="210"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,220) rotate(90)"/>
@@ -59,10 +67,8 @@
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,220) rotate(90)"/>
     <line class="jimdg-spoke" x1="910" y1="220" x2="910" y2="94"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,84) rotate(-90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="922" y="130">OIDC</text>
     <line class="jimdg-flow" x1="330" y1="284" x2="330" y2="330"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(330,340) rotate(90)"/>
-    <text class="jimdg-flow-label" x="342" y="316">validates requests</text>
     <line class="jimdg-flow" x1="830" y1="284" x2="830" y2="330"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(830,340) rotate(90)"/>
     <line class="jimdg-flow" x1="330" y1="420" x2="491.8" y2="534.2"/>
@@ -87,6 +93,11 @@
       <animateMotion dur="1.6s" begin="0.1s" repeatCount="indefinite" path="M830,286 L830,328"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="1.6s" begin="0.1s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  </g>
+  <g id="jimdg-wa-labels">
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="910" y="130">OIDC</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="330" y="316">validates requests</text>
   </g>
   <g id="jimdg-wa-boundary-title">
     <text class="jimdg-hub-title" x="580" y="186">JIM.Web</text>

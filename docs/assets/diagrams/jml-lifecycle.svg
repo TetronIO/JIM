@@ -14,6 +14,18 @@
 <svg class="jim-diagram" viewBox="0 0 1160 556" role="img" aria-labelledby="jimdg-jml-title jimdg-jml-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-jml-title">The Joiner, Mover and Leaver lifecycle</title>
   <desc id="jimdg-jml-desc">An identity's lifecycle in three phases, each flowing from the source system through JIM to the target systems. Joiner: a new starter record in the HR system is imported, JIM creates the identity by projecting it into the Metaverse, and accounts are provisioned in the target systems. Mover: a department transfer is imported, the identity is updated and the changes flow out to every target system's account. Leaver: the terminated record is imported, deletion rules and a grace period retire the identity, and target system accounts are deprovisioned.</desc>
+  <defs>
+    <mask id="jimdg-jml-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="556">
+      <rect x="0" y="0" width="1160" height="556" fill="#ffffff"/>
+      <rect x="227.6" y="200" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="557.6" y="200" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="887.6" y="200" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="227.6" y="418" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="557.6" y="418" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="887.6" y="418" width="45.3" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
+  <g mask="url(#jimdg-jml-labelcut)">
   <g id="jimdg-jml-phases">
     <text class="jimdg-stage-label" x="250" y="52">Joiner</text>
     <text class="jimdg-system-sub" x="250" y="74">a new identity appears</text>
@@ -25,6 +37,7 @@
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(480,46) rotate(0)"/>
     <line class="jimdg-spoke" x1="680" y1="46" x2="800" y2="46"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(810,46) rotate(0)"/>
+  </g>
   </g>
   <g id="jimdg-jml-events">
     <rect class="jimdg-system" x="120" y="110" width="260" height="64" rx="8"/>
@@ -61,25 +74,20 @@
     <text class="jimdg-system-name" x="910" y="490">Accounts deprovisioned</text>
     <text class="jimdg-system-sub" x="910" y="511">Target Systems</text>
   </g>
+  <g mask="url(#jimdg-jml-labelcut)">
   <g id="jimdg-jml-flows">
     <line class="jimdg-spoke" x1="250" y1="174" x2="250" y2="234"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,244) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="262" y="213">import</text>
     <line class="jimdg-spoke" x1="580" y1="174" x2="580" y2="234"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,244) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="213">import</text>
     <line class="jimdg-spoke" x1="910" y1="174" x2="910" y2="234"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,244) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="922" y="213">import</text>
     <line class="jimdg-spoke" x1="250" y1="392" x2="250" y2="452"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,462) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="262" y="431">export</text>
     <line class="jimdg-spoke" x1="580" y1="392" x2="580" y2="452"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,462) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="431">export</text>
     <line class="jimdg-spoke" x1="910" y1="392" x2="910" y2="452"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,462) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="922" y="431">export</text>
   </g>
   <g id="jimdg-jml-packets">
     <circle class="jimdg-packet" r="4.5">
@@ -106,5 +114,14 @@
       <animateMotion dur="2.4s" begin="-0.4s" repeatCount="indefinite" path="M910,394 L910,451"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-0.4s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  </g>
+  <g id="jimdg-jml-labels">
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="250" y="213">import</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="580" y="213">import</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="910" y="213">import</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="250" y="431">export</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="580" y="431">export</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="910" y="431">export</text>
   </g>
 </svg>
