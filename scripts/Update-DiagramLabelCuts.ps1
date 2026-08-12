@@ -99,40 +99,8 @@ if (-not (Test-Path -LiteralPath $cssPath)) {
 }
 
 # --- Locate a playwright package -------------------------------------------------------------
-# Preference order: an explicit override, the @playwright/mcp copy that .devcontainer/setup.sh
-# installs (its bundled Chromium revision is the one that is actually downloaded), then any plain
-# global playwright / playwright-core.
-function Resolve-PlaywrightModule {
-    if ($env:JIM_PLAYWRIGHT_MODULE) {
-        if (Test-Path -LiteralPath $env:JIM_PLAYWRIGHT_MODULE) { return $env:JIM_PLAYWRIGHT_MODULE }
-        throw "JIM_PLAYWRIGHT_MODULE is set but does not exist: $($env:JIM_PLAYWRIGHT_MODULE)"
-    }
-
-    $globalRoot = $null
-    try { $globalRoot = (& npm root -g 2>$null | Select-Object -First 1) } catch { $globalRoot = $null }
-    if (-not $globalRoot) { return $null }
-
-    $candidates = @(
-        (Join-Path $globalRoot '@playwright/mcp/node_modules/playwright-core'),
-        (Join-Path $globalRoot 'playwright'),
-        (Join-Path $globalRoot 'playwright-core')
-    )
-    foreach ($candidate in $candidates) {
-        if (Test-Path -LiteralPath $candidate) { return $candidate }
-    }
-    return $null
-}
-
+. (Join-Path $PSScriptRoot 'JimPlaywright.ps1')
 $playwrightModule = Resolve-PlaywrightModule
-if (-not $playwrightModule) {
-    throw @'
-Could not find a playwright package to measure label metrics with.
-
-The dev container installs one already (.devcontainer/setup.sh, "Installing Playwright MCP
-browser"); re-run that step, or point JIM_PLAYWRIGHT_MODULE at a playwright/playwright-core
-install of your own.
-'@
-}
 
 # --- Collect the diagrams ----------------------------------------------------------------------
 $files = [System.Collections.Generic.List[string]]::new()
@@ -176,7 +144,7 @@ ${page404}
 
 (async () => {
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewportSize: { width: 1280, height: 900 } });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.setContent(html, { waitUntil: 'load' });
   await page.evaluate(() => document.fonts && document.fonts.ready);
   const result = await page.evaluate((names) => {
