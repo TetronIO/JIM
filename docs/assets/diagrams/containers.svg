@@ -16,6 +16,16 @@
 <svg class="jim-diagram" viewBox="0 0 1160 750" role="img" aria-labelledby="jimdg-ct-title jimdg-ct-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-ct-title">JIM Containers</title>
   <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems, file systems and cloud applications, with enterprise database connectivity in development.</desc>
+  <defs>
+    <mask id="jimdg-ct-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="750">
+      <rect x="0" y="0" width="1160" height="750" fill="#ffffff"/>
+      <rect x="416.6" y="156" width="49.9" height="18" rx="3" fill="#000000"/>
+      <rect x="547" y="157" width="66" height="18" rx="3" fill="#000000"/>
+      <rect x="735.4" y="158.9" width="41.2" height="18" rx="3" fill="#000000"/>
+      <rect x="646.4" y="327.7" width="89.2" height="18" rx="3" fill="#000000"/>
+      <rect x="848.2" y="337" width="83.7" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
   <g id="jimdg-ct-people">
     <rect class="jimdg-stage" x="150" y="32" width="200" height="64" rx="8"/>
     <circle class="jimdg-person-glyph" cx="166" cy="53" r="6"/>
@@ -52,30 +62,24 @@
     <text class="jimdg-stage-label" x="890" y="486">PostgreSQL</text>
     <text class="jimdg-system-sub" x="890" y="508">configuration &amp; identity data</text>
   </g>
+  <g mask="url(#jimdg-ct-labelcut)">
   <g id="jimdg-ct-edges">
     <line class="jimdg-spoke" x1="250" y1="96" x2="250" y2="215"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,225) rotate(90)"/>
     <line class="jimdg-spoke" x1="330" y1="96" x2="531.5" y2="219.8"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(540,225) rotate(31.6)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="455" y="180">web UI</text>
     <line class="jimdg-spoke" x1="580" y1="96" x2="580" y2="215"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,225) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="170">REST API</text>
     <line class="jimdg-spoke" x1="890" y1="96" x2="658.8" y2="220.3"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(650,225) rotate(151.7)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="745" y="180">OIDC</text>
     <line class="jimdg-flow" x1="360" y1="265" x2="450" y2="265"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,265) rotate(0)"/>
-    <text class="jimdg-flow-label" x="372" y="253">REST API</text>
     <line class="jimdg-flow" x1="640" y1="305" x2="821.5" y2="417.7"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(830,423) rotate(31.85)"/>
-    <text class="jimdg-flow-label jimdg-anchor-end" x="716" y="364">reads &amp; writes</text>
     <line class="jimdg-flow" x1="890" y1="305" x2="890" y2="410"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(890,420) rotate(90)"/>
-    <text class="jimdg-flow-label" x="902" y="350">queues tasks</text>
     <line class="jimdg-flow" x1="700" y1="470" x2="770" y2="470"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(780,470) rotate(0)"/>
-    <text class="jimdg-flow-label" x="706" y="458">task queue</text>
   </g>
   <g id="jimdg-ct-links">
     <line class="jimdg-spoke" x1="480" y1="516" x2="120" y2="656"/>
@@ -94,6 +98,7 @@
     <circle class="jimdg-link-end" cx="680" cy="516" r="3.5"/>
     <circle class="jimdg-link-end" cx="1040" cy="656" r="3.5"/>
   </g>
+  </g>
   <g id="jimdg-ct-systems">
     <rect class="jimdg-system" x="20" y="656" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="120" y="684">Directory Services</text>
@@ -111,6 +116,7 @@
     <text class="jimdg-system-name" x="1040" y="684">Cloud Applications</text>
     <text class="jimdg-system-sub" x="1040" y="705">SCIM 2.0</text>
   </g>
+  <g mask="url(#jimdg-ct-labelcut)">
   <g id="jimdg-ct-packets">
     <circle class="jimdg-packet" r="4.5">
       <animateMotion dur="3s" begin="0s" repeatCount="indefinite" path="M480,516 L120,656"/>
@@ -129,7 +135,17 @@
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-2.25s" repeatCount="indefinite"/>
     </circle>
   </g>
+  </g>
+  <g id="jimdg-ct-labels">
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="442" y="169">web UI</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="580" y="170">REST API</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="756" y="171.9">OIDC</text>
+    <text class="jimdg-flow-label" x="372" y="253">REST API</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="691" y="340.7">reads &amp; writes</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="890" y="350">queues tasks</text>
+    <text class="jimdg-flow-label" x="706" y="458">task queue</text>
+  </g>
   <g id="jimdg-ct-boundary-title">
-    <text class="jimdg-hub-title" x="580" y="188">JIM</text>
+    <text class="jimdg-hub-title" x="580" y="202">JIM</text>
   </g>
 </svg>

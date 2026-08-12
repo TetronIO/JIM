@@ -11,6 +11,14 @@
 <svg class="jim-diagram" viewBox="0 0 1160 640" role="img" aria-labelledby="jimdg-hs-title jimdg-hs-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-hs-title">JIM hub-and-spoke synchronisation concept</title>
   <desc id="jimdg-hs-desc">Source systems on the left and target systems on the right connect to JIM in the centre. Inside JIM, Connectors pass imported data through the Import, Synchronise and Export pipeline, which correlates and projects identities into the Metaverse, the authoritative data store for fused identities. Every flow passes through JIM; no data moves directly between Connected Systems. Enterprise database connectivity is in development.</desc>
+  <defs>
+    <mask id="jimdg-hs-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="640">
+      <rect x="0" y="0" width="1160" height="640" fill="#ffffff"/>
+      <rect x="374.8" y="209" width="50.4" height="18" rx="3" fill="#000000"/>
+      <rect x="703.6" y="209" width="112.9" height="18" rx="3" fill="#000000"/>
+      <rect x="524.3" y="391" width="112" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
   <g id="jimdg-hs-hub">
     <rect class="jimdg-hub" x="300" y="28" width="560" height="584" rx="8"/>
     <text class="jimdg-hub-title" x="580" y="66">JIM</text>
@@ -40,13 +48,12 @@
       <text class="jimdg-core-title" x="580" y="517">Metaverse</text>
       <text class="jimdg-core-sub" x="580" y="541">Authoritative data store for fused identities</text>
     </g>
+    <g mask="url(#jimdg-hs-labelcut)">
     <g id="jimdg-hs-flows">
       <line class="jimdg-flow" x1="400" y1="186" x2="400" y2="252"/>
       <polygon class="jimdg-flow-arrow" points="400,262 394.5,252 405.5,252"/>
-      <text class="jimdg-flow-label jimdg-anchor-end" x="390" y="222">staging</text>
       <line class="jimdg-flow" x1="760" y1="262" x2="760" y2="196"/>
       <polygon class="jimdg-flow-arrow" points="760,186 754.5,196 765.5,196"/>
-      <text class="jimdg-flow-label jimdg-anchor-end" x="750" y="222">outbound changes</text>
       <line class="jimdg-flow" x1="470" y1="290" x2="500" y2="290"/>
       <polygon class="jimdg-flow-arrow" points="510,290 500,284.5 500,295.5"/>
       <line class="jimdg-flow" x1="650" y1="290" x2="680" y2="290"/>
@@ -54,7 +61,7 @@
       <line class="jimdg-flow" x1="580" y1="328" x2="580" y2="472"/>
       <polygon class="jimdg-flow-arrow" points="580,318 574.5,328 585.5,328"/>
       <polygon class="jimdg-flow-arrow" points="580,482 574.5,472 585.5,472"/>
-      <text class="jimdg-flow-label" x="592" y="404">correlate &amp; project</text>
+    </g>
     </g>
   </g>
   <g id="jimdg-hs-sources">
@@ -79,6 +86,7 @@
     <text class="jimdg-system-name" x="1030" y="486">Cloud Applications</text>
     <text class="jimdg-system-sub" x="1030" y="507">SCIM 2.0</text>
   </g>
+  <g mask="url(#jimdg-hs-labelcut)">
   <g id="jimdg-hs-spokes">
     <line class="jimdg-spoke" x1="240" y1="150" x2="290" y2="150"/>
     <polygon class="jimdg-arrow" points="300,150 290,144.5 290,155.5"/>
@@ -143,5 +151,11 @@
       <animateMotion dur="2.4s" begin="-0.5s" repeatCount="indefinite" path="M860,490 L909,490"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-0.5s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  </g>
+  <g id="jimdg-hs-labels">
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="400" y="222">staging</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="760" y="222">outbound changes</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="580" y="404">correlate &amp; project</text>
   </g>
 </svg>
