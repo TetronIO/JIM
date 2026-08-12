@@ -334,19 +334,12 @@
     private List<CategoryGroup> _categoryGroups = new();
 
     /// <summary>
-    /// The sort key standing for "the order the values arrived in". Attribute values are read a page at a time
-    /// with no sort parameter, and an uncapped attribute's values must order the same way as a capped one's, so
-    /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
-    /// arrow over an order it did not choose.
+    /// The sort key standing for "the order the values arrived in". The range read takes no sort parameter (it
+    /// orders by value id, which is the total order its offset and count are addressed against), and an uncapped
+    /// attribute's values must order the same way as a capped one's, so no column offers a sort; naming the default
+    /// something no header claims keeps the grid from showing a sort arrow over an order it did not choose.
     /// </summary>
     private const string SourceOrderSort = "order";
-
-    /// <summary>
-    /// The page size windows are stitched from when they come from the application layer. It matches the largest
-    /// page it will serve (larger requests are clamped there), so a window never silently comes back from a
-    /// different offset.
-    /// </summary>
-    private const int SourcePageSize = 100;
 
     /// <summary>
     /// Per-category expanded state loaded from browser localStorage.
@@ -584,39 +577,20 @@
     // ========================== Window Loading ==========================
 
     /// <summary>
-    /// A window loader for a capped attribute, whose values live in the database rather than on this page. The
-    /// application layer serves them a page at a time, so a window is stitched from the pages spanning it rather
-    /// than read at an arbitrary offset; the values are ordered by their own id, so the pages join without gaps
-    /// or repeats.
+    /// A window loader for a capped attribute, whose values live in the database rather than on this page: one
+    /// range read at the offset and count the grid asked for. The total comes back only when the request asked
+    /// for it, and a null total is passed straight through rather than turned into a zero, which the grid would
+    /// read as "nothing matched".
     /// </summary>
     private Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<MetaverseObjectAttributeValue>>>
         LoadServerValueWindowAsync(string attributeName) => async (request, _) =>
     {
-        var items = new List<MetaverseObjectAttributeValue>(request.Count);
-        var firstPage = request.StartIndex / SourcePageSize;
-        var skipInFirstPage = request.StartIndex % SourcePageSize;
-        var totalValues = 0;
-
         using var jim = JimFactory.Create();
-        for (var page = firstPage; items.Count < request.Count; page++)
-        {
-            var result = await jim.Metaverse.GetAttributeValuesPagedAsync(
-                MetaverseObject.Id, attributeName, page + 1, SourcePageSize, request.SearchText);
-            totalValues = result.TotalResults;
+        var result = await jim.Metaverse.GetAttributeValuesRangeAsync(
+            MetaverseObject.Id, attributeName, request.StartIndex, request.Count,
+            request.SearchText, request.IncludeTotalCount);
 
-            IEnumerable<MetaverseObjectAttributeValue> values = result.Results;
-            if (page == firstPage)
-                values = values.Skip(skipInFirstPage);
-
-            items.AddRange(values.Take(request.Count - items.Count));
-
-            // A short page is the last one; asking for the next would only cost a round trip to learn that.
-            if (result.Results.Count < SourcePageSize)
-                break;
-        }
-
-        return new VirtualisedWindow<MetaverseObjectAttributeValue>(
-            items, request.IncludeTotalCount ? totalValues : null);
+        return new VirtualisedWindow<MetaverseObjectAttributeValue>(result.Results, result.TotalResults);
     };
 
     /// <summary>

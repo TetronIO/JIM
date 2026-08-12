@@ -23,15 +23,15 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// Covers the inline table of one Metaverse Object attribute's values now that it is a
-/// <see cref="VirtualisedDataGrid{TItem}"/>: that the grid is what renders the values, that an arbitrary window
-/// is stitched correctly from the whole pages the application layer serves, and that an attribute with nothing
-/// in it says so rather than showing an empty table.
+/// <see cref="VirtualisedDataGrid{TItem}"/> over the application layer's range read: that the grid is what renders
+/// the values, that a window is one read at exactly the offset and count that was asked for, that an uncounted
+/// window comes back with a null total rather than a zero, and that an attribute with nothing in it says so
+/// rather than showing an empty table.
 /// </summary>
 [TestFixture]
 public class MvoMvaTableTests : JimComponentTestContext
 {
     private const string AttributeName = "Static Members";
-    private const int SourcePageSize = 100;
 
     private static readonly Guid MetaverseObjectId = Guid.NewGuid();
 
@@ -46,18 +46,21 @@ public class MvoMvaTableTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
+    /// <summary>
+    /// Serves the given values as the repository's range read does: the window at the requested offset and count,
+    /// and the total only when it was asked for (null, never zero, when it was not).
+    /// </summary>
     private void SetupValues(IReadOnlyList<MetaverseObjectAttributeValue> values)
     {
         _metaverse
-            .Setup(r => r.GetAttributeValuesPagedAsync(MetaverseObjectId, AttributeName,
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()))
-            .ReturnsAsync((Guid _, string _, int page, int pageSize, string? _) => new PagedResultSet<MetaverseObjectAttributeValue>
-            {
-                Results = values.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-                TotalResults = values.Count,
-                CurrentPage = page,
-                PageSize = pageSize
-            });
+            .Setup(r => r.GetAttributeValuesRangeAsync(MetaverseObjectId, AttributeName,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<MetaverseObjectAttributeValue>
+                {
+                    Results = values.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? values.Count : null
+                });
     }
 
     private static List<MetaverseObjectAttributeValue> BuildValues(int count) =>
@@ -120,35 +123,52 @@ public class MvoMvaTableTests : JimComponentTestContext
         });
     }
 
+    /// <summary>
+    /// The grid addresses windows by absolute offset and count, and so does the range read behind them, so the
+    /// request goes over unchanged and in a single read; the page stitching this replaced took two whenever the
+    /// window did not start on a page boundary.
+    /// </summary>
     [Test]
-    public async Task MvoMvaTable_WindowStraddlingAPageBoundary_IsStitchedFromBothPagesAsync()
+    public async Task MvoMvaTable_Window_ReadsTheOffsetAndCountItWasAskedForInOneReadAsync()
     {
         var values = BuildValues(250);
         SetupValues(values);
         var cut = RenderTable();
+        _metaverse.Invocations.Clear();
 
         var window = await LoadWindow(cut)(
-            new VirtualisedWindowRequest(SourcePageSize - 4, 12, null, "order", false, IncludeTotalCount: true),
+            new VirtualisedWindowRequest(96, 12, null, "order", false, IncludeTotalCount: true),
             CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(window.Items.Select(v => v.StringValue),
-                Is.EqualTo(values.Skip(SourcePageSize - 4).Take(12).Select(v => v.StringValue)));
+                Is.EqualTo(values.Skip(96).Take(12).Select(v => v.StringValue)));
             Assert.That(window.TotalItems, Is.EqualTo(250));
         }
+
+        _metaverse.Verify(r => r.GetAttributeValuesRangeAsync(
+            MetaverseObjectId, AttributeName, 96, 12, null, true), Times.Once);
     }
 
+    /// <summary>
+    /// Counting is the expensive half of a window read, so a request that does not ask for it must not trigger
+    /// one, and the absent total must stay null: a zero in its place reads as "nothing matched".
+    /// </summary>
     [Test]
-    public async Task MvoMvaTable_WindowNotAskingForTheCount_ReturnsANullTotalAsync()
+    public async Task MvoMvaTable_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
     {
         SetupValues(BuildValues(30));
         var cut = RenderTable();
+        _metaverse.Invocations.Clear();
 
         var window = await LoadWindow(cut)(
             new VirtualisedWindowRequest(0, 5, null, "order", false, IncludeTotalCount: false), CancellationToken.None);
 
         Assert.That(window.TotalItems, Is.Null, "null means not counted, and must not be read as no matches");
+
+        _metaverse.Verify(r => r.GetAttributeValuesRangeAsync(
+            MetaverseObjectId, AttributeName, 0, 5, null, false), Times.Once);
     }
 
     [Test]

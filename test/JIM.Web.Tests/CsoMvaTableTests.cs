@@ -24,16 +24,16 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// Covers the inline table of one Connected System Object attribute's values now that it is a
-/// <see cref="VirtualisedDataGrid{TItem}"/>. The behaviour worth pinning is the seam between the two: the grid
-/// asks for an arbitrary window (offset and count), while the application layer only serves whole pages, so the
-/// component stitches the pages spanning a window. Getting that arithmetic wrong shows the reader the wrong
-/// values with no error anywhere, which is exactly the class of defect a unit test can catch and a glance cannot.
+/// <see cref="VirtualisedDataGrid{TItem}"/> over the application layer's range read. The behaviour worth pinning
+/// is the seam between the two: the grid asks for an arbitrary window (offset and count) and the range read is
+/// addressed the same way, so the component must hand the request over unchanged, in one call, and must pass the
+/// total back exactly as it came, including a null one. Each of those going wrong shows the reader the wrong
+/// values (or none) with no error anywhere.
 /// </summary>
 [TestFixture]
 public class CsoMvaTableTests : JimComponentTestContext
 {
     private const string AttributeName = "member";
-    private const int SourcePageSize = 100;
 
     private static readonly Guid ConnectedSystemObjectId = Guid.NewGuid();
 
@@ -49,21 +49,20 @@ public class CsoMvaTableTests : JimComponentTestContext
     }
 
     /// <summary>
-    /// Serves the given values a page at a time, exactly as the repository does (ordered, offset by page), so a
-    /// test can assert on the window the component assembles rather than on the pages it happened to ask for.
+    /// Serves the given values as the repository's range read does: the window at the requested offset and count,
+    /// and the total only when it was asked for (null, never zero, when it was not).
     /// </summary>
     private void SetupValues(IReadOnlyList<ConnectedSystemObjectAttributeValue> values, string? expectedSearch = null)
     {
         _connectedSystems
-            .Setup(r => r.GetAttributeValuesPagedAsync(ConnectedSystemObjectId, AttributeName,
-                It.IsAny<int>(), It.IsAny<int>(), expectedSearch))
-            .ReturnsAsync((Guid _, string _, int page, int pageSize, string? _) => new PagedResultSet<ConnectedSystemObjectAttributeValue>
-            {
-                Results = values.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-                TotalResults = values.Count,
-                CurrentPage = page,
-                PageSize = pageSize
-            });
+            .Setup(r => r.GetAttributeValuesRangeAsync(ConnectedSystemObjectId, AttributeName,
+                It.IsAny<int>(), It.IsAny<int>(), expectedSearch, It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<ConnectedSystemObjectAttributeValue>
+                {
+                    Results = values.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? values.Count : null
+                });
     }
 
     private static List<ConnectedSystemObjectAttributeValue> BuildValues(int count) =>
@@ -114,42 +113,50 @@ public class CsoMvaTableTests : JimComponentTestContext
                 "a virtualised list has no page size to choose and no page controls"));
     }
 
+    /// <summary>
+    /// The grid addresses windows by absolute offset and count, and so does the range read behind them, so the
+    /// request goes over unchanged. Any arithmetic here (the page stitching this replaced) is a chance to hand
+    /// the reader values from the wrong place with no error anywhere.
+    /// </summary>
     [Test]
-    public async Task CsoMvaTable_WindowInsideOnePage_ReturnsThatSliceAsync()
+    public async Task CsoMvaTable_Window_ReadsTheOffsetAndCountItWasAskedForAsync()
     {
         var values = BuildValues(250);
         SetupValues(values);
         var cut = RenderTable();
+        _connectedSystems.Invocations.Clear();
 
         var window = await LoadWindow(cut)(
-            new VirtualisedWindowRequest(10, 5, null, "order", false, IncludeTotalCount: true), CancellationToken.None);
+            new VirtualisedWindowRequest(97, 10, null, "order", false, IncludeTotalCount: true), CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(window.Items.Select(v => v.StringValue),
-                Is.EqualTo(values.Skip(10).Take(5).Select(v => v.StringValue)));
+                Is.EqualTo(values.Skip(97).Take(10).Select(v => v.StringValue)));
             Assert.That(window.TotalItems, Is.EqualTo(250));
         }
+
+        _connectedSystems.Verify(r => r.GetAttributeValuesRangeAsync(
+            ConnectedSystemObjectId, AttributeName, 97, 10, null, true), Times.Once);
     }
 
     /// <summary>
-    /// The window the virtualiser asks for is not aligned to the application layer's pages, so a window that
-    /// straddles a page boundary has to be joined from both. This is the arithmetic that silently shows the
-    /// wrong values if it is wrong.
+    /// One window is one read. It used to take two whenever the window did not start on a page boundary, which
+    /// is most of them.
     /// </summary>
     [Test]
-    public async Task CsoMvaTable_WindowStraddlingAPageBoundary_IsStitchedFromBothPagesAsync()
+    public async Task CsoMvaTable_Window_CostsASingleReadAsync()
     {
-        var values = BuildValues(250);
-        SetupValues(values);
+        SetupValues(BuildValues(250));
         var cut = RenderTable();
+        _connectedSystems.Invocations.Clear();
 
-        var window = await LoadWindow(cut)(
-            new VirtualisedWindowRequest(SourcePageSize - 3, 10, null, "order", false, IncludeTotalCount: true),
-            CancellationToken.None);
+        await LoadWindow(cut)(
+            new VirtualisedWindowRequest(97, 10, null, "order", false, IncludeTotalCount: true), CancellationToken.None);
 
-        Assert.That(window.Items.Select(v => v.StringValue),
-            Is.EqualTo(values.Skip(SourcePageSize - 3).Take(10).Select(v => v.StringValue)));
+        _connectedSystems.Verify(r => r.GetAttributeValuesRangeAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()),
+            Times.Once, "a window that does not align to a page boundary must not cost a second round trip");
     }
 
     [Test]
@@ -170,14 +177,16 @@ public class CsoMvaTableTests : JimComponentTestContext
     }
 
     /// <summary>
-    /// Counting is the expensive half of a window read, so the grid only asks for it when the filters changed;
-    /// a loader that ignores that turns every scroll into a count query.
+    /// Counting is the expensive half of a window read, so the grid only asks for it when the filters changed.
+    /// The loader must pass that through rather than counting anyway, and must report the resulting absent total
+    /// as null: a zero in its place reads as "nothing matched" and empties the list.
     /// </summary>
     [Test]
-    public async Task CsoMvaTable_WindowNotAskingForTheCount_ReturnsANullTotalAsync()
+    public async Task CsoMvaTable_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
     {
         SetupValues(BuildValues(40));
         var cut = RenderTable();
+        _connectedSystems.Invocations.Clear();
 
         var window = await LoadWindow(cut)(
             new VirtualisedWindowRequest(0, 10, null, "order", false, IncludeTotalCount: false), CancellationToken.None);
@@ -187,6 +196,9 @@ public class CsoMvaTableTests : JimComponentTestContext
             Assert.That(window.TotalItems, Is.Null, "null means not counted, and must not be read as no matches");
             Assert.That(window.Items, Has.Count.EqualTo(10));
         }
+
+        _connectedSystems.Verify(r => r.GetAttributeValuesRangeAsync(
+            ConnectedSystemObjectId, AttributeName, 0, 10, null, false), Times.Once);
     }
 
     [Test]

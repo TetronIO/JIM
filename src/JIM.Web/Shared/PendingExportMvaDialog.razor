@@ -93,51 +93,27 @@
     public int TotalCount { get; set; }
 
     /// <summary>
-    /// The sort key standing for "the order the application layer returned them in". Attribute value changes are
-    /// read a page at a time with no sort parameter, so no column offers a sort; naming the default something no
-    /// header claims keeps the grid from showing a sort arrow over an order it did not choose.
+    /// The sort key standing for "the order the application layer returned them in". The range read takes no sort
+    /// parameter (it orders by change id, which is the total order its offset and count are addressed against), so
+    /// no column offers a sort; naming the default something no header claims keeps the grid from showing a sort
+    /// arrow over an order it did not choose.
     /// </summary>
     private const string SourceOrderSort = "order";
 
     /// <summary>
-    /// The page size windows are stitched from. It matches the largest page the application layer will serve
-    /// (larger requests are clamped there), so a window never silently comes back from a different offset.
-    /// </summary>
-    private const int SourcePageSize = 100;
-
-    /// <summary>
-    /// Reads one window of this attribute's queued changes. The application layer serves them a page at a time,
-    /// so a window is stitched from the pages spanning it rather than read at an arbitrary offset; the changes
-    /// are ordered by their own id, so the pages join without gaps or repeats.
+    /// Reads one window of this attribute's queued changes: one range read at the offset and count the grid asked
+    /// for. The total comes back only when the request asked for it, and a null total is passed straight through
+    /// rather than turned into a zero, which the grid would read as "nothing matched".
     /// </summary>
     private async Task<VirtualisedWindow<PendingExportAttributeValueChange>> LoadChangeWindowAsync(
         VirtualisedWindowRequest request, CancellationToken _)
     {
-        var items = new List<PendingExportAttributeValueChange>(request.Count);
-        var firstPage = request.StartIndex / SourcePageSize;
-        var skipInFirstPage = request.StartIndex % SourcePageSize;
-        var totalChanges = 0;
-
         using var jim = JimFactory.Create();
-        for (var page = firstPage; items.Count < request.Count; page++)
-        {
-            var result = await jim.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
-                PendingExportId, AttributeName, page + 1, SourcePageSize, request.SearchText);
-            totalChanges = result.TotalResults;
+        var result = await jim.ConnectedSystems.GetPendingExportAttributeChangesRangeAsync(
+            PendingExportId, AttributeName, request.StartIndex, request.Count,
+            request.SearchText, request.IncludeTotalCount);
 
-            IEnumerable<PendingExportAttributeValueChange> changes = result.Results;
-            if (page == firstPage)
-                changes = changes.Skip(skipInFirstPage);
-
-            items.AddRange(changes.Take(request.Count - items.Count));
-
-            // A short page is the last one; asking for the next would only cost a round trip to learn that.
-            if (result.Results.Count < SourcePageSize)
-                break;
-        }
-
-        return new VirtualisedWindow<PendingExportAttributeValueChange>(
-            items, request.IncludeTotalCount ? totalChanges : null);
+        return new VirtualisedWindow<PendingExportAttributeValueChange>(result.Results, result.TotalResults);
     }
 
     private static string GetValueText(PendingExportAttributeValueChange change)

@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Enums
 @using JIM.Utilities
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -277,161 +278,189 @@ else
                                             </MudExpansionPanels>
                                         }
                                     }
-                                    @if (_selectedChange?.AttributeChanges.Any() == true)
+                                    @if (_selectedChange != null && _selectedChange.AttributeChanges.Count > 0)
                                     {
-                                        <!-- Filter controls for the table -->
-                                        <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 12px;">
-                                            <div style="width: 250px;">
-                                                <SearchField @bind-Value="_modalSearchText" Label="Search" />
-                                            </div>
-                                            <div style="width: 180px;">
-                                                <MudSelect T="string" @bind-Value="_modalFilterAttribute" Label="Attribute" Variant="Variant.Outlined"
-                                                           Dense="true" Margin="Margin.Dense">
-                                                    <MudSelectItem T="string" Value="@((string)null!)">All Attributes</MudSelectItem>
-                                                    @foreach (var attr in GetUniqueAttributes(_selectedChange))
-                                                    {
-                                                        <MudSelectItem T="string" Value="@attr">@attr</MudSelectItem>
-                                                    }
-                                                </MudSelect>
-                                            </div>
-                                            <div style="width: 150px;">
-                                                <MudSelect T="string" @bind-Value="_modalFilterChangeType" Label="Change type"
-                                                           Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense">
-                                                    <MudSelectItem T="string" Value="@((string)null!)">All</MudSelectItem>
-                                                    <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
-                                                    <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
-                                                    <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
-                                                    <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
-                                                    <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
-                                                </MudSelect>
-                                            </div>
-                                        </div>
+                                        // Captured so the toolbar fragment, a lambda the compiler's null-state
+                                        // analysis does not reach into, works against a non-null change group.
+                                        var selectedChange = _selectedChange;
 
-                                        @* Not a VirtualisedDataGrid, deliberately, and this is the one table in the
-                                           portal that is not. The grid sizes itself by measuring where the page
-                                           footer lands (jimVirtualList.fit), and inside a dialog that measurement
-                                           describes the page behind the overlay rather than the dialog: the footer
-                                           is somewhere below the fold and the page's own scroll offset is added to
-                                           the container's position, so the computed ceiling goes negative and the
-                                           grid collapses to its 240px floor. The grid would also write its search,
-                                           sort and scroll position into the page's URL, where they would outlive the
-                                           dialog they belong to. So the pager goes (no list in the portal is paged
-                                           any more) and the rows scroll with the dialog body, narrowed by the three
-                                           filters above. Making the fit dialog-aware is what would let this become a
-                                           grid like every other table. *@
-                                        <MudTable Items="@GetFilteredModalDisplayChanges()" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
-                                                  Elevation="0" T="AttributeChangeDisplay">
-                                            <HeaderContent>
-                                                <MudTh>
-                                                    <MudText Typo="Typo.button">Change</MudText>
-                                                </MudTh>
-                                                <MudTh>
-                                                    <MudText Typo="Typo.button">Attribute</MudText>
-                                                </MudTh>
-                                                <MudTh>
-                                                    <MudText Typo="Typo.button">Type</MudText>
-                                                </MudTh>
-                                                <MudTh>
-                                                    <MudText Typo="Typo.button">Plurality</MudText>
-                                                </MudTh>
-                                                <MudTh>
-                                                    <MudText Typo="Typo.button">Value</MudText>
-                                                </MudTh>
-                                            </HeaderContent>
-                                            <RowTemplate>
-                                                <MudTd DataLabel="Change">
-                                                    <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context)">
-                                                        @context.DisplayChangeType
-                                                    </MudChip>
-                                                </MudTd>
-                                                <MudTd DataLabel="Attribute">
-                                                    <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
-                                                </MudTd>
-                                                <MudTd DataLabel="Type">
-                                                    <MudText Class="mud-text-secondary">@context.AttributeType</MudText>
-                                                </MudTd>
-                                                <MudTd DataLabel="Plurality">
-                                                    <MudText Class="mud-text-secondary">@(context.IsMultiValued ? "Multi-Valued" : "Single-Valued")
-                                                    </MudText>
-                                                </MudTd>
-                                                <MudTd DataLabel="Value">
-                                                    @if (context.IsUpdate)
-                                                    {
-                                                        @* SVA Update - show old → new with old value de-emphasised *@
-                                                        @if (context.OldReferenceValue != null || context.NewReferenceValue != null)
+                                        @* A grid inside a dialog states its own height ceiling rather than measuring
+                                           where the page footer lands (that footer belongs to the page behind the
+                                           overlay), and keeps its search and scroll position to itself rather than
+                                           writing them into an address bar that outlives the dialog. All three of the
+                                           table's filters survive: the grid's own search box replaces the standalone
+                                           one, and the attribute and change-type selects sit beside it in the toolbar. *@
+                                        <VirtualisedDataGrid @ref="_attributeChangesGrid"
+                                                             T="AttributeChangeDisplay"
+                                                             ContainerId="change-history-attribute-changes"
+                                                             TrackUrlState="false"
+                                                             MaxHeight="400px"
+                                                             StateKey="@GetSelectedChangeStateKey()"
+                                                             DefaultSortBy="@SourceOrderSort"
+                                                             LoadWindow="LoadAttributeChangeWindow"
+                                                             SearchPlaceholder="Search changes..."
+                                                             SingularName="Change"
+                                                             PluralName="Changes">
+                                            <ToolBarExtras>
+                                                <div style="width: 180px;">
+                                                    <MudSelect T="string" Value="@_modalFilterAttribute"
+                                                               ValueChanged="OnModalFilterAttributeChangedAsync"
+                                                               Label="Attribute" Variant="Variant.Outlined"
+                                                               Dense="true" Margin="Margin.Dense">
+                                                        <MudSelectItem T="string" Value="@((string)null!)">All Attributes</MudSelectItem>
+                                                        @foreach (var attr in GetUniqueAttributes(selectedChange))
                                                         {
-                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                @if (context.OldReferenceValue != null)
-                                                                {
-                                                                    <MudLink Href="@context.OldReferenceValue.Href" Class="mud-text-secondary">
-                                                                        @context.OldReferenceValue.DisplayName</MudLink>
+                                                            <MudSelectItem T="string" Value="@attr">@attr</MudSelectItem>
+                                                        }
+                                                    </MudSelect>
+                                                </div>
+                                                <div style="width: 150px;" class="ml-3">
+                                                    <MudSelect T="string" Value="@_modalFilterChangeType"
+                                                               ValueChanged="OnModalFilterChangeTypeChangedAsync"
+                                                               Label="Change type" Variant="Variant.Outlined"
+                                                               Dense="true" Margin="Margin.Dense">
+                                                        <MudSelectItem T="string" Value="@((string)null!)">All</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
+                                                        <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
+                                                    </MudSelect>
+                                                </div>
+                                            </ToolBarExtras>
+                                            <Columns>
+                                                <TemplateColumn Title="Change" Sortable="false">
+                                                    <HeaderTemplate>
+                                                        <MudText Typo="Typo.button">Change</MudText>
+                                                    </HeaderTemplate>
+                                                    <CellTemplate>
+                                                        <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context.Item)">
+                                                            @context.Item.DisplayChangeType
+                                                        </MudChip>
+                                                    </CellTemplate>
+                                                </TemplateColumn>
+                                                <TemplateColumn Title="Attribute" Sortable="false">
+                                                    <HeaderTemplate>
+                                                        <MudText Typo="Typo.button">Attribute</MudText>
+                                                    </HeaderTemplate>
+                                                    <CellTemplate>
+                                                        <MudText Class="mud-text-secondary">@context.Item.AttributeName</MudText>
+                                                    </CellTemplate>
+                                                </TemplateColumn>
+                                                <TemplateColumn Title="Type" Sortable="false">
+                                                    <HeaderTemplate>
+                                                        <MudText Typo="Typo.button">Type</MudText>
+                                                    </HeaderTemplate>
+                                                    <CellTemplate>
+                                                        <MudText Class="mud-text-secondary">@context.Item.AttributeType</MudText>
+                                                    </CellTemplate>
+                                                </TemplateColumn>
+                                                <TemplateColumn Title="Plurality" Sortable="false">
+                                                    <HeaderTemplate>
+                                                        <MudText Typo="Typo.button">Plurality</MudText>
+                                                    </HeaderTemplate>
+                                                    <CellTemplate>
+                                                        <MudText Class="mud-text-secondary">
+                                                            @(context.Item.IsMultiValued ? "Multi-Valued" : "Single-Valued")
+                                                        </MudText>
+                                                    </CellTemplate>
+                                                </TemplateColumn>
+                                                <TemplateColumn Title="Value" Sortable="false">
+                                                    <HeaderTemplate>
+                                                        <MudText Typo="Typo.button">Value</MudText>
+                                                    </HeaderTemplate>
+                                                    <CellTemplate>
+                                                        @{
+                                                            // Captured here, and the reference values captured inside
+                                                            // their own guards below, rather than dereferenced through
+                                                            // the guards in markup: a chained dereference under a guard
+                                                            // is what CodeQL reads as a possible null.
+                                                            var change = context.Item;
+                                                        }
+                                                        @if (change.IsUpdate)
+                                                        {
+                                                            @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
+                                                            {
+                                                                @* SVA reference update: old → new, with the old value de-emphasised. *@
+                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                                    @if (change.OldReferenceValue != null)
+                                                                    {
+                                                                        var oldReference = change.OldReferenceValue;
+                                                                        <MudLink Href="@oldReference.Href" Class="mud-text-secondary">@oldReference.DisplayName</MudLink>
                                                                     }
-                                    else
+                                                                    else
                                                                     {
                                                                         <MudText Class="mud-text-secondary">(none)</MudText>
                                                                     }
                                                                     <MudText Class="mud-text-secondary">→</MudText>
-                                                                    @if (context.NewReferenceValue != null)
+                                                                    @if (change.NewReferenceValue != null)
                                                                     {
-                                                                        <MudLink Href="@context.NewReferenceValue.Href">
-                                                                            @context.NewReferenceValue.DisplayName</MudLink>
-                                                                        }
-                                    else
-                                                                        {
-                                                                            <MudText Class="mud-text-secondary">(none)</MudText>
-                                                                        }
-                                                                    </MudStack>
-                                                                }
-                                                                else
-                                                                {
-                                                                    @* Scalar update - render old value de-emphasised, new value bold *@
-                                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                        <MudText Class="mud-text-secondary">@context.OldValue</MudText>
-                                                                        <MudText Class="mud-text-secondary">→</MudText>
-                                                                        <MudText>@context.NewValue</MudText>
-                                                                    </MudStack>
-                                                                }
-                                                            }
-                        else if (context.ReferenceValue != null)
-                                                            {
-                                                                @* MVA reference Add/Remove - bold for Add, de-emphasised for Remove *@
-                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                                    <MudChip T="string" Color="Color.Default">@context.ReferenceValue.TypeName
-                                                                    </MudChip>
-                                                                    @if (context.DisplayChangeType == "Remove")
-                                                                    {
-                                                                        <MudLink Href="@context.ReferenceValue.Href">
-                                                                            @context.ReferenceValue.DisplayName
-                                                                        </MudLink>
+                                                                        var newReference = change.NewReferenceValue;
+                                                                        <MudLink Href="@newReference.Href">@newReference.DisplayName</MudLink>
                                                                     }
                                                                     else
                                                                     {
-                                                                        <MudLink Href="@context.ReferenceValue.Href">
-                                                                            @context.ReferenceValue.DisplayName
-                                                                        </MudLink>
-                                                                    }
-                                                                    @if (!string.IsNullOrEmpty(context.ReferenceValue.SecondaryId))
-                                                                    {
-                                                                        <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
+                                                                        <MudText Class="mud-text-secondary">(none)</MudText>
                                                                     }
                                                                 </MudStack>
                                                             }
                                                             else
                                                             {
-                                                                @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
-                                                                @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
-                                                                {
-                                                                    <MudText Class="mud-text-secondary"><TextValueDisplay Value="@context.DisplayValue" /></MudText>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <MudText><TextValueDisplay Value="@context.DisplayValue" /></MudText>
-                                                                }
+                                                                @* Scalar update: old value de-emphasised, new value plain. *@
+                                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                                    <MudText Class="mud-text-secondary">@change.OldValue</MudText>
+                                                                    <MudText Class="mud-text-secondary">→</MudText>
+                                                                    <MudText>@change.NewValue</MudText>
+                                                                </MudStack>
                                                             }
-                                                        </MudTd>
-                                                    </RowTemplate>
-                                                </MudTable>
-                                            }
+                                                        }
+                                                        else if (change.ReferenceValue != null)
+                                                        {
+                                                            var reference = change.ReferenceValue;
+                                                            @* MVA reference Add/Remove. *@
+                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                                <MudChip T="string" Color="Color.Default">@reference.TypeName</MudChip>
+                                                                <MudLink Href="@reference.Href">@reference.DisplayName</MudLink>
+                                                                @if (!string.IsNullOrEmpty(reference.SecondaryId))
+                                                                {
+                                                                    <MudText Class="mud-text-secondary">(@reference.SecondaryId)</MudText>
+                                                                }
+                                                            </MudStack>
+                                                        }
+                                                        else
+                                                        {
+                                                            @* Simple scalar Add/Remove: de-emphasised where the value went away. *@
+                                                            @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
+                                                            {
+                                                                <MudText Class="mud-text-secondary"><TextValueDisplay Value="@change.DisplayValue" /></MudText>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudText><TextValueDisplay Value="@change.DisplayValue" /></MudText>
+                                                            }
+                                                        }
+                                                    </CellTemplate>
+                                                </TemplateColumn>
+                                            </Columns>
+                                            <EmptyContent Context="grid">
+                                                @if (!string.IsNullOrWhiteSpace(grid.SearchText)
+                                                     || !string.IsNullOrEmpty(_modalFilterAttribute)
+                                                     || !string.IsNullOrEmpty(_modalFilterChangeType))
+                                                {
+                                                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                                                     PrimaryText="No changes match the current filters"
+                                                                     SecondaryText="Try a different search term, or widen the attribute and change type filters."
+                                                                     ActionText="Clear Filters"
+                                                                     OnAction="@(() => ClearModalFiltersAsync(grid))" />
+                                                }
+                                                else
+                                                {
+                                                    <TableEmptyState Icon="@Icons.Material.Filled.List"
+                                                                     PrimaryText="There is nothing to show for these attribute changes" />
+                                                }
+                                            </EmptyContent>
+                                        </VirtualisedDataGrid>
+                                    }
                                             else if (_selectedChange?.ChangeType == ObjectChangeType.Deleted)
                                             {
                                                 <MudText Class="mud-text-secondary">
@@ -482,10 +511,19 @@ else
     private bool _detailsDialogVisible = false;
     private ChangeGroup? _selectedChange = null;
 
-    // Modal filter state
-    private string _modalSearchText = string.Empty;
+    // Modal filter state. The search itself belongs to the grid in the dialog (it renders the box), so only the
+    // two page-owned selects are held here.
     private string? _modalFilterAttribute = null;
     private string? _modalFilterChangeType = null;
+
+    private VirtualisedDataGrid<AttributeChangeDisplay>? _attributeChangesGrid;
+
+    /// <summary>
+    /// The sort key standing for "the order the changes were built in" (by attribute name, then change type). The
+    /// dialog's table has never offered a sort, and naming the default something no header claims keeps the grid
+    /// from showing a sort arrow over an order it did not choose.
+    /// </summary>
+    private const string SourceOrderSort = "order";
 
     private DialogOptions _dialogOptions = new DialogOptions
     {
@@ -826,11 +864,61 @@ else
     private void OpenChangeDetails(ChangeGroup changeGroup)
     {
         _selectedChange = changeGroup;
-        // Reset modal filters when opening
-        _modalSearchText = string.Empty;
+        // Reset the modal filters when opening. The grid's own search resets with them, because the state key
+        // below changes with the selected group and the grid re-reads its state whenever that happens.
         _modalFilterAttribute = null;
         _modalFilterChangeType = null;
         _detailsDialogVisible = true;
+    }
+
+    /// <summary>
+    /// Identifies which change group's attribute changes the dialog's grid is showing, so that a grid instance
+    /// reused across two openings of the dialog reloads rather than keeping the previous group's rows.
+    /// </summary>
+    private string GetSelectedChangeStateKey() =>
+        _selectedChange == null ? string.Empty : _selectedChange.ChangeTime.Ticks.ToString();
+
+    /// <summary>
+    /// Reads one window of the selected change group's attribute changes. Every one of them is already on this
+    /// page (they arrived with the change group), so the window is taken in memory rather than from a query; the
+    /// total is only counted when the request asks for it.
+    /// </summary>
+    private Task<VirtualisedWindow<AttributeChangeDisplay>> LoadAttributeChangeWindow(
+        VirtualisedWindowRequest request, CancellationToken _) =>
+        Task.FromResult(GetFilteredModalDisplayChanges(request.SearchText).ToWindow(request));
+
+    private async Task OnModalFilterAttributeChangedAsync(string? attributeName)
+    {
+        _modalFilterAttribute = attributeName;
+        await RefreshAttributeChangesGridAsync();
+    }
+
+    private async Task OnModalFilterChangeTypeChangedAsync(string? changeType)
+    {
+        _modalFilterChangeType = changeType;
+        await RefreshAttributeChangesGridAsync();
+    }
+
+    private async Task ClearModalFiltersAsync(VirtualisedDataGrid<AttributeChangeDisplay> grid)
+    {
+        _modalFilterAttribute = null;
+        _modalFilterChangeType = null;
+        // Clearing the search already re-counts, returns the reader to the top and reloads, which is exactly what
+        // the two selects changing underneath it needs; doing both would read the same list twice.
+        await grid.ClearSearchAsync();
+    }
+
+    /// <summary>
+    /// Re-reads the grid after a page-owned filter changed. The totals go with it: a different set of changes
+    /// matches now, so the old count and the reader's position in it describe a list that no longer exists.
+    /// </summary>
+    private async Task RefreshAttributeChangesGridAsync()
+    {
+        if (_attributeChangesGrid == null)
+            return;
+
+        await _attributeChangesGrid.ResetScrollAsync();
+        await _attributeChangesGrid.RefreshAsync(invalidateTotals: true);
     }
 
     private void CloseDetailsDialog()
@@ -911,10 +999,10 @@ else
     }
 
     /// <summary>
-    /// Gets filtered display changes for the modal table based on current filter state.
-    /// Uses the display model which collapses SVA Add+Remove into Update.
+    /// Gets filtered display changes for the modal table, under the grid's search text and the two page-owned
+    /// filters. Uses the display model which collapses SVA Add+Remove into Update.
     /// </summary>
-    private IEnumerable<AttributeChangeDisplay> GetFilteredModalDisplayChanges()
+    private IEnumerable<AttributeChangeDisplay> GetFilteredModalDisplayChanges(string? searchText)
     {
         if (_selectedChange == null)
             return Enumerable.Empty<AttributeChangeDisplay>();
@@ -922,14 +1010,15 @@ else
         var displayChanges = GetDisplayChanges(_selectedChange).AsEnumerable();
 
         // Apply search filter
-        if (!string.IsNullOrWhiteSpace(_modalSearchText))
+        if (!string.IsNullOrWhiteSpace(searchText))
         {
+            var search = searchText;
             displayChanges = displayChanges.Where(c =>
-            c.AttributeName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ||
-            (c.DisplayValue?.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (c.ReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (c.OldReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (c.NewReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false));
+            c.AttributeName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            (c.DisplayValue?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (c.ReferenceValue?.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (c.OldReferenceValue?.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (c.NewReferenceValue?.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
         // Apply attribute filter

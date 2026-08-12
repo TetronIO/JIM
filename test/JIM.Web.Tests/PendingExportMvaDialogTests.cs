@@ -26,16 +26,16 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// Covers the dialog listing every queued change to one multi-valued attribute of a Pending Export, now that it
-/// is a <see cref="VirtualisedDataGrid{TItem}"/>. Two things are worth pinning: the window arithmetic across the
-/// application layer's pages (wrong arithmetic shows the wrong changes with no error anywhere), and that a
-/// dialog is a place the shared grid works at all, since it sizes itself against the page rather than a
-/// hand-tuned height.
+/// is a <see cref="VirtualisedDataGrid{TItem}"/> over the application layer's range read. Two things are worth
+/// pinning: that a window is handed to the range read exactly as it arrived, in one call and with the grid's
+/// decision about counting intact (anything else shows the wrong changes, or none, with no error anywhere), and
+/// that a dialog is a place the shared grid works at all, since it states its own height ceiling rather than
+/// measuring the page behind the overlay.
 /// </summary>
 [TestFixture]
 public class PendingExportMvaDialogTests : JimComponentTestContext
 {
     private const string AttributeName = "member";
-    private const int SourcePageSize = 100;
 
     private static readonly Guid PendingExportId = Guid.NewGuid();
 
@@ -50,18 +50,21 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
+    /// <summary>
+    /// Serves the given changes as the repository's range read does: the window at the requested offset and count,
+    /// and the total only when it was asked for (null, never zero, when it was not).
+    /// </summary>
     private void SetupChanges(IReadOnlyList<PendingExportAttributeValueChange> changes)
     {
         _connectedSystems
-            .Setup(r => r.GetPendingExportAttributeChangesPagedAsync(PendingExportId, AttributeName,
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()))
-            .ReturnsAsync((Guid _, string _, int page, int pageSize, string? _) => new PagedResultSet<PendingExportAttributeValueChange>
-            {
-                Results = changes.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-                TotalResults = changes.Count,
-                CurrentPage = page,
-                PageSize = pageSize
-            });
+            .Setup(r => r.GetPendingExportAttributeChangesRangeAsync(PendingExportId, AttributeName,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<PendingExportAttributeValueChange>
+                {
+                    Results = changes.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? changes.Count : null
+                });
     }
 
     private static List<PendingExportAttributeValueChange> BuildChanges(int count) =>
@@ -128,35 +131,52 @@ public class PendingExportMvaDialogTests : JimComponentTestContext
         });
     }
 
+    /// <summary>
+    /// The grid addresses windows by absolute offset and count, and so does the range read behind them, so the
+    /// request goes over unchanged and in a single read; the page stitching this replaced took two whenever the
+    /// window did not start on a page boundary.
+    /// </summary>
     [Test]
-    public async Task PendingExportMvaDialog_WindowStraddlingAPageBoundary_IsStitchedFromBothPagesAsync()
+    public async Task PendingExportMvaDialog_Window_ReadsTheOffsetAndCountItWasAskedForInOneReadAsync()
     {
         var changes = BuildChanges(250);
         SetupChanges(changes);
         var provider = ShowDialog(totalCount: 250);
+        _connectedSystems.Invocations.Clear();
 
         var window = await LoadWindow(provider)(
-            new VirtualisedWindowRequest(SourcePageSize - 2, 6, null, "order", false, IncludeTotalCount: true),
+            new VirtualisedWindowRequest(98, 6, null, "order", false, IncludeTotalCount: true),
             CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(window.Items.Select(c => c.StringValue),
-                Is.EqualTo(changes.Skip(SourcePageSize - 2).Take(6).Select(c => c.StringValue)));
+                Is.EqualTo(changes.Skip(98).Take(6).Select(c => c.StringValue)));
             Assert.That(window.TotalItems, Is.EqualTo(250));
         }
+
+        _connectedSystems.Verify(r => r.GetPendingExportAttributeChangesRangeAsync(
+            PendingExportId, AttributeName, 98, 6, null, true), Times.Once);
     }
 
+    /// <summary>
+    /// Counting is the expensive half of a window read, so a request that does not ask for it must not trigger
+    /// one, and the absent total must stay null: a zero in its place reads as "nothing matched".
+    /// </summary>
     [Test]
-    public async Task PendingExportMvaDialog_WindowNotAskingForTheCount_ReturnsANullTotalAsync()
+    public async Task PendingExportMvaDialog_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
     {
         SetupChanges(BuildChanges(20));
         var provider = ShowDialog(totalCount: 20);
+        _connectedSystems.Invocations.Clear();
 
         var window = await LoadWindow(provider)(
             new VirtualisedWindowRequest(0, 5, null, "order", false, IncludeTotalCount: false), CancellationToken.None);
 
         Assert.That(window.TotalItems, Is.Null, "null means not counted, and must not be read as no matches");
+
+        _connectedSystems.Verify(r => r.GetPendingExportAttributeChangesRangeAsync(
+            PendingExportId, AttributeName, 0, 5, null, false), Times.Once);
     }
 
     [Test]

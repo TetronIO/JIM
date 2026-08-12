@@ -51,18 +51,21 @@ public class MvoDetailsMvaTableTests : JimComponentTestContext
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
+    /// <summary>
+    /// Serves the given values as the repository's range read does: the window at the requested offset and count,
+    /// and the total only when it was asked for (null, never zero, when it was not).
+    /// </summary>
     private void SetupServerValues(IReadOnlyList<MetaverseObjectAttributeValue> values)
     {
         _metaverse
-            .Setup(r => r.GetAttributeValuesPagedAsync(MetaverseObjectId, AttributeName,
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()))
-            .ReturnsAsync((Guid _, string _, int page, int pageSize, string? _) => new PagedResultSet<MetaverseObjectAttributeValue>
-            {
-                Results = values.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-                TotalResults = values.Count,
-                CurrentPage = page,
-                PageSize = pageSize
-            });
+            .Setup(r => r.GetAttributeValuesRangeAsync(MetaverseObjectId, AttributeName,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()))
+            .ReturnsAsync((Guid _, string _, int offset, int count, string? _, bool includeTotalCount) =>
+                new RangeResultSet<MetaverseObjectAttributeValue>
+                {
+                    Results = values.Skip(offset).Take(count).ToList(),
+                    TotalResults = includeTotalCount ? values.Count : null
+                });
     }
 
     private static MetaverseObject BuildObject(int valueCount)
@@ -157,8 +160,8 @@ public class MvoDetailsMvaTableTests : JimComponentTestContext
             Assert.That(window.TotalItems, Is.EqualTo(12));
         }
 
-        _metaverse.Verify(r => r.GetAttributeValuesPagedAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>()),
+        _metaverse.Verify(r => r.GetAttributeValuesRangeAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<bool>()),
             Times.Never, "every value is already on the page; reading them back costs a database round trip per scroll");
     }
 
@@ -191,13 +194,15 @@ public class MvoDetailsMvaTableTests : JimComponentTestContext
     /// <summary>
     /// A capped attribute holds more values in the database than the detail load brought back, so its windows have
     /// to come from the application layer. Windowing the loaded subset instead would quietly present the cap as
-    /// the whole membership.
+    /// the whole membership. The request goes over unchanged, and costs one read rather than the two the page
+    /// stitching this replaced needed for any window not starting on a page boundary.
     /// </summary>
     [Test]
     public async Task MvoDetailsPanel_CappedAttribute_ReadsItsWindowFromTheApplicationLayerAsync()
     {
         SetupServerValues(BuildObject(250).AttributeValues);
         var cut = RenderPanel(loadedValueCount: 3, totalCount: 250);
+        _metaverse.Invocations.Clear();
 
         var window = await LoadWindow(cut)(
             new VirtualisedWindowRequest(98, 5, null, "order", false, IncludeTotalCount: true), CancellationToken.None);
@@ -206,9 +211,33 @@ public class MvoDetailsMvaTableTests : JimComponentTestContext
         {
             Assert.That(window.TotalItems, Is.EqualTo(250));
             Assert.That(window.Items.Select(v => v.StringValue),
-                Is.EqualTo(new[] { "value-0098", "value-0099", "value-0100", "value-0101", "value-0102" }),
-                "the window straddles the application layer's page boundary and must be stitched across it");
+                Is.EqualTo(new[] { "value-0098", "value-0099", "value-0100", "value-0101", "value-0102" }));
         }
+
+        _metaverse.Verify(r => r.GetAttributeValuesRangeAsync(
+            MetaverseObjectId, AttributeName, 98, 5, null, true), Times.Once,
+            "the offset and count are handed over as they arrived, in one read");
+    }
+
+    /// <summary>
+    /// Counting is the expensive half of a window read, so a capped attribute's loader must pass the grid's
+    /// "do not count" through, and must report the resulting absent total as null: a zero in its place reads as
+    /// "nothing matched" and empties the table.
+    /// </summary>
+    [Test]
+    public async Task MvoDetailsPanel_CappedAttribute_WindowNotAskingForTheCount_DoesNotCountAndReturnsANullTotalAsync()
+    {
+        SetupServerValues(BuildObject(250).AttributeValues);
+        var cut = RenderPanel(loadedValueCount: 3, totalCount: 250);
+        _metaverse.Invocations.Clear();
+
+        var window = await LoadWindow(cut)(
+            new VirtualisedWindowRequest(0, 5, null, "order", false, IncludeTotalCount: false), CancellationToken.None);
+
+        Assert.That(window.TotalItems, Is.Null, "null means not counted, and must not be read as no matches");
+
+        _metaverse.Verify(r => r.GetAttributeValuesRangeAsync(
+            MetaverseObjectId, AttributeName, 0, 5, null, false), Times.Once);
     }
 
     [Test]
@@ -231,11 +260,20 @@ public class MvoDetailsMvaTableTests : JimComponentTestContext
     {
         SetupServerValues(BuildObject(120).AttributeValues);
         var cut = RenderTabs(loadedValueCount: 3, totalCount: 120);
+        _metaverse.Invocations.Clear();
 
         var window = await LoadWindow(cut)(
-            new VirtualisedWindowRequest(0, 4, null, "order", false, IncludeTotalCount: true), CancellationToken.None);
+            new VirtualisedWindowRequest(7, 4, null, "order", false, IncludeTotalCount: true), CancellationToken.None);
 
-        Assert.That(window.TotalItems, Is.EqualTo(120));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.TotalItems, Is.EqualTo(120));
+            Assert.That(window.Items.Select(v => v.StringValue),
+                Is.EqualTo(new[] { "value-0007", "value-0008", "value-0009", "value-0010" }));
+        }
+
+        _metaverse.Verify(r => r.GetAttributeValuesRangeAsync(
+            MetaverseObjectId, AttributeName, 7, 4, null, true), Times.Once);
     }
 
     #endregion
