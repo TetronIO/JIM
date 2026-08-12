@@ -10,6 +10,19 @@
 <svg class="jim-diagram" viewBox="0 0 1160 630" role="img" aria-labelledby="jimdg-sc-title jimdg-sc-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-sc-title">JIM System Context</title>
   <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An OIDC Identity Provider authenticates sign-in. JIM synchronises with Directory Services over LDAP and LDAPS, imports from HR systems via CSV, reads and writes file systems, and synchronises with cloud applications over SCIM 2.0. Enterprise database connectivity over SQL is in development.</desc>
+  <defs>
+    <mask id="jimdg-sc-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="630">
+      <rect x="0" y="0" width="1160" height="630" fill="#ffffff"/>
+      <rect x="314.4" y="159" width="124.2" height="18" rx="3" fill="#000000"/>
+      <rect x="547" y="159" width="66" height="18" rx="3" fill="#000000"/>
+      <rect x="762.4" y="159" width="41.2" height="18" rx="3" fill="#000000"/>
+      <rect x="242.4" y="441" width="87.1" height="18" rx="3" fill="#000000"/>
+      <rect x="389.1" y="441" width="88.4" height="18" rx="3" fill="#000000"/>
+      <rect x="535.4" y="441" width="89.2" height="18" rx="3" fill="#000000"/>
+      <rect x="709.5" y="441" width="35.1" height="18" rx="3" fill="#000000"/>
+      <rect x="843" y="441" width="62.2" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
   <g id="jimdg-sc-people">
     <rect class="jimdg-stage" x="150" y="36" width="220" height="64" rx="8"/>
     <circle class="jimdg-person-glyph" cx="170" cy="57" r="6"/>
@@ -47,35 +60,28 @@
     <text class="jimdg-system-name" x="1030" y="548">Cloud Applications</text>
     <text class="jimdg-system-sub" x="1030" y="569">SCIM 2.0</text>
   </g>
+  <g mask="url(#jimdg-sc-labelcut)">
   <g id="jimdg-sc-edges">
     <line class="jimdg-spoke" x1="260" y1="100" x2="491.4" y2="235"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(500,240) rotate(30.3)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="420" y="200">web UI · PowerShell</text>
     <line class="jimdg-spoke" x1="580" y1="100" x2="580" y2="230"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,240) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="170">REST API</text>
     <line class="jimdg-spoke" x1="900" y1="100" x2="668.6" y2="235"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(660,240) rotate(149.7)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="740" y="200">OIDC</text>
     <line class="jimdg-spoke" x1="450.8" y1="383.9" x2="139.2" y2="516.1"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(130,520) rotate(157)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,380) rotate(-23)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="352" y="430">LDAP/LDAPS</text>
     <line class="jimdg-spoke" x1="355" y1="520" x2="512.4" y2="386.5"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(520,380) rotate(-40.3)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="426" y="472">imports · CSV</text>
     <line class="jimdg-spoke" x1="580" y1="390" x2="580" y2="510"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,380) rotate(-90)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,520) rotate(90)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="455">reads &amp; writes</text>
     <line class="jimdg-spoke-planned" x1="647.6" y1="386.5" x2="797.4" y2="513.5"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(805,520) rotate(40.3)"/>
     <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(640,380) rotate(220.3)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="688" y="430">SQL</text>
     <line class="jimdg-spoke" x1="709.2" y1="383.9" x2="1020.8" y2="516.1"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(1030,520) rotate(23)"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,380) rotate(203)"/>
-    <text class="jimdg-spoke-label jimdg-anchor-end" x="870" y="474">SCIM 2.0</text>
   </g>
   <g id="jimdg-sc-packets">
     <circle class="jimdg-packet" r="4.5">
@@ -90,5 +96,16 @@
       <animateMotion dur="3s" begin="-0.75s" repeatCount="indefinite" path="M709,384 L1021,516"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-0.75s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  </g>
+  <g id="jimdg-sc-labels">
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="377" y="172">web UI · PowerShell</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="580" y="172">REST API</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="783" y="172">OIDC</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="286" y="454">LDAP/LDAPS</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="433" y="454">imports · CSV</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="580" y="454">reads &amp; writes</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="727" y="454">SQL</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="874" y="454">SCIM 2.0</text>
   </g>
 </svg>
