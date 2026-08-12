@@ -37,7 +37,7 @@
   <g id="jimdg-sd-edges">
     <line class="jimdg-flow" x1="450" y1="138" x2="550" y2="138"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(560,138) rotate(0)"/>
-    <text class="jimdg-flow-label jimdg-anchor-middle" x="505" y="126">queues tasks</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="537" y="96">queues tasks</text>
     <line class="jimdg-flow" x1="840" y1="138" x2="900" y2="138"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,138) rotate(0)"/>
   </g>

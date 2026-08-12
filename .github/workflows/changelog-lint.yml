@@ -18,8 +18,15 @@ name: changelog-lint
 #      applies no stylesheet, and the page renders unstyled rather than failing.
 #      See Test-CssBalance.ps1 for the two occurrences in site.css that this
 #      prevents recurring.
+#   5. Concept diagram label cuts: every edge label must either fit the cut its
+#      diagram's label-cut mask makes for it, or stand clear of every edge; none
+#      may cross a node or boundary outline; and no mask may enclose a surface
+#      element. The cut geometry comes from rendered text metrics, so a reworded
+#      label silently outgrows its cut and the edge reappears through the words -
+#      see Update-DiagramLabelCuts.ps1. This is the only step needing a browser,
+#      so it short-circuits unless the PR touched a diagram or the diagram tokens.
 #
-# All four run in this single job so they are enforced via the existing
+# All five run in this single job so they are enforced via the existing
 # required "changelog-lint" status, without registering further required checks
 # in the branch ruleset. A failure in any of them therefore surfaces as the
 # "changelog-lint" check failing.
@@ -63,3 +70,30 @@ jobs:
         run: pwsh -File ./scripts/Lint-DocExamples.ps1
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
+      - name: Check concept diagram label cuts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Only a diagram source or a change to the diagram tokens can invalidate
+          # a label cut, and this check needs a browser download, so the cost is
+          # paid on those PRs alone. The step still runs (and passes) on every PR,
+          # so the job keeps reporting and stays safe as a required check.
+          CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css)$'; then
+            echo "No diagram sources or diagram tokens changed; skipping the label cut check."
+            exit 0
+          fi
+          # Reuse the @playwright/mcp pin from setup.sh rather than adding a third
+          # copy: tooling-pin-check keeps that pin and .mcp.json's in lockstep, and
+          # a third would silently drift out of both.
+          PLAYWRIGHT_MCP_VERSION="$(sed -n 's/^PLAYWRIGHT_MCP_VERSION="\(.*\)"$/\1/p' .devcontainer/setup.sh)"
+          if [ -z "$PLAYWRIGHT_MCP_VERSION" ]; then
+            echo "::error::Could not read PLAYWRIGHT_MCP_VERSION from .devcontainer/setup.sh"
+            exit 1
+          fi
+          npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" --silent
+          PLAYWRIGHT_CORE_CLI="$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' | head -1)"
+          node "$PLAYWRIGHT_CORE_CLI" install --with-deps chromium
+          JIM_PLAYWRIGHT_MODULE="$(dirname "$PLAYWRIGHT_CORE_CLI")" \
+            pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check

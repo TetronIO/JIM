@@ -89,6 +89,17 @@ Authoring rules:
 - **No blank lines inside the SVG file.** The snippet is inlined into markdown as a raw-HTML block; a blank line would end the block and the remainder would be parsed as markdown.
 - Root element: `<svg class="jim-diagram" viewBox="..." role="img" aria-labelledby="...">` with a `<title>` and descriptive `<desc>`.
 - Arrowheads are explicit polygons, not `<marker>` elements (markers restyle unreliably across browsers).
+- **Edge labels sit on their edge, with the edge cut away behind them.** Centre the label on its line and let the diagram's `<mask id="…-labelcut">` punch a hole in the edges, arrowheads and packets behind it. Never place an edge label by nudging it off the line by eye: a `<text>` `x`/`y` sits on the *baseline*, but the box that collides reaches about 11.6 user units above it, and on a diagonal the line travels sideways across that height, so a label that looks clear at the baseline is sliced at cap height. (That is exactly how eight touching labels shipped; every one was on a diagonal and none of the vertical ones were affected.) Full rule, and why a knockout stroke is the wrong mechanism here: `engineering/DESIGN.md` > Diagrams.
+- **Never hand-write a cut rectangle; generate it.** Each one comes from the label's *rendered* metrics, so it cannot be reasoned about from the source. After moving, adding or rewording any edge label:
+
+    ```bash
+    pwsh -File ./scripts/Update-DiagramLabelCuts.ps1           # regenerate every diagram's cuts
+    pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check    # verify; non-zero exit on drift
+    ```
+
+    `-Check` enforces that every edge label either fits its cut or stands at least 8 units clear of every edge, and separately that none crosses a node or boundary outline (which a cut cannot fix, because masking a `<rect>` holes its fill). It needs no setup: it drives the Chromium that `.devcontainer/setup.sh` already installs for the Playwright MCP server. Still eyeball the result in both themes afterwards.
+- **A short edge keeps its label beside it.** If the cut would leave less than ~28 units of visible line, the label stays offset rather than erasing the edge it labels; the same goes for step captions that name a stage rather than hug an edge.
+- **Keep boundary titles (`.jimdg-hub-title`) as the last element in the file.** Their knockout stroke only clears the edges underneath if the title paints after them, so the title belongs in a trailing `…-boundary-title` group rather than inside the boundary group next to its `<rect>`.
 - Edge animation uses SMIL data packets (`<circle class="jimdg-packet">` with `animateMotion`), only on live edges, direction matching the arrowheads; `custom.css` hides `.jimdg-packet` under `prefers-reduced-motion`. Full motion rules: `engineering/DESIGN.md` > Diagrams.
 - Follow the snippet include with a `<p class="jim-diagram-caption">` footnote decoding the visual encoding (illustrative examples, dashed = planned). Wrap any sentence that refers to the packet animation in `<span class="jimdg-caption-motion">`; it hides together with the dots under `prefers-reduced-motion`.
 - No build step: the SVG is a static asset edited by hand; preview with `jim-docs` and verify in both themes.
@@ -127,7 +138,7 @@ The script wraps each diagram in a `<button class="jim-dgz-trigger">` so it is k
 - **The visible window always carries the stage's aspect ratio**, so `preserveAspectRatio="xMidYMid meet"` never letterboxes and pointer coordinates map exactly. Zoom and pan are pure `viewBox` maths; there is no transform layer.
 - **SMIL packets must be primed after any re-parenting.** A cloned or moved `<svg>` is its own timeline root and restarts at zero, which parks every packet with a positive `begin` offset at 0,0 - a dot stuck in the top-left corner for up to 1.2s. `primeAnimations()` winds the clock past the longest offset; it is called both when wrapping an in-page SVG in its trigger and when opening a clone. Removing either call brings the artefact back.
 
-Ids are stripped from clones (they exist only for `aria-labelledby`); this is safe because no diagram references its own ids via `url(#…)` or `<mpath>`. If a future diagram does, the clone will need id rewriting instead.
+**Ids are rewritten on clone, not stripped.** Diagrams whose edge labels sit on the line point at a `<mask id="…-labelcut">` with `mask="url(#…)"`, so a stripped id leaves a dangling reference; a dangling mask reference renders *unmasked*, which would draw the lines straight through the labels in the overlay. `cloneForOverlay()` therefore suffixes every id and repoints every `url(#…)` and `href="#…"` that names one. Stripping happened to survive this at first, because the in-page copy was still in the document for the reference to land on; that stops being true the moment two diagrams share an id.
 
 **If diagrams stop being clickable after a MkDocs Material upgrade:** check whether Material changed how it processes Mermaid. Look for changes to the `div.mermaid` shadow host insertion or `attachShadow` call (search for `attachShadow` in the bundle). The relevant function in the current bundle is named `Zn()`. Concept SVGs are unaffected by Material upgrades; they never enter a shadow root.
 
