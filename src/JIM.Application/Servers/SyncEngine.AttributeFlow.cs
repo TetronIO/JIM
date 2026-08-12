@@ -209,6 +209,47 @@ public partial class SyncEngine
         => mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
 
     /// <summary>
+    /// Takes over provenance on the values a winning contribution left in place (#1292). The typed writers below
+    /// diff by value, so a contribution that supplies the value the Metaverse Object already holds stages neither an
+    /// addition nor a removal, and the surviving row keeps whichever rule and system stamped it last. That stamp is
+    /// not cosmetic: it is what <see cref="FindEffectiveIncumbentSyncRuleId"/> reads, so leaving it stale hands the
+    /// priority gate the wrong incumbent. Two consequences, both reachable through ordinary administration:
+    /// <list type="bullet">
+    /// <item>Deleting a contributing Synchronisation Rule nulls the stamp (the FK is <c>ON DELETE SET NULL</c>). A
+    /// null incumbent opens the gate to every contributor, and the surviving contributor's identical value would
+    /// never repair it.</item>
+    /// <item>A higher-priority rule that contributes the same value as the incumbent would leave the lower-priority
+    /// rule recorded as owner. The gate always lets a rule overwrite its own value, so the loser could then change
+    /// the attribute out from under the winner.</item>
+    /// </list>
+    /// Call this from each writer AFTER its removals are staged: <see cref="GetEffectiveAttributeValues"/> then
+    /// returns exactly the rows this contribution matched, and the call is a no-op when the value was replaced.
+    /// A contribution with no persisted Synchronisation Rule id takes nothing over, so an unpersisted rule (tests,
+    /// preview evaluation) cannot erase a real stamp. Only rows whose provenance actually differs are touched, so
+    /// the persistence layer writes nothing for the overwhelmingly common unchanged case.
+    /// </summary>
+    private static void TakeOverProvenance(
+        MetaverseObject mvo,
+        int attributeId,
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
+    {
+        if (!contributingSyncRuleId.HasValue)
+            return;
+
+        foreach (var surviving in GetEffectiveAttributeValues(mvo, attributeId)
+            .Where(av => av.ContributedBySyncRuleId != contributingSyncRuleId || av.ContributedBySystemId != contributingSystemId))
+        {
+            Log.Verbose("TakeOverProvenance: Synchronisation Rule {RuleId} takes over attribute {AttributeId} on MVO {MvoId} " +
+                "from Synchronisation Rule {PreviousRuleId}.",
+                contributingSyncRuleId, attributeId, mvo.Id, surviving.ContributedBySyncRuleId);
+
+            surviving.ContributedBySyncRuleId = contributingSyncRuleId;
+            surviving.ContributedBySystemId = contributingSystemId;
+        }
+    }
+
+    /// <summary>
     /// Identifies the Synchronisation Rule that currently owns a Metaverse Object attribute's value (the incumbent,
     /// for the attribute priority gate, #91). Prefers a value written earlier in this run by another mapping (a
     /// pending addition), otherwise the current persisted row value, ignoring values already pending removal. Under
@@ -420,6 +461,8 @@ public partial class SyncEngine
                         syncRuleMapping.TargetMetaverseAttribute!.Name, LogSanitiser.Sanitise(resultString), mvo.Id);
                 }
             }
+
+            TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
         }
     }
 
@@ -524,6 +567,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, targetAttributeId, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessNumberAttribute(
@@ -557,6 +602,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessLongNumberAttribute(
@@ -588,6 +635,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessDecimalAttribute(
@@ -621,6 +670,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessDateTimeAttribute(
@@ -662,6 +713,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessBinaryAttribute(
@@ -696,6 +749,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessReferenceAttribute(
@@ -814,6 +869,11 @@ public partial class SyncEngine
 
             mvo.PendingAttributeValueAdditions.Add(newMvoAv);
         }
+
+        // Only take provenance over when this pass saw the whole picture. With unresolved references the removals are
+        // deferred to the cross-page resolution pass, so the surviving rows are not yet this contribution's set.
+        if (!hasUnresolvedReferences)
+            TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessGuidAttribute(
@@ -847,6 +907,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static void ProcessBooleanAttribute(
@@ -888,6 +950,8 @@ public partial class SyncEngine
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
+
+        TakeOverProvenance(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static Dictionary<string, object?> BuildCsoAttributeDictionary(
@@ -996,6 +1060,8 @@ public partial class SyncEngine
             Log.Debug("ProcessExpressionArrayResult: Expression array result for {AttributeName} - removing {RemoveCount}, adding {AddCount} values on MVO {MvoId}",
                 targetAttribute.Name, valuesToRemove.Count(), valuesToAdd.Count(), mvo.Id);
         }
+
+        TakeOverProvenance(mvo, targetAttribute.Id, contributingSystemId, contributingSyncRuleId);
     }
 
     private static MetaverseObjectAttributeValue? CreateMvoAttributeValueFromExpressionResult(
