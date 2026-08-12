@@ -46,9 +46,21 @@ A list with nothing in it says which of the two reasons applies. If your search 
 
 ## Tables inside a page
 
-The same behaviour applies to the tables that live inside a page, not just the lists you navigate to. The values of a multi-valued attribute on a Metaverse Object or a Connected System Object, the queued changes behind a Pending Export's multi-valued attribute, and the attribute changes shown for a causality event all scroll continuously, carry the same search box and count, and have no page controls.
+The same behaviour applies to the tables that live inside a page, not just the lists you navigate to. Nothing in the portal pages any more:
 
-This matters most for group membership: a group with half a million members is read by scrolling it, and narrowed by typing into its search box, rather than by working through pages ten values at a time.
+- An Activity's Run Profile execution items, and its child Activities
+- An API Key's usage history
+- A Connected System Object's attributes, and the Pending Exports queued against it
+- A Pending Export's Attribute Changes
+- The values of a multi-valued attribute on a Metaverse Object or a Connected System Object
+- The changes behind a Change History entry, and a causality event's attribute changes
+- A Connected System's schema, Run Profiles, Object Matching Rules and Attribute Flows
+- A Metaverse Object Type's attributes and its downstream deprovisioning
+- Service Settings, Example Data Templates, and all three Operations tabs
+
+This matters most for group membership: a group with half a million members is read by scrolling it, and narrowed by typing into its search box, rather than by working through pages ten values at a time. The same goes for an Activity that recorded a million execution items.
+
+Two things moved rather than converted, because a scrolling table could not hold them. A Metaverse Attribute's contributors reorder by dragging, which needs a row that grows, so they now open in a dialog from the contributor count. A Schedule's recent executions likewise open from its **History** action, where they show the Schedule's whole history rather than its last five.
 
 ## One line per row
 
