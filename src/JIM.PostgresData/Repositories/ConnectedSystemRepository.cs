@@ -4743,6 +4743,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            // The graph an export evaluation needs to work out an object's class membership: the tag saying the
+            // Connected System has the concept at all, the auxiliary classes an administrator merged in, and the
+            // structural class that carries an auxiliary-typed object. None of it fetched is class membership
+            // silently not computed, and exports going out without the classes their attributes require.
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Tags)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Extensions)
+            .ThenInclude(extension => extension.ExtensionObjectType)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.StructuralCarrierObjectType)
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
