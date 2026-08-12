@@ -1026,6 +1026,179 @@
     color: var(--cz-text);
 }
 
+/* ─── Caused by: the upward causal chain (#1223) ─── */
+
+/* Reads as one continuous chain rather than as a stack of cards: a single rail runs down the left of
+   every level, and nesting indents against it, so a fork is visible as two rails leaving one point. */
+.causality-panel .caused-by {
+    border-top: 1px solid var(--cz-line-soft);
+    background: var(--cz-surface);
+    padding: 18px 24px 22px;
+}
+
+.causality-panel .cb-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.causality-panel .cb-title {
+    font-weight: 650;
+    font-size: 1rem;
+}
+
+.causality-panel .cb-truncated {
+    font-size: 0.875rem;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .cb-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.causality-panel .cb-hop {
+    position: relative;
+    padding: 0 0 14px 20px;
+    border-left: 2px solid var(--cz-line-soft);
+}
+
+/* The last hop of a level stops its rail at its own content, so the line does not trail into
+   whitespace below the chain */
+.causality-panel .cb-hop:last-child {
+    border-left-color: transparent;
+    padding-bottom: 0;
+}
+
+/* ...but it still has to reach its own marker from the hop above, or the rail breaks at the last
+   step. A lone hop has nothing above it to join, so it gets no stub. */
+.causality-panel .cb-hop:last-child:not(:first-child)::after {
+    content: "";
+    position: absolute;
+    left: -2px;
+    top: 0;
+    bottom: calc(100% - 11px);
+    border-left: 2px solid var(--cz-line-soft);
+}
+
+.causality-panel .cb-hop::before {
+    content: "";
+    position: absolute;
+    left: -5px;
+    top: 5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cz-line);
+    z-index: 1;
+}
+
+.causality-panel .cb-sentence {
+    font-size: 0.9375rem;
+    line-height: 1.45;
+    color: var(--cz-text);
+}
+
+/* The relationship the cascade acted through, highlighted by colour rather than weight: it is the one
+   span an administrator scans for, and bolding it fights the sentence carrying it. */
+.causality-panel .cb-attr {
+    color: var(--cz-primary-text);
+}
+
+.causality-panel .cb-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 7px;
+}
+
+.causality-panel .cb-reason {
+    font-size: 0.875rem;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .cb-link {
+    font-size: 0.875rem;
+    color: var(--cz-primary-text);
+    text-decoration: none;
+    font-weight: 550;
+}
+
+.causality-panel .cb-link:hover {
+    text-decoration: underline;
+}
+
+/* Every terminal state is calm neutral, never amber: a chain that ends because history aged out is the
+   expected outcome of any deployment older than its retention window, not a fault to be flagged. */
+.causality-panel .cb-end {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 0.875rem;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .cb-members-toggle {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 9px;
+    border: 1px solid var(--cz-line);
+    background: transparent;
+    color: var(--cz-text-dim);
+    font-size: 0.875rem;
+    font-weight: 550;
+    font-family: inherit;
+    padding: 4px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.causality-panel .cb-members-toggle:hover,
+.causality-panel .cb-members-toggle.on {
+    background: var(--cz-inner);
+    color: var(--cz-text);
+}
+
+.causality-panel .cb-members-toggle:focus-visible {
+    outline: 2px solid var(--cz-primary);
+    outline-offset: 2px;
+}
+
+.causality-panel .cb-members {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+}
+
+.causality-panel .cb-member {
+    padding: 0 0 10px 14px;
+    border-left: 1px solid var(--cz-line-soft);
+}
+
+.causality-panel .cb-member:last-child {
+    padding-bottom: 0;
+}
+
+.causality-panel .cb-member-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+}
+
+.causality-panel .cb-member-name {
+    font-size: 0.9375rem;
+    font-weight: 550;
+}
+
+.causality-panel .cb-nested {
+    margin-top: 10px;
+}
+
 /* ─── Responsive ─── */
 
 @media (max-width: 820px) {

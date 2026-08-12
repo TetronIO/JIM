@@ -63,6 +63,22 @@ A queued deprovision is distinguished from an ordinary **Export queued** because
 !!! note "Applies to new runs"
     Outcomes recorded before this distinction existed remain as they were written, so a deprovisioning cascade on an older Activity still reads **Export queued**. Runs from this version onwards use the new outcome.
 
+### Caused by
+
+The causality panel answers "what did this run do?", reading downstream. Beneath it, **Caused by** answers the opposite question: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it.
+
+Each step is a sentence rather than a diagram, for example "10 Users were deleted, so they were removed from Project Diamond's Static Members", with the relationship the cascade acted through picked out in colour. Objects removed for the same reason, on the same Connected System, through the same Synchronisation Rule read as one statement carrying a count instead of as ten near-identical rows; expanding it names each of them individually. Two independent causes converging on one effect stay as two, because a hidden second cause is precisely what an administrator needs to see.
+
+Everything a step says was captured at the moment it happened: the causing object's name, its object type, the attribute, the Connected System and the Synchronisation Rule. A cause is by definition older than its effect, so the objects and records a chain names have very often been deleted, renamed, or aged out of history by the time anyone reads it; recording the wording alongside the link is what lets the chain still read correctly when they have.
+
+The chain always says why it ends, because the three reasons mean entirely different things:
+
+- **End of the recorded chain**: nothing caused this. It is the whole story.
+- **What caused this is no longer retained**: the causing record has aged out of Activity retention. This is expected rather than exceptional on a deployment that has been live longer than one retention window, and is shown calmly rather than as an error; the cause itself is still named, from the wording recorded at the time.
+- **More causes exist beyond this point**: the walk stopped at its depth bound, not at a real end. A chain that hit the bound anywhere says so at the top as well.
+
+A cause that was recorded on a different execution item links to it, so a long chain can be walked one page at a time. A cause recorded on the item you are already looking at is shown without a link.
+
 ## Metaverse Object Housekeeping
 
 When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it, queues deletes for any accounts covered by an export Synchronisation Rule whose [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) is Delete, and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Metaverse Object Housekeeping** activity, with an execution item per deleted Metaverse Object, per staged membership-removal Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. Deprovisioning deletes are reported on the deleted object's own item, nested beneath its **MVO Deleted** outcome, exactly as on a synchronisation run. A quiet housekeeping pass with nothing to delete records no activity.

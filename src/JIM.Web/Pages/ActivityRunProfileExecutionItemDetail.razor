@@ -1,6 +1,7 @@
 @page "/activity/item/{Id:guid}"
 @attribute [Authorize(Roles = "User")]
 @using JIM.Models.Activities;
+@using JIM.Models.Activities.DTOs
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums;
@@ -262,7 +263,8 @@
                 <CausalityPanel Item="_activityRunProfileExecutionItem"
                                 Context="@BuildCausalityPageContext()"
                                 LivePendingExportIds="_livePendingExportIds"
-                                Timestamp="@_activity?.Executed" />
+                                Timestamp="@_activity?.Executed"
+                                Chain="_causalChain" />
             </div>
         }
 
@@ -903,6 +905,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private IReadOnlySet<Guid>? _livePendingExportIds;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
 
+    // The upward causal chain (#1223): why the changes on this item happened. Loaded here rather than in
+    // the panel so the panel stays a rendering component with no data access of its own.
+    private CausalChain? _causalChain;
+
     // Decision-time deletion policy snapshot (#119): the deletion rule context panels render from the facts
     // recorded when the decision was made, never from the object type's current configuration, so the
     // explanation stays accurate after an administrator edits the rule.
@@ -1067,6 +1073,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         }
 
         await LoadLivePendingExportIdsAsync(jim);
+
+        // Only items with outcomes render the causality panel, and the chain renders inside it, so an item
+        // without outcomes has nowhere to show a chain and the walk is not worth paying for.
+        if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
+            _causalChain = await jim.Activities.GetCausalChainAsync(Id);
 
         // Resolve the MVO type for headings and deletion rule display
         {

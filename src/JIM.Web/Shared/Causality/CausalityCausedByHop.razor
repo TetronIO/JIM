@@ -1,0 +1,164 @@
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One hop in the causal chain: a cohort of causes that all say the same thing, the attribution beside them
+   (why, on which Connected System, through which Synchronisation Rule), and whatever caused them in turn.
+   Recursive: a cause that resolved renders its own hops beneath it, so the whole walk is one component.
+
+   A cohort of one is named in its sentence and needs no disclosure; a cohort of many is counted in its
+   sentence and lists its causes behind one, because ten near-identical rows say nothing ten times. *@
+
+<li class="cb-hop">
+    <div class="cb-sentence">
+        @foreach (var part in Sentence)
+        {
+            @if (part.IsAttributeName)
+            {
+                <span class="cb-attr">@part.Text</span>
+            }
+            else
+            {
+                @part.Text
+            }
+        }
+    </div>
+
+    @if (HasMeta)
+    {
+        <div class="cb-meta">
+            @if (Reason != null)
+            {
+                <span class="cb-reason">@Reason</span>
+            }
+            @if (Cohort.ConnectedSystemId is { } connectedSystemId && !string.IsNullOrWhiteSpace(Cohort.ConnectedSystemName))
+            {
+                <CausalityEntityChip Label="@Cohort.ConnectedSystemName"
+                                     Href="@($"/admin/connected-systems/{connectedSystemId}")"
+                                     Kind="CausalityEntityKind.ConnectedSystem" />
+            }
+            @if (Cohort.SyncRuleId is { } syncRuleId && !string.IsNullOrWhiteSpace(Cohort.SyncRuleName))
+            {
+                <CausalityEntityChip Label="@Cohort.SyncRuleName"
+                                     Href="@($"/admin/sync-rules/{syncRuleId}")"
+                                     Kind="CausalityEntityKind.SynchronisationRule" />
+            }
+            @if (SoleCause != null && LinkFor(SoleCause) is { } soleHref)
+            {
+                <a class="cb-link" href="@soleHref">View what recorded it</a>
+            }
+        </div>
+    }
+
+    @if (SoleCause != null)
+    {
+        @* Already named in the sentence, so it renders flat: its ending, or the causes behind it *@
+        @RenderCauseTail(SoleCause)
+    }
+    else
+    {
+        <button type="button" class="cb-members-toggle @(_expanded ? "on" : null)"
+                aria-expanded="@(_expanded ? "true" : "false")" @onclick="ToggleMembers">
+            @(_expanded ? CausalityCauseWording.HideMembersLabel(Cohort) : CausalityCauseWording.MembersLabel(Cohort))
+        </button>
+        @if (_expanded)
+        {
+            <ul class="cb-members">
+                @foreach (var member in Cohort.Members)
+                {
+                    <li class="cb-member" @key="member">
+                        <div class="cb-member-head">
+                            <span class="cb-member-name">@(member.DisplayName ?? "Unnamed object")</span>
+                            @if (LinkFor(member) is { } memberHref)
+                            {
+                                <a class="cb-link" href="@memberHref">View what recorded it</a>
+                            }
+                        </div>
+                        @RenderCauseTail(member)
+                    </li>
+                }
+            </ul>
+        }
+    }
+</li>
+
+@code {
+    /// <summary>
+    /// The cohort this hop speaks for.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalChainCohort Cohort { get; set; } = null!;
+
+    /// <summary>
+    /// The name of the thing this cohort acted on: the page's record at the first level, and the cause one
+    /// level up thereafter.
+    /// </summary>
+    [Parameter]
+    public string? EffectName { get; set; }
+
+    /// <summary>
+    /// The Run Profile Execution Item this cohort explains. A cause recorded on that same item is not
+    /// linked; the link would land back where the reader already is.
+    /// </summary>
+    [Parameter]
+    public Guid? EffectItemId { get; set; }
+
+    private bool _expanded;
+
+    private IReadOnlyList<CausalityCauseSentencePart> Sentence => CausalityCauseWording.Sentence(Cohort, EffectName);
+
+    private string? Reason => CausalityCauseWording.Reason(Cohort.ReasonCode);
+
+    /// <summary>
+    /// The cohort's single cause where it speaks for one, otherwise null. Drives the whole flat-versus-listed
+    /// split, so it is derived once here rather than re-tested at each branch.
+    /// </summary>
+    private CausalChainMember? SoleCause => Cohort.MemberCount == 1 ? Cohort.Members[0] : null;
+
+    private bool HasMeta =>
+        Reason != null
+        || (Cohort.ConnectedSystemId.HasValue && !string.IsNullOrWhiteSpace(Cohort.ConnectedSystemName))
+        || (Cohort.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(Cohort.SyncRuleName))
+        || (SoleCause != null && LinkFor(SoleCause) != null);
+
+    private void ToggleMembers()
+    {
+        _expanded = !_expanded;
+    }
+
+    /// <summary>
+    /// The href of the item that recorded a cause, or null where there is nothing useful to link to: the
+    /// cause named no item, or named the very item being viewed.
+    /// </summary>
+    private string? LinkFor(CausalChainMember member)
+    {
+        if (member.RunProfileExecutionItemId is not { } itemId || itemId == Guid.Empty)
+            return null;
+
+        return itemId == EffectItemId ? null : $"/activity/item/{itemId}";
+    }
+
+    /// <summary>
+    /// What follows a cause: the hops that caused it where the walk resolved, otherwise the phrase saying
+    /// why it stopped. Never both and never neither, so a chain can always be read to its end.
+    /// </summary>
+    private RenderFragment RenderCauseTail(CausalChainMember member) => __builder =>
+    {
+        if (member.Causes.Count > 0)
+        {
+            <ol class="cb-list cb-nested">
+                @foreach (var cohort in member.Causes)
+                {
+                    <CausalityCausedByHop Cohort="cohort" EffectName="@member.DisplayName"
+                                          EffectItemId="member.RunProfileExecutionItemId" />
+                }
+            </ol>
+        }
+        else if (CausalityCauseWording.Ending(member.Resolution) is { } ending)
+        {
+            <span class="cb-end">@ending</span>
+        }
+    };
+}
