@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | **Phase 1 Complete** |
 | **Phase 1** | Supported (currently shipped capabilities) |
-| **Phase 2** | Started: Scenario 16 (JIM SQL Connector matrix) is implemented against Microsoft SQL Server and Oracle Database; Scenarios 17-18 remain road-mapped |
+| **Phase 2** | Started: Scenario 16 (JIM SQL Connector matrix) is implemented against Microsoft SQL Server and Oracle Database; Scenarios 18-19 remain road-mapped |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 
 ---
@@ -152,6 +152,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
 | `Scenario15-ScimConnector` | SCIM 2.0 Client Connector end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted rather than validation skipped (#545) | file (HR CSV source), scim-provider |
 | `Scenario16-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
+| `Scenario17-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Samba AD only; `-Template` is ignored | samba-ad-primary |
 
 **Available Templates (`-Template` parameter):**
 
@@ -1113,9 +1114,43 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 ---
 
+#### Scenario 17: Initial Password Provisioning
+
+**Status**: implemented, and **currently blocked from completing a run**. Samba AD only.
+
+> **The blocker is in JIM, not in the scenario.** `Setup-Scenario17.ps1` has to remove Scenario 1's `userAccountControl` Attribute Flow, because the Initial Password's EnableAccount option writes the same attribute and the confirming import otherwise reports the export as unconfirmed ("Will attempt to reassert the change on the next export run"). Deleting a Synchronisation Rule Mapping currently fails with an Entity Framework tracking conflict on `SyncRuleMappingSource`, so setup stops at Step 2c. Switching EnableAccount off is not a way round it: `false` means "disable the account", not "leave it alone".
+>
+> Everything up to that point runs green, and the credential chain itself has been proven by hand against a live Samba AD domain controller on accounts JIM provisioned: the Initial Password binds as `MustChangePassword` (49/`773`), a wrong password as `InvalidCredentials` (49/`52e`), the account holder's own change succeeds, and the newly chosen password binds cleanly.
+>
+> A second, softer issue is worked around rather than fixed: `Setup-Scenario1.ps1` imports the directory hierarchy *before* selecting the partition, and the import enumerates containers only for already-selected partitions, so the first import yields none and Setup-Scenario1 warns and carries on. The Connected System's exports are then refused several steps later with "selected partition(s) contain no enumerated containers". `Setup-Scenario17.ps1` Step 2b re-imports to recover; the ordering belongs to Setup-Scenario1 and affects every scenario that uses it.
+
+Closes the one gap that every other piece of JIM's password coverage leaves open: whether the account holder can actually sign in.
+
+The unit tests in `LdapConnectorPasswordTests` assert against a mocked `ILdapOperationExecutor`, so they prove that JIM *emits* a quoted UTF-16LE `unicodePwd` write and a `pwdLastSet` of zero, in that order. They cannot prove a directory accepts either, that the encoding is right, or that "must change at next sign-in" reaches the person holding the account. This scenario provisions an account through the ordinary path and then uses the credential.
+
+**The chain, and why each link is needed:**
+
+| Step | Assertion | Why it is not redundant |
+|------|-----------|-------------------------|
+| 1 | HR CSV, Metaverse, Create export to Samba AD | The Initial Password is set only on a Create export, so provisioning is what triggers the delivery |
+| 2 | `pwdLastSet` is 0 and `ACCOUNTDISABLE` is clear | Active Directory refuses to enable an account holding no policy-compliant password, so the enabled state is independent evidence that the password write landed |
+| 3 | Bind as the account holder with the Initial Password gives result 49, sub-code `773` | `773` is ERROR_PASSWORD_MUST_CHANGE: the credential is correct *and* the directory is insisting on a change. This is the scenario's central assertion |
+| 4 | Bind with a deliberately wrong password gives result 49, sub-code `52e` | Without this contrast step 3 proves nothing. Both outcomes are result code 49, so a scenario that only checked "the bind failed" would pass just as happily against a password JIM never set |
+| 5 | The account holder changes their own password, authenticating with the Initial Password | The flow a new starter is actually put through, and the only step proving the credential is *usable* rather than merely recognised. An administrative reset would prove nothing about it |
+| 6 | Bind with the newly chosen password succeeds outright | The account is left usable, not stuck |
+| 7 | JIM reports nothing parked and nothing expired | JIM's own record has to agree with the directory; a parked account is one the target refused |
+
+**Why the password source is Static.** A generated password is produced at the moment it is set and stored nowhere, by design, so no test can ever bind with one. Static is the only source whose value the scenario can know. The delivery path it exercises (stage a Pending Initial Password on the Create export, then set it through the Connector's password channel) is the same one the generated sources use, so what is given up is the generator, not the mechanism.
+
+**Why Samba AD only.** "Must change at next sign-in" is an Active Directory behaviour with no portable equivalent; JIM reports it as an expiry downgrade on every other directory (`LdapConnectorPassword.BuildNonActiveDirectoryResult`). Step 3 would have nothing to bite on. Both `Setup-Scenario17.ps1` and the scenario refuse to run against OpenLDAP rather than silently asserting less.
+
+**`-Template` is ignored.** The scenario asserts against a single account; a larger template only lengthens the export. It always provisions at Micro.
+
+**Bind classification** lives in `Get-LDAPBindOutcome` (`utils/LDAP-Helpers.ps1`), which maps Active Directory's bind sub-codes to names and is covered by `utils/LDAP-Helpers.Tests.ps1` using strings captured verbatim from a live domain controller. Anything unrecognised is reported as `Failed` rather than guessed at, so a new failure mode surfaces as a test failure instead of being folded into an existing category.
+
 ### Phase 2 - Database Scenarios
 
-> The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 16: Database Source/Target" is delivered by the matrix scenario below; the two remaining planned scenarios are now numbered 17 and 18.
+> The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 16: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, so the two remaining planned scenarios are now numbered 18 and 19.
 
 #### Scenario 16: JIM SQL Connector Provider x Capability Matrix
 
@@ -1171,8 +1206,8 @@ Re-seeding is skipped when a content hash of the generated script matches what t
 
 #### Still road-mapped
 
-- **Scenario 17: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 16 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
-- **Scenario 18: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
+- **Scenario 18: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 16 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
+- **Scenario 19: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
 
 ---
 
