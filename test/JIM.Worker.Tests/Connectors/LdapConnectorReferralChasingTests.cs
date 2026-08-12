@@ -61,6 +61,6 @@ public class LdapConnectorReferralChasingTests
         connection.Dispose();
 
         // Act + Assert
-        Assert.DoesNotThrow(() => LdapConnectorUtilities.DisableReferralChasing(connection, Log.Logger));
+        Assert.That(() => LdapConnectorUtilities.DisableReferralChasing(connection, Log.Logger), Throws.Nothing);
     }
 }
