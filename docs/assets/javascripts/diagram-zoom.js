@@ -168,18 +168,23 @@
   // for a diagram only slightly taller than the stage, which is every concept
   // SVG -- a 1160x640 diagram on a 2.01-aspect stage opens with its bottom 10%
   // quietly cut off, looking whole rather than looking panable. So contain by
-  // default, and fall back to fit-to-width only when containing would leave the
-  // diagram narrower than MIN_CONTAIN_SCALE of the stage.
+  // default, and fall back to fit-to-width only when containing would render
+  // the diagram too small to read.
   //
-  // The threshold is set from the two populations, measured on the worst
-  // realistic stage (a 1440x620 window, stage aspect 2.72): contained, the
-  // tallest concept diagrams fill 51% and 57% of the stage, which is 674px and
-  // 755px of a 1160-unit diagram and perfectly readable; a Mermaid flowchart
-  // fills 7%, a 98px thumbnail. Anything between the two is a safe cut. It also
-  // errs the right way, because the overlay has zoom controls: a diagram shown
-  // whole but small can be zoomed into, whereas a cropped one only helps a
-  // reader who notices it pans.
-  var MIN_CONTAIN_SCALE = 0.4;
+  // "Too small" has to be measured in CSS pixels, not as a share of the stage.
+  // A share alone gets the phone case wrong: on a 390px-wide window the stage
+  // is tall and narrow, so containing a 4000-unit flowchart costs only 42% of
+  // the width -- which sounds cheap and is in fact a 153px sliver. The two
+  // populations separate cleanly by absolute width: on the worst realistic
+  // desktop window (1440x620, stage aspect 2.72) the tallest concept diagrams
+  // contain to 674px and 755px, perfectly readable, while a Mermaid flowchart
+  // contains to between 98px and 182px on every window tested. MIN_CONTAIN_PX
+  // sits between them with room either side.
+  //
+  // It also errs the right way, because the overlay has zoom controls: a
+  // diagram shown whole but small can be zoomed into, whereas a cropped one
+  // only helps a reader who notices it pans.
+  var MIN_CONTAIN_PX = 560;
 
   function initView(svg) {
     var base = parseViewBox(svg);
@@ -196,8 +201,7 @@
     // Start at the top of the diagram; clampView centres it on any axis where
     // the window is larger than the diagram.
     var aspect = stageAspect();
-    var contained = Math.max(base[2], base[3] * aspect);
-    var home = base[2] / contained >= MIN_CONTAIN_SCALE ? contained : base[2];
+    var home = homeWidth(base, aspect);
     view = { svg: svg, base: base, home: home, x: base[0], y: base[1], w: home, h: home / aspect };
     applyView();
   }
@@ -205,6 +209,17 @@
   function stageAspect() {
     var r = ovStage.getBoundingClientRect();
     return r.height > 0 ? r.width / r.height : 16 / 9;
+  }
+
+  // The window width the overlay opens at: the whole diagram where that stays
+  // readable, fit-to-width where it would not. Returns a viewBox width, so a
+  // value wider than the diagram means the diagram is contained with padding.
+  function homeWidth(base, aspect) {
+    var contained = Math.max(base[2], base[3] * aspect);
+    if (contained <= base[2]) return base[2];        // nothing to lose; already whole
+    var stagePx = ovStage.getBoundingClientRect().width;
+    var containedPx = stagePx * (base[2] / contained);
+    return containedPx >= MIN_CONTAIN_PX ? contained : base[2];
   }
 
   function applyView() {
@@ -587,8 +602,7 @@
         // window width, so a diagram opened whole stays whole across a resize.
         var aspect = stageAspect();
         var wasAtHome = view.w >= view.home;
-        var contained = Math.max(view.base[2], view.base[3] * aspect);
-        view.home = view.base[2] / contained >= MIN_CONTAIN_SCALE ? contained : view.base[2];
+        view.home = homeWidth(view.base, aspect);
         if (wasAtHome) view.w = view.home;
         view.h = view.w / aspect;
         applyView();
