@@ -52,6 +52,8 @@
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
+        'Get-JIMConnectedSystemContainerScopeText',
+        'Set-JIMConnectedSystemContainerScopeText',
         'Get-JIMConnectedSystemDirectoryServer',
         'Get-JIMConnectedSystemObject',
         'Get-JIMConnectedSystemObjectType',

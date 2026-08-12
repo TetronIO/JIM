@@ -5033,6 +5033,70 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// A Connected System's Container Scope as canonical Advanced Mode text, or null where the Connected System
+    /// does not exist.
+    /// </summary>
+    public async Task<string?> GetContainerScopeTextAsync(int connectedSystemId)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+
+        return connectedSystem == null
+            ? null
+            : ContainerScopeText.Project(connectedSystem.Partitions ?? []);
+    }
+
+    /// <summary>
+    /// Replaces a Connected System's whole Container Scope with the statements in a piece of text, recording the
+    /// change with an Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <remarks>
+    /// The whole scope is one configuration change and is saved as one, exactly as the portal's tree is: an
+    /// administrator restating a hierarchy has made a single decision about what JIM manages, and recording it as
+    /// a Container's worth of separate changes would leave a change history nobody can read a decision out of.
+    /// </remarks>
+    /// <returns>Null where the Connected System does not exist.</returns>
+    public async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        MetaverseObject? initiatedBy) =>
+        await ApplyContainerScopeTextAsync(connectedSystemId, text,
+            connectedSystem => UpdateConnectedSystemAsync(connectedSystem, initiatedBy));
+
+    /// <summary>
+    /// Replaces a Connected System's whole Container Scope with the statements in a piece of text (initiated by API
+    /// key), recording the change with an Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <returns>Null where the Connected System does not exist.</returns>
+    public async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        ApiKey initiatedByApiKey) =>
+        await ApplyContainerScopeTextAsync(connectedSystemId, text,
+            connectedSystem => UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey));
+
+    private async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        Func<ConnectedSystem, Task> persistAsync)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(
+            connectedSystemId, withChangeTracking: true);
+
+        if (connectedSystem == null)
+            return null;
+
+        var partitions = connectedSystem.Partitions ?? [];
+        var errors = ContainerScopeText.Apply(text, partitions);
+
+        if (errors.Count > 0)
+            return new ContainerScopeTextApplyResult { Errors = errors, Text = ContainerScopeText.Project(partitions) };
+
+        await persistAsync(connectedSystem);
+
+        return new ContainerScopeTextApplyResult { Errors = [], Text = ContainerScopeText.Project(partitions) };
+    }
+
+    /// <summary>
     /// Deletes a Connected System Container, recording the change with an Activity and a versioned configuration
     /// snapshot of the owning Connected System.
     /// </summary>

@@ -3553,3 +3553,29 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
 .jim-scope-pending-clean {
     color: var(--mud-palette-text-secondary);
 }
+
+/* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */
+.jim-scope-mode {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* The scope is a list of Distinguished Names, so it is read column-by-column: a proportional face makes two
+   near-identical paths hard to tell apart, which is the one thing an administrator is doing here. */
+.jim-scope-text .mud-input-slot {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.875rem;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.jim-scope-text-error-list {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+}
+
+.jim-scope-text-error-list li + li {
+    margin-top: 0.25rem;
+}

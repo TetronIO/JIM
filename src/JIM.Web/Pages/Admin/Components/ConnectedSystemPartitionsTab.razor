@@ -317,9 +317,62 @@ else
     </MudAlert>
 }
 
+@* ─── Simple or Advanced: the same scope, edited as a tree or as text ─── *@
+@if (ConnectedSystem.Partitions is { Count: > 0 } && ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
+{
+    <div class="jim-scope-mode mt-6">
+        <MudToggleGroup T="bool" Value="@_advancedMode" ValueChanged="SetAdvancedMode" Outlined="true"
+                        Delimiters="true" Color="Color.Primary" CheckMark="true" FixedContent="true"
+                        data-testid="jim-scope-mode">
+            <MudToggleItem Value="false" Text="Simple" />
+            <MudToggleItem Value="true" Text="Advanced" />
+        </MudToggleGroup>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            @(_advancedMode
+                ? "One statement per line, in hierarchy order. This states the whole of Container Scope: a Container it does not name is not managed."
+                : "Tick the Containers to manage. Advanced states the same scope as text, for a hierarchy too large to click through.")
+        </MudText>
+    </div>
+}
+
+@if (_advancedMode)
+{
+    <MudPaper Class="pa-4 mt-6" Outlined="true">
+        <MudTextField T="string" @bind-Value="_advancedText" Immediate="true" Variant="Variant.Outlined"
+                      Lines="10" Label="Container Scope" spellcheck="false"
+                      Class="jim-scope-text" data-testid="jim-scope-text"
+                      HelperText="include (or +) or exclude (or -), an optional one-level, then the Container's path. Blank lines and lines beginning with # are ignored." />
+
+        @if (_advancedErrors.Count > 0)
+        {
+            @* Every problem at once, each tied to its line: an administrator correcting a scope of any size one
+               round trip at a time is how a half-corrected text gets saved. *@
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4" data-testid="jim-scope-text-errors">
+                <MudText Class="mb-2"><strong>This Container Scope was not applied.</strong> Nothing has been changed.</MudText>
+                <ul class="jim-scope-text-error-list">
+                    @foreach (var error in _advancedErrors)
+                    {
+                        <li>Line @error.LineNumber: @error.Message</li>
+                    }
+                </ul>
+            </MudAlert>
+        }
+
+        <div class="d-flex align-center gap-4 mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                       OnClick="ApplyAdvancedTextWithFeedback" data-testid="jim-scope-text-apply">
+                Apply
+            </MudButton>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Applying edits the selection; nothing reaches the Connected System until you save.
+            </MudText>
+        </div>
+    </MudPaper>
+}
+
 @if (ConnectedSystem.Partitions is { Count: > 0 })
 {
-    @foreach (var partition in ConnectedSystem.Partitions)
+    @foreach (var partition in VisiblePartitions)
     {
         <MudPaper Class="mt-6" Outlined="true">
             <div class="jim-scope-partition-head">
@@ -441,6 +494,74 @@ else
     /// and the preview can report itself stale.
     /// </summary>
     private void OnSelectionEdited() => _selectionEdited = true;
+
+    // ─── Advanced Mode (#1255): the same scope, stated as text ───
+
+    private bool _advancedMode;
+    private string _advancedText = string.Empty;
+    private IReadOnlyList<ContainerScopeTextError> _advancedErrors = [];
+
+    /// <summary>
+    /// The partitions the tree renders. Empty in Advanced Mode, where the text is the editor.
+    /// </summary>
+    private IEnumerable<ConnectedSystemPartition> VisiblePartitions =>
+        _advancedMode ? [] : ConnectedSystem.Partitions ?? [];
+
+    /// <summary>
+    /// Switches between editing the scope as a tree and editing it as text.
+    /// </summary>
+    /// <remarks>
+    /// Leaving Advanced Mode applies the text rather than discarding it, because the text is the pending edit and
+    /// dropping it on a click of "Simple" would lose work with nothing said. Where it cannot be applied the switch
+    /// does not happen and the errors stand; the two modes express exactly the same scopes, so there is nothing an
+    /// administrator can write here that the tree cannot then show them.
+    /// </remarks>
+    private void SetAdvancedMode(bool advanced)
+    {
+        if (advanced == _advancedMode)
+            return;
+
+        if (advanced)
+        {
+            _advancedText = ContainerScopeText.Project(ConnectedSystem.Partitions ?? []);
+            _advancedErrors = [];
+            _advancedMode = true;
+            return;
+        }
+
+        if (ApplyAdvancedText())
+            _advancedMode = false;
+    }
+
+    private void ApplyAdvancedTextWithFeedback()
+    {
+        if (ApplyAdvancedText())
+            Snackbar.Add("Container Scope applied. Save your changes to send them to the Connected System.", Severity.Success);
+    }
+
+    /// <summary>
+    /// Resolves the authored text against the hierarchy and applies it to the in-memory selection, exactly as
+    /// ticking boxes in the tree does. Nothing is persisted here: the Save Changes button below owns that, so
+    /// Advanced Mode inherits the confirmation, the preview link and the audit rather than having its own.
+    /// </summary>
+    private bool ApplyAdvancedText()
+    {
+        var partitions = ConnectedSystem.Partitions ?? [];
+        var before = ContainerScopeText.Project(partitions);
+
+        _advancedErrors = ContainerScopeText.Apply(_advancedText, partitions);
+        if (_advancedErrors.Count > 0)
+            return false;
+
+        // Hand back what was actually applied, so the administrator sees the canonical form of what they wrote
+        // rather than being left to wonder whether their shorthand was understood.
+        _advancedText = ContainerScopeText.Project(partitions);
+
+        if (_advancedText != before)
+            OnSelectionEdited();
+
+        return true;
+    }
 
     /// <summary>
     /// Deselecting a partition takes every Container within it out of scope too, so its selections are cleared

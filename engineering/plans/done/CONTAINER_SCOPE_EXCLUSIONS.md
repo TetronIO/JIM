@@ -1,10 +1,10 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Doing (Phases 1-6 complete; Advanced Mode outstanding)
+- **Status:** Done (all phases complete)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
 - **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
-- **Last Updated**: 2026-08-12 (Phase 6 completed)
+- **Last Updated**: 2026-08-12 (Phase 7 completed)
 
 ## Overview
 
@@ -152,8 +152,13 @@ An `"excluded"` key in `ConfigurationChangeConsequences` classified as a scope r
 
 *Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone: `ou=Corp` selected as a subtree with `ou=Service Accounts` excluded and `ou=App1` re-included beneath it discarded exactly one entry, attributed to the excluded Container, surviving the Activity's completion (which is what the finalisation carve-out exists for) and read back through `Get-JIMActivityStats`.*
 
-**Phase 7: Advanced Mode.**
-Parser and canonical text projection, wildcard support, resolution against the hierarchy with hard errors on unresolvable paths, the itemised lossy-downgrade confirmation, and parity across all three surfaces.
+**Phase 7: Advanced Mode.** ✅
+Parser and canonical text projection, resolution against the hierarchy with hard errors on unresolvable paths, and parity across all three surfaces.
+
+- ***The text is an editor for the Container rows, resolved at save; it is not a stored list of paths.** This plan rejects "an exclusion list of Distinguished Names" under Rejected Alternatives because such a list breaks on rename, and Advanced Mode is a list of Distinguished Names, so the same objection had to be answered rather than inherited. It is answered by where the text lives: `ContainerScopeText.Apply` resolves each path against the discovered hierarchy once and writes `Selected` / `Excluded` / `Scope` onto the rows, which are keyed on `StableId`. A rename in the directory therefore moves the selection with the Container exactly as the tree's does, and the next projection writes the new path out. Nothing in the scope engine, the import, the export or the preview knows Advanced Mode exists.*
+- ***Wildcards were deliberately not built, and that removed a whole phase's worth of machinery.** They were the only reason the two modes could express different things, so without them the projection round-trips exactly and the "itemised lossy-downgrade confirmation" this plan specified has nothing to itemise: switching to Simple simply applies the text. The plan's success criterion about a path resolving to nothing raising an error "on the run" likewise falls away, because an unresolvable path can no longer be saved to meet a run. What is lost is authoring a path for a Container the hierarchy has not discovered yet; that is a real capability, and the case for it should come from someone who wants it rather than from this plan.*
+- ***Applied all-or-nothing, and redundancy is an error rather than a normalisation.** Half an applied scope is objects silently leaving import scope, which is the failure this whole feature exists to remove, so a text with any problem changes nothing and reports every problem at once against its line. Restating what an ancestor already says is refused for a subtler reason: the canonical projection never writes such a line, so dropping it silently would hand back text differing from the text just saved, and honouring it would leave a Container selected *and* covered, a state the tree cannot reach.*
+- ***The portal's Advanced Mode edits the same in-memory graph the tree does, and saves through the same button.** That is what makes it inherit the confirmation dialog, the Configuration Change Preview link and the versioned snapshot without a line of its own; a second save path would have been a second place for the preview-to-save audit trail to be wrong.*
 
 ## Success Criteria
 
