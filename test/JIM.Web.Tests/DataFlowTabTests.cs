@@ -163,52 +163,36 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void DataFlowTab_HeaderBandsNameEachSideOfTheMetaverse()
+    public void DataFlowTab_Headings_NameTheSideOfTheMetaverseEachColumnBelongsTo()
     {
-        // A single header row cannot say that the columns form two groups, so "Object Type" on its own does not say
-        // which side it belongs to. The band spans each side's columns and names it, which is what lets the column
-        // headings themselves stay short and symmetrical.
+        // The columns used to sit under a band row that spanned each side and named it, which let the headings
+        // themselves stay short ("Object Type" twice, "Attribute" twice). The virtualised grid has exactly one
+        // heading per column and no way to span them, so the qualification moved into the headings: unqualified,
+        // "Object Type" would not say which side of the Metaverse it describes, and the reader would be back to
+        // checking each cell's CS / MV marker to work out what they are looking at.
         SetupFlows(BuildImportFlow());
 
         var cut = Render<DataFlowTab>();
         var headerRows = cut.FindAll("thead tr");
-        var bandCells = headerRows[0].QuerySelectorAll("th");
+        var headings = headerRows[0].QuerySelectorAll("th").Select(th => th.TextContent.Trim()).ToList();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(headerRows, Has.Count.EqualTo(2), "a band row above the column headings");
-            Assert.That(bandCells.First(c => c.TextContent.Trim() == "Connected System").GetAttribute("colspan"),
-                Is.EqualTo("3"), "the Connected System side is system, object type and attribute");
-            Assert.That(bandCells.First(c => c.TextContent.Trim() == "Metaverse").GetAttribute("colspan"),
-                Is.EqualTo("2"), "the Metaverse side is object type and attribute");
+            Assert.That(headerRows, Has.Count.EqualTo(1), "a data grid has one heading row");
+            Assert.That(headings, Does.Contain("Connected System Object Type"));
+            Assert.That(headings, Does.Contain("Connected System Attribute"));
+            Assert.That(headings, Does.Contain("Metaverse Object Type"));
+            Assert.That(headings, Does.Contain("Metaverse Attribute"));
+            Assert.That(headings, Does.Not.Contain("Object Type"), "unqualified, it does not say which side");
+            Assert.That(headings, Does.Not.Contain("Attribute"), "unqualified, it does not say which side");
         }
     }
 
     [Test]
-    public void DataFlowTab_BandedHeadings_AreShortAndSymmetricalOnBothSides()
+    public void DataFlowTab_StackedLabels_QualifyEachSideTheSameWayTheHeadingsDo()
     {
-        // The point of the band: neither side has to restate itself, so both read the same way. An asymmetric
-        // header ("Object Type" against "Metaverse Object Type") is what made the two sides look unrelated.
-        SetupFlows(BuildImportFlow());
-
-        var cut = Render<DataFlowTab>();
-        var columnHeadings = cut.FindAll("thead tr")[1].QuerySelectorAll("th")
-            .Select(th => th.TextContent.Trim()).ToList();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(columnHeadings.Count(h => h == "Object Type"), Is.EqualTo(2), "one per side");
-            Assert.That(columnHeadings.Count(h => h == "Attribute"), Is.EqualTo(2), "one per side");
-            Assert.That(columnHeadings, Does.Not.Contain("Metaverse Object Type"), "the band says which side");
-        }
-    }
-
-    [Test]
-    public void DataFlowTab_StackedLabels_StayFullyQualifiedEvenThoughTheHeadingsAreShort()
-    {
-        // Below the small breakpoint the table stacks each row into label and value pairs and the band is not
-        // rendered at all, so a DataLabel of "Object Type" would lose the only thing saying which side it is.
-        // The divergence between the visible heading and the stacked label is deliberate.
+        // At narrow widths each row stacks into label and value pairs, taking its labels from the column titles
+        // rather than from the headings' markup, so they have to carry the same qualification.
         SetupFlows(BuildImportFlow());
 
         var cut = Render<DataFlowTab>();

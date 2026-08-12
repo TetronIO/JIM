@@ -2,7 +2,6 @@
 @using JIM.Models.Logic.DTOs
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -69,164 +68,198 @@
     expression's attribute references live in its text; search finds those.
 </MudText>
 
-@* CustomHeader lets HeaderContent supply the whole <thead>, so the column headings can carry a band row above
-   them naming the side each group belongs to. Without it MudTable renders HeaderContent inside a single row. *@
-<MudTable Items="@_flows" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-4 mb-5" SortLabel="Sort By"
-          Outlined="true" Elevation="0" Loading="@_loading" LoadingProgressColor="Color.Primary"
-          CustomHeader="true" HeaderClass="jim-dataflow-header"
-          RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
-    <ToolBarContent>
-        <TableDensityToggle @bind-Dense="_dense" />
-        <MudText Class="mx-2 mud-text-disabled">|</MudText>
-        <MudText Typo="Typo.body1">@_flows.Count @(_flows.Count == 1 ? "flow" : "flows")</MudText>
-        <MudSpacer />
-        <SearchField Value="@_search" ValueChanged="OnSearchChangedAsync" DebounceInterval="500" Class="mt-0" />
-    </ToolBarContent>
-    @* Columns are anchored to sides, not to source and target: those two swap sides between directions, so a
-       Source column means the Connected System on one row and the Metaverse on the next, and no column can be
-       learned. The Connected System block is always on the left and the Metaverse block always on the right; only
-       the arrow between them changes with direction. *@
-    <HeaderContent>
-        @* The band names each side, so the headings beneath it need not restate it and the two sides read
-           symmetrically. The trailing columns belong to neither side, and their band is deliberately unlabelled:
-           naming that group would assert a structure JIM does not have. *@
-        <MudTHeadRow Class="jim-header-band">
-            <MudTh colspan="3" Class="jim-band-cs">Connected System</MudTh>
-            <MudTh Class="jim-band-none"></MudTh>
-            <MudTh colspan="2" Class="jim-band-mv">Metaverse</MudTh>
-            <MudTh colspan="@(ShowPriorityColumn ? 3 : 2)" Class="jim-band-none"></MudTh>
-        </MudTHeadRow>
-        <MudTHeadRow>
-            <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">System</MudText></MudTableSortLabel></MudTh>
-            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
-            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.ConnectedSystemSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
-            <MudTh Style="width: 1%;"></MudTh>
-            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Object Type</MudText></MudTableSortLabel></MudTh>
-            <MudTh Class="jim-side-heading"><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(DataFlowDisplay.MetaverseSideName)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
-            @if (ShowPriorityColumn)
-            {
-                <MudTh>
-                    <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
-                        <MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.Priority ?? int.MaxValue)"><MudText Typo="Typo.button">Priority</MudText></MudTableSortLabel>
-                    </MudTooltip>
-                </MudTh>
-            }
-            <MudTh><MudText Typo="Typo.button">@OptionsColumnHeader</MudText></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<DataFlowHeader, object>(x => x.SyncRuleName)"><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTableSortLabel></MudTh>
-        </MudTHeadRow>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Connected System">
-            <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
-        </MudTd>
+@* Columns are anchored to sides, not to source and target: those two swap sides between directions, so a Source
+   column would mean the Connected System on one row and the Metaverse on the next, and no column could be learned.
+   The Connected System block is always on the left and the Metaverse block always on the right; only the arrow
+   between them changes with direction. Each heading names its own side in full, because the virtualised grid has a
+   single header row: the band that used to name each side spanned several columns, which a data grid's one heading
+   per column cannot express, so the qualification moved into the headings themselves. *@
+<VirtualisedDataGrid @ref="_grid" T="DataFlowHeader"
+                     ContainerId="data-flow-list"
+                     UrlParameterPrefix="df-"
+                     DefaultSortBy="system"
+                     LoadWindow="LoadFlowWindowAsync"
+                     SingularName="Data Flow"
+                     PluralName="Data Flows"
+                     SearchPlaceholder="Search data flows">
+    <Columns>
+        <TemplateColumn Title="Connected System" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connected System" Name="system" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudLink Href="@($"/admin/connected-systems/{context.Item.ConnectedSystemId}")">@context.Item.ConnectedSystemName</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
         @* Object type names are verbatim schema identifiers, not prose, so they take the inline code style
            wherever JIM shows them (see SyncRuleScopeTab, which does the same for both sides). *@
-        <MudTd DataLabel="Connected System Object Type"><code class="jim-code-inline">@context.ConnectedSystemObjectTypeName</code></MudTd>
-        <MudTd DataLabel="Connected System Attribute">
-            @if (context.Direction == SyncRuleDirection.Import)
-            {
-                @foreach (var source in context.Sources.OrderBy(s => s.Order))
+        <TemplateColumn Title="Connected System Object Type" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connected System Object Type" Name="csobjecttype" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <code class="jim-code-inline">@context.Item.ConnectedSystemObjectTypeName</code>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Connected System Attribute" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connected System Attribute" Name="csattribute" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.Direction == SyncRuleDirection.Import)
                 {
-                    <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
-                                   Kind="@SourceKind(source)"
-                                   Name="@source.DisplayName"
-                                   Expression="@source.Expression" />
-                }
-            }
-            else
-            {
-                <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
-                               Name="@context.TargetConnectedSystemAttributeName"
-                               Href="@DataFlowDisplay.TargetHref(context)" />
-            }
-        </MudTd>
-        <MudTd Class="mud-text-secondary" Style="text-align: center;">
-            <MudTooltip Text="@($"{DataFlowDisplay.DirectionLabel(context.Direction)}: the value moves this way")" Arrow="true" Placement="Placement.Top">
-                <span>@DataFlowDisplay.DirectionArrow(context.Direction)</span>
-            </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Metaverse Object Type"><code class="jim-code-inline">@context.MetaverseObjectTypeName</code></MudTd>
-        <MudTd DataLabel="Metaverse Attribute">
-            @if (context.Direction == SyncRuleDirection.Import)
-            {
-                <AttributeChip Kind="AttributeChipKind.Metaverse"
-                               Name="@context.TargetMetaverseAttributeName"
-                               Href="@DataFlowDisplay.TargetHref(context)" />
-            }
-            else
-            {
-                @foreach (var source in context.Sources.OrderBy(s => s.Order))
-                {
-                    <AttributeChip @key="@($"{context.SyncRuleMappingId}-{source.Order}")"
-                                   Kind="@SourceKind(source)"
-                                   Name="@source.DisplayName"
-                                   Expression="@source.Expression" />
-                }
-            }
-        </MudTd>
-        @if (ShowPriorityColumn)
-        {
-            <MudTd DataLabel="Priority">
-                @{
-                    var priorityLabel = DataFlowDisplay.PriorityLabel(context);
-                    var isHighestPriorityContributor = DataFlowDisplay.IsHighestPriorityContributor(context);
-                }
-                @if (priorityLabel == null)
-                {
-                    <EmptyValue />
+                    @foreach (var source in context.Item.Sources.OrderBy(s => s.Order))
+                    {
+                        <AttributeChip @key="@($"{context.Item.SyncRuleMappingId}-{source.Order}")"
+                                       Kind="@SourceKind(source)"
+                                       Name="@source.DisplayName"
+                                       Expression="@source.Expression" />
+                    }
                 }
                 else
                 {
-                    <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context)" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string"
-                                 Variant="@(isHighestPriorityContributor ? Variant.Filled : Variant.Outlined)"
-                                 Color="@(isHighestPriorityContributor ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                   Name="@context.Item.TargetConnectedSystemAttributeName"
+                                   Href="@DataFlowDisplay.TargetHref(context.Item)" />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false">
+            <HeaderTemplate></HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@($"{DataFlowDisplay.DirectionLabel(context.Item.Direction)}: the value moves this way")" Arrow="true" Placement="Placement.Top">
+                    <span class="mud-text-secondary">@DataFlowDisplay.DirectionArrow(context.Item.Direction)</span>
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Metaverse Object Type" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Metaverse Object Type" Name="mvobjecttype" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <code class="jim-code-inline">@context.Item.MetaverseObjectTypeName</code>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Metaverse Attribute" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Metaverse Attribute" Name="mvattribute" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.Direction == SyncRuleDirection.Import)
+                {
+                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                   Name="@context.Item.TargetMetaverseAttributeName"
+                                   Href="@DataFlowDisplay.TargetHref(context.Item)" />
+                }
+                else
+                {
+                    @foreach (var source in context.Item.Sources.OrderBy(s => s.Order))
+                    {
+                        <AttributeChip @key="@($"{context.Item.SyncRuleMappingId}-{source.Order}")"
+                                       Kind="@SourceKind(source)"
+                                       Name="@source.DisplayName"
+                                       Expression="@source.Expression" />
+                    }
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        @if (ShowPriorityColumn)
+        {
+            <TemplateColumn Title="Priority" Sortable="false">
+                <HeaderTemplate>
+                    <MudTooltip Text="Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are." Arrow="true" Placement="Placement.Top">
+                        <VirtualisedSortHeader Title="Priority" Name="priority" />
+                    </MudTooltip>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @{
+                        var priorityLabel = DataFlowDisplay.PriorityLabel(context.Item);
+                        var isHighestPriorityContributor = DataFlowDisplay.IsHighestPriorityContributor(context.Item);
+                    }
+                    @if (priorityLabel == null)
+                    {
+                        <EmptyValue />
+                    }
+                    else
+                    {
+                        <MudTooltip Text="@DataFlowDisplay.PriorityTooltip(context.Item)" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string"
+                                     Variant="@(isHighestPriorityContributor ? Variant.Filled : Variant.Outlined)"
+                                     Color="@(isHighestPriorityContributor ? Color.Primary : Color.Default)">@priorityLabel</MudChip>
+                        </MudTooltip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        }
+        <TemplateColumn Title="@OptionsColumnHeader" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">@OptionsColumnHeader</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.NullIsValue == true)
+                {
+                    <MudTooltip Text="This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor." Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Null is a value</MudChip>
                     </MudTooltip>
                 }
-            </MudTd>
+                else if (context.Item.EnforceState == true)
+                {
+                    <MudTooltip Text="Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value." Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Enforce State</MudChip>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Synchronisation Rule" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Synchronisation Rule" Name="rule" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudLink Href="@DataFlowDisplay.RuleHref(context.Item)">@context.Item.SyncRuleName</MudLink>
+                @if (!context.Item.SyncRuleEnabled)
+                {
+                    <MudTooltip Text="This Synchronisation Rule is disabled, so this flow is configured but moves no data." Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.PauseCircleOutline">Disabled</MudChip>
+                    </MudTooltip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No data flows match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
         }
-        <MudTd DataLabel="@OptionsColumnHeader">
-            @if (context.NullIsValue == true)
-            {
-                <MudTooltip Text="This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor." Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Null is a value</MudChip>
-                </MudTooltip>
-            }
-            else if (context.EnforceState == true)
-            {
-                <MudTooltip Text="Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value." Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Secondary">Enforce State</MudChip>
-                </MudTooltip>
-            }
-            else
-            {
-                <EmptyValue />
-            }
-        </MudTd>
-        <MudTd DataLabel="Synchronisation Rule">
-            <MudLink Href="@DataFlowDisplay.RuleHref(context)">@context.SyncRuleName</MudLink>
-            @if (!context.SyncRuleEnabled)
-            {
-                <MudTooltip Text="This Synchronisation Rule is disabled, so this flow is configured but moves no data." Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.PauseCircleOutline">Disabled</MudChip>
-                </MudTooltip>
-            }
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No data flows match these filters.</MudText>
-    </NoRecordsContent>
-    <PagerContent>
-        <MudTablePager RowsPerPageString="Rows per page:" PageSizeOptions="@(new[] { 10, 25, 50, 100 })" />
-    </PagerContent>
-</MudTable>
+        else if (AnyFilterIsActive)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                             PrimaryText="No data flows match these filters"
+                             SecondaryText="Clear one of the filters above to widen the list." />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SwapHoriz"
+                             PrimaryText="No data flows are configured"
+                             SecondaryText="Add Attribute Flows to a Synchronisation Rule and they will appear here." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     private IList<DataFlowHeader> _flows = new List<DataFlowHeader>();
-    private bool _loading = true;
-    private bool _dense;
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
+    private VirtualisedDataGrid<DataFlowHeader>? _grid;
+
+    // Whether _flows still describes the current filters and search. Every filter is evaluated server-side, so a
+    // filter change invalidates the cached set rather than being applied over it here.
+    private bool _flowsMatchCurrentQuery;
 
     // Filter state. Held as fields rather than in a DataFlowQuery so each control can bind to one of them; the
     // query is rebuilt per load, which keeps the portal's filters and the REST endpoint's identical by construction.
@@ -246,29 +279,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // The unfiltered set is loaded here rather than waiting for the grid's first window, because the filter
+        // drop-downs are built from it: the page's own controls must be populated by the time they first render.
         await LoadAsync(buildOptions: true);
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
-                _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-                _preferencesLoaded = true;
-                StateHasChanged();
-            }
-            catch (InvalidOperationException)
-            {
-                // JS interop is not available on the first server-side render; retried on the next one.
-            }
-            catch (JSDisconnectedException)
-            {
-                // The circuit went away mid-render. There is no preference to load and nobody left to show it to.
-            }
-        }
     }
 
     /// <summary>
@@ -278,25 +291,71 @@
     /// </summary>
     private async Task LoadAsync(bool buildOptions = false)
     {
-        _loading = true;
-        StateHasChanged();
+        using var jim = JimFactory.Create();
+        var flows = await jim.ConnectedSystems.GetDataFlowsAsync(BuildQuery());
 
-        try
-        {
-            using var jim = JimFactory.Create();
-            var flows = await jim.ConnectedSystems.GetDataFlowsAsync(BuildQuery());
+        if (buildOptions)
+            BuildFilterOptions(flows);
 
-            if (buildOptions)
-                BuildFilterOptions(flows);
-
-            _flows = flows;
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
+        _flows = flows;
+        _flowsMatchCurrentQuery = true;
     }
+
+    /// <summary>
+    /// Slices one window of the loaded flows, re-querying first where the grid's search has moved on from the set
+    /// in hand. The window itself is in memory (the query returns the whole match set), but the matching is still
+    /// the server's, for the reason given on <see cref="LoadAsync"/>; only the sort is applied here, because it
+    /// reorders a set the server has already decided.
+    /// </summary>
+    private async Task<VirtualisedWindow<DataFlowHeader>> LoadFlowWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        if (!_flowsMatchCurrentQuery || !string.Equals(_search, request.SearchText, StringComparison.Ordinal))
+        {
+            _search = request.SearchText;
+            await LoadAsync();
+        }
+
+        IEnumerable<DataFlowHeader> flows = _flows;
+
+        IOrderedEnumerable<DataFlowHeader> Order<TKey>(Func<DataFlowHeader, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? flows.OrderByDescending(key, comparer) : flows.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "csobjecttype" => Order(f => f.ConnectedSystemObjectTypeName, StringComparer.OrdinalIgnoreCase),
+            "csattribute" => Order(DataFlowDisplay.ConnectedSystemSideName, StringComparer.OrdinalIgnoreCase),
+            "mvobjecttype" => Order(f => f.MetaverseObjectTypeName, StringComparer.OrdinalIgnoreCase),
+            "mvattribute" => Order(DataFlowDisplay.MetaverseSideName, StringComparer.OrdinalIgnoreCase),
+            "priority" => Order(f => f.Priority ?? int.MaxValue),
+            "rule" => Order(f => f.SyncRuleName, StringComparer.OrdinalIgnoreCase),
+            _ => Order(f => f.ConnectedSystemName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return sorted.ToWindow(request);
+    }
+
+    /// <summary>
+    /// Invalidates the loaded set after one of the page's own filters has changed, and sends the grid back to the
+    /// top to re-count and re-window it: the old total and scroll position describe a match set that is gone.
+    /// </summary>
+    private async Task ApplyFilterChangeAsync()
+    {
+        _flowsMatchCurrentQuery = false;
+
+        if (_grid == null)
+            return;
+
+        await _grid.ResetScrollAsync();
+        await _grid.RefreshAsync(invalidateTotals: true);
+    }
+
+    /// <summary>
+    /// Whether any of the page's own filters is narrowing the list, so the empty state can tell "nothing matches
+    /// what you chose" apart from "there are no data flows at all".
+    /// </summary>
+    private bool AnyFilterIsActive =>
+        _direction.HasValue || _connectedSystemId.HasValue || _metaverseObjectTypeId.HasValue ||
+        _metaverseAttributeId.HasValue || _multipleContributorsOnly;
 
     /// <summary>
     /// Whether the Priority column applies to what is on screen. Priority orders competing contributions into the
@@ -374,42 +433,30 @@
     private async Task OnDirectionChangedAsync(SyncRuleDirection? direction)
     {
         _direction = direction;
-        await LoadAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnConnectedSystemChangedAsync(int? connectedSystemId)
     {
         _connectedSystemId = connectedSystemId;
-        await LoadAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnMetaverseObjectTypeChangedAsync(int? metaverseObjectTypeId)
     {
         _metaverseObjectTypeId = metaverseObjectTypeId;
-        await LoadAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnMetaverseAttributeChangedAsync(int? metaverseAttributeId)
     {
         _metaverseAttributeId = metaverseAttributeId;
-        await LoadAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnMultipleContributorsOnlyChangedAsync(bool multipleContributorsOnly)
     {
         _multipleContributorsOnly = multipleContributorsOnly;
-        await LoadAsync();
-    }
-
-    private async Task OnSearchChangedAsync(string search)
-    {
-        _search = search;
-        await LoadAsync();
-    }
-
-    private async Task OnRowsPerPageChangedAsync(int rowsPerPage)
-    {
-        _rowsPerPage = rowsPerPage;
-        await PreferenceService.SetRowsPerPageAsync(rowsPerPage);
+        await ApplyFilterChangeAsync();
     }
 }
