@@ -563,7 +563,9 @@ public class SqlConnectorSchemaTests
 
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
-        Assert.That(schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "COST_CENTRE_ID").Description, Is.Null,
+        // Every attribute carries its source column type, so the absence of a suggestion is asserted on the
+        // suggestion's own wording rather than on the Description being empty (#1354).
+        Assert.That(schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "COST_CENTRE_ID").Description, Does.Not.Contain("Foreign key"),
             "A foreign key to something JIM does not synchronise is not a Reference an administrator could confirm.");
     }
 
@@ -584,7 +586,8 @@ public class SqlConnectorSchemaTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(department.Type, Is.EqualTo(AttributeDataType.Reference));
-            Assert.That(department.Description, Is.Null, "There is nothing left to suggest once the administrator has configured it.");
+            Assert.That(department.Description, Does.Not.Contain("Foreign key"), "There is nothing left to suggest once the administrator has configured it.");
+            Assert.That(department.Description, Does.Contain("Source column type: int"), "The source column type is stated regardless, so the administrator can see what the attribute was built from.");
         }
     }
 
@@ -630,6 +633,28 @@ public class SqlConnectorSchemaTests
 
         Assert.That(AttributeType(schema.ObjectTypes.Single(), "IS_ACTIVE"), Is.EqualTo(AttributeDataType.Number),
             "Reinterpreting a number as a flag is never inferred, only opted into. Without the opt-in it stays numeric, and one digit with no scale is a whole number (#1354).");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_EveryColumn_StatesItsSourceTypeInTheDescriptionAsync()
+    {
+        // The inferred type is only arguable if the administrator can see what it was inferred from,
+        // which matters most on Oracle where the declaration is the whole signal (#1354).
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("FTE", "NUMBER", Precision: 9, Scale: 4));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
+        var objectType = schema.ObjectTypes.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectType.Attributes.Single(a => a.Name == "EMPLOYEE_ID").Description, Is.EqualTo("Source column type: NUMBER(10)."),
+                "A zero scale is left off, because NUMBER(10) is how the column is written.");
+            Assert.That(objectType.Attributes.Single(a => a.Name == "FTE").Description, Is.EqualTo("Source column type: NUMBER(9,4)."),
+                "A scale that carries meaning is stated, because it is what makes the column fractional.");
+        }
     }
 
     [Test]

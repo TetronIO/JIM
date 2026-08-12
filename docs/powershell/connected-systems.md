@@ -655,7 +655,7 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected 
 
 ## Set-JIMConnectedSystemAttribute
 
-Updates the selection and external ID configuration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
+Updates the selection, external ID configuration and data type of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
 ### Syntax
 
@@ -663,7 +663,7 @@ Updates the selection and external ID configuration of attributes on a Connected
 # Single (default)
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
     -AttributeId <int> [-Selected <bool>] [-IsExternalId <bool>]
-    [-IsSecondaryExternalId <bool>] [-PassThru]
+    [-IsSecondaryExternalId <bool>] [-Type <string>] [-PassThru]
 
 # Bulk
 Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
@@ -680,8 +680,11 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId <int> -ObjectTypeId <int>
 | `Selected` | `bool` | No (Single) | | Whether this attribute is selected for synchronisation |
 | `IsExternalId` | `bool` | No (Single) | | Whether this attribute is the primary external identifier |
 | `IsSecondaryExternalId` | `bool` | No (Single) | | Whether this attribute is a secondary external identifier |
-| `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, and/or `isSecondaryExternalId`. |
+| `Type` | `string` | No (Single) | | Overrides the data type schema discovery inferred. One of `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary`. `Integer` is the friendly name for the Number type. |
+| `AttributeUpdates` | `hashtable` | Yes (Bulk) | | Hashtable of updates. Keys are attribute IDs; values are hashtables with `selected`, `isExternalId`, and/or `isSecondaryExternalId`. A data type cannot be set in bulk. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated attribute(s) |
+
+`-Type` is accepted only where the Connector's schema cannot state a type definitively, which today means the JIM File Connector and the JIM SQL Connector. It is refused once the attribute is referenced by a Synchronisation Rule or holds values. See [Attribute data types](../configuration/connected-systems.md#attribute-data-types) for when an override is needed and why.
 
 ### Output
 
@@ -695,6 +698,12 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeI
 
 ```powershell title="Mark an attribute as the primary external ID"
 Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 10 -IsExternalId $true
+```
+
+```powershell title="Correct the data type of an Oracle NUMBER column"
+# Oracle has one numeric type, so a NUMBER(10) employee identifier is read as a Decimal by default.
+# Recording it as a whole number lets it flow into the built-in Employee Number Metaverse Attribute.
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeId 5 -Type Integer
 ```
 
 ```powershell title="Bulk-update multiple attributes"
