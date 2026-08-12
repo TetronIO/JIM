@@ -416,8 +416,18 @@ function Add-Scenario16MetaverseAttribute {
     return $attribute
 }
 
-$mvFteAttribute       = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE"       -Type Decimal
-$mvHeadcountAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount" -Type LongNumber
+# Oracle has no distinct integer widths: every whole-number column is a NUMBER, which the Connector maps
+# to Decimal, so one column is LongNumber on SQL Server and Decimal on Oracle. A Metaverse Attribute
+# carries a single type and the mapping validator refuses a mismatch, so a whole-number attribute cannot
+# be shared between the two providers; each gets its own, typed to what that provider's schema discovery
+# actually yields. FTE is decimal(9,4) on SQL Server and NUMBER(9,4) on Oracle, both of which map to
+# Decimal, so it stays shared.
+$anchorNumberType = if ($Provider -eq "Oracle") { 'Decimal' } else { 'Integer'    }
+$bigNumberType    = if ($Provider -eq "Oracle") { 'Decimal' } else { 'LongNumber' }
+
+$mvFteAttribute        = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE" -Type Decimal
+$mvHeadcountAttribute  = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount ($($config.DisplayName))"   -Type $bigNumberType
+$mvEmployeeIdAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Employee Id ($($config.DisplayName))" -Type $anchorNumberType
 
 $mvAttributes = @(Get-JIMMetaverseAttribute)
 
@@ -479,13 +489,13 @@ $importRule = New-JIMSyncRule `
 $importMappings = @(
     @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Employee ID'         }
     @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Account Name'        }
-    @{ Cs = 'EMPLOYEE_ID';         Mv = 'Employee Number'     }
+    @{ Cs = 'EMPLOYEE_ID';         Mv = $mvEmployeeIdAttribute.name }
     @{ Cs = 'FIRST_NAME';          Mv = 'First Name'          }
     @{ Cs = 'LAST_NAME';           Mv = 'Last Name'           }
     @{ Cs = 'EMAIL';               Mv = 'Email'               }
     @{ Cs = 'DEPARTMENT';          Mv = 'Department'          }
     @{ Cs = 'IS_ACTIVE';           Mv = 'Account Enabled'     }
-    @{ Cs = 'HEADCOUNT';           Mv = 'SQL Matrix Headcount'}
+    @{ Cs = 'HEADCOUNT';           Mv = $mvHeadcountAttribute.name  }
     @{ Cs = 'FTE';                 Mv = 'SQL Matrix FTE'      }
     # Zoneless: the Database Time Zone decides the instant. This is the DateTimeNonUtc row's subject.
     @{ Cs = 'START_DATE';          Mv = 'Employee Start Date' }
@@ -504,10 +514,15 @@ if ($Provider -eq "Oracle") {
     $importMappings += @{ Cs = 'HIRED_AT_LOCAL'; Mv = 'Account Expires' }
 }
 
+# -ErrorAction Stop is explicit rather than inherited: a mapping that fails to create leaves the rule
+# short an Attribute Flow while the line below still reports the full count, so every matrix row after
+# it would assert against a configuration nobody had described. That is exactly how two type mismatches
+# on the Oracle leg went unnoticed from #1312 until now.
 foreach ($mapping in $importMappings) {
     New-JIMSyncRuleMapping -SyncRuleId $importRule.id `
         -TargetMetaverseAttributeId (Get-MvAttributeId -Name $mapping.Mv) `
-        -SourceConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'Person' -AttributeName $mapping.Cs) | Out-Null
+        -SourceConnectedSystemAttributeId (Get-CsAttributeId -ObjectTypeName 'Person' -AttributeName $mapping.Cs) `
+        -ErrorAction Stop | Out-Null
 }
 Write-Host "  OK Inbound rule created with $($importMappings.Count) Attribute Flow(s)" -ForegroundColor Green
 
@@ -677,8 +692,11 @@ return @{
         ZonelessDate    = 'Employee Start Date'
         OffsetDate      = 'Employee End Date'
         LocalZoneDate   = 'Account Expires'
-        Decimal         = $mvFteAttribute.name
-        LongNumber      = $mvHeadcountAttribute.name
+        # Named for their column rather than their type: the whole-number ones are LongNumber on
+        # SQL Server and Decimal on Oracle, so a type-shaped key would be wrong on one provider.
+        Fte             = $mvFteAttribute.name
+        Headcount       = $mvHeadcountAttribute.name
+        EmployeeId      = $mvEmployeeIdAttribute.name
         MultiValued     = 'Other Telephones'
     }
 }
