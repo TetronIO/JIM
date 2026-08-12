@@ -14,7 +14,6 @@
 @implements IDisposable
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
 @inject IUiNotificationService UiNotifications
 @inject IActivityEtaTracker EtaTracker
 
@@ -467,7 +466,7 @@
         <ConfigurationChangePreviewPanel ActivityId="@_activity.Id" Title="Preview results" ShowProgress="false" Class="mt-6" />
     }
 
-    @if (ShowsExecutionItems && _initialisationComplete && _preferencesLoaded)
+    @if (ShowsExecutionItems && _initialisationComplete)
     {
         @if (_activityRunProfileExecutionStats != null)
         {
@@ -764,214 +763,263 @@
             </MudStack>
         }
 
-        <MudTable @ref="_table"
-                  T="ActivityRunProfileExecutionItemHeader"
-                  ServerData="ServerReload"
-                  RowsPerPage="@_rowsPerPage"
-                  RowsPerPageChanged="OnRowsPerPageChanged"
-                  Hover="true"
-                  Dense="@_dense"
-                  Breakpoint="Breakpoint.Sm"
-                  Class="mt-3 mb-5"
-                  Outlined="true"
-                  Elevation="0"
-                  Loading="@_loading"
-                  LoadingProgressColor="Color.Primary">
-            <ToolBarContent>
-                <TableDensityToggle @bind-Dense="_dense" />
-                <MudSpacer />
-                <SearchField ValueChanged="@(s => OnSearch(s))"
-                             Placeholder="Search name or external ID"
-                             Class="mt-0"
-                             Style="min-width: 300px;" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh Style="width: 1px;"></MudTh>
-                <MudTh>
-                    <MudTableSortLabel SortLabel="externalid" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">External Id</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-                <MudTh>
-                    <MudTableSortLabel SortLabel="displayname" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-                <MudTh>
-                    <MudTableSortLabel SortLabel="objecttype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">External Object Type</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-                <MudTh>
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Outcomes</MudText>
-                </MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>
-                    <MudButton Variant="Variant.Outlined"
-                               Size="Size.Small"
-                               Color="Color.Primary"
-                               Href="@($"/activity/item/{context.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
-                </MudTd>
-                <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
-                <MudTd DataLabel="Display Name">
-                    @if (!string.IsNullOrEmpty(context.DisplayName))
-                    {
-                        @context.DisplayName
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-                <MudTd DataLabel="External Object Type">
-                    @if (!string.IsNullOrEmpty(context.ConnectedSystemObjectType))
-                    {
-                        <MudChip T="string" Text="@context.ConnectedSystemObjectType" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.ConnectedSystemObjectType)" />
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-                <MudTd DataLabel="Outcomes">
-                    @{
-                        var outcomes = Helpers.ParseOutcomeSummary(context.OutcomeSummary);
-                    }
-                    @if (outcomes.Count > 0)
-                    {
-                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                            @foreach (var (outcomeType, count) in outcomes)
-                            {
-                                <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Text"
-                                             Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
-                                             Class="jim-stat-chip">
-                                        @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
+        @* The infinite-scroll machinery (URL state, scroll restore, window loading, the search box and the
+           toolbar count) lives in the shared grid; this page supplies the columns, the window loader, the chip
+           filters above and the empty states. Its URL parameters carry the rpei- prefix so the two grids on
+           this page can share the address bar without colliding. *@
+        <VirtualisedDataGrid @ref="_executionItemsGrid" T="ActivityRunProfileExecutionItemHeader"
+                             ContainerId="activity-execution-items"
+                             UrlParameterPrefix="rpei-"
+                             StateKey="@Id.ToString()"
+                             DefaultSortBy="@DefaultExecutionItemSort"
+                             LoadWindow="LoadExecutionItemWindowAsync"
+                             SingularName="Run Profile Execution Item"
+                             PluralName="Run Profile Execution Items"
+                             SearchPlaceholder="Search name or external ID">
+            <Columns>
+                <TemplateColumn T="ActivityRunProfileExecutionItemHeader" Sortable="false">
+                    <HeaderTemplate></HeaderTemplate>
+                    <CellTemplate>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   Href="@($"/activity/item/{context.Item.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ActivityRunProfileExecutionItemHeader" Title="External Id" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="External Id" Name="externalid" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <span class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.Item.ExternalIdValue) ? context.Item.ExternalIdValue : "-")</span>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ActivityRunProfileExecutionItemHeader" Title="Display Name" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Display Name" Name="displayname" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.DisplayName))
+                        {
+                            @context.Item.DisplayName
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ActivityRunProfileExecutionItemHeader" Title="External Object Type" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="External Object Type" Name="objecttype" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.ConnectedSystemObjectType))
+                        {
+                            <MudChip T="string" Text="@context.Item.ConnectedSystemObjectType" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.ConnectedSystemObjectType)" />
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ActivityRunProfileExecutionItemHeader" Title="Outcomes" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Outcomes</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @{
+                            var outcomes = Helpers.ParseOutcomeSummary(context.Item.OutcomeSummary);
+                            var itemErrorType = context.Item.ErrorType;
+                            var hasError = itemErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet;
+                        }
+                        @if (outcomes.Count > 0)
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                @foreach (var (outcomeType, count) in outcomes)
+                                {
+                                    <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Variant="Variant.Text"
+                                                 Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
+                                                 Class="jim-stat-chip">
+                                            @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (hasError)
+                                {
+                                    var errorType = itemErrorType!.Value;
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
+                                        @errorType.ToString().SplitOnCapitalLetters()
                                     </MudChip>
-                                </MudTooltip>
-                            }
-                            @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-                            {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                                    @context.ErrorType.Value.ToString().SplitOnCapitalLetters()
-                                </MudChip>
-                            }
-                        </MudStack>
-                    }
-                    else if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-                    {
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
-                            @context.ErrorType.Value.ToString().SplitOnCapitalLetters()
-                        </MudChip>
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                @if (string.IsNullOrWhiteSpace(_searchString))
+                                }
+                            </MudStack>
+                        }
+                        else if (hasError)
+                        {
+                            var errorType = itemErrorType!.Value;
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="jim-stat-chip">
+                                @errorType.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @* An empty table means one of three different things, and the message says which: a search that
+                   matched nothing, chip filters nothing satisfies, or an Activity that recorded no items at all.
+                   The first two carry their own way out. *@
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
-                    <MudText>There are no sync results to show.</MudText>
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Run Profile Execution Items match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else if (HasActiveExecutionItemFilters)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                                     PrimaryText="No Run Profile Execution Items match the current filters"
+                                     SecondaryText="Adjust or clear the filters above to see more items."
+                                     ActionText="Clear Filters"
+                                     OnAction="ClearExecutionItemFiltersAsync" />
                 }
                 else
                 {
-                    <MudText>No sync results found matching "@_searchString".</MudText>
+                    <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                     PrimaryText="This Activity recorded no Run Profile Execution Items"
+                                     SecondaryText="Items appear here for every object the run added, updated, joined, projected, exported or failed on." />
                 }
-            </NoRecordsContent>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
+            </EmptyContent>
+        </VirtualisedDataGrid>
     }
 
-    @if (_childActivityCount > 0 && _preferencesLoaded)
+    @if (_childActivityCount > 0)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Child Activities</MudText>
-        <MudTable @ref="_childActivitiesTable"
-                  T="Activity"
-                  ServerData="ChildActivitiesServerReload"
-                  RowsPerPage="@_rowsPerPage"
-                  RowsPerPageChanged="OnRowsPerPageChanged"
-                  Hover="true"
-                  Dense="@_dense"
-                  Class="mt-3"
-                  Outlined="true"
-                  Elevation="0"
-                  Loading="@_childActivitiesLoading"
-                  LoadingProgressColor="Color.Primary">
-            <ToolBarContent>
-                <TableDensityToggle @bind-Dense="_dense" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh></MudTh>
-                <MudTh>Type</MudTh>
-                <MudTh>Target</MudTh>
-                <MudTh>Message</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Started</MudTh>
-                <MudTh>Duration</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>
-                    <MudButton Variant="Variant.Outlined"
-                               Size="Size.Small"
-                               Color="Color.Primary"
-                               Href="@($"/activity/{context.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
-                </MudTd>
-                <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
-                <MudTd DataLabel="Target">
-                    @if (!string.IsNullOrEmpty(context.TargetContext) && !string.IsNullOrEmpty(context.TargetName))
-                    {
-                        <span><strong>@context.TargetContext</strong> → @context.TargetName</span>
-                    }
-                    else if (!string.IsNullOrEmpty(context.TargetContext))
-                    {
-                        <span><strong>@context.TargetContext</strong></span>
-                    }
-                    else if (!string.IsNullOrEmpty(context.TargetName))
-                    {
-                        <span>@context.TargetName</span>
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-                <MudTd DataLabel="Message">
-                    @if (!string.IsNullOrEmpty(context.Message))
-                    {
-                        <span>@context.Message</span>
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)" Class="ml-0">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
-                </MudTd>
-                <MudTd DataLabel="Started">
-                    @if (context.Executed != default)
-                    {
-                        <span title="@context.Executed.ToLocalTime().ToFriendlyDate()">@context.Executed.ToLocalTime().ToRelativeTime()</span>
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-                <MudTd DataLabel="Duration">@(context.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText>No child activities found.</MudText>
-            </NoRecordsContent>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
+        @* The second grid on this page, so its URL parameters carry their own ca- prefix. Child Activities are
+           read oldest first and the range read offers no sort of its own, so no column claims a sort key. *@
+        <VirtualisedDataGrid @ref="_childActivitiesGrid" T="Activity"
+                             ContainerId="activity-child-activities"
+                             UrlParameterPrefix="ca-"
+                             StateKey="@Id.ToString()"
+                             DefaultSortBy="@ChildActivitySort"
+                             LoadWindow="LoadChildActivityWindowAsync"
+                             SingularName="Child Activity"
+                             PluralName="Child Activities"
+                             SearchPlaceholder="Search target, message or status">
+            <Columns>
+                <TemplateColumn T="Activity" Sortable="false">
+                    <HeaderTemplate></HeaderTemplate>
+                    <CellTemplate>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   Href="@($"/activity/{context.Item.Id}{(_fromOperations ? "?from=operations" : "")}")">View</MudButton>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="Activity" Title="Type" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Type</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.TargetType.ToString().SplitOnCapitalLetters()
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="Activity" Title="Target" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Target</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.TargetContext) && !string.IsNullOrEmpty(context.Item.TargetName))
+                        {
+                            <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetName</span>
+                        }
+                        else if (!string.IsNullOrEmpty(context.Item.TargetContext))
+                        {
+                            <span><strong>@context.Item.TargetContext</strong></span>
+                        }
+                        else if (!string.IsNullOrEmpty(context.Item.TargetName))
+                        {
+                            <span>@context.Item.TargetName</span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="Activity" Title="Message" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Message</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.Message))
+                        {
+                            <span>@context.Item.Message</span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="Activity" Title="Status" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Status</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)" Class="ml-0">@context.Item.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="Activity" Title="Started" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Started</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.Executed != default)
+                        {
+                            var executedLocal = context.Item.Executed.ToLocalTime();
+                            <span title="@executedLocal.ToFriendlyDate()">@executedLocal.ToRelativeTime()</span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="Activity" Title="Duration" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Duration</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @(context.Item.ExecutionTime?.ToAbbreviatedString() ?? "-")
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Child Activities match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.AccountTree"
+                                     PrimaryText="This Activity has no Child Activities"
+                                     SecondaryText="Child Activities appear here when an operation spawns work of its own." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
     }
 }
 
@@ -983,7 +1031,7 @@
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private Guid _loadedId;
-    private MudTable<ActivityRunProfileExecutionItemHeader>? _table;
+    private VirtualisedDataGrid<ActivityRunProfileExecutionItemHeader>? _executionItemsGrid;
     private Activity? _activity;
 
     /// <summary>
@@ -993,9 +1041,8 @@
     private Activity? _parentActivity;
     private ConfigurationChangeDetail? _configChangeDetail;
     private bool _isAdministrator;
-    private MudTable<Activity>? _childActivitiesTable;
+    private VirtualisedDataGrid<Activity>? _childActivitiesGrid;
     private int _childActivityCount;
-    private bool _childActivitiesLoading;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
@@ -1021,17 +1068,32 @@
     private double? StepProgressFraction => _activity is { Status: ActivityStatus.InProgress, ObjectsToProcess: > 0 }
         ? Math.Clamp((double)_activity.ObjectsProcessed / _activity.ObjectsToProcess, 0d, 1d)
         : null;
-    private string _searchString = "";
-    private bool _loading;
-    private int _rowsPerPage = 10;
     private CancellationTokenSource? _pollCts;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private ActivityEtaEstimate _etaEstimate;
     private DateTime _lastRefreshUtc = DateTime.MinValue;
-    private bool _preferencesLoaded;
     private bool _initialisationComplete;
-    private bool _dense;
     private readonly TypeChipColorAssigner _typeChipColors = new();
+
+    /// <summary>
+    /// The sort key standing for the order the data layer returns Run Profile Execution Items in when no column
+    /// has been clicked (their own id, which is insertion order). No header claims it, so the grid shows no sort
+    /// arrow over an order the reader did not choose.
+    /// </summary>
+    private const string DefaultExecutionItemSort = "id";
+
+    /// <summary>
+    /// The sort key for the Child Activities grid. The range read that backs it returns children oldest first and
+    /// takes no sort parameter, so this names that order rather than offering a choice; no column claims it.
+    /// </summary>
+    private const string ChildActivitySort = "created";
+
+    /// <summary>
+    /// How many Child Activities a search scan reads per round trip. It matches the largest window the data layer
+    /// will serve (larger requests are clamped there), so a short chunk reliably means the end of the children
+    /// rather than a silently truncated request.
+    /// </summary>
+    private const int ChildActivityScanChunkSize = 500;
 
     // Object type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<string> _selectedObjectTypes = new List<string>();
@@ -1114,7 +1176,6 @@
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
         _childActivityCount = 0;
-        _searchString = "";
         _selectedObjectTypes = new List<string>();
         _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
         _selectedOutcomeTypes = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
@@ -1257,124 +1318,131 @@
             or ActivityTargetOperationType.Delete
         && _activity.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    /// <summary>
+    /// Loads one window of this Activity's Run Profile Execution Items, honouring the request's skip-the-count
+    /// contract. An Activity can hold millions of items, so the window is read at an absolute offset from the
+    /// data layer rather than sliced out of anything held here.
+    /// </summary>
+    private async Task<VirtualisedWindow<ActivityRunProfileExecutionItemHeader>> LoadExecutionItemWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
     {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _dense = await PreferenceService.GetTableDenseAsync() == true;
-                _preferencesLoaded = true;
-                StateHasChanged(); // Re-render to show the table now that preference is loaded
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
+        // Each chip filter is null when nothing is selected, which the data layer reads as "show all".
+        IEnumerable<string>? objectTypeFilter = _selectedObjectTypes.Count > 0 ? _selectedObjectTypes : null;
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = _selectedErrorTypes.Count > 0 ? _selectedErrorTypes : null;
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = _selectedOutcomeTypes.Count > 0 ? _selectedOutcomeTypes : null;
+
+        using var jim = JimFactory.Create();
+        var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersRangeAsync(
+            Id,
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            objectTypeFilter,
+            errorTypeFilter,
+            outcomeTypeFilter,
+            includeTotalCount: request.IncludeTotalCount);
+
+        // A null total means the count was not asked for, never that nothing matched; it is passed through as
+        // null so the grid keeps the total it already holds.
+        return new VirtualisedWindow<ActivityRunProfileExecutionItemHeader>(result.Results, result.TotalResults);
     }
 
-    private async Task OnRowsPerPageChanged(int newSize)
+    /// <summary>
+    /// Loads one window of this Activity's direct Child Activities. The range read offers no sort and no search
+    /// of its own, so the grid's search term is applied here over the children as they stream in; the scan is
+    /// only paid while a search is active, and the set is one Activity's direct children.
+    /// </summary>
+    private async Task<VirtualisedWindow<Activity>> LoadChildActivityWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
     {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
+        using var jim = JimFactory.Create();
+
+        if (string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var result = await jim.Activities.GetChildActivitiesRangeAsync(
+                Id, request.StartIndex, request.Count, includeTotalCount: request.IncludeTotalCount);
+            return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
+        }
+
+        var matches = new List<Activity>();
+        for (var offset = 0; ; offset += ChildActivityScanChunkSize)
+        {
+            var chunk = await jim.Activities.GetChildActivitiesRangeAsync(
+                Id, offset, ChildActivityScanChunkSize, includeTotalCount: false);
+            matches.AddRange(chunk.Results.Where(child => MatchesChildActivitySearch(child, request.SearchText)));
+
+            // A short chunk is the last one; asking for the next would only cost a round trip to learn that.
+            if (chunk.Results.Count < ChildActivityScanChunkSize)
+                break;
+        }
+
+        return matches.ToWindow(request);
     }
 
-    private async Task<TableData<ActivityRunProfileExecutionItemHeader>> ServerReload(TableState state, CancellationToken token)
-    {
-        _loading = true;
-        StateHasChanged();
+    /// <summary>
+    /// Whether a Child Activity matches the grid's search term, over the fields the grid shows as text.
+    /// </summary>
+    private static bool MatchesChildActivitySearch(Activity activity, string searchText) =>
+        Contains(activity.TargetName, searchText)
+        || Contains(activity.TargetContext, searchText)
+        || Contains(activity.Message, searchText)
+        || Contains(activity.TargetType.ToString().SplitOnCapitalLetters(), searchText)
+        || Contains(activity.Status.ToString().SplitOnCapitalLetters(), searchText);
 
-        try
-        {
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
+    private static bool Contains(string? value, string searchText) =>
+        value != null && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 
-            // Get selected object types for filtering (null means show all)
-            IEnumerable<string>? objectTypeFilter = _selectedObjectTypes.Count > 0 ? _selectedObjectTypes : null;
+    /// <summary>
+    /// Whether any Run Profile Execution Item chip filter has been narrowed from its default, so the empty state
+    /// can offer clearing them. The grid's search box is judged separately, because a search that matched nothing
+    /// has a more specific way out.
+    /// </summary>
+    private bool HasActiveExecutionItemFilters =>
+        _selectedObjectTypes.Count > 0 || _selectedErrorTypes.Count > 0 || _selectedOutcomeTypes.Count > 0;
 
-            // Get selected error types for filtering (null means show all)
-            IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = _selectedErrorTypes.Count > 0 ? _selectedErrorTypes : null;
-
-            // Get selected outcome types for filtering (null means show all)
-            IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = _selectedOutcomeTypes.Count > 0 ? _selectedOutcomeTypes : null;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(
-                Id,
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending,
-                objectTypeFilter,
-                errorTypeFilter,
-                outcomeTypeFilter);
-
-            return new TableData<ActivityRunProfileExecutionItemHeader>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task<TableData<Activity>> ChildActivitiesServerReload(TableState state, CancellationToken token)
-    {
-        _childActivitiesLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            // Convert MudBlazor's 0-indexed page to our 1-indexed page
-            var page = state.Page + 1;
-
-            using var jim = JimFactory.Create();
-            var result = await jim.Activities.GetChildActivitiesAsync(Id, page, state.PageSize);
-
-            return new TableData<Activity>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _childActivitiesLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private void OnSearch(string text)
-    {
-        _searchString = text;
-        _table?.ReloadServerData();
-    }
-
-    private void OnObjectTypeFilterChanged(IReadOnlyCollection<string> selectedTypes)
+    private async Task OnObjectTypeFilterChanged(IReadOnlyCollection<string> selectedTypes)
     {
         _selectedObjectTypes = selectedTypes;
-        _table?.ReloadServerData();
+        await ApplyExecutionItemFilterChangeAsync();
     }
 
-    private void OnErrorTypeFilterChanged(IReadOnlyCollection<ActivityRunProfileExecutionItemErrorType> selectedTypes)
+    private async Task OnErrorTypeFilterChanged(IReadOnlyCollection<ActivityRunProfileExecutionItemErrorType> selectedTypes)
     {
         _selectedErrorTypes = selectedTypes;
-        _table?.ReloadServerData();
+        await ApplyExecutionItemFilterChangeAsync();
     }
 
-    private void OnOutcomeTypeFilterChanged(IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> selectedTypes)
+    private async Task OnOutcomeTypeFilterChanged(IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> selectedTypes)
     {
         _selectedOutcomeTypes = selectedTypes;
-        _table?.ReloadServerData();
+        await ApplyExecutionItemFilterChangeAsync();
+    }
+
+    /// <summary>
+    /// Clears every chip filter, offered as the way out by the empty state when the current filters matched
+    /// nothing.
+    /// </summary>
+    private async Task ClearExecutionItemFiltersAsync()
+    {
+        _selectedObjectTypes = new List<string>();
+        _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
+        _selectedOutcomeTypes = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
+        await ApplyExecutionItemFilterChangeAsync();
+    }
+
+    /// <summary>
+    /// Applies a chip filter change: the match set is different, so the total the toolbar count and the scroll
+    /// area are sized from must be re-counted, and the reader's position describes a list that no longer exists.
+    /// </summary>
+    private async Task ApplyExecutionItemFilterChangeAsync()
+    {
+        if (_executionItemsGrid == null)
+            return;
+
+        await _executionItemsGrid.ResetScrollAsync();
+        await _executionItemsGrid.RefreshAsync(invalidateTotals: true);
     }
 
     /// <summary>
@@ -1669,9 +1737,10 @@
 
             await InvokeAsync(StateHasChanged);
 
-            // The Child Activities table is server-paged; ask it to re-fetch its current page.
-            if (_childActivitiesTable != null)
-                await InvokeAsync(() => _childActivitiesTable.ReloadServerData());
+            // The Child Activities grid streams its rows from the data layer; ask it to re-fetch the windows in
+            // view, re-counting as it goes because a running Activity can spawn further children.
+            if (_childActivitiesGrid != null)
+                await InvokeAsync(() => _childActivitiesGrid.RefreshAsync(invalidateTotals: true));
         }
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
         {
