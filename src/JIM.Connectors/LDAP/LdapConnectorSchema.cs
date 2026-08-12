@@ -422,6 +422,13 @@ internal class LdapConnectorSchema
                 if (visibility != null)
                     objectType.Tags.Add(visibility);
 
+                // Hand objectClass to JIM. An entry's classes are not a property of the configuration but of the
+                // individual entry, so no Attribute Flow can state them: which auxiliary classes an entry belongs to
+                // follows from which of the merged classes' attributes it actually has values for. JIM computes the
+                // value on export instead, and marks the attribute read-only below so it cannot be flowed.
+                objectType.Tags.Add(new ConnectorSchemaObjectTypeTag(
+                    ObjectTypeTags.Keys.ClassMembershipAttribute, LdapConnectorConstants.ObjectClassAttributeName));
+
                 // Collect attributes by walking the class hierarchy (SUP chain)
                 var allMust = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var allMay = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -474,6 +481,14 @@ internal class LdapConnectorSchema
                         Description = "The full distinguished name (DN) of this entry"
                     });
                 }
+
+                // JIM owns objectClass, so an administrator must not be able to target it with an Attribute Flow.
+                // Read-only is the mechanism that already says so, and it does not stop JIM writing the value it
+                // computes: the ban is on flows, not on export.
+                var objectClassAttribute = objectType.Attributes.FirstOrDefault(a =>
+                    a.Name.Equals(LdapConnectorConstants.ObjectClassAttributeName, StringComparison.OrdinalIgnoreCase));
+                if (objectClassAttribute != null)
+                    objectClassAttribute.Writability = AttributeWritability.ReadOnly;
 
                 objectType.Attributes = objectType.Attributes.OrderBy(a => a.Name).ToList();
 
