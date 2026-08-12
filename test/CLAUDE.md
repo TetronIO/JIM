@@ -257,17 +257,18 @@ These flags are for human developer iteration only. Claude must not use them bec
 
 ### Running the FULL runner in the Claude Code cloud sandbox (when Docker is available)
 
-When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA. Fix (verified 2026-08-02: Scenario 4 and Scenario 8 both green this way):
+When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA.
 
-1. `cp /root/.ccr/ca-bundle.crt .ccr-ca-bundle.crt` (repo root is the build context) and add `.ccr-ca-bundle.crt` to `.git/info/exclude`.
-2. In each of `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, `src/JIM.Scheduler/Dockerfile`, insert immediately after the `FROM ... AS build` line:
-   ```dockerfile
-   COPY .ccr-ca-bundle.crt /ccr-ca-bundle.crt
-   ENV SSL_CERT_FILE=/ccr-ca-bundle.crt
-   ```
-   (The bundle includes the system CAs, so pointing OpenSSL's `SSL_CERT_FILE` at it wholesale is safe. The base-image pulls and apt steps need nothing; only in-build `dotnet restore` fails.)
-3. Run the runner normally (e.g. `./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario4-DeletionRules -DirectoryType OpenLDAP`). OpenLDAP is the sensible directory type here; Samba AD images may not be cached.
-4. **Revert the Dockerfile edits and delete the bundle before committing anything.** They are sandbox-only scaffolding and must never land in a commit (`git checkout -- src/*/Dockerfile && rm .ccr-ca-bundle.crt`).
+**Set one environment variable; do not edit the Dockerfiles.** All three build stages already accept an `EXTRA_CA_CERTS_BASE64` build argument for exactly this case (corporate TLS inspection), and `docker-compose.yml` wires it to `JIM_BUILD_EXTRA_CA_BASE64` for `jim.web`, `jim.worker` and `jim.scheduler`:
+
+```bash
+export JIM_BUILD_EXTRA_CA_BASE64=$(base64 -w0 /root/.ccr/ca-bundle.crt)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario14-AttributePriority -DirectoryType OpenLDAP
+```
+
+OpenLDAP is the sensible directory type here; Samba AD images may not be cached. Because the bridge is an environment variable, there is nothing in the working tree to revert and nothing that can leak into a commit.
+
+(This section previously prescribed copying the CA bundle into the repo root and hand-editing a `COPY`/`ENV SSL_CERT_FILE` pair into each Dockerfile, with a warning to revert it all before committing. That predates the `EXTRA_CA_CERTS_BASE64` argument and is no longer necessary; the build arg installs the CA properly via `update-ca-certificates` instead of overriding `SSL_CERT_FILE` wholesale.)
 
 Mind host resources: a Small-template Scenario 8 run fits in a 15 GB sandbox; the Scale templates do not.
 
