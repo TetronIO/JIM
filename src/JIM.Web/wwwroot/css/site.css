@@ -3595,8 +3595,11 @@ html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell
    written as an inline style, which wins over this rule. It is a maximum, not a height: a short list
    collapses to its content like an ordinary table. The fallback exists so the virtualiser never sees an
    unconstrained container while that first measurement is in flight. */
+/* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is
+   not the page (a dialog, a cell) states its own ceiling instead, as the custom property, and skips the
+   measurement; the property's fallback is what every ordinary list uses. */
 .jim-virtualised-list .mud-table-container {
-    max-height: calc(100vh - 320px);
+    max-height: var(--jim-virtualised-list-max-height, calc(100vh - 320px));
     overflow-y: auto;
 }
 

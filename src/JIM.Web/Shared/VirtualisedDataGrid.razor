@@ -27,7 +27,7 @@
     @* The id anchors the scroll-position interop: the virtualiser's scroll container is MudBlazor's own element
        inside the grid, so it is reached as a descendant of something this component names rather than by a global
        selector that another table on the page could match. *@
-    <div id="@ContainerId" class="jim-virtualised-list">
+    <div id="@ContainerId" class="jim-virtualised-list" style="@ContainerStyle">
     @* OverscanCount is well above MudBlazor's default of 3 because every window costs a database read and a
        SignalR round trip, and the virtualiser renders empty space for rows it has asked for but not yet received.
        Fetching a screen's worth beyond the viewport means an ordinary scroll consumes rows that already arrived,
@@ -42,10 +42,20 @@
                then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
                the left slot pushed the primary action into the middle, where the loudest thing on the page was
                also the only one floating in open space. *@
-            <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
+            @* An embedded grid is one of many on its page, so it carries neither control: a density toggle and a
+               search box repeated once per attribute (or once per event in a timeline) is more chrome than the
+               three rows underneath it, and the host page owns both for all of them. The count stays, because
+               how many values there are is the one thing each embedded table has to say for itself. *@
+            @if (!Embedded)
+            {
+                <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
+            }
             @if (ToolBarExtras != null)
             {
-                <MudText Class="mx-2 mud-text-disabled">|</MudText>
+                @if (!Embedded)
+                {
+                    <MudText Class="mx-2 mud-text-disabled">|</MudText>
+                }
                 @ToolBarExtras
             }
             <MudSpacer />
@@ -54,10 +64,13 @@
                search box because that is the control the reader just changed it with. *@
             <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
                               SingularName="@SingularName" PluralName="@PluralName"
-                              Class="mr-3" />
-            @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
-               filtered by a term the reader cannot see. *@
-            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+                              Class="@(Embedded ? null : "mr-3")" />
+            @if (!Embedded)
+            {
+                @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
+                   filtered by a term the reader cannot see. *@
+                <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
+            }
         </ToolBarContent>
         <Columns>
             @Columns
@@ -149,6 +162,24 @@
     [Parameter]
     public Func<T, int, string?>? RowClassFunc { get; set; }
 
+    /// <summary>
+    /// Marks a grid that is one of many on its page: a value table per multi-valued attribute, a table per event
+    /// in a timeline. Such a grid drops the density toggle and the search box (repeated chrome the host page owns
+    /// once), and keeps its search, sort and scroll position to itself instead of writing them to an address bar
+    /// every sibling shares, where which instance a parameter belongs to is a rendering accident.
+    /// </summary>
+    [Parameter]
+    public bool Embedded { get; set; }
+
+    /// <summary>
+    /// An explicit height ceiling (any CSS length, e.g. "400px"), for a grid whose container is not the page: a
+    /// dialog, a cell, an expansion panel. The default ceiling is measured from where the page footer lands, which
+    /// for those grids describes the page behind them rather than the box they are in. Supplying this skips the
+    /// measurement entirely.
+    /// </summary>
+    [Parameter]
+    public string? MaxHeight { get; set; }
+
     // ─── State the page and empty-state fragment may read ───
 
     /// <summary>The free-text search currently narrowing the list; empty when the reader has not searched.</summary>
@@ -178,6 +209,10 @@
     private string? _appliedStateKey;
 
     private string ScrollContainerSelector => $"#{ContainerId} .mud-table-container";
+
+    // A stated ceiling is applied as a plain style on the container, so it holds from the first paint and needs no
+    // measurement; the CSS fallback ceiling is scoped to the same element, so this overrides it.
+    private string? ContainerStyle => string.IsNullOrWhiteSpace(MaxHeight) ? null : $"--jim-virtualised-list-max-height: {MaxHeight};";
 
     // The row height the grid is laid out at, and the divisor that turns a scroll offset into a row index. The two
     // must agree, so both read this rather than repeating the numbers.
@@ -213,8 +248,12 @@
         var isReusedInstance = _appliedStateKey != null;
         _appliedStateKey = StateKey;
 
-        var urlState = VirtualisedListUrlState.Read(
-            NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
+        // An embedded grid writes no URL state, so there is none of its own to read back; reading anyway would
+        // adopt whatever the page's own list happens to have put there.
+        var urlState = Embedded
+            ? new VirtualisedListUrlState { SortBy = DefaultSortBy, SortDescending = DefaultSortDescending }
+            : VirtualisedListUrlState.Read(
+                NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
         SearchText = urlState.SearchText ?? string.Empty;
         SortBy = urlState.SortBy ?? DefaultSortBy;
         SortDescending = urlState.SortDescending;
@@ -254,20 +293,32 @@
         // and the ceiling decides how tall that area can get. There is no height to pass because there is no
         // height to know: JavaScript measures where the page footer lands and caps the container so a long list
         // ends at the same place on every page, while a short one collapses to its content, whatever chrome
-        // sits above the grid (a CSS fallback covers the first paint).
-        await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
+        // sits above the grid (a CSS fallback covers the first paint). A caller that stated its own ceiling has
+        // already answered the question, and its container is not the page anyway.
+        if (string.IsNullOrWhiteSpace(MaxHeight))
+            await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
 
-        // Restore first, then watch, so the restore's own scrolling is not reported back as the reader's position.
-        // scrollToRow waits for the row to become reachable rather than needing a retry here; this component does
-        // not re-render when the grid loads its data, so there would be no later pass to retry on.
-        if (!_scrollRestored)
+        if (Embedded)
         {
-            await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
+            // Nothing to restore and nothing to watch for: an embedded grid holds no URL state, and scroll
+            // tracking exists only to keep that state current. Marked observed so this pass runs once.
             _scrollRestored = true;
+            _scrollObserved = true;
         }
+        else
+        {
+            // Restore first, then watch, so the restore's own scrolling is not reported back as the reader's position.
+            // scrollToRow waits for the row to become reachable rather than needing a retry here; this component does
+            // not re-render when the grid loads its data, so there would be no later pass to retry on.
+            if (!_scrollRestored)
+            {
+                await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
+                _scrollRestored = true;
+            }
 
-        _selfReference ??= DotNetObjectReference.Create(this);
-        _scrollObserved = await InvokeInteropAsync<bool>("jimVirtualList.observe", ScrollContainerSelector, _selfReference, RowHeight, ScrollDebounceMilliseconds);
+            _selfReference ??= DotNetObjectReference.Create(this);
+            _scrollObserved = await InvokeInteropAsync<bool>("jimVirtualList.observe", ScrollContainerSelector, _selfReference, RowHeight, ScrollDebounceMilliseconds);
+        }
 
         // A StateKey change on a reused instance: the rows the virtualiser holds belong to the previous view,
         // so fetch the new view's windows (and, with the totals already nulled, its count) underneath the
@@ -354,7 +405,8 @@
     {
         _firstVisibleRow = 0;
         await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, 0, RowHeight, ScrollRestoreTimeoutMilliseconds);
-        await WriteUrlStateAsync();
+        if (!Embedded)
+            await WriteUrlStateAsync();
     }
 
     /// <summary>
