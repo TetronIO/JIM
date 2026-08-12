@@ -4,11 +4,13 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Web
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject ICredentialProtectionService CredentialProtection
 @inject IJSRuntime JSRuntime
+@inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -20,103 +22,105 @@
     Configure service-wide settings. Read-only settings are defined by environment variables and cannot be modified here.
 </MudText>
 
-<MudTable Items="@_filteredSettings" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
-    Filter="new Func<ServiceSetting, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading"
-    GroupBy="@_groupDefinition">
-    <ToolBarContent>
-        <MudText Typo="Typo.h6">Settings</MudText>
-        <MudSpacer />
-        <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show configurable only" Color="Color.Primary" Class="mr-4" />
-        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
-        <SearchField @bind-Value="_searchString" Class="mt-0" />
-    </ToolBarContent>
-    <ColGroup>
-        <col />
-        <col style="width: 300px;" />
-        <col style="width: 150px;" />
-        <col style="width: 120px;" />
-    </ColGroup>
-    <HeaderContent>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<ServiceSetting, object>(x => x.DisplayName)">
-                <MudText Typo="Typo.button">Setting</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudText Typo="Typo.button">Value</MudText>
-        </MudTh>
-        <MudTh>
-            <MudText Typo="Typo.button">Status</MudText>
-        </MudTh>
-        <MudTh Style="text-align: right;">
-            <MudText Typo="Typo.button">Actions</MudText>
-        </MudTh>
-    </HeaderContent>
-    <GroupHeaderTemplate>
-        <MudTh Class="mud-table-cell-custom-group" colspan="4">
-            <MudIconButton Icon="@(IsGroupExpanded(context.Key) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                OnClick="@((e) => ToggleGroupExpanded(context.Key))" Class="ms-n2" />
-            <MudText Typo="Typo.button">@GetCategoryDisplayName(context.Key)</MudText>
-        </MudTh>
-    </GroupHeaderTemplate>
-    <RowTemplate Context="settingContext">
-        @if (IsGroupExpanded(settingContext.Category.ToString()))
-        {
-            <MudTd DataLabel="Setting" Class="@GetRowClass(settingContext)">
-                <MudText Typo="Typo.body1">@settingContext.DisplayName</MudText>
-                @if (!string.IsNullOrEmpty(settingContext.Description))
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+   and the toolbar count) lives in the shared grid. Service Settings are a small configuration list, loaded whole
+   once, so the window is sliced from memory rather than becoming a database range read. The Category that used to
+   be a collapsible group header is now a sortable column: grouping is computed over the rows a grid is holding,
+   and a virtualised grid holds one window, so a group header would describe the window rather than the list. *@
+<VirtualisedDataGrid @ref="_grid" T="ServiceSetting"
+                     ContainerId="service-setting-list"
+                     DefaultSortBy="category"
+                     LoadWindow="LoadSettingWindowAsync"
+                     SingularName="Service Setting"
+                     PluralName="Service Settings"
+                     SearchPlaceholder="Search settings"
+                     RowClassFunc="RowClass">
+    <ToolBarExtras>
+        <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show configurable only" Color="Color.Primary" Class="mr-4" />
+        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show overridden only" Color="Color.Primary" />
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Title="Category" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Category" Name="category" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetCategoryDisplayName(context.Item.Category.ToString())</MudText>
+            </CellTemplate>
+        </TemplateColumn>
+        @* py-3 balances the cell's vertical breathing room against its generous horizontal padding, so the
+           name/description block is not cramped against the row edges. *@
+        <TemplateColumn Title="Setting" Sortable="false" CellClass="py-3">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Setting" Name="setting" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudText Typo="Typo.body1">@context.Item.DisplayName</MudText>
+                @if (!string.IsNullOrEmpty(context.Item.Description))
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@settingContext.Description</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Item.Description</MudText>
                 }
-            </MudTd>
-            <MudTd DataLabel="Value" Class="@($"jim-nowrap {GetRowClass(settingContext)}")">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Value" Sortable="false" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Value</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
                 @* Controls sit to the left of the value so values stay left-aligned regardless of their length. *@
-                @if (settingContext.ValueType == ServiceSettingValueType.StringEncrypted)
+                @if (context.Item.ValueType == ServiceSettingValueType.StringEncrypted)
                 {
-                    @if (_revealedSecrets.Contains(settingContext.Key) && _decryptedCache.TryGetValue(settingContext.Key, out var decrypted))
+                    var encryptedKey = context.Item.Key;
+                    @if (_revealedSecrets.Contains(encryptedKey) && _decryptedCache.TryGetValue(encryptedKey, out var decrypted))
                     {
-                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => HideSecret(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => HideSecret(encryptedKey)" />
                         <span class="jim-text-code">@(decrypted.Value ?? "(not set)")</span>
                     }
                     else
                     {
-                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => RevealSecretAsync(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => RevealSecretAsync(encryptedKey)" />
                         <span class="jim-text-code">********</span>
                     }
                 }
-                else if (settingContext.ValueType == ServiceSettingValueType.Guid)
+                else if (context.Item.ValueType == ServiceSettingValueType.Guid)
                 {
-                    var guidValue = settingContext.GetEffectiveValue();
+                    var guidValue = context.Item.GetEffectiveValue();
                     @if (!string.IsNullOrEmpty(guidValue))
                     {
                         <MudTooltip Text="Copy to clipboard" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small" Class="me-2"
-                                           OnClick="() => CopyToClipboardAsync(guidValue!)" />
+                                           OnClick="() => CopyToClipboardAsync(guidValue)" />
                         </MudTooltip>
                     }
                     <span class="jim-text-code">@(guidValue ?? "(not set)")</span>
                 }
                 else
                 {
-                    <span class="jim-text-code">@(settingContext.GetEffectiveValue() ?? "(not set)")</span>
+                    <span class="jim-text-code">@(context.Item.GetEffectiveValue() ?? "(not set)")</span>
                 }
-            </MudTd>
-            <MudTd DataLabel="Status" Class="@GetRowClass(settingContext)">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
                 @* Each status gets its own colour so the column scans at a glance: grey locked, blue modified, green default. *@
-                @if (settingContext.IsReadOnly)
+                @if (context.Item.IsReadOnly)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
                 }
-                else if (settingContext.IsOverridden)
+                else if (context.Item.IsOverridden)
                 {
                     <MudTooltip Arrow="true" Placement="Placement.Top">
                         <TooltipContent>
-                            @if (settingContext.LastUpdated.HasValue)
+                            @if (context.Item.LastUpdated.HasValue)
                             {
-                                <MudText Typo="Typo.caption">Modified @settingContext.LastUpdated.Value.ToLocalTime().ToFriendlyDate()</MudText>
-                                @if (settingContext.LastUpdatedByName != null)
+                                var lastUpdated = context.Item.LastUpdated.Value.ToLocalTime();
+                                <MudText Typo="Typo.caption">Modified @lastUpdated.ToFriendlyDate()</MudText>
+                                @if (context.Item.LastUpdatedByName != null)
                                 {
-                                    <MudText Typo="Typo.caption">by @settingContext.LastUpdatedByName</MudText>
+                                    <MudText Typo="Typo.caption">by @context.Item.LastUpdatedByName</MudText>
                                 }
                             }
                         </TooltipContent>
@@ -129,43 +133,69 @@
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Default</MudChip>
                 }
-            </MudTd>
-            <MudTd DataLabel="Actions" Class="@GetRowClass(settingContext)">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{
+                    var setting = context.Item;
+                }
                 <div class="d-flex justify-end gap-2">
-                    @if (!settingContext.IsReadOnly)
+                    @if (!setting.IsReadOnly)
                     {
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(setting)" />
                         </MudTooltip>
-                        @if (settingContext.IsOverridden)
+                        @if (setting.IsOverridden)
                         {
                             <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(setting)" />
                             </MudTooltip>
                         }
                     }
                     <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.History" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowHistoryDialogAsync(settingContext)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.History" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowHistoryDialogAsync(setting)" />
                     </MudTooltip>
                 </div>
-            </MudTd>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Service Settings match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
         }
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No settings found.</MudText>
-    </NoRecordsContent>
-</MudTable>
+        else if (_showConfigurableOnly || _showOverriddenOnly)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                             PrimaryText="No Service Settings match the filters"
+                             SecondaryText="Clear the filters above to see every setting, including the read-only ones defined by environment variables."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.DisplaySettings"
+                             PrimaryText="No Service Settings are available"
+                             SecondaryText="Service Settings are seeded when JIM starts; if none are listed, the service has not finished initialising." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     private List<ServiceSetting> _settings = new();
-    private List<ServiceSetting> _filteredSettings = new();
-    private string _searchString = string.Empty;
     private bool _showConfigurableOnly;
     private bool _showOverriddenOnly;
-    private bool _loading = true;
     private HashSet<string> _revealedSecrets = new();
     private Dictionary<string, (string? Value, bool Error)> _decryptedCache = new();
-    private HashSet<object> _expandedGroups = new();
+    private VirtualisedDataGrid<ServiceSetting>? _grid;
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
@@ -182,62 +212,118 @@
         new("Service Settings", href: null, disabled: true)
     ];
 
-    private TableGroupDefinition<ServiceSetting> _groupDefinition = new()
-    {
-        GroupName = "Category",
-        Selector = (e) => e.Category.ToString()
-    };
-
     protected override async Task OnInitializedAsync()
     {
-        _searchString = Search ?? string.Empty;
+        // The ?search= deep link predates the grid, which owns its own search under ?q=. Normalise it onto the
+        // grid's parameter (preserving anything else in the query) so a link from an Activity's Target still
+        // lands on the setting it names, rather than on an unfiltered list.
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            query.Remove("search");
+            query["q"] = Search;
+            NavManager.NavigateTo($"/admin/settings?{query}", replace: true);
+            return;
+        }
+
         await LoadSettingsAsync();
-        InitializeExpandedGroups();
     }
 
     private async Task LoadSettingsAsync()
     {
-        _loading = true;
         using var jim = JimFactory.Create();
         _settings = await jim.ServiceSettings.GetAllSettingsAsync();
         _decryptedCache.Clear();
         _revealedSecrets.Clear();
-        UpdateFilteredSettings();
-        _loading = false;
     }
 
-    private void InitializeExpandedGroups()
+    /// <summary>
+    /// Reloads the settings from the database and refreshes the grid over them, after an edit or a revert. The
+    /// totals are invalidated because a revert can change which settings match the "overridden only" filter.
+    /// </summary>
+    private async Task ReloadListAsync()
     {
-        // Expand all categories by default
-        foreach (var setting in _settings)
-        {
-            _expandedGroups.Add(setting.Category.ToString());
-        }
+        await LoadSettingsAsync();
+        if (_grid != null)
+            await _grid.RefreshAsync(invalidateTotals: true);
     }
 
-    private void UpdateFilteredSettings()
+    /// <summary>
+    /// Slices one window of Service Settings from the in-memory list, applying the page's own two filters, the
+    /// grid's search (display name, description and key; the same fields the old table filtered) and its sort.
+    /// </summary>
+    private Task<VirtualisedWindow<ServiceSetting>> LoadSettingWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        _filteredSettings = _settings
+        var settings = _settings
             .Where(s => !_showConfigurableOnly || !s.IsReadOnly)
-            .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly))
-            .Where(s => FilterFunc(s))
-            .ToList();
+            .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly));
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            settings = settings.Where(s =>
+                s.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                s.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true ||
+                s.Key.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Category leads by default and breaks to the display name within it, so the list reads in the same order
+        // the collapsible category groups used to put it in.
+        var sorted = request.SortBy switch
+        {
+            "setting" => Order(settings, s => s.DisplayName, request.SortDescending),
+            "status" => Order(settings, StatusRank, request.SortDescending).ThenBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase),
+            _ => Order(settings, s => GetCategoryDisplayName(s.Category.ToString()), request.SortDescending)
+                .ThenBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
-    private bool FilterFunc(ServiceSetting setting)
+    private static IOrderedEnumerable<ServiceSetting> Order(IEnumerable<ServiceSetting> source, Func<ServiceSetting, string> key, bool descending) =>
+        descending
+            ? source.OrderByDescending(key, StringComparer.OrdinalIgnoreCase)
+            : source.OrderBy(key, StringComparer.OrdinalIgnoreCase);
+
+    private static IOrderedEnumerable<ServiceSetting> Order(IEnumerable<ServiceSetting> source, Func<ServiceSetting, int> key, bool descending) =>
+        descending ? source.OrderByDescending(key) : source.OrderBy(key);
+
+    /// <summary>
+    /// Orders the Status column by how much a reader cares: what has been changed from its default first, then
+    /// what could be changed, then what is locked by an environment variable. Sorting by the underlying booleans
+    /// would order the column by nothing the reader can see.
+    /// </summary>
+    private static int StatusRank(ServiceSetting setting) => setting.IsReadOnly ? 2 : setting.IsOverridden ? 0 : 1;
+
+    /// <summary>
+    /// Re-runs the window under the page's own filters. The match set is different, so the total (and the
+    /// unfiltered baseline the toolbar count compares against) has to be counted again, and the reader's scroll
+    /// position describes rows that are no longer there.
+    /// </summary>
+    private async Task OnFilterChangedAsync()
     {
-        if (string.IsNullOrWhiteSpace(_searchString))
-            return true;
-        if (setting.DisplayName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (setting.Description?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
-            return true;
-        if (setting.Key.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-        return false;
+        if (_grid == null)
+            return;
+
+        await _grid.ResetScrollAsync();
+        await _grid.RefreshAsync(invalidateTotals: true);
     }
 
-    private string GetCategoryDisplayName(object? categoryValue)
+    private async Task ClearFiltersAsync()
+    {
+        _showConfigurableOnly = false;
+        _showOverriddenOnly = false;
+        await OnFilterChangedAsync();
+    }
+
+    /// <summary>
+    /// Low-lights a setting whose value is fixed by an environment variable, so the rows that cannot be edited
+    /// read as such before the reader reaches the Status column.
+    /// </summary>
+    private static string? RowClass(ServiceSetting setting, int _) => setting.IsReadOnly ? "jim-readonly-row" : null;
+
+    private static string GetCategoryDisplayName(object? categoryValue)
     {
         var categoryString = categoryValue?.ToString();
         return categoryString switch
@@ -250,29 +336,6 @@
             "Instance" => "Instance",
             _ => categoryString ?? "Unknown"
         };
-    }
-
-    private string GetRowClass(ServiceSetting setting)
-    {
-        // py-3 balances the cell's vertical breathing room against its generous horizontal padding, so the
-        // name/description block is not cramped against the row edges.
-        return setting.IsReadOnly ? "jim-readonly-row py-3" : "py-3";
-    }
-
-    private bool IsGroupExpanded(object? groupKey)
-    {
-        return _expandedGroups.Contains(groupKey!);
-    }
-
-    private void ToggleGroupExpanded(object? groupKey)
-    {
-        if (groupKey == null)
-            return;
-
-        if (_expandedGroups.Contains(groupKey))
-            _expandedGroups.Remove(groupKey);
-        else
-            _expandedGroups.Add(groupKey);
     }
 
     private async Task RevealSecretAsync(string key)
@@ -293,12 +356,25 @@
 
         _decryptedCache[key] = result;
         _revealedSecrets.Add(key);
+        await RefreshRowsAsync();
     }
 
-    private void HideSecret(string key)
+    private async Task HideSecret(string key)
     {
         _revealedSecrets.Remove(key);
         _decryptedCache.Remove(key);
+        await RefreshRowsAsync();
+    }
+
+    /// <summary>
+    /// Re-renders the rows the grid is holding, without re-counting. Revealing or hiding a secret changes what one
+    /// cell shows and nothing about which settings match, and the grid caches its rows, so a page re-render alone
+    /// is not enough to repaint them.
+    /// </summary>
+    private async Task RefreshRowsAsync()
+    {
+        if (_grid != null)
+            await _grid.RefreshAsync();
     }
 
     private (string? Value, bool Error) GetDecryptedValue(ServiceSetting setting)
@@ -364,7 +440,7 @@
 
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
-                await LoadSettingsAsync();
+                await ReloadListAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' updated.", Severity.Success);
             }
             catch (Exception ex)
@@ -401,7 +477,7 @@
 
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
-                await LoadSettingsAsync();
+                await ReloadListAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' reverted to default.", Severity.Success);
             }
             catch (Exception ex)

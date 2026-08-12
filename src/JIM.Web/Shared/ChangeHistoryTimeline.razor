@@ -307,9 +307,20 @@ else
                                             </div>
                                         </div>
 
-                                        <!-- Paginated table -->
+                                        @* Not a VirtualisedDataGrid, deliberately, and this is the one table in the
+                                           portal that is not. The grid sizes itself by measuring where the page
+                                           footer lands (jimVirtualList.fit), and inside a dialog that measurement
+                                           describes the page behind the overlay rather than the dialog: the footer
+                                           is somewhere below the fold and the page's own scroll offset is added to
+                                           the container's position, so the computed ceiling goes negative and the
+                                           grid collapses to its 240px floor. The grid would also write its search,
+                                           sort and scroll position into the page's URL, where they would outlive the
+                                           dialog they belong to. So the pager goes (no list in the portal is paged
+                                           any more) and the rows scroll with the dialog body, narrowed by the three
+                                           filters above. Making the fit dialog-aware is what would let this become a
+                                           grid like every other table. *@
                                         <MudTable Items="@GetFilteredModalDisplayChanges()" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
-                                                  Elevation="0" RowsPerPage="10" T="AttributeChangeDisplay">
+                                                  Elevation="0" T="AttributeChangeDisplay">
                                             <HeaderContent>
                                                 <MudTh>
                                                     <MudText Typo="Typo.button">Change</MudText>
@@ -419,9 +430,6 @@ else
                                                             }
                                                         </MudTd>
                                                     </RowTemplate>
-                                                    <PagerContent>
-                                                        <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
-                                                    </PagerContent>
                                                 </MudTable>
                                             }
                                             else if (_selectedChange?.ChangeType == ObjectChangeType.Deleted)
