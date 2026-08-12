@@ -5383,7 +5383,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Gets every attribute data flow, in both directions, for the system-wide Data Flow view (#1199): one flow per
     /// Synchronisation Rule mapping, filtered by the supplied query. Import flows are stamped with how many
-    /// contributors their target Metaverse Attribute has, so the caller can tell a contested attribute from a
+    /// contributors their target Metaverse Attribute has, so the caller can tell a shared attribute from a
     /// single-source one without asking again per row.
     /// </summary>
     /// <param name="query">The filters to apply. All are optional and combine with AND.</param>

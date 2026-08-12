@@ -22,7 +22,7 @@ The connector space is a critical concept. It is a staging area between the exte
 
 --8<-- "assets/diagrams/sync-pipeline.svg"
 
-<p class="jim-diagram-caption">Imported data is staged in the connector space as Connected System Objects; the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
+<p class="jim-diagram-caption">Every Connected System has its own connector space, named for it here; imported data is staged there as Connected System Objects, the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 This two-stage approach gives you:
 

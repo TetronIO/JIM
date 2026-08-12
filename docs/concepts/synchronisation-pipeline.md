@@ -4,7 +4,7 @@ JIM processes identity data in a three-phase pipeline: **Import**, **Sync**, and
 
 --8<-- "assets/diagrams/sync-pipeline.svg"
 
-<p class="jim-diagram-caption">Data is staged either side of the Metaverse: imports land in the connector space as Connected System Objects, synchronisation reconciles them into Metaverse Objects, and outbound changes are staged again before export.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
+<p class="jim-diagram-caption">Data is staged either side of the Metaverse, in the connector space belonging to each Connected System: imports land there as Connected System Objects, synchronisation reconciles them into Metaverse Objects, and outbound changes are staged again before export. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 ## 📥 Phase 1: Import
 

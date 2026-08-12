@@ -622,6 +622,11 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-chip-label-planned { font-size: 12.5px; font-weight: 600; fill: var(--jimdg-chip-muted-text); }
 .jim-diagram .jimdg-chip-sub-planned   { font-size: 11px; fill: var(--jimdg-chip-muted-text); }
 .jim-diagram .jimdg-stage-label  { font-size: 16px; font-weight: 600; fill: var(--jimdg-node-text); }
+/* Eyebrow naming the Connected System a box belongs to, sat above the box's own
+   title. Repeating the system's name is what ties a Connector Space to its
+   Connected System across the JIM boundary, without drawing a container that
+   would have to straddle it. */
+.jim-diagram .jimdg-owner-name   { font-size: 13px; font-weight: 600; fill: var(--jimdg-node-text); }
 .jim-diagram .jimdg-core-title   { font-size: 19px; font-weight: 700; fill: var(--jimdg-core-text); }
 .jim-diagram .jimdg-core-sub     { font-size: 13.5px; fill: var(--jimdg-core-text); opacity: 0.85; }
 .jim-diagram .jimdg-system-name  { font-size: 17px; font-weight: 600; fill: var(--jimdg-system-text); }
@@ -808,10 +813,15 @@ body:has(.jim-home) .md-content__button {
   cursor: grabbing;
 }
 
-.jim-dgz__svg {
+/* The clone keeps its .jim-diagram class (the --jimdg-* theming depends on it),
+   which carries a top margin for in-page flow. Inside a fixed-height stage that
+   margin displaces the diagram downwards and clips the same amount off the
+   bottom, so it has to be cancelled here. */
+.jim-dgz__stage .jim-dgz__svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  margin: 0;
   font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
 }
 
