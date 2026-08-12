@@ -1,10 +1,10 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Doing (Phases 1-5 complete, and Phase 6's classification half; preview counting and Advanced Mode outstanding)
+- **Status:** Doing (Phases 1-6 complete; Advanced Mode outstanding)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
 - **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
-- **Last Updated**: 2026-08-12
+- **Last Updated**: 2026-08-12 (Phase 6 completed)
 
 ## Overview
 
@@ -139,12 +139,18 @@ The four row states above in `ScopedHierarchyPicker`, with the selection rules t
 
 *Landed with Phase 4 rather than after it, per the surface-parity rule: portal-only editing would have left administrators unable to script the thing they most often script. Both surfaces refuse the contradiction with a 400, evaluated against the state the request would leave behind, so naming one half against a stored other is refused too and stating both halves is how a Container moves from a selection to an exclusion. This is the API-boundary rejection Phase 2 deferred to the phase that first exposes the field.*
 
-**Phase 6: Change classification, consequences and preview.** (partly landed)
+**Phase 6: Change classification, consequences and preview.** ✅
 An `"excluded"` key in `ConfigurationChangeConsequences` classified as a scope reduction (as the `"scope"` narrowing already is); the preview counts objects leaving scope through an exclusion; `SyncImportTaskProcessor`'s "Container Scope" unresolved-reference cause covers exclusions in its prose.
 
 *The classification and consequences half landed with Phases 4 and 5, because shipping settable exclusions without it meant an administrator could carve out a branch and save in silence while narrowing a Container to One Level warned. It could not be done in isolation: the configuration snapshot captured selected Containers only, so an exclusion left no trace in the change history at all, and the same filter dropped any Container captured only as the route to a statement below it (losing a selection on a nested Container, and every re-inclusion inside an exclusion). Containers are now captured when they state something or hold something that does, with selection and exclusion both recorded by presence. A collection item can also carry a truer word than "Added" for what it did, because an exclusion arrives in the snapshot as a whole node exactly as a selection does, and the confirmation otherwise described a carve-out as an addition over prose about objects coming into scope.*
 
-*Still outstanding here: the preview's count of objects leaving scope through an exclusion, the unresolved-reference prose, and the per-exclusion discard count on the Activity that Phase 3 deferred.*
+*The remaining three landed together, all of them about an exclusion being visible rather than silent.*
+
+- ***The preview already counted objects leaving through an exclusion; nothing could ask it to.** `ConnectedSystemScope` has resolved exclusions since Phase 3, and the portal builds its proposal from the edited graph, so the portal could preview a carve-out from the day it could make one. The REST endpoint carried the stored exclusions forward with a comment saying Phase 5 would let callers propose them, and Phase 5 shipped the write surfaces without it. `ExcludedContainerIds` now exists on the request and on `New-JIMConfigurationChangePreview`, with the same omitted-means-unchanged and empty-means-lift semantics the selection lists carry, and a Container named in both lists is refused with a 400 rather than resolved. The adapter had one genuine gap the tests found: a proposal that brings scope in by **lifting** an exclusion moves no tick box, so `SelectsSomethingNew` read it as bringing nothing in and the "objects JIM has never imported cannot be counted" finding never fired.*
+- ***The Activity's discard count needed an informational channel, and the stat counter table was already one.** `(ActivityId, Dimension, Key, Count)` is the shape, and its incremental upsert is what makes a paged import's per-page reports add up; a new `ExcludedContainer` dimension carries them, and the counts travel from the Connector on `ConnectedSystemImportResult` so they are a Connector contract rather than an LDAP detail. Two consequences worth recording. Finalisation could no longer wipe an Activity's counters wholesale before recomputing them, because a discarded entry produced no Run Profile Execution Item to recompute from; `RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems` now names what finalisation owns, stated positively rather than as an exception at the delete. And the key is the Container's **id**: the key column holds 200 characters and Distinguished Names do not, and a count is a historical record that has to survive the Container being renamed, so the portal resolves the name at read time through a new Summary-tier projection and says plainly when the Container has since gone.*
+- ***The unresolved-reference prose named one of the two ways an object leaves scope.** "Make sure Container Scope includes the location of the referenced object" is unhelpful advice when an exclusion is what took it out: the branch above the object is selected, so an administrator checks the tick box, finds it ticked, and has learnt nothing.*
+
+*Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone: `ou=Corp` selected as a subtree with `ou=Service Accounts` excluded and `ou=App1` re-included beneath it discarded exactly one entry, attributed to the excluded Container, surviving the Activity's completion (which is what the finalisation carve-out exists for) and read back through `Get-JIMActivityStats`.*
 
 **Phase 7: Advanced Mode.**
 Parser and canonical text projection, wildcard support, resolution against the hierarchy with hard errors on unresolvable paths, the itemised lossy-downgrade confirmation, and parity across all three surfaces.
