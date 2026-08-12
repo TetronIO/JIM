@@ -171,8 +171,8 @@ public class SyncRuleMappingDeleteDatabaseTests
             var mapping = await jim.ConnectedSystems.GetSyncRuleMappingAsync(ids.MappingId);
             Assert.That(mapping, Is.Not.Null, "The seeded mapping should be retrievable.");
 
-            Assert.DoesNotThrowAsync(async () =>
-                await jim.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping!, initiator),
+            Assert.That(async () =>
+                await jim.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping!, initiator), Throws.Nothing,
                 "Deleting a mapping must not fail because the rule it belongs to was loaded first.");
         }
 

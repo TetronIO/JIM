@@ -148,7 +148,7 @@ public class ConnectedSystemSchemaReconciliationDatabaseTests
         await using (var saveContext = NewContext())
         {
             var saveRepository = new PostgresDataRepository(saveContext);
-            Assert.DoesNotThrowAsync(async () => await saveRepository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(detachedSystem));
+            Assert.That(async () => await saveRepository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(detachedSystem), Throws.Nothing);
         }
 
         await using var verify = NewContext();
@@ -227,7 +227,7 @@ public class ConnectedSystemSchemaReconciliationDatabaseTests
 
             // This must not throw. Before the fix: System.ArgumentException, "An item with the same key has
             // already been added. Key: 0", thrown from ReconcileAttributes' ToDictionary(a => a.Id) call.
-            Assert.DoesNotThrowAsync(async () => await saveRepository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(detachedSystem));
+            Assert.That(async () => await saveRepository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(detachedSystem), Throws.Nothing);
         }
 
         await using var verify = NewContext();

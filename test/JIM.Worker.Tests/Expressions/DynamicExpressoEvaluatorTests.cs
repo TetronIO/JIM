@@ -1486,7 +1486,7 @@ public class DynamicExpressoEvaluatorTests
         var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength);
 
         Assert.That(expression.Length, Is.EqualTo(DynamicExpressoEvaluator.MaxExpressionLength));
-        Assert.DoesNotThrow(() => _evaluator.Evaluate(expression, context));
+        Assert.That(() => _evaluator.Evaluate(expression, context), Throws.Nothing);
     }
 
     [Test]

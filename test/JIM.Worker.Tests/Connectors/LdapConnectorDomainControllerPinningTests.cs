@@ -479,7 +479,7 @@ public class LdapConnectorDomainControllerPinningTests
         // Belt-and-braces: closing without ever having opened must remain safe, as it was before this slice.
         using var connector = new LdapConnector();
 
-        Assert.DoesNotThrow(() => connector.CloseImportConnection());
+        Assert.That(() => connector.CloseImportConnection(), Throws.Nothing);
     }
 
     #endregion

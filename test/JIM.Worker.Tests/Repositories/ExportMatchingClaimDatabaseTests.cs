@@ -196,7 +196,7 @@ public class ExportMatchingClaimDatabaseTests
 
         // SaveChangesAsync must not throw (no DbUpdateConcurrencyException) and must not write stale
         // pre-claim values back over the row.
-        Assert.DoesNotThrowAsync(async () => await ctx.SaveChangesAsync());
+        Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing);
 
         await using var verify = NewContext();
         var row = await verify.ConnectedSystemObjects.SingleAsync(c => c.Id == csoId);

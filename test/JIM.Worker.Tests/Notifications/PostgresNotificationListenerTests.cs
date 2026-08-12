@@ -41,8 +41,8 @@ public class PostgresNotificationListenerTests
     [Test]
     public void ValidateChannelName_ValidChannelNames_DoNotThrow()
     {
-        Assert.DoesNotThrow(() => PostgresNotificationListener.ValidateChannelName("jim_worker_task_change"));
-        Assert.DoesNotThrow(() => PostgresNotificationListener.ValidateChannelName("jim_activity_progress"));
+        Assert.That(() => PostgresNotificationListener.ValidateChannelName("jim_worker_task_change"), Throws.Nothing);
+        Assert.That(() => PostgresNotificationListener.ValidateChannelName("jim_activity_progress"), Throws.Nothing);
     }
 
     [Test]
