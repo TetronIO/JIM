@@ -79,9 +79,12 @@ public class ContainerSelectionEditorTests
     }
 
     [Test]
-    public void ToggleSelected_OnAnIncludedContainer_ClearsBothFlagsRatherThanSelectingIt()
+    public void ToggleSelected_OnAnIncludedContainer_LeavesItCoveredRatherThanSelectingIt()
     {
-        // A covered Container is shown ticked-through; clicking it means "stop covering me", not "select me".
+        // Ticking a covered Container would only restate what the ancestor above already says, so it does not
+        // select it. Nor does it stop the coverage: Corp's search still returns Sales, and coverage is derived from
+        // the selections rather than set by hand, so claiming otherwise would be a state the next recalculation
+        // contradicts. Carving the Container out is what an administrator wants here, and Exclude is that action.
         var sales = Container("Sales");
         var corp = Container("Corp", selected: true, children: [sales]);
         var partition = PartitionWith(corp);
@@ -93,7 +96,8 @@ public class ContainerSelectionEditorTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(sales.Selected, Is.False);
-            Assert.That(sales.Included, Is.False);
+            Assert.That(sales.Included, Is.True);
+            Assert.That(corp.Selected, Is.True, "the ancestor's own selection is untouched");
         }
     }
 
@@ -513,6 +517,50 @@ public class ContainerSelectionEditorTests
     }
 
     #endregion
+
+    [Test]
+    public void ToggleSelected_DeselectingAReInclusionInsideAnExclusion_HandsItBackToThatExclusion()
+    {
+        // Found by driving the portal: the row went blank rather than reading "Excluded by Service Accounts", which
+        // says "nothing has been decided here" when the branch is in fact carved out. ToggleSelected maintained the
+        // coverage flags by hand and knew only about selections, so nothing re-applied the exclusion above.
+        var app1 = Container("App1", selected: true);
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [app1])
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        ContainerSelectionEditor.ToggleSelected(app1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(app1.Selected, Is.False);
+            Assert.That(app1.ExcludedByAncestor, Is.True, "the exclusion it was carved back out of governs it again");
+            Assert.That(app1.Included, Is.False, "the exclusion is nearer than Corp's selection");
+        }
+    }
+
+    [Test]
+    public void ToggleSelected_SelectingAContainerInsideAnExclusion_CoversWhatItReaches()
+    {
+        var app1 = Container("App1", children: [Container("Staging")]);
+        var partition = PartitionWith(Container("Corp", selected: true, children:
+        [
+            Container("Service Accounts", excluded: true, children: [app1])
+        ]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        ContainerSelectionEditor.ToggleSelected(app1);
+
+        var staging = Child(app1, "Staging");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(app1.Selected, Is.True);
+            Assert.That(staging.Included, Is.True, "the re-inclusion is nearer to it than the exclusion above");
+            Assert.That(staging.ExcludedByAncestor, Is.False);
+        }
+    }
 
     #region Naming the Container that decided a row (#1255)
 
