@@ -416,6 +416,27 @@ public interface IConnectedSystemRepository
         string? searchText = null);
 
     /// <summary>
+    /// Gets a window of a Pending Export's attribute value changes addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for the virtualised (infinite-scroll) Pending
+    /// Export grid on the Connected System Object detail page. Ordered by attribute name, and shares its query
+    /// core with <see cref="GetAllPendingExportChangesPagedAsync"/> so the two reads can never disagree on which
+    /// changes match.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional search text to filter changes by value or attribute name.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Retrieves the Pending Export header (without attribute value changes) for a specific Connected System Object,
     /// along with the total count of attribute value changes. Used by the CSO detail page where changes are
     /// loaded separately via server-side paging.

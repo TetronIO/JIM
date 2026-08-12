@@ -251,6 +251,32 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// Gets a window of Schedule Executions addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Schedule Execution grids. Takes the same filter and sort as
+    /// <see cref="GetScheduleExecutionsAsync"/> and shares its query core. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="scheduleId">Optional filter by Schedule ID; null lists every Schedule's executions.</param>
+    /// <param name="offset">The zero-based index of the first execution wanted; negative values read as zero.</param>
+    /// <param name="count">How many executions are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionsRangeAsync(
+            scheduleId, offset, count, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
     /// Gets a Schedule Execution by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the execution.</param>

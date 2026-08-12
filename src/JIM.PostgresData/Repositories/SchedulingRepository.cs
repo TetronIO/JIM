@@ -253,6 +253,85 @@ public class SchedulingRepository : ISchedulingRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
+            scheduleId, offset, pageSize, sortBy, sortDescending, includeTotalCount: true);
+
+        var pagedResultSet = new PagedResultSet<ScheduleExecution>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged Schedule Execution read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetScheduleExecutionsRangeAsync"/> will return, bounding the latency of a
+    /// single read. It is deliberately five times the paged reader's page-size cap, because the two caps protect
+    /// against different things: a page size is a number a person picked from a fixed list and never approaches
+    /// 100, whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach
+    /// truncates the window silently, rendering the shortfall as blank rows rather than raising anything. The
+    /// derivation from the list grid's height and row-height arithmetic lives on
+    /// <c>MetaverseRepository.MaxHeaderWindowSize</c>, which this cap mirrors.
+    /// </summary>
+    private const int MaxExecutionWindowSize = 500;
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxExecutionWindowSize)
+            count = MaxExecutionWindowSize;
+
+        var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
+            scheduleId, offset, count, sortBy, sortDescending, includeTotalCount);
+
+        return new RangeResultSet<ScheduleExecution>
+        {
+            Results = results,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Schedule Execution reads: applies the optional Schedule filter and
+    /// the sort, windows the result by absolute <paramref name="offset"/> and <paramref name="count"/>, and
+    /// returns it alongside the total match count (or null for that total when
+    /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
+    /// executions match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<ScheduleExecution> Results, int? TotalResults)> QueryScheduleExecutionsByRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.ScheduleExecutions
             .Include(e => e.Schedule)
             .AsQueryable();
@@ -260,11 +339,12 @@ public class SchedulingRepository : ISchedulingRepository
         // Filter by schedule if specified
         if (scheduleId.HasValue)
         {
-            query = query.Where(e => e.ScheduleId == scheduleId.Value);
+            var scheduleIdValue = scheduleId.Value;
+            query = query.Where(e => e.ScheduleId == scheduleIdValue);
         }
 
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        var ordered = sortBy?.ToLower() switch
         {
             "status" => sortDescending
                 ? query.OrderByDescending(e => e.Status)
@@ -280,27 +360,20 @@ public class SchedulingRepository : ISchedulingRepository
                 : query.OrderBy(e => e.QueuedAt)
         };
 
-        var totalCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every sort key
+        // above can tie (a Schedule that fans several executions into the queue at once stamps them all with the
+        // same queued time, and a never-started execution has a null started and completed time). Without it,
+        // PostgreSQL may order tied rows differently per window, repeating some executions and skipping others.
+        query = ordered.ThenBy(e => e.Id);
 
-        var pagedResultSet = new PagedResultSet<ScheduleExecution>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
+        // Counting scans every matching execution rather than a window of them, so it is skipped entirely when
+        // the caller already holds the total. Sorting cannot change how many executions match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        var results = await query.Skip(offset).Take(count).ToListAsync();
+        return (results, totalCount);
     }
 
     public async Task CreateScheduleExecutionAsync(ScheduleExecution execution)

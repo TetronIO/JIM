@@ -365,6 +365,33 @@ public class ActivityRangeTests
         }
     }
 
+    [Test]
+    public async Task GetActivitiesRangeAsync_TiedCreatedTimes_ProduceNonOverlappingWindowsAsync()
+    {
+        // A Schedule that fans several Run Profiles out at once stamps every Activity with the same created
+        // time, so the default sort key alone cannot order them. Without the id tie-break the two windows may
+        // repeat and skip rows; with it they partition the match set exactly.
+        var created = DateTime.UtcNow.AddHours(-1);
+        for (var i = 0; i < 20; i++)
+        {
+            var activity = NewActivity(targetName: "Simultaneous");
+            activity.Created = created;
+            _dbContext.Activities.Add(activity);
+        }
+        await _dbContext.SaveChangesAsync();
+
+        var first = await _repository.Activity.GetActivitiesRangeAsync(startIndex: 0, count: 10);
+        var second = await _repository.Activity.GetActivitiesRangeAsync(startIndex: 10, count: 10);
+
+        // Asserted as the exact id order rather than merely as "no duplicates": the windows are only
+        // guaranteed to partition the match set if the tie is broken by a total order, and the id order is the
+        // observable consequence of that. Insertion order (what an untie-broken query happens to yield here)
+        // is not the id order, so this fails without the tie-break.
+        var expected = _dbContext.Activities.Select(a => a.Id).OrderBy(id => id).ToList();
+        var seen = first.Results.Select(a => a.Id).Concat(second.Results.Select(a => a.Id)).ToList();
+        Assert.That(seen, Is.EqualTo(expected));
+    }
+
     /// <summary>
     /// Seeds <paramref name="count"/> top-level Activities named "Activity 001", "Activity 002", ...
     /// (zero-padded so lexical order matches numeric order under the target-name sort).

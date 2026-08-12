@@ -4109,6 +4109,67 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int pageSize,
         string? searchText = null)
     {
+        if (page < 1) page = 1;
+        if (pageSize > 100) pageSize = 100;
+
+        var offset = (page - 1) * pageSize;
+        var (items, totalCount) = await QueryAllPendingExportChangesByRangeAsync(
+            pendingExportId, offset, pageSize, searchText, includeTotalCount: true);
+
+        return new PagedResultSet<PendingExportAttributeValueChange>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged Pending Export change read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (items, totalCount) = await QueryAllPendingExportChangesByRangeAsync(
+            pendingExportId, offset, count, searchText, includeTotalCount);
+
+        return new RangeResultSet<PendingExportAttributeValueChange>
+        {
+            Results = items,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Pending Export attribute-change reads: one Pending Export's changes,
+    /// optionally narrowed by a case-insensitive search over the attribute name and the change's value, ordered
+    /// by attribute name and windowed by absolute <paramref name="offset"/> and <paramref name="count"/>,
+    /// alongside the total match count (or null for that total when <paramref name="includeTotalCount"/> is
+    /// false). Shared so the two reads can never disagree on which changes match; callers own input validation
+    /// and clamping.
+    /// </summary>
+    private async Task<(List<PendingExportAttributeValueChange> Results, int? TotalResults)> QueryAllPendingExportChangesByRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.Set<PendingExportAttributeValueChange>()
             .Where(avc => avc.PendingExportId == pendingExportId);
 
@@ -4121,27 +4182,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 || (avc.UnresolvedReferenceValue != null && EF.Functions.ILike(avc.UnresolvedReferenceValue, searchPattern)));
         }
 
-        var totalCount = await query.CountAsync();
+        // Counting scans every matching change rather than a window of them, so it is skipped entirely when the
+        // caller already holds the total. Ordering cannot change how many changes match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
-        if (page < 1) page = 1;
-        if (pageSize > 100) pageSize = 100;
-
-        var offset = (page - 1) * pageSize;
         var items = await query
             .OrderBy(avc => avc.Attribute.Name)
+            // Deterministic tie-break: Skip/Take windows are only stable under a total order, and a
+            // multi-valued attribute contributes several changes under one name.
             .ThenBy(avc => avc.Id)
             .Skip(offset)
-            .Take(pageSize)
+            .Take(count)
             .Include(avc => avc.Attribute)
             .ToListAsync();
 
-        return new PagedResultSet<PendingExportAttributeValueChange>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = items
-        };
+        return (items, totalCount);
     }
 
     /// <inheritdoc />
