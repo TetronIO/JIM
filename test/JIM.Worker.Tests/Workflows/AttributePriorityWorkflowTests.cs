@@ -175,7 +175,7 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
         var orphaned = DisplayNameValue(ctx);
         Assert.That(orphaned?.ContributedBySyncRuleId, Is.Not.Null, "precondition: the value starts with provenance");
         orphaned!.ContributedBySyncRuleId = null;
-        orphaned.ContributedBySystemId = null;
+        orphaned!.ContributedBySystemId = null;
 
         await RunFullSyncAsync(ctx.Directory);
 
