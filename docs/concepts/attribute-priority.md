@@ -72,6 +72,8 @@ Together these distinguish the two kinds of blank an administrator may need to i
 
 The same provenance is visible per value: retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that simply has no contributor; consumers should treat such a row as "no value present", never as a value.
 
+Provenance follows the winner even when the value does not change. Two contributors often hold the same value for an attribute, so a change of winner need not be a change of value: a higher-priority source joining, a priority reorder, or the deletion of the Synchronisation Rule that contributed the value all hand the value to a different rule while the value itself stays exactly as it was. The next synchronisation of the winning contributor records the hand-over, so the contributing rule shown against a value is the rule that would win resolution for it today, not the one that happened to write it first.
+
 ## 🛠️ Configuring priority
 
 Attribute priority is configured per (Metaverse Object Type, Metaverse attribute).

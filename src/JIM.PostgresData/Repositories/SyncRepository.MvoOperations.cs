@@ -476,24 +476,28 @@ public partial class SyncRepository
             // 1. Update the MetaverseObjects rows (scalar columns), keyed by Id, with no xmin predicate.
             await BulkUpdateMvoRowsViaEfAsync(metaverseObjects);
 
-            // 2. Reconcile attribute values: insert the added values, delete the removed ones.
-            var existingAvIdsByMvo = await LoadExistingAttributeValueIdsAsync(mvoIds);
+            // 2. Reconcile attribute values: insert the added values, delete the removed ones, and write the
+            //    provenance of any surviving value whose contributing rule or system changed (#1292).
+            var existingAvsByMvo = await LoadExistingAttributeValuesAsync(mvoIds);
             var attributeValuesToInsert = new List<(Guid MvoId, MetaverseObjectAttributeValue Value)>();
             var attributeValueIdsToDelete = new List<Guid>();
+            var provenanceUpdates = new List<(Guid Id, int? SystemId, int? SyncRuleId)>();
 
             foreach (var mvo in metaverseObjects)
             {
-                var existing = existingAvIdsByMvo.GetValueOrDefault(mvo.Id) ?? new HashSet<Guid>();
+                var existing = existingAvsByMvo.GetValueOrDefault(mvo.Id) ?? new Dictionary<Guid, (int?, int?)>();
                 var currentIds = new HashSet<Guid>();
 
                 foreach (var av in mvo.AttributeValues)
                 {
                     currentIds.Add(av.Id);
-                    if (!existing.Contains(av.Id))
+                    if (!existing.TryGetValue(av.Id, out var storedProvenance))
                         attributeValuesToInsert.Add((mvo.Id, av));
+                    else if (storedProvenance.SystemId != av.ContributedBySystemId || storedProvenance.SyncRuleId != av.ContributedBySyncRuleId)
+                        provenanceUpdates.Add((av.Id, av.ContributedBySystemId, av.ContributedBySyncRuleId));
                 }
 
-                foreach (var existingId in existing.Where(existingId => !currentIds.Contains(existingId)))
+                foreach (var existingId in existing.Keys.Where(existingId => !currentIds.Contains(existingId)))
                     attributeValueIdsToDelete.Add(existingId);
             }
 
@@ -502,6 +506,9 @@ public partial class SyncRepository
 
             if (attributeValueIdsToDelete.Count > 0)
                 await DeleteMetaverseObjectAttributeValuesByIdsAsync(attributeValueIdsToDelete);
+
+            if (provenanceUpdates.Count > 0)
+                await BulkUpdateMvoAttributeValueProvenanceViaEfAsync(provenanceUpdates);
 
             await transaction.CommitAsync();
         }
@@ -590,12 +597,15 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Loads the current database attribute-value ids for the given Metaverse Objects, grouped by Metaverse Object id.
-    /// Used to compute the insert/delete delta for the update path. Runs on the EF connection and ambient transaction.
+    /// Loads the current database attribute-value ids for the given Metaverse Objects, grouped by Metaverse Object id,
+    /// each carrying its stored provenance. Used to compute the insert/delete delta for the update path, and the
+    /// provenance delta beside it (#1292): a surviving value's contributing rule and system are the only columns the
+    /// synchronisation engine can change on a row it does not replace, so they are the only ones diffed here. Runs on
+    /// the EF connection and ambient transaction.
     /// </summary>
-    private async Task<Dictionary<Guid, HashSet<Guid>>> LoadExistingAttributeValueIdsAsync(List<Guid> mvoIds)
+    private async Task<Dictionary<Guid, Dictionary<Guid, (int? SystemId, int? SyncRuleId)>>> LoadExistingAttributeValuesAsync(List<Guid> mvoIds)
     {
-        var result = new Dictionary<Guid, HashSet<Guid>>();
+        var result = new Dictionary<Guid, Dictionary<Guid, (int? SystemId, int? SyncRuleId)>>();
         if (mvoIds.Count == 0)
             return result;
 
@@ -605,7 +615,8 @@ public partial class SyncRepository
         var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
         await using var command = new NpgsqlCommand(
-            @"SELECT ""Id"", ""MetaverseObjectId"" FROM ""MetaverseObjectAttributeValues"" WHERE ""MetaverseObjectId"" = ANY(@ids)",
+            @"SELECT ""Id"", ""MetaverseObjectId"", ""ContributedBySystemId"", ""ContributedBySyncRuleId""
+              FROM ""MetaverseObjectAttributeValues"" WHERE ""MetaverseObjectId"" = ANY(@ids)",
             connection, transaction);
         command.Parameters.AddWithValue("ids", mvoIds.ToArray());
 
@@ -614,15 +625,67 @@ public partial class SyncRepository
         {
             var attributeValueId = reader.GetGuid(0);
             var metaverseObjectId = reader.GetGuid(1);
-            if (!result.TryGetValue(metaverseObjectId, out var set))
+            if (!result.TryGetValue(metaverseObjectId, out var values))
             {
-                set = [];
-                result[metaverseObjectId] = set;
+                values = [];
+                result[metaverseObjectId] = values;
             }
-            set.Add(attributeValueId);
+
+            values[attributeValueId] = (
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3));
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Writes the taken-over provenance of surviving Metaverse Object attribute values (#1292) as a single batched,
+    /// VALUES-list UPDATE. A deliberately narrow two-column fix-up on rows that already exist, in the shape of
+    /// <see cref="FixupMvoReferenceValueIdsAsync"/>: the value columns of a surviving row never change (the attribute
+    /// flow writers replace a row rather than edit it), so this is not the entity's write path and takes no bulk
+    /// column list. Runs on the EF connection so it joins the ambient transaction.
+    /// </summary>
+    private async Task BulkUpdateMvoAttributeValueProvenanceViaEfAsync(List<(Guid Id, int? SystemId, int? SyncRuleId)> provenanceUpdates)
+    {
+        const int columnsPerRow = 3;
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+
+        // Reuse one StringBuilder across chunks (Clear() each iteration) rather than allocating per chunk.
+        var sql = new StringBuilder();
+        foreach (var chunk in BulkSqlHelpers.ChunkList(provenanceUpdates, chunkSize))
+        {
+            sql.Clear();
+            sql.Append("""
+                UPDATE "MetaverseObjectAttributeValues" AS mav SET
+                    "ContributedBySystemId" = v."ContributedBySystemId",
+                    "ContributedBySyncRuleId" = v."ContributedBySyncRuleId"
+                FROM (VALUES
+                """);
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(',');
+                var o = i * columnsPerRow;
+                // Explicit casts give the VALUES columns a definite type even when a whole chunk is null for a column.
+                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::int,{{{o + 2}}}::int)");
+
+                parameters.Add(chunk[i].Id);
+                parameters.Add(BulkSqlHelpers.NullableParam(chunk[i].SystemId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(chunk[i].SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+            }
+
+            sql.Append("""
+                ) AS v("Id","ContributedBySystemId","ContributedBySyncRuleId")
+                WHERE mav."Id" = v."Id"
+                """);
+
+            await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+
+        Log.Debug("BulkUpdateMvoAttributeValueProvenanceViaEfAsync: Took over provenance on {Count} Metaverse Object attribute values",
+            provenanceUpdates.Count);
     }
 
     /// <summary>

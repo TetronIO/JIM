@@ -225,6 +225,14 @@ public class UpdateConnectedSystemContainerRequest
     public bool? Selected { get; set; }
 
     /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported. Mutually exclusive with <see cref="Selected"/>: a request that would leave both set
+    /// is rejected with 400, whether it states both itself or states one against a stored other.
+    /// Omit to leave the stored exclusion unchanged.
+    /// </summary>
+    public bool? Excluded { get; set; }
+
+    /// <summary>
     /// How far beneath this Container objects are imported from, when it is selected. Subtree imports from this
     /// Container and every Container beneath it; OneLevel imports only the objects held directly in it, leaving
     /// Containers beneath it to be selected in their own right.

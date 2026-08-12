@@ -158,6 +158,27 @@ Scope is also settable from the REST API (`PUT /api/v1/synchronisation/connected
 !!! note "Objects that reference something out of scope"
     A reference attribute pointing at an object outside the imported Containers cannot be resolved, and JIM reports it as an unresolved reference naming Container Scope as the likely cause. Narrowing a Container is a common way to create these; if a group's members live in a Container you have just excluded, either bring that Container back into scope or expect the membership to import incompletely.
 
+### Excluding a Container
+
+Service Account, mailbox-archive and staging OUs sitting inside an otherwise wholly-managed branch are the ordinary shape of a production directory. **Exclude** carves one of those out of a selection made above it: select `OU=Corp` as a whole subtree, then exclude `OU=Service Accounts,OU=Corp`, and JIM imports everything in `OU=Corp` except that branch.
+
+The action appears on a Container's row in the tree wherever a selection above already reaches it, which is exactly where an exclusion means anything. An excluded Container reads **Excluded from *X***, naming the selection it was carved out of, and offers **Include** to hand it back. Containers beneath it read **Excluded by *X*** and are left unimported too.
+
+**Whichever statement is nearest to an object decides its fate.** That is what makes re-inclusion work: tick a Container inside an excluded branch and it comes back into scope, along with everything beneath it, while the rest of the exclusion stands. Exclusions and re-inclusions nest to any depth.
+
+Excluding is not the same as selecting the siblings you want. Ticking eleven of twelve sibling OUs looks equivalent, and is silently wrong over time: an OU created under the parent afterwards is not in the enumerated set, so its objects are never imported and nothing says so. An exclusion has the opposite and safer failure mode, because the parent is what was selected: a new OU beneath it is imported.
+
+!!! warning "Excluding a Container takes objects out of scope"
+    Objects already imported from an excluded branch become obsolete on the next Import Run Profile, and whatever they are joined to is deprovisioned on the next synchronisation, exactly as narrowing a Container does. Preview the change before saving.
+
+An exclusion is honoured everywhere the selection is: on Full Import, on the delta paths, and on export, where a write into an excluded branch is refused for the same reason it is refused outside the selected Containers entirely. It is enforced as entries arrive rather than by searching around the branch, so an import that discarded entries says how many, per exclusion, in its summary; a branch of 500,000 objects carved out of a 510,000-object parent shows up as a number you can act on rather than as an unexplained slow import.
+
+An exclusion survives a rename or a move of the Container, because it is keyed on the directory's own immutable identifier (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP) rather than on the Distinguished Name.
+
+A Container can be selected or excluded, never both. An exclusion beneath a **This level** selection is inert, since such a selection reaches no Container beneath it, and the tree therefore never offers one there.
+
+Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer).
+
 ### Credentials
 
 | Setting | Description | Example |

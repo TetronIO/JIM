@@ -95,9 +95,11 @@
                             @if (item.IsCollectionItem)
                             {
                                 @* A whole item joining or leaving a collection. There is no before-and-after pair to *@
-                                @* show: the label names it, and this says which way it went.                        *@
+                                @* show: the label names it, and this says which way it went, unless the item        *@
+                                @* carries a truer word for what it did (a Container carved out of a selection is in  *@
+                                @* the snapshot for the first time, so it arrives, but it was not "Added").           *@
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    @(item.ChangeType == ConfigurationDiffChangeType.Added ? "Added" : "Removed")
+                                    @(item.CollectionItemVerb ?? (item.ChangeType == ConfigurationDiffChangeType.Added ? "Added" : "Removed"))
                                 </MudText>
                             }
                             else if (item.OldDisplayValue == null && item.NewDisplayValue == null)
