@@ -8,7 +8,7 @@
 
 This document defines the design for **Drift Detection & Remediation** (outbound sync): how JIM detects and corrects unauthorised changes made directly in target systems.
 
-> **Related design:** [ATTRIBUTE_PRIORITY.md](../doing/ATTRIBUTE_PRIORITY.md) (Issue #91) covers the inbound-sync concern of which source "wins" when multiple systems contribute to the same MVO attribute. The two were originally specified together because drift detection needs to know whether a system is a legitimate contributor to an attribute (has import rules) or just a recipient (only has export rules): if a system is a contributor, changes from it are not "drift", they are legitimate updates subject to attribute priority resolution. Drift detection shipped first using a coarse contributor check (`HasImportRuleForAttribute`); attribute priority refines that check into a priority-aware version (see [ATTRIBUTE_PRIORITY.md](../doing/ATTRIBUTE_PRIORITY.md), "Interaction with Drift Detection").
+> **Related design:** [ATTRIBUTE_PRIORITY.md](ATTRIBUTE_PRIORITY.md) (Issue #91) covers the inbound-sync concern of which source "wins" when multiple systems contribute to the same MVO attribute. The two were originally specified together because drift detection needs to know whether a system is a legitimate contributor to an attribute (has import rules) or just a recipient (only has export rules): if a system is a contributor, changes from it are not "drift", they are legitimate updates subject to attribute priority resolution. Drift detection shipped first using a coarse contributor check (`HasImportRuleForAttribute`); attribute priority refines that check into a priority-aware version (see [ATTRIBUTE_PRIORITY.md](ATTRIBUTE_PRIORITY.md), "Interaction with Drift Detection").
 
 ---
 
@@ -194,7 +194,7 @@ public class SyncRule
 
 ### Sync Engine Changes (Outbound Sync)
 
-> **Note**: This logic applies to both `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` via the shared `SyncTaskProcessorBase`. The `HasImportRuleForAttribute` contributor check shown is the **shipped** (non-priority-aware) version; it becomes priority-aware once attribute priority lands (see [ATTRIBUTE_PRIORITY.md](../doing/ATTRIBUTE_PRIORITY.md), "Interaction with Drift Detection").
+> **Note**: This logic applies to both `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` via the shared `SyncTaskProcessorBase`. The `HasImportRuleForAttribute` contributor check shown is the **shipped** (non-priority-aware) version; it becomes priority-aware once attribute priority lands (see [ATTRIBUTE_PRIORITY.md](ATTRIBUTE_PRIORITY.md), "Interaction with Drift Detection").
 
 ```csharp
 // In SyncTaskProcessorBase, after processing inbound CSO changes:
@@ -357,6 +357,6 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 ## References
 
 - Issue #173: Scenario 8 drift detection tests
-- [ATTRIBUTE_PRIORITY.md](../doing/ATTRIBUTE_PRIORITY.md) - Inbound-sync attribute priority design (Issue #91); refines the drift contributor check to be priority-aware
+- [ATTRIBUTE_PRIORITY.md](ATTRIBUTE_PRIORITY.md) - Inbound-sync attribute priority design (Issue #91); refines the drift contributor check to be priority-aware
 - [OUTBOUND_SYNC_DESIGN.md](OUTBOUND_SYNC_DESIGN.md) - Related export evaluation design
 - [SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md](SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md) - Integration test scenarios

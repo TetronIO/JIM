@@ -87,6 +87,17 @@ public static class ConfigurationChangeConsequences
                     : "Importing the whole subtree brings the objects in the containers beneath this one into scope for " +
                       "import on the next Import Run Profile. Nothing already imported is taken out of scope.",
 
+            // Carving a container out of a selection made above it. Reaches the same place as deselecting a
+            // container, by a third route; clearing the exclusion is the reverse, and takes nothing away.
+            (ConfigurationSnapshotService.ConnectedSystemObjectType, "excluded") =>
+                newValue == True
+                    ? "Excluding this container stops the objects in it being imported, and the same for every " +
+                      "container beneath it, unless one of those is selected in its own right. The Connected System " +
+                      "Objects already imported from them become obsolete, and whatever they are joined to is " +
+                      "deprovisioned on the next synchronisation."
+                    : "Including this container again brings its objects, and those beneath it, back into scope for " +
+                      "import on the next Import Run Profile. Nothing already imported is taken out of scope.",
+
             (ConfigurationSnapshotService.MetaverseObjectTypeObjectType, "deletionRule") =>
                 "This takes effect immediately: Metaverse Objects of this type that already satisfy the new rule become " +
                 "eligible for deletion on the next synchronisation or housekeeping pass, without any further change " +

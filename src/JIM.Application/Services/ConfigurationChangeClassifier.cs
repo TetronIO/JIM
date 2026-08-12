@@ -138,6 +138,9 @@ public static class ConfigurationChangeClassifier
         ["objectMatchingRuleMode"] = B,
         ["unresolvedReferenceHandling"] = B,
         ["maxExportParallelism"] = C,
+        // How long an account provisioned into this system stays owed an initial password. It changes how long
+        // JIM keeps trying, never what it synchronises, so no Full Synchronisation is implied.
+        ["initialPasswordTimeToLive"] = C,
         ["settingValues"] = B,
         // Every individual setting value, whatever the connector calls it. Connector settings are the connector's
         // instructions: where it reads from, what it filters, how it writes. One key covers them all because the
@@ -200,7 +203,11 @@ public static class ConfigurationChangeClassifier
         // through both the classifier and the preflight, whose agreement is the invariant
         // ContainerSelectionClassificationTests exists to hold. Over-warning on a deliberate, administrator-made
         // widening is the safer side of that trade; the consequence text distinguishes the two directions.
-        ["scope"] = A
+        ["scope"] = A,
+        // Carving a container out of a selection above it takes its objects out of scope, reaching the same place as
+        // deselecting the container by a third route. Over-classified on clearing the exclusion for the same reason
+        // scope is over-classified on widening, and distinguished the same way in the consequence text.
+        ["excluded"] = A
     };
 
     /// <summary>
@@ -222,15 +229,21 @@ public static class ConfigurationChangeClassifier
     /// Keys whose *appearance* is less consequential than a change to them, classified for that case alone.
     /// Everything else about the key keeps the class in <see cref="ConnectedSystemKeys"/>.
     ///
-    /// Only a container's scope needs this. The snapshot holds selected containers only, so selecting a container
-    /// brings its whole node into the snapshot, scope included; the scope scalar arrives as an addition. Nothing has
-    /// left scope in that case, and the selection itself is already classified as a container appearing. Without this,
-    /// selecting any container at all would be reported as destructive, which is precisely the "warn about the wrong
-    /// things" failure the removal table above exists to avoid.
+    /// Only a container's own import-scope scalars need this. The snapshot holds the containers that state something,
+    /// so selecting a container brings its whole node into the snapshot, scope and exclusion included; those scalars
+    /// arrive as additions. Nothing has left scope in that case, and the selection itself is already classified as a
+    /// container appearing. Without this, selecting any container at all would be reported as destructive, which is
+    /// precisely the "warn about the wrong things" failure the removal table above exists to avoid.
     /// </summary>
     private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemAdditionKeys = new(StringComparer.Ordinal)
     {
-        ["scope"] = B
+        ["scope"] = B,
+        // A container's selection became a scalar when containers stopped being captured by selection alone: a
+        // container held in the snapshot only as the path to a statement below it is present without being selected,
+        // so its selection arriving is a container coming into scope, not one leaving it. `excluded` is deliberately
+        // absent from this table: it is recorded by presence, so its arrival IS the carve-out, and it keeps the
+        // destructive class above.
+        ["selected"] = B
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> MetaverseObjectTypeKeys = new(StringComparer.Ordinal)
@@ -310,6 +323,7 @@ public static class ConfigurationChangeClassifier
         [Constants.SettingKeys.HistoryRetentionPeriod] = C,
         [Constants.SettingKeys.ConfigurationChangeRetentionPeriod] = C,
         [Constants.SettingKeys.SecurityEventRetentionPeriod] = C,
+        [Constants.SettingKeys.InitialPasswordRetentionPeriod] = C,
         [Constants.SettingKeys.HistoryCleanupBatchSize] = C,
         [Constants.SettingKeys.ChangeTrackingCsoChangesEnabled] = C,
         [Constants.SettingKeys.ChangeTrackingMvoChangesEnabled] = C,

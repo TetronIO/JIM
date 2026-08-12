@@ -125,7 +125,7 @@ public class CsoImportStateStampDatabaseTests
     {
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
-        Assert.DoesNotThrowAsync(async () => await repository.Sync.StampImportStateAsync([]));
+        Assert.That(async () => await repository.Sync.StampImportStateAsync([]), Throws.Nothing);
     }
 
     /// <summary>

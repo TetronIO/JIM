@@ -1,0 +1,77 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The one way JIM renders an attribute that belongs to a side of the Metaverse: a chip carrying a CS, MV or Ex     *@
+@* avatar. Which side an attribute sits on is the single most misreadable thing about an Attribute Flow (both       *@
+@* sides are just names, and inbound and outbound swap which is which), so the marker is a component rather than a  *@
+@* convention every call site has to remember. See JIM.Web/CLAUDE.md "Shared UI components".                        *@
+
+@if (Kind == AttributeChipKind.Expression)
+{
+    <MudTooltip Text="@Expression" Arrow="true" Placement="Placement.Top">
+        <MudChip T="string" Size="Size.Medium" Class="@($"jim-expr-chip {Class}")">
+            <AvatarContent>
+                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
+            </AvatarContent>
+            <ChildContent>
+                <span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(Expression ?? string.Empty))</span>
+            </ChildContent>
+        </MudChip>
+    </MudTooltip>
+}
+else
+{
+    <MudTooltip Text="@EffectiveTooltip" Arrow="true" Placement="Placement.Top">
+        <MudChip T="string" Size="Size.Medium" Class="@Class" Href="@Href">
+            <AvatarContent>
+                <MudAvatar Color="@(Kind == AttributeChipKind.Metaverse ? Color.Primary : Color.Secondary)">
+                    @(Kind == AttributeChipKind.Metaverse ? "MV" : "CS")
+                </MudAvatar>
+            </AvatarContent>
+            <ChildContent>@Name</ChildContent>
+        </MudChip>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>
+    /// Which side of the Metaverse the attribute belongs to, or that the value is computed rather than read.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public AttributeChipKind Kind { get; set; }
+
+    /// <summary>
+    /// The attribute's name. Ignored for <see cref="AttributeChipKind.Expression"/>, which shows the expression.
+    /// </summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// The expression text, for <see cref="AttributeChipKind.Expression"/>. Rendered with syntax highlighting and
+    /// repeated verbatim in the tooltip, since highlighting can make a long expression harder to read at chip size.
+    /// </summary>
+    [Parameter]
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// Optional tooltip. Defaults to naming the side the attribute belongs to, which is the fact the avatar is
+    /// abbreviating; pass a richer one (data type, plurality) where the call site knows it.
+    /// </summary>
+    [Parameter]
+    public string? Tooltip { get; set; }
+
+    /// <summary>
+    /// Optional destination, making the chip a link. Not offered for expressions, which have nowhere to point.
+    /// </summary>
+    [Parameter]
+    public string? Href { get; set; }
+
+    /// <summary>
+    /// Additional CSS classes for the chip.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string EffectiveTooltip => Tooltip ??
+        (Kind == AttributeChipKind.Metaverse ? "Metaverse Attribute" : "Connected System attribute");
+}

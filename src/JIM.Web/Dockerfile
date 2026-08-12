@@ -11,7 +11,7 @@ ARG VERSION=dev
 # to skip the expensive generation step in local dev builds.
 ARG OPENAPI_STAGE=openapi-gen
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -52,7 +52,7 @@ RUN mkdir -p /data/keys /var/log/jim /connector-files \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:e1fc6e423f543119c406d24e2e687d67c569f18f04a37a8b0005d80ad0dcee80 AS build
 # Corporate networks routinely inspect outbound TLS by re-signing it with their own authority, which
 # breaks certificate validation for every package restore inside the build. Supplying that authority
 # here (base64 of a PEM bundle) lets the build trust it; empty (the default) is a no-op. Build-stage
@@ -114,10 +114,16 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 #
 # The output is written under /app/publish so that the final stage can pull
 # from either openapi-gen or publish using the same path.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
-ENV JIM_OPENAPI_GENERATE=true \
+# DOTNET_gcServer=0 for the same reason scripts/Generate-OpenApiDoc.ps1 sets it: generation
+# allocates hard and briefly, and Server GC's per-core heaps grow to tens of gigabytes when
+# nothing pushes back (measured 11.3 GB, against 1.28 GB under Workstation GC, for the same
+# 1 MB document). This stage is discarded after the document is copied out, so the setting
+# never reaches the shipped image, which keeps Server GC.
+ENV DOTNET_gcServer=0 \
+    JIM_OPENAPI_GENERATE=true \
     JIM_OPENAPI_OUTPUT_PATH=/app/publish/wwwroot/api/openapi/v1.json \
     JIM_LOG_LEVEL=Warning \
     JIM_LOG_PATH=/tmp \

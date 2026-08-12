@@ -11,6 +11,8 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 ## What a Connected System contains
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
+
+    The Schema, Partitions &amp; Containers and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
@@ -22,7 +24,7 @@ The connector space is a critical concept. It is a staging area between the exte
 
 --8<-- "assets/diagrams/sync-pipeline.svg"
 
-<p class="jim-diagram-caption">Imported data is staged in the connector space as Connected System Objects; the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
+<p class="jim-diagram-caption">Every Connected System has its own connector space, named for it here; imported data is staged there as Connected System Objects, the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 This two-stage approach gives you:
 

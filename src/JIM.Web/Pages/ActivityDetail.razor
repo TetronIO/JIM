@@ -627,6 +627,57 @@
             </MudStack>
         }
 
+        @* ─── Container Scope exclusions (#1255) ─── *@
+        @if (DiscardedEntriesThroughAnExclusion)
+        {
+            var exclusionStats = _activityRunProfileExecutionStats!;
+            <MudPaper Class="pa-4 mt-6" Outlined="true">
+                <MudText Typo="Typo.h5">Entries Discarded by Container Scope</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                    A Connected System cannot be asked for a branch minus part of itself in one search, so JIM reads
+                    the entries an excluded Container covers and discards them. These entries were transferred and
+                    never imported. Where the number is large, moving the excluded branch outside the selected one
+                    removes the cost entirely.
+                </MudText>
+                <MudSimpleTable Dense="true" Hover="true" Class="mt-4">
+                    <thead>
+                        <tr>
+                            <th>Excluded Container</th>
+                            <th style="text-align: right;">Entries Discarded</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (containerId, discarded) in exclusionStats.EntriesDiscardedByExcludedContainer.OrderByDescending(entry => entry.Value))
+                        {
+                            <tr>
+                                <td>
+                                    @if (_excludedContainers.TryGetValue(containerId, out var container))
+                                    {
+                                        <MudTooltip Arrow="true" Placement="Placement.Top" Text="@container.ExternalId">
+                                            <span>@container.Name</span>
+                                        </MudTooltip>
+                                    }
+                                    else
+                                    {
+                                        @* The Container has been removed from the hierarchy since this run. Saying
+                                           so beats inventing a name for it. *@
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Container no longer in the hierarchy</MudText>
+                                    }
+                                </td>
+                                <td style="text-align: right;">@discarded.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td><strong>Total</strong></td>
+                            <td style="text-align: right;"><strong>@exclusionStats.TotalEntriesDiscardedByExclusion.ToString("N0")</strong></td>
+                        </tr>
+                    </tfoot>
+                </MudSimpleTable>
+            </MudPaper>
+        }
+
         @* Results Section with Filter and Table *@
         <MudText Typo="Typo.h5">@(IsHousekeepingActivity ? "Deletion Results" : Helpers.GetRunTypeResultsTitle(_activity.ConnectedSystemRunType))</MudText>
 
@@ -951,6 +1002,12 @@
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
 
     /// <summary>
+    /// The excluded Containers this run discarded entries through, named. Loaded only when there are any, which
+    /// is every run except those on a Connected System carrying exclusions that covered something it read.
+    /// </summary>
+    private Dictionary<int, ConnectedSystemContainerSummary> _excludedContainers = new();
+
+    /// <summary>
     /// The steps of this Run Profile execution (#454), refreshed alongside the Activity so the
     /// stepper tracks the run live and still reads correctly on a page opened after it finished.
     /// </summary>
@@ -1005,6 +1062,35 @@
         && _activity.TargetType is ActivityTargetType.ConnectedSystemRunProfile or ActivityTargetType.MetaverseObjectHousekeeping;
 
     private bool IsHousekeepingActivity => _activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
+
+    /// <summary>
+    /// Whether this run read entries from the Connected System and threw them away because a Container Scope
+    /// exclusion carved them out (#1255).
+    /// </summary>
+    private bool DiscardedEntriesThroughAnExclusion =>
+        _activityRunProfileExecutionStats?.TotalEntriesDiscardedByExclusion > 0;
+
+    /// <summary>
+    /// Names the excluded Containers this run discarded entries through, so the panel can show what an
+    /// administrator recognises rather than a row of ids.
+    /// </summary>
+    /// <remarks>
+    /// The counts are keyed by Container id because they are a historical record and a Container can be renamed
+    /// or moved afterwards. The lookup is skipped entirely when nothing was discarded, which is almost every run,
+    /// and it reads a projection rather than loading the Containers themselves.
+    /// </remarks>
+    private async Task LoadExcludedContainerNamesAsync(JimApplication jim)
+    {
+        if (!DiscardedEntriesThroughAnExclusion)
+        {
+            _excludedContainers = new Dictionary<int, ConnectedSystemContainerSummary>();
+            return;
+        }
+
+        var summaries = await jim.ConnectedSystems.GetConnectedSystemContainerSummariesAsync(
+            _activityRunProfileExecutionStats!.EntriesDiscardedByExcludedContainer.Keys.ToList());
+        _excludedContainers = summaries.ToDictionary(summary => summary.Id);
+    }
 
     protected override void OnInitialized()
     {
@@ -1084,6 +1170,7 @@
         {
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
             _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
+            await LoadExcludedContainerNamesAsync(jim);
         }
 
         // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
@@ -1577,6 +1664,7 @@
             {
                 _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(updated.Id);
                 _phases = await jim.Activities.GetActivityPhasesAsync(updated.Id);
+                await LoadExcludedContainerNamesAsync(jim);
             }
 
             await InvokeAsync(StateHasChanged);

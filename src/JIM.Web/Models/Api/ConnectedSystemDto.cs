@@ -27,6 +27,13 @@ public class ConnectedSystemDetailDto
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
+    /// How long an account provisioned into this Connected System stays owed an initial password before JIM
+    /// records an expiry and stops trying. Null means JIM's default of seven days, and is reported as null rather
+    /// than as the default so a caller can tell a system configured to seven days from one never configured.
+    /// </summary>
+    public TimeSpan? InitialPasswordTimeToLive { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
     /// both the per-object error and the Activity warning while still logging the occurrence.
@@ -87,6 +94,7 @@ public class ConnectedSystemDetailDto
             Status = entity.Status,
             SettingValuesValid = entity.SettingValuesValid,
             MaxExportParallelism = entity.MaxExportParallelism,
+            InitialPasswordTimeToLive = entity.InitialPasswordTimeToLive,
             UnresolvedReferenceHandling = entity.UnresolvedReferenceHandling,
             Connector = new ConnectorReferenceDto
             {
@@ -395,6 +403,12 @@ public class ConnectedSystemContainerDto
     public bool Selected { get; set; }
 
     /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported.
+    /// </summary>
+    public bool Excluded { get; set; }
+
+    /// <summary>
     /// How far beneath this Container objects are imported from, when it is selected.
     /// </summary>
     public ConnectedSystemContainerScope Scope { get; set; }
@@ -413,6 +427,7 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Excluded = entity.Excluded,
             Scope = entity.Scope,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,

@@ -26,6 +26,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
+| `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
@@ -42,6 +43,24 @@ Four rules are baked into it rather than left to each call site, because each ha
 - **A Container that cannot be ticked says why** ("Covered by ou=People") rather than being greyed out with no explanation.
 
 The selection rules themselves are **not** in the component: `ContainerSelectionEditor` (JIM.Utilities) owns the cascade down a branch, the roll-up to a parent, the partition auto-selection, the filter predicate and the coverage recalculation, and is unit-tested there. They decide what a Full Import returns, so they must be testable without rendering anything. Coverage in particular is `ConnectedSystemUtilities.ApplyContainerInclusion`'s, shared with the import's own search-root resolution, so the tree can never show one scope while the import performs another.
+
+## Attribute chips (which side of the Metaverse an attribute is on)
+
+**An attribute rendered anywhere near an Attribute Flow is an `<AttributeChip />`.** It carries the `CS` / `MV` / `Ex` avatar that says whether the attribute belongs to a Connected System, to the Metaverse, or is a computed value.
+
+```razor
+<AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@attribute.Name" />
+<AttributeChip Kind="AttributeChipKind.Metaverse" Name="@attribute.Name" Href="@url" />
+<AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
+```
+
+The marker is not decoration. Both sides of a flow are just names, and which side is the source swaps between Inbound and Outbound, so on any surface listing flows the avatar is the only thing distinguishing "reads `department` from the directory" from "writes `department` to it". `Kind` should be derived from the data (does the source carry a Metaverse Attribute id or a Connected System one?) rather than from the flow's direction, so a malformed row cannot be labelled as the side its direction implies.
+
+- `Tooltip` defaults to naming the side; pass a richer one where the call site knows the attribute's data type and plurality.
+- `Href` makes the chip a link. Expressions never take one; they have nowhere to point.
+- Expression chips render the expression itself with syntax highlighting, not the word "Expression": the expression text is the only thing telling two computed sources apart.
+
+**Known duplicate:** `SyncRuleAttributeFlowTab.razor` still hand-rolls this markup in eleven places, in two clusters that disagree with each other (one wraps the whole chip in a rich type/plurality tooltip, the other tooltips only the avatar with generic text). Migrating it to this component is worth doing, and needs the tooltip inconsistency resolved deliberately rather than folded into an unrelated change. Do not add a twelfth copy.
 
 ## Form action gating and input immediacy
 

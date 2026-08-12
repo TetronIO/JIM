@@ -812,7 +812,7 @@ public class PasswordGeneratorServiceTests
         var derived = _generator.DeriveFrom(null);
 
         Assert.That(_generator.Assess(derived, null).IsUsable, Is.True);
-        Assert.DoesNotThrow(() => _generator.Generate(derived));
+        Assert.That(() => _generator.Generate(derived), Throws.Nothing);
     }
 
     [Test]

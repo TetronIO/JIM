@@ -199,12 +199,14 @@ Updates the configuration of an existing Connected System.
 # ById (default)
 Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
     [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
+    [-InitialPasswordTimeToLive <timespan>]
     [-UnresolvedReferenceHandling <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-UnresolvedReferenceHandling <string>]
+    [-MaxExportParallelism <int>] [-InitialPasswordTimeToLive <timespan>]
+    [-UnresolvedReferenceHandling <string>]
     [-ChangeReason <string>] [-PassThru]
 ```
 
@@ -218,6 +220,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
+| `InitialPasswordTimeToLive` | `timespan` | No | 7 days | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Raise it ahead of a planned outage longer than the current window; accounts provisioned meanwhile otherwise expire without a password. See [Passwords](../concepts/passwords.md#how-long-jim-keeps-trying). |
 | `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
@@ -823,13 +826,13 @@ Set-JIMConnectedSystemPartition -ConnectedSystemId 3 -PartitionId 1 -Selected $f
 
 ## Set-JIMConnectedSystemContainer
 
-Updates the selection state and scope of a container within a partition.
+Updates the selection state, exclusion and scope of a container within a partition.
 
 ### Syntax
 
 ```powershell
 Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
-    [-Selected <bool>] [-Scope <string>] [-PassThru]
+    [-Selected <bool>] [-Excluded <bool>] [-Scope <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -839,6 +842,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ContainerId` | `int` | Yes | | Container identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this container is selected for synchronisation |
+| `Excluded` | `bool` | No | | Whether this container is carved out of a selection an ancestor made, leaving the objects within it deliberately unimported. Omit to leave the stored exclusion unchanged. |
 | `Scope` | `string` | No | | How far beneath the container objects are imported from: `Subtree` or `OneLevel`. Omit to leave the stored scope unchanged. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated container |
 
@@ -860,6 +864,18 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $t
 Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Scope Subtree
 ```
 
+```powershell title="Exclude a container from the selection above it"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $true
+```
+
+```powershell title="Replace a selection with an exclusion"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Selected $false -Excluded $true
+```
+
+```powershell title="Hand an excluded container back into scope"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $false
+```
+
 ```powershell title="Select multiple containers via pipeline"
 @(7, 8, 9) | ForEach-Object {
     Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId $_ -Selected $true
@@ -871,6 +887,8 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Scope Subtr
 - The parent partition must also be selected for container selection to take effect during import operations.
 - `Scope` defaults to `Subtree` on containers that have never had it set, which is how container selection behaved before the option existed.
 - Narrowing a container to `OneLevel` takes the objects beneath it out of scope, exactly as deselecting those containers would. The Connected System Objects already imported from them become obsolete on the next import.
+- `Selected` and `Excluded` are mutually exclusive: a container states one thing about itself. A request that would leave both set is rejected with a 400, whether it names both or names one against a stored other, so moving a container from a selection to an exclusion means setting both in the same call.
+- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector.md#excluding-a-container).
 - Supports `ShouldProcess` (Medium impact).
 
 ---

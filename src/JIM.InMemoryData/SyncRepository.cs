@@ -290,6 +290,16 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
+        int connectedSystemId, int attributeId, decimal attributeValue)
+    {
+        var cso = GetCsosForSystem(connectedSystemId)
+            .FirstOrDefault(c => c.AttributeValues
+                // Numeric equality, so a stored 4200.00 matches a supplied 4200 (#1283).
+                .Any(av => av.AttributeId == attributeId && av.DecimalValue == attributeValue));
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
     {
@@ -554,6 +564,19 @@ public class SyncRepository : ISyncRepository
             .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
             .Where(av => av?.LongValue != null)
             .Select(av => av!.LongValue!.Value)
+            .ToList();
+        return Task.FromResult(values);
+    }
+
+    public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+    {
+        var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);
+        if (partitionId != null)
+            csos = csos.Where(c => c.PartitionId == partitionId);
+        var values = csos
+            .Select(c => c.AttributeValues.FirstOrDefault(av => av.AttributeId == c.ExternalIdAttributeId))
+            .Where(av => av?.DecimalValue != null)
+            .Select(av => av!.DecimalValue!.Value)
             .ToList();
         return Task.FromResult(values);
     }
@@ -1430,6 +1453,24 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(expiring.Count);
     }
 
+    public Task<int> DeleteTerminalInitialPasswordsAsync(DateTime olderThan, int maxRecords)
+    {
+        if (maxRecords <= 0)
+            return Task.FromResult(0);
+
+        var trimming = _pendingInitialPasswords.Values
+            .Where(p => p.Status is PendingInitialPasswordStatus.Parked or PendingInitialPasswordStatus.Expired &&
+                        (p.LastAttemptedAt ?? p.CreatedAt) < olderThan)
+            .OrderBy(p => p.LastAttemptedAt ?? p.CreatedAt)
+            .Take(maxRecords)
+            .ToList();
+
+        foreach (var pending in trimming)
+            _pendingInitialPasswords.Remove(pending.Id);
+
+        return Task.FromResult(trimming.Count);
+    }
+
     public Task<int> ReleaseParkedInitialPasswordsAsync(int syncRuleId)
     {
         var parked = _pendingInitialPasswords.Values
@@ -1668,6 +1709,31 @@ public class SyncRepository : ISyncRepository
     /// narrated its steps.
     /// </summary>
     public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
+
+    public Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
+    {
+        if (entriesDiscardedByContainerId.Count == 0)
+            return Task.CompletedTask;
+
+        var counts = _exclusionDiscardCounts.TryGetValue(activityId, out var existing)
+            ? existing
+            : _exclusionDiscardCounts[activityId] = new Dictionary<int, long>();
+
+        // Accumulated rather than replaced, matching the real repository's upsert: a caller reporting per page
+        // must reach the same total as one reporting once.
+        foreach (var (containerId, discarded) in entriesDiscardedByContainerId)
+            counts[containerId] = counts.GetValueOrDefault(containerId) + discarded;
+
+        return Task.CompletedTask;
+    }
+
+    private readonly Dictionary<Guid, Dictionary<int, long>> _exclusionDiscardCounts = new();
+
+    /// <summary>
+    /// Entries discarded through an exclusion so far, keyed by Activity then by excluded Container id, for tests
+    /// asserting what a run reported about the cost of its carve-outs (#1255).
+    /// </summary>
+    public IReadOnlyDictionary<Guid, Dictionary<int, long>> ExclusionDiscardCounts => _exclusionDiscardCounts;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
@@ -2496,6 +2562,9 @@ public class SyncRepository : ISyncRepository
         if (av.StringValue != null) return av.StringValue.ToLowerInvariant();
         if (av.IntValue.HasValue) return av.IntValue.Value.ToString();
         if (av.LongValue.HasValue) return av.LongValue.Value.ToString();
+        // Canonical rather than raw: a decimal carries its scale, so 4200.00m and 4200m would
+        // otherwise key differently despite being the same anchor (#1283).
+        if (av.DecimalValue.HasValue) return ExternalIdValue.ToCanonicalString(av.DecimalValue.Value);
         if (av.GuidValue.HasValue) return av.GuidValue.Value.ToString().ToLowerInvariant();
         return null;
     }

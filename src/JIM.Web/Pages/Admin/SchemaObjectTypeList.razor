@@ -1,11 +1,14 @@
 @page "/admin/schema"
 @page "/admin/schema/attributes"
+@page "/admin/schema/data-flow"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
 @using JIM.Web.Models
+@using JIM.Web.Pages.Admin.Components
+@using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
@@ -14,9 +17,9 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Schema</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@(_activeTabIndex == 0 ? "Object Types" : "Attributes")</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Schema" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Schema:</span> <span class="mud-primary-text">@TabTitle</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes.</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.</MudText>
 
 @* TabPanelsClass is pa-0 rather than pt-5 because both tabs host a virtualised grid, and the grid supplies its
    own mt-5 (see the tab content spacing rule in JIM.Web/CLAUDE.md: never stack panel padding on top of content
@@ -280,10 +283,24 @@
             </EmptyContent>
         </VirtualisedDataGrid>
     </MudTabPanel>
+    <MudTabPanel Text="Data Flow" Icon="@Icons.Material.Filled.SwapHoriz">
+        <DataFlowTab />
+    </MudTabPanel>
 </NavigableMudTabs>
 
 @code {
     private int _activeTabIndex;
+
+    /// <summary>
+    /// The active tab's name, appended to the page heading. Indexed rather than switched on a slug because the
+    /// tab strip is the source of truth for the order.
+    /// </summary>
+    private string TabTitle => _activeTabIndex switch
+    {
+        0 => "Object Types",
+        1 => "Attributes",
+        _ => "Data Flow"
+    };
     private IList<MetaverseObjectTypeHeader>? _metaverseObjectTypeHeaders;
     private VirtualisedDataGrid<MetaverseObjectTypeHeader>? _objectTypeGrid;
     private VirtualisedDataGrid<MetaverseAttributeHeader>? _attributeGrid;

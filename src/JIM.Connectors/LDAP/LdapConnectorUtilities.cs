@@ -560,15 +560,22 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
-    /// Whether a distinguished name falls within the scope of any of the supplied Containers. An empty
-    /// collection means the caller has no Container-level opinion to apply, and every name is admitted.
+    /// Whether a distinguished name is within the scope the supplied Containers describe: the Container with the
+    /// final say over it admits it rather than carving it out. An empty collection means the caller has no
+    /// Container-level opinion to apply, and every name is admitted.
     /// </summary>
-    internal static bool IsDnWithinAnyContainerScope(string? distinguishedName, IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers)
+    /// <remarks>
+    /// Callers must supply every Container stating something about scope, exclusions included; the selections alone
+    /// answer a different question (see <c>ConnectedSystemExtensions.GetScopeDecidingContainers</c>). Supplying only
+    /// the selections is not a partial answer but a wrong one: an exclusion that is not present cannot carve
+    /// anything out.
+    /// </remarks>
+    internal static bool IsDnInScope(string? distinguishedName, IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers)
     {
         if (connectedSystemContainers.Count == 0)
             return true;
 
-        return ResolveMostSpecificContainerScope(distinguishedName, connectedSystemContainers) is not null;
+        return ContainerSpecificity.IsInScope(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
     }
 
     /// <summary>
@@ -862,6 +869,36 @@ internal static class LdapConnectorUtilities
             "does not host would otherwise silently return zero objects. A domain's objects must be managed through a " +
             "Connected System whose Host targets that domain's own domain controllers (one Connected System per domain " +
             "today).");
+    }
+
+    /// <summary>
+    /// Stops the platform LDAP client following referrals on JIM's behalf.
+    /// <para>
+    /// A referral names another server, and the platform follows it on a brand new connection that carries
+    /// none of the credentials JIM bound with. Active Directory refuses anonymous reads by default, so every
+    /// chased referral fails, and it fails against the search that triggered it rather than against the
+    /// referral: partition discovery reports an access denial on a connection that is authenticated and
+    /// perfectly healthy. Declining the chase turns that into the referral simply being ignored, which is
+    /// both truthful and recoverable.
+    /// </para>
+    /// <para>
+    /// This is deliberately unconditional rather than a setting. JIM chasing referrals itself, with its own
+    /// credentials and a record of which servers it followed, is a feature in its own right (issue #1352);
+    /// until that exists there is no configuration an administrator could usefully choose between.
+    /// </para>
+    /// </summary>
+    internal static void DisableReferralChasing(LdapConnection connection, ILogger logger)
+    {
+        try
+        {
+            connection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+        }
+        catch (Exception ex) when (ex is LdapException or DirectoryOperationException or PlatformNotSupportedException or ObjectDisposedException)
+        {
+            // Hardening a connection must never be what fails a run. The worst case if this is refused is the
+            // platform default, which is what every release before this one used.
+            logger.Warning(ex, "DisableReferralChasing: The platform would not let referral chasing be turned off for this connection. Referrals returned by the directory may be followed anonymously, and any that are will fail against directories that refuse anonymous reads.");
+        }
     }
 
     /// <summary>

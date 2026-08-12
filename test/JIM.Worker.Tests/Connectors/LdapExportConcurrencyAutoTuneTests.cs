@@ -119,7 +119,7 @@ public class LdapExportConcurrencyAutoTuneTests
         var settings = new List<ConnectedSystemSettingValue>();
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        Assert.DoesNotThrow(() => LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger));
+        Assert.That(() => LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger), Throws.Nothing);
     }
 
     [Test]

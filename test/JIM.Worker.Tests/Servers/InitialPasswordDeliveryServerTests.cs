@@ -623,6 +623,107 @@ public class InitialPasswordDeliveryServerTests
 
     #endregion
 
+    #region Trimming terminal work records
+
+    /// <summary>
+    /// A Parked or Expired record is retained so somebody can see what happened, which means something has to
+    /// age it out; nothing did before, so a rule provisioning into a directory that refuses its passwords grew
+    /// one retained row per account, for ever.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_TerminalAndOlderThanTheCutoff_AreRemovedAsync()
+    {
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Parked, DateTime.UtcNow.AddDays(-100));
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Expired, DateTime.UtcNow.AddDays(-100));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(2));
+            Assert.That(_syncRepo.PendingInitialPasswords, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// A record still being worked is not history and is never trimmed, however old it is. An account owed a
+    /// password that a long outage has held up must still get one when the directory comes back.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_PendingRecord_IsLeftAloneAsync()
+    {
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Pending, DateTime.UtcNow.AddDays(-100));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.Zero);
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A terminal record inside the retention period is what an administrator is meant to be looking at, so it
+    /// stays until it has had its time.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_TerminalButWithinRetention_IsLeftAloneAsync()
+    {
+        await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Parked, DateTime.UtcNow.AddDays(-2));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.Zero);
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// The batch cap bounds one pass, so a deployment that has accumulated a very large backlog drains it over
+    /// several housekeeping cycles rather than in one long-running transaction.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_MoreThanTheBatchCap_RemovesOnlyTheCapAsync()
+    {
+        for (var i = 0; i < 5; i++)
+            await SeedTerminalRecordAsync(PendingInitialPasswordStatus.Expired, DateTime.UtcNow.AddDays(-100));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.EqualTo(2));
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(3));
+        }
+    }
+
+    /// <summary>
+    /// A record's age runs from the last thing that happened to it, not from when the account was provisioned.
+    /// A row parked for months and released and re-parked yesterday is current work, and trimming it would
+    /// discard the reason an administrator is about to read.
+    /// </summary>
+    [Test]
+    public async Task DeleteExpiredWorkRecordsAsync_AgeRunsFromTheLastAttempt_NotFromCreationAsync()
+    {
+        await SeedTerminalRecordAsync(
+            PendingInitialPasswordStatus.Parked,
+            lastAttemptedAt: DateTime.UtcNow.AddDays(-1),
+            createdAt: DateTime.UtcNow.AddDays(-200));
+
+        var deleted = await _server.DeleteExpiredWorkRecordsAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deleted, Is.Zero);
+            Assert.That(_syncRepo.PendingInitialPasswords, Has.Count.EqualTo(1));
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
@@ -650,6 +751,36 @@ public class InitialPasswordDeliveryServerTests
         ]);
 
         return cso;
+    }
+
+    /// <summary>
+    /// Stages one account in the given state, with its clock wound back so the retention cutoff has something
+    /// to bite on.
+    /// </summary>
+    private async Task SeedTerminalRecordAsync(
+        PendingInitialPasswordStatus status,
+        DateTime? lastAttemptedAt = null,
+        DateTime? createdAt = null)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = ConnectedSystemId,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+        _syncRepo.SeedConnectedSystemObject(cso);
+
+        await _syncRepo.StageInitialPasswordsAsync([
+            new PendingInitialPassword
+            {
+                ConnectedSystemObjectId = cso.Id,
+                ConnectedSystemId = ConnectedSystemId,
+                SyncRuleId = SyncRuleId,
+                Status = status,
+                CreatedAt = createdAt ?? lastAttemptedAt ?? DateTime.UtcNow,
+                LastAttemptedAt = lastAttemptedAt
+            }
+        ]);
     }
 
     /// <summary>

@@ -1,10 +1,10 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Doing (Phases 1-2 complete; Connector honouring next)
+- **Status:** Doing (Phases 1-6 complete; Advanced Mode outstanding)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
 - **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
-- **Last Updated**: 2026-08-10
+- **Last Updated**: 2026-08-12 (Phase 6 completed)
 
 ## Overview
 
@@ -31,7 +31,7 @@ Service Account, mailbox-archive and staging OUs sitting inside an otherwise who
 | Per-Container scope (`Subtree` / `OneLevel`) | `ConnectedSystemContainer.Scope`, `ConnectedSystemEnums.cs` |
 | The one membership question | `ConnectedSystemScope.Contains(partitionId, containerIdentifier)` |
 | What containment *means* | `IConnectorContainment.IsWithinContainer`, implemented by the Connector |
-| LDAP's answer | `LdapConnectorUtilities.IsDnWithinContainerScope` / `IsDnWithinAnyContainerScope` |
+| LDAP's answer | `LdapConnectorUtilities.IsDnWithinContainerScope` / `IsDnInScope` (renamed from `IsDnWithinAnyContainerScope` in Phase 3, where "within any" stopped being what it answers) |
 | Import search roots and row coverage | `ConnectedSystemUtilities.ApplyContainerInclusion` |
 | Selection editing rules | `ContainerSelectionEditor` (JIM.Utilities) |
 | Portal control | `ScopedHierarchyPicker.razor` |
@@ -88,7 +88,10 @@ The picker already computes coverage and disables a Container that an ancestor's
 | Selected | (scope control) | Whole subtree / This level |
 | Covered by an ancestor | "Covered by *X*" | **Exclude** |
 | Excluded | "Excluded from *X*" | **Include** |
+| Excluded by an ancestor | "Excluded by *X*" | tick box |
 | Neither | (Container count) | tick box |
+
+*(The fourth row was added during Phase 4. Rendered plain, a Container inside a carve-out reads as "nothing has been decided here" when something has, and ticking it is meaningful where ticking a covered one is not: it brings the branch back into scope.)*
 
 An exclusion beneath a `OneLevel` parent is inert, and falls out of the design for free: such a row is not Covered, so it is never offered Exclude.
 
@@ -109,17 +112,45 @@ Replace the `Any(...)` OR in `ConnectedSystemScope.Contains` and in `LdapConnect
 
 *Two rules fell out of the work rather than the design. Roll-up must refuse to select an excluded parent, or completing the selection of every re-inclusion inside a carved-out branch silently undoes the exclusion. And an exclusion must not change the import's search roots: `GetTopLevelSelectedContainersTests` pins that, because the alternative is the search decomposition rejected below.*
 
-**Phase 3: Import, export, and the discard count.**
+**Phase 3: Import, export, and the discard count.** ✅
 Connector-side honouring via the shared predicate (full import, delta paths, export write guard); per-exclusion discarded-entry counts in the import summary statistics and on the Activity.
 
-**Phase 4: Portal.**
+*Landed. The phase turned on a distinction the code did not previously draw: the **selected** Containers say where JIM may search and write, and they do not say which Container decides an object's fate. `ConnectedSystemExtensions.GetScopeDecidingContainers` collects the selections and the exclusions together, and `ContainerSpecificity.IsInScope` ranks them so the most specific statement wins. Four paths ask it and all reach the same answer: the full import and the AD USN delta (filtering the entries their searches return, in `ConvertLdapResults`, since a Subtree search cannot exclude a branch server-side), the changelog and accesslog deltas, the export write guard, and `ConnectedSystemScope` so the preview cannot state a count the next import contradicts.*
+
+*Three decisions taken during the work:*
+
+- *Where containment is not a hierarchy, two Containers can admit an object without either holding the other, which `ContainerSpecificity` explicitly refused to resolve for opposing meanings. **Excluded wins** such a tie: importing an object an administrator excluded is the worse of the two failures.*
+- *`ConnectedSystemScope` reads which Containers carve out from the **proposal**, not from the Containers' stored `Excluded` flags, for the same reason the selection is a parameter at all. A preview that read the stored flags would evaluate the configuration the administrator is trying to move away from.*
+- *A Container the Connector creates mid-run is in scope because JIM selects it as the run ends, but not when an exclusion carves out the branch it was created in.*
+
+*The per-exclusion counts are reported as import summary statistics in the log. **Putting them on the Activity is deferred to Phase 6**: the Activity has no informational channel, only `WarningMessage`, and an exclusion doing exactly what it was configured to do is not a warning; flagging every exclusion-configured import as warned would train administrators to ignore the field. Phase 6 already opens the Activity and preview surfaces for this feature.*
+
+*No changelog entry or public documentation: nothing an administrator can reach has changed, because no surface can set `Excluded` until Phases 4 and 5. The user-facing entry belongs with the phase that makes exclusions settable.*
+
+*Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone. `ou=Corp` selected as a subtree imported 4 objects; excluding `ou=Service Accounts` beneath it imported 2 and logged "Discarded 2 entries read from excluded Containers across 1 exclusion(s)" attributed to that Container; selecting `ou=App1` beneath the exclusion brought its service account back, importing 3 and discarding 1.*
+
+**Phase 4: Portal.** ✅
 The four row states above in `ScopedHierarchyPicker`, with the selection rules themselves in `ContainerSelectionEditor` where they stay unit-testable without rendering, plus bUnit coverage of the state transitions.
 
-**Phase 5: Surface parity.**
+*Landed, as **five** row states rather than four. The model's `ExcludedByAncestor` needed one of its own: a Container inside a carve-out rendered plain reads as "nothing has been decided here" when something has, and ticking it is meaningful (it brings the branch back), which is what separates it from a covered row. Both actions sit in the column the scope control already occupies, so no row grows a sixth column and the actions line up down the tree. **Exclude** appears on hover and on keyboard focus, because every Container beneath a selected branch is a candidate for it; **Include** stays at rest, because an exclusion is a deliberate configuration that should be reversible without discovering a hover. An excluded row's tick box is disabled: ticking it would clear the exclusion by a second route meaning something different from the Include beside it. `ContainerSelectionEditor.DecidingAncestor` names the Container that decided a row, walking the hierarchy the way `ApplyContainerInclusion` does so a row can never name one Container while another governs it, and the scope summary reports how many Containers are excluded where there are any.*
+
+**Phase 5: Surface parity.** ✅
 `Excluded` on `UpdateConnectedSystemContainerRequest` and the read DTOs; `Set-JIMConnectedSystemContainer -Excluded` with Pester coverage; docs for both.
 
-**Phase 6: Change classification, consequences and preview.**
+*Landed with Phase 4 rather than after it, per the surface-parity rule: portal-only editing would have left administrators unable to script the thing they most often script. Both surfaces refuse the contradiction with a 400, evaluated against the state the request would leave behind, so naming one half against a stored other is refused too and stating both halves is how a Container moves from a selection to an exclusion. This is the API-boundary rejection Phase 2 deferred to the phase that first exposes the field.*
+
+**Phase 6: Change classification, consequences and preview.** ✅
 An `"excluded"` key in `ConfigurationChangeConsequences` classified as a scope reduction (as the `"scope"` narrowing already is); the preview counts objects leaving scope through an exclusion; `SyncImportTaskProcessor`'s "Container Scope" unresolved-reference cause covers exclusions in its prose.
+
+*The classification and consequences half landed with Phases 4 and 5, because shipping settable exclusions without it meant an administrator could carve out a branch and save in silence while narrowing a Container to One Level warned. It could not be done in isolation: the configuration snapshot captured selected Containers only, so an exclusion left no trace in the change history at all, and the same filter dropped any Container captured only as the route to a statement below it (losing a selection on a nested Container, and every re-inclusion inside an exclusion). Containers are now captured when they state something or hold something that does, with selection and exclusion both recorded by presence. A collection item can also carry a truer word than "Added" for what it did, because an exclusion arrives in the snapshot as a whole node exactly as a selection does, and the confirmation otherwise described a carve-out as an addition over prose about objects coming into scope.*
+
+*The remaining three landed together, all of them about an exclusion being visible rather than silent.*
+
+- ***The preview already counted objects leaving through an exclusion; nothing could ask it to.** `ConnectedSystemScope` has resolved exclusions since Phase 3, and the portal builds its proposal from the edited graph, so the portal could preview a carve-out from the day it could make one. The REST endpoint carried the stored exclusions forward with a comment saying Phase 5 would let callers propose them, and Phase 5 shipped the write surfaces without it. `ExcludedContainerIds` now exists on the request and on `New-JIMConfigurationChangePreview`, with the same omitted-means-unchanged and empty-means-lift semantics the selection lists carry, and a Container named in both lists is refused with a 400 rather than resolved. The adapter had one genuine gap the tests found: a proposal that brings scope in by **lifting** an exclusion moves no tick box, so `SelectsSomethingNew` read it as bringing nothing in and the "objects JIM has never imported cannot be counted" finding never fired.*
+- ***The Activity's discard count needed an informational channel, and the stat counter table was already one.** `(ActivityId, Dimension, Key, Count)` is the shape, and its incremental upsert is what makes a paged import's per-page reports add up; a new `ExcludedContainer` dimension carries them, and the counts travel from the Connector on `ConnectedSystemImportResult` so they are a Connector contract rather than an LDAP detail. Two consequences worth recording. Finalisation could no longer wipe an Activity's counters wholesale before recomputing them, because a discarded entry produced no Run Profile Execution Item to recompute from; `RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems` now names what finalisation owns, stated positively rather than as an exception at the delete. And the key is the Container's **id**: the key column holds 200 characters and Distinguished Names do not, and a count is a historical record that has to survive the Container being renamed, so the portal resolves the name at read time through a new Summary-tier projection and says plainly when the Container has since gone.*
+- ***The unresolved-reference prose named one of the two ways an object leaves scope.** "Make sure Container Scope includes the location of the referenced object" is unhelpful advice when an exclusion is what took it out: the branch above the object is selected, so an administrator checks the tick box, finds it ticked, and has learnt nothing.*
+
+*Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone: `ou=Corp` selected as a subtree with `ou=Service Accounts` excluded and `ou=App1` re-included beneath it discarded exactly one entry, attributed to the excluded Container, surviving the Activity's completion (which is what the finalisation carve-out exists for) and read back through `Get-JIMActivityStats`.*
 
 **Phase 7: Advanced Mode.**
 Parser and canonical text projection, wildcard support, resolution against the hierarchy with hard errors on unresolvable paths, the itemised lossy-downgrade confirmation, and parity across all three surfaces.

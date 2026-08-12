@@ -194,7 +194,7 @@ public class SqlObjectTypeConfigurationTests
     {
         // The Description is the administrator's copy-paste starting point, so a document that does not
         // parse would be the worst possible first experience of this setting.
-        Assert.DoesNotThrow(() => SqlSchemaConfiguration.Parse(SqlConnectorConstants.ObjectTypesExample));
+        Assert.That(() => SqlSchemaConfiguration.Parse(SqlConnectorConstants.ObjectTypesExample), Throws.Nothing);
     }
 
     [Test]

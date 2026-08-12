@@ -291,6 +291,18 @@ public static class Constants
         /// </summary>
         public const string SecurityEventRetentionPeriod = "History.SecurityEventRetentionPeriod";
 
+        /// <summary>
+        /// How long an initial-password record that has reached a terminal state (parked for an administrator, or
+        /// expired) is kept before housekeeping removes it. Records still being worked are never removed, however
+        /// old. Default: 90 days.
+        /// <para>
+        /// Shorter than the general history retention period on purpose: this is a work list rather than an audit
+        /// trail, and the durable record of what happened to an account is its Activity, which is governed by the
+        /// retention periods above and outlives this.
+        /// </para>
+        /// </summary>
+        public const string InitialPasswordRetentionPeriod = "History.InitialPasswordRetentionPeriod";
+
         // Change Tracking Settings
         /// <summary>
         /// Enables or disables change tracking for Connected System Objects.

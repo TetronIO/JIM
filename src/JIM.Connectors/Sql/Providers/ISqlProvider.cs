@@ -82,6 +82,21 @@ internal interface ISqlProvider
     void ConfigureConnection(DbConnection connection, SqlConnectionSettings settings);
 
     /// <summary>
+    /// Applies any configuration this dialect can only apply to a live session, immediately after the
+    /// connection has been opened and before anything is read or written through it.
+    /// <para>
+    /// Oracle Database's session time zone is the case this exists for. It decides what a
+    /// <c>TIMESTAMP WITH LOCAL TIME ZONE</c> column reads back as, ODP.NET defaults it to the client
+    /// host's zone, and the driver offers no way to set it before the connection is open, so
+    /// <see cref="ConfigureConnection"/> cannot reach it. Pinning it to
+    /// <see cref="SqlConnectionSettings.DatabaseTimeZone"/> is half of what keeps that column type
+    /// correct; <see cref="ColumnCarriesAnOffset"/> is the other half.
+    /// </para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The session could not be configured as the Connected System asks, so the connection is unusable rather than quietly reading values in the wrong zone.</exception>
+    void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings);
+
+    /// <summary>
     /// Creates a command on a connection, with any dialect-specific command configuration applied.
     /// </summary>
     DbCommand CreateCommand(DbConnection connection, string commandText);
@@ -192,6 +207,31 @@ internal interface ISqlProvider
     #endregion
 
     #region Values
+
+    /// <summary>
+    /// Materialises a value a driver handed back through a bound parameter as the CLR type the rest of
+    /// the Connector works in, so that no provider-specific type crosses this seam.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It exists because a driver is not obliged to answer <see cref="DbParameter.Value"/> with a CLR
+    /// primitive, and ODP.NET does not: a generated key comes back as an
+    /// <c>Oracle.ManagedDataAccess.Types</c> wrapper struct whose type depends on how the parameter was
+    /// bound. Read unwrapped, a sequence-backed <c>NUMBER</c> key fails every create with a cast error
+    /// naming a type an administrator has no way to act on.
+    /// </para>
+    /// <para>
+    /// The data reader path needs none of this: every driver JIM speaks to materialises a column as a
+    /// CLR value already. This is the parameter path only.
+    /// </para>
+    /// <para>
+    /// Null, <see cref="DBNull"/> and a driver's own per-type null sentinel all answer null, so a caller
+    /// has exactly one thing to test for. That matters: a driver's null sentinel need not be
+    /// <see cref="DBNull"/>, and a caller checking only for <see cref="DBNull"/> would read "the database
+    /// returned nothing" as a value.
+    /// </para>
+    /// </remarks>
+    object? ConvertFromDriverValue(object? value);
 
     /// <summary>
     /// Materialises a GUID from whatever the reader returned for a GUID-typed column. The byte order

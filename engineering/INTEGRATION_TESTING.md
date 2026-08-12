@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | **Phase 1 Complete** |
 | **Phase 1** | Supported (currently shipped capabilities) |
-| **Phase 2** | Road-mapped (after Database Connector #170) |
+| **Phase 2** | Started: Scenario 16 (JIM SQL Connector matrix) is implemented against Microsoft SQL Server and Oracle Database; Scenarios 18-19 remain road-mapped |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 
 ---
@@ -81,6 +81,10 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario12-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix"        # JIM SQL Connector provider x capability matrix (SQL Server + Oracle)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix" -Provider SqlServer  # one provider only (quicker loop; skips the 13.6GB Oracle image)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix" -Quick             # representative subset for the regular gate
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario16-SqlConnectorMatrix" -FullMatrix        # full matrix including the 500,000-row scale import
 
 # Run with a specific template size (see Data Scale Templates for the full list)
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano                    # smallest; fast dev iteration
@@ -128,7 +132,7 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). Scenario 14 is OpenLDAP only.
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). Scenario 14 is OpenLDAP only. Scenario 16 uses no directory container at all: it runs against the `phase2` database containers, which the runner starts on demand.
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
@@ -146,6 +150,9 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) |
 | `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) |
 | `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
+| `Scenario15-ScimConnector` | SCIM 2.0 Client Connector end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted rather than validation skipped (#545) | file (HR CSV source), scim-provider |
+| `Scenario16-SqlConnectorMatrix` | JIM SQL Connector provider x capability matrix: the connector's capability rows driven against both priority 1 providers (Microsoft SQL Server and Oracle Database). Accepts `-Provider SqlServer\|Oracle\|Both` (default `Both`), `-Quick` for the representative subset, and `-FullMatrix` for the full matrix including the 500,000-row scale import (#170) | sqlserver-hris-a, oracle-hris-b |
+| `Scenario17-InitialPasswordProvisioning` | Initial Password provisioning end to end: an account is provisioned, then the scenario signs in as the account holder with the password JIM set, proves the directory is forcing a change, changes it as the account holder, and signs in again. Samba AD only; `-Template` is ignored | samba-ad-primary |
 
 **Available Templates (`-Template` parameter):**
 
@@ -269,7 +276,7 @@ The Integration Testing Framework provides end-to-end validation of JIM's synchr
 - **Realistic Systems**: Test against actual Samba AD, SQL Server, Oracle, etc., not mocks
 - **Idempotent**: Complete stand-up/tear-down for repeatable testing
 - **Scalable**: Template-based data sets from 3 to 1M objects
-- **Phased**: Phase 1 (supported) covers LDAP/CSV; Phase 2 (road-mapped) adds databases
+- **Phased**: Phase 1 (supported) covers LDAP/CSV; Phase 2 adds databases, starting with the JIM SQL Connector matrix (Scenario 16)
 - **Opt-In**: Manual trigger only, not automatic on every commit
 
 ### Step-Based Execution Model
@@ -323,16 +330,18 @@ flowchart TB
             P1D["openldap-primary<br/>(two suffixes)<br/>1389/1636"]
             CSV["CSV Files (mounted volume at /connector-files)"]
         end
-        subgraph P2["Phase 2 (Road-mapped)"]
+        subgraph P2["Phase 2 (profile: phase2)"]
             direction TB
-            P2A["SQL Server<br/>(HRIS A)<br/>Port: 1433"]
-            P2B["Oracle XE<br/>(HRIS B)<br/>Port: 1521"]
-            P2C["PostgreSQL<br/>(Target)<br/>Port: 5433"]
-            P2E["MySQL<br/>Port: 3306"]
+            P2A["sqlserver-hris-a<br/>SQL Server 2022<br/>1433 (Scenario 16)"]
+            P2B["oracle-hris-b<br/>Oracle Database Free 23ai<br/>1521, service FREEPDB1 (Scenario 16)"]
+            P2C["postgres-target<br/>PostgreSQL 16<br/>5432 (staged, priority 2)"]
+            P2E["mysql-test<br/>MySQL 8<br/>3306 (staged, priority 2)"]
         end
         P1 ~~~ P2
     end
 ```
+
+Ports shown are container-internal: nothing in the integration-test stack publishes a port to the host (see [Container Port Reference](#container-port-reference)). The `phase2` containers only start when the runner needs them, and only the ones the requested provider needs; `postgres-target` and `mysql-test` are staged for the JIM SQL Connector's priority 2 providers and stay dormant.
 
 The end-to-end run lifecycle (stand up, populate, configure, execute, validate, tear down) is shown under [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference).
 
@@ -411,6 +420,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Scenario12 RelativeDateScoping | file-based (no directory) | any | ~2.5m | date-window wait |
 | Scenario13 RelativeDateOutboundScoping | file-based (no directory) | any | ~3m | date-window wait |
 | Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m | fixed six-user; -Template ignored |
+| Scenario16 SqlConnectorMatrix | database (SQL Server, Oracle) | (ignored) | not yet measured | its own SQL seeder sizes the data; -Template ignored |
 
 **Notes:**
 
@@ -419,6 +429,7 @@ All templates generate realistic enterprise data following normal distribution p
 - The first-run directory-snapshot build scales with user count: negligible for light templates, ~45-60 min at Scale100k50Groups (100k users). At scale, also mind the reset-hygiene caveat in [issue #961](https://github.com/TetronIO/JIM/issues/961).
 - OpenLDAP per-scenario times at scale can include between-scenario reset/directory overhead (see [#961](https://github.com/TetronIO/JIM/issues/961)); for the non-scaling scenarios (e.g. Scenario 5) treat the 100k figure as an upper bound, not the scenario's intrinsic cost.
 - Scenario 14 ignores `-Template` (it always uses its bespoke six-user, two-suffix dataset) and runs on OpenLDAP only.
+- Scenario 16 ignores `-Template` too: the LDAP data-scale templates do not apply to a database source, and its own deterministic SQL seeder sizes the data. Its cost is dominated by the database containers rather than by JIM: a cold first run also pays the 13.6GB Oracle image pull.
 
 ---
 
@@ -1103,15 +1114,94 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 ---
 
-### Phase 2 (Road-mapped) - Database Scenarios
+#### Scenario 17: Initial Password Provisioning
 
-> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, and Attribute Priority (#91) took 14. The planned scenarios are now numbered 15-17.
+**Status**: implemented and passing. Samba AD only.
 
-All three Phase 2 scenarios are blocked on the **Database Connector** ([#170](https://github.com/TetronIO/JIM/issues/170)); the scripts do not exist yet. Planned shape:
+> **Setup recovers the directory hierarchy before asserting anything.** `Setup-Scenario1.ps1` imports the hierarchy once and selects the Partition afterwards, and Containers are enumerated only for a Partition that is already selected, so a single import leaves none; it warns and carries on, and the failure resurfaces several steps later as an export refused with "selected partition(s) contain no enumerated containers". Step 2b of `Setup-Scenario17.ps1` drives the sequence to completion instead (import, select the Partition, import again, select the Container) and throws on the spot if any stage fails. The ordering belongs to Setup-Scenario1 and affects every scenario that composes it.
+>
+> **Setup also removes Scenario 1's `userAccountControl` Attribute Flow.** The Initial Password's EnableAccount option writes the same attribute, and leaving both in place gives one attribute two writers: the confirming import reports the export as unconfirmed and JIM records that it "will attempt to reassert the change on the next export run". Switching EnableAccount off is not an alternative, because `false` means "disable the account", not "leave it alone". Removing the flow is what an administrator provisioning through the Initial Password should do; the account's enabled state belongs to whichever mechanism sets the password, because Active Directory will not enable an account that does not already hold a policy-compliant one.
 
-- **Scenario 15: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export.
-- **Scenario 16: Database Source/Target** - straight database connector import/export (SQL Server -> PostgreSQL), covering data-type handling and multi-valued attributes.
-- **Scenario 17: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
+**The chain, and why each link is needed:**
+
+| Step | Assertion | Why it is not redundant |
+|------|-----------|-------------------------|
+| 1 | HR CSV, Metaverse, Create export to Samba AD | The Initial Password is set only on a Create export, so provisioning is what triggers the delivery |
+| 2 | `pwdLastSet` is 0 and `ACCOUNTDISABLE` is clear | Active Directory refuses to enable an account holding no policy-compliant password, so the enabled state is independent evidence that the password write landed |
+| 3 | Bind as the account holder with the Initial Password gives result 49, sub-code `773` | `773` is ERROR_PASSWORD_MUST_CHANGE: the credential is correct *and* the directory is insisting on a change. This is the scenario's central assertion |
+| 4 | Bind with a deliberately wrong password gives result 49, sub-code `52e` | Without this contrast step 3 proves nothing. Both outcomes are result code 49, so a scenario that only checked "the bind failed" would pass just as happily against a password JIM never set |
+| 5 | The account holder changes their own password, authenticating with the Initial Password | The flow a new starter is actually put through, and the only step proving the credential is *usable* rather than merely recognised. An administrative reset would prove nothing about it |
+| 6 | Bind with the newly chosen password succeeds outright | The account is left usable, not stuck |
+| 7 | JIM reports nothing parked and nothing expired | JIM's own record has to agree with the directory; a parked account is one the target refused |
+
+**Why the password source is Static.** A generated password is produced at the moment it is set and stored nowhere, by design, so no test can ever bind with one. Static is the only source whose value the scenario can know. The delivery path it exercises (stage a Pending Initial Password on the Create export, then set it through the Connector's password channel) is the same one the generated sources use, so what is given up is the generator, not the mechanism.
+
+**Why Samba AD only.** "Must change at next sign-in" is an Active Directory behaviour with no portable equivalent; JIM reports it as an expiry downgrade on every other directory (`LdapConnectorPassword.BuildNonActiveDirectoryResult`). Step 3 would have nothing to bite on. Both `Setup-Scenario17.ps1` and the scenario refuse to run against OpenLDAP rather than silently asserting less.
+
+**`-Template` is ignored.** The scenario asserts against a single account; a larger template only lengthens the export. It always provisions at Micro.
+
+**Bind classification** lives in `Get-LDAPBindOutcome` (`utils/LDAP-Helpers.ps1`), which maps Active Directory's bind sub-codes to names and is covered by `utils/LDAP-Helpers.Tests.ps1` using strings captured verbatim from a live domain controller. Anything unrecognised is reported as `Failed` rather than guessed at, so a new failure mode surfaces as a test failure instead of being folded into an existing category.
+
+### Phase 2 - Database Scenarios
+
+> The road-mapped numbers here have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, Attribute Priority (#91) took 14, the SCIM 2.0 Client Connector (#545) took 15, and the JIM SQL Connector matrix ([#170](https://github.com/TetronIO/JIM/issues/170)) takes 16. What was previously listed as "Scenario 16: Database Source/Target" is delivered by the matrix scenario below. Initial Password Provisioning then claimed 17, so the two remaining planned scenarios are now numbered 18 and 19.
+
+#### Scenario 16: JIM SQL Connector Provider x Capability Matrix
+
+**Status**: written, and **blocked from running** until the connector is registered. This is the correctness gate for the JIM SQL Connector ([#170](https://github.com/TetronIO/JIM/issues/170)).
+
+> **The scenario cannot execute a single matrix row today, and the blocker is not in the scenario.** The JIM SQL Connector is deliberately registered in neither `ConnectorFactory.CreateConnectorInstance` nor `SeedingServer.BuiltInConnectors()` until Phase 8 of the plan, so:
+>
+> - no `JIM SQL Connector` Connector Definition is ever seeded, and `Setup-Scenario16.ps1` stops at Step 4 with *"The 'JIM SQL Connector' Connector Definition was not found"*; and
+> - even with a definition in place, `ConnectorFactory` would throw `NotSupportedException` for the name, which is the single dispatch point for the save-time connectivity test, schema discovery, every import and every export.
+>
+> Both registrations are one line each. Until they land, treat every row below as authored but unproven, and do not read a green summary from this scenario as evidence of anything. Verified on this branch against a freshly built stack: `ConnectorDefinitions` holds only the LDAP, File and SCIM 2.0 Client definitions, and both `-Provider SqlServer -Quick` and `-Provider Oracle -Quick` abort at Step 4 in about four seconds.
+
+**Purpose**: drive one capability row per line of the PRD's Testing Requirements table against both priority 1 providers, **Microsoft SQL Server** and **Oracle Database**: full import from a table and from a view, multi-valued and reference import, delta import in both modes plus the fallback path, export (create, update, delete, natural-key and reference), the type-mapping round trip, configuration validation, the provider driver-shape rows the unit suite cannot reach, and the 500,000-row scale import. Databases are deliberately not retrofitted into Scenarios 1-14; this matrix plus the road-mapped Multi-Source Aggregation scenario are the two vehicles for database regression coverage.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario16-SqlConnectorMatrix.ps1` and `test/integration/Setup-Scenario16.ps1`.
+
+**Containers**: `sqlserver-hris-a` and `oracle-hris-b` from the `phase2` compose profile. No directory container is involved.
+
+**Parameters** (all Scenario 16 only; the runner refuses to pass them to any other scenario):
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `-Provider SqlServer\|Oracle\|Both` | `Both` | Which provider to exercise. `Both` runs the whole matrix against each in turn and is what the pre-release gate uses; naming one provider is the quicker loop, and is the way to avoid the Oracle image entirely while working on SQL Server. |
+| `-Quick` | off | The representative subset, for the regular gate (the Scenario 11 tiering precedent). Mutually exclusive with `-FullMatrix`. |
+| `-FullMatrix` | off | Everything, including the 500,000-row scale import, which is the bulk of the runtime. Mutually exclusive with `-Quick`. |
+
+With neither switch, the default tier runs every functional row against the chosen provider(s) and leaves out only the scale import.
+
+`-Template` is ignored: the LDAP data-scale templates do not describe a database source, and Scenario 16 seeds its own rows with a deterministic SQL seeder sized by row count.
+
+**Stack-up**: the runner starts the `phase2` containers itself, and starts **only** the ones the requested `-Provider` needs, then waits for each to report healthy before running the scenario. Health, not a TCP connect, is the readiness signal for both: SQL Server accepts connections well before it will answer a query, and Oracle's pluggable database spends its first stretch MOUNTED rather than open READ WRITE. `postgres-target` and `mysql-test` are in the same profile but stay dormant; they are staged for the connector's priority 2 providers, which Scenario 16 does not cover.
+
+**Container facts worth knowing** (all from `test/integration/docker/docker-compose.integration-tests.yml`):
+
+- `sqlserver-hris-a` runs `mcr.microsoft.com/mssql/server:2022-latest`. The 2022 image ships **mssql-tools18 only**, so the healthcheck uses the fully qualified `/opt/mssql-tools18/bin/sqlcmd` path (nothing named `sqlcmd` is on `PATH`), with `-C` to trust the self-signed certificate SQL Server generates for itself; tools18 encrypts by default, where the older tools did not, so without `-C` the check fails on every interval no matter how healthy the server is. The SA password comes from `MSSQL_SA_PASSWORD` (the unprefixed `SA_PASSWORD` is deprecated and logs a warning on every start), overridable via `SQL_SA_PASSWORD`. Sized at 4 CPUs / 6GB for the 500,000-row scale run.
+- `oracle-hris-b` runs `container-registry.oracle.com/database/free:23.9.0.0` (**Oracle Database Free 23ai**, not the retired Express 21c image). It pulls **anonymously** from Oracle's own registry: no `docker login`, no licence click-through, and no third-party Docker Hub redistribution. The image is 13.6GB. The CDB service is `FREE`; the pluggable database JIM connects to is `FREEPDB1`, set explicitly via `ORACLE_PDB`. Connect to the PDB, never the CDB: application schemas live in the PDB and a CDB connection cannot see them. Sized at 4 CPUs / 8GB, with `shm_size: 2gb` because Oracle puts the SGA in System V shared memory and Docker's 64MB default `/dev/shm` is far too small (see [ORA-00845](#oracle-fails-to-start-with-ora-00845) below).
+- Oracle's healthcheck runs the image's own `/opt/oracle/checkDBStatus.sh`. It authenticates as SYSDBA through operating-system authentication (`sqlplus -s /`), so it carries **no credentials at all**, and it fails while the pluggable database is still MOUNTED rather than open READ WRITE, which is exactly the window in which a connection attempt would fail confusingly. Its `start_period` is 600s to cover a first start against an empty named volume, which creates the database from scratch. In practice the warm path is far quicker: on the development host used to validate this work, the container reported healthy about **40 seconds** after `docker compose up`, because the 23.9 image ships a pre-created database in its layers.
+
+**What the setup configures.** One Connected System per provider, with all five Object Types selected (`Person`, `PersonView`, `AppUser`, `NaturalKeyAccount`, and `GuidKeyedPerson` on Oracle only), five Run Profiles at page size 10, an Object Matching Rule on `EMPLOYEE_NUMBER`, one inbound Synchronisation Rule projecting `EMPLOYEES` into the Metaverse, and two outbound rules (three on Oracle) covering the three export shapes: a database-generated `IDENTITY` key, a natural key JIM authors, and Oracle's `RAW(16) DEFAULT SYS_GUID()`. It also contributes two Metaverse Attributes, `SQL Matrix FTE` (Decimal) and `SQL Matrix Headcount` (LongNumber), because no built-in attribute has those data types and mapping a `NUMBER(9,4)` onto an Integer attribute would round the value that the exact-numeric row exists to protect.
+
+**Database Time Zone is `Australia/Sydney`, and that is load-bearing.** At the UTC default every zone conversion is the identity, so a zone-inversion defect passes unnoticed; that much is a PRD requirement. What is less obvious is that **Europe/London does not work either for this seed**: the seeder derives `START_DATE` as 2020-01-06 plus n days, so a 50-row database never leaves January and February, where London is UTC+00:00 and the conversion is the identity again. Sydney is UTC+11:00 across the seeded range. The zoneless driver-shape row additionally writes a southern-winter date in (where Sydney is UTC+10:00), asserts against it, and restores the original, because a fixed-offset implementation passes a single-season test.
+
+**Seeder timings** (measured on the validation host, Docker Desktop, 16 CPUs / 64GB, warm containers). The seeder is set-based (`INSERT ... SELECT` over a generated series) rather than one statement per row, and it is not the expensive part of the scenario:
+
+| Provider | 50 rows | 500,000 rows |
+|----------|---------|--------------|
+| Microsoft SQL Server | ~1.2s | **6.8s** |
+| Oracle Database Free 23ai | ~2.0s | **7.9s** |
+
+Re-seeding is skipped when a content hash of the generated script matches what the `JIM_SEED_MANIFEST` table records, so an unchanged seed costs one round trip; pass `-Force` to rebuild regardless. Because the hash covers the script and not the data, rows that a matrix row mutated are **not** detected as drift: re-run with `-Force` when a previous run left the database dirty.
+
+**Image pinning**: both database images use mutable tags on purpose. `engineering/DEPENDENCY_PINNING.md` row 9 records integration test images as an accepted exception to digest pinning (test-only, never shipped, chosen for connector compatibility testing rather than supply chain assurance) and updates them manually as needed. Do not digest-pin them without changing that policy row first.
+
+#### Still road-mapped
+
+- **Scenario 18: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export. Sequenced after Scenario 16 is green: the matrix is the correctness gate, and this is the cross-technology regression breadth that follows it.
+- **Scenario 19: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
 
 ---
 
@@ -1268,7 +1358,13 @@ docker compose -f test/integration/docker/docker-compose.integration-tests.yml -
 
 **Alternative all-Phase-1 invoker:** `./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 1` stands up every Phase 1 system, runs all scenarios, collects results to `test/integration/results/`, and tears down. Prefer `Run-IntegrationTests.ps1 -Scenario All` unless you specifically need this script.
 
-Phase 2 (database) scenarios are not yet runnable; they are blocked on the Database Connector ([#170](https://github.com/TetronIO/JIM/issues/170)).
+**Phase 2 (database):** Scenario 16 (JIM SQL Connector matrix) is runnable through the runner in the ordinary way; it starts the `phase2` containers it needs itself, so no separate `--profile phase2` step is required. To drive the containers by hand for debugging, bring up only what you need rather than the whole profile:
+
+```powershell
+docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d sqlserver-hris-a oracle-hris-b
+```
+
+The remaining database scenarios (17 Multi-Source Aggregation, 18 Performance Baselines) are still road-mapped.
 
 ---
 
@@ -1283,7 +1379,7 @@ Integration tests run manually via GitHub Actions `workflow_dispatch` to avoid e
 3. Click **Run workflow**
 4. Choose:
    - **Template**: Data scale (Micro to Scale1m80Groups; or Scale100k5kGroups-Scale1m60kGroups for long-tail / OpenLDAP-only)
-   - **Phase**: 1 (Supported) or 2 (Road-mapped)
+   - **Phase**: 1 (LDAP/CSV) or 2 (databases)
 5. Click **Run workflow**
 
 ### Workflow Configuration
@@ -1720,22 +1816,80 @@ netstat -an | Select-String "389"
 # Solution: Stop conflicting service or change port mapping
 ```
 
-**Oracle takes forever to start**:
+### Phase 2 Database Containers (Scenario 16)
+
+**"network jim-network was found but has incorrect label" when starting the JIM stack**: the phase2 database containers were brought up before the JIM stack, against a hand-created `jim-network`. The main compose file owns that network (it is not declared external there), so it refuses to reuse one it did not create, and the JIM stack will not start at all. The runner avoids this by starting the stack first; you only hit it when driving the containers by hand.
+
+Do not fix it by tearing the databases down: Oracle's first boot against an empty volume is the expensive part of the whole scenario. Either recreate the network with the containers still running:
+
 ```powershell
-# Oracle XE first start can take 10-15 minutes
+docker network disconnect jim-network oracle-hris-b
+docker network disconnect jim-network sqlserver-hris-a
+docker network rm jim-network
+# let the JIM stack create it, then put the databases back
+docker network connect jim-network oracle-hris-b
+docker network connect jim-network sqlserver-hris-a
+```
+
+or add a throwaway overlay that marks the network external for that one run (`networks: { jim-network: { name: jim-network, external: true } }`) and pass it as an extra `-f` after `docker-compose.override.yml`. Neither belongs in the repository.
+
+**Driving the scenario from a Windows host rather than the devcontainer**: the `jim-*` shell aliases do not exist there. The equivalents are `docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build` (set `OPENAPI_STAGE=publish` first to skip the five-minute OpenAPI stage) and `pwsh -NoProfile -File ./test/integration/Run-IntegrationTests.ps1 ...`. You will also need a `.env`: the worktree does not inherit the main clone's copy, and `JIM_INFRASTRUCTURE_API_KEY` must be present before `jim.web` first starts or the scenario's API calls all fail authentication. The Keycloak image comes from quay.io, which times out often enough to be worth a bare `docker pull quay.io/keycloak/keycloak:<tag>` retry before concluding anything is wrong.
+
+**Oracle takes a long time to start**:
+```powershell
+# Follow the start-up and wait for: "DATABASE IS READY TO USE!"
 docker logs -f oracle-hris-b
 
-# Wait for: "DATABASE IS READY TO USE!"
+# What the runner waits on: the container's own health status
+docker inspect --format='{{.State.Health.Status}}' oracle-hris-b
 ```
+
+What to expect: a **cold first run is dominated by the 13.6GB image pull**, not by Oracle itself. After that, a start against an existing `oracle-data` volume is quick, and even a start against an empty volume is far quicker than the Express-era 10-15 minutes because the Free 23ai image ships a pre-created database in its layers; on the development host used to validate this work, the container reported healthy about 40 seconds after `docker compose up`. The healthcheck's `start_period` is 600s to cover the slow path, so a long wait is tolerated rather than expected.
+
+**Reading the Oracle healthcheck's exit code**: the check runs the image's own `/opt/oracle/checkDBStatus.sh`, which exits with:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Database open and usable |
+| `1` | The database role is neither PRIMARY nor STANDBY |
+| `2` | The pluggable database is not open in the required mode (typically still MOUNTED, i.e. still starting) |
+| `3` | SQL\*Plus execution failed (the instance is not up, or SQL\*Plus could not run at all) |
+
+```powershell
+# Run the status script by hand and read the exit code
+docker exec oracle-hris-b /opt/oracle/checkDBStatus.sh; $LASTEXITCODE
+```
+
+Exit code 2 during start-up is normal and self-clearing; it is the entire reason the healthcheck is preferred to a TCP probe. Exit code 2 that never clears, or exit code 3, means the instance itself is in trouble: read `docker logs oracle-hris-b`.
+
+<a id="oracle-fails-to-start-with-ora-00845"></a>
+
+**Oracle fails to start with ORA-00845**: Oracle puts the SGA in System V shared memory, and Docker's default 64MB `/dev/shm` is far too small for it. The compose definition sets `shm_size: 2gb` on `oracle-hris-b` for exactly this reason; ORA-00845 in the container logs means that setting has been lost, overridden, or the container was started outside the compose file.
+
+**Connecting to Oracle manually for debugging**:
+```powershell
+docker exec oracle-hris-b sqlplus -s 'system/"Test@123!"@//localhost:1521/FREEPDB1'
+```
+
+The password **must be double-quoted inside the connect string**. It contains `@`, which EZConnect otherwise reads as the host separator, so an unquoted password silently produces a nonsense connect descriptor rather than an authentication error. This was the defect in the previous healthcheck, and it is why the current one authenticates through operating-system authentication (`sqlplus -s /`) and carries no credentials at all. Note also that `FREEPDB1` is the pluggable database; connecting to the `FREE` CDB service instead will not see the application schemas.
+
+**Connecting to SQL Server manually for debugging**:
+```powershell
+docker exec sqlserver-hris-a /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Test@123!' -Q "SELECT @@VERSION"
+```
+
+The 2022 image ships mssql-tools18 only, and nothing named `sqlcmd` is on `PATH`, so the fully qualified path is the only one that resolves. `-C` trusts the self-signed certificate SQL Server generates for itself; tools18 encrypts by default, so the command fails without it however healthy the server is.
 
 **PostgreSQL connection refused**:
 ```powershell
-# Check if container is running
+# Check if the container is running
 docker ps | Select-String "postgres"
 
-# Check connection
-Test-NetConnection -ComputerName localhost -Port 5433
+# No ports are published to the host, so test from inside the container
+docker exec postgres-target pg_isready -U jimtest
 ```
+
+`postgres-target` (and `mysql-test`) are staged for the JIM SQL Connector's priority 2 providers and are **not** started by Scenario 16, so "not running" is the expected state during a Scenario 16 run.
 
 ### Data Population Issues
 
@@ -1843,6 +1997,7 @@ JIM/
         ├── Setup-Scenario10.ps1                            # Configures JIM for Scenario 10
         ├── Setup-Scenario12.ps1                            # Configures JIM for Scenario 12
         ├── Setup-Scenario13.ps1                            # Configures JIM for Scenario 13
+        ├── Setup-Scenario16.ps1                            # Configures JIM for Scenario 16 (JIM SQL Connector matrix)
         ├── Add-Scenario8Schedules.ps1                      # Optional schedule wiring for Scenario 8
         ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 1, 4, 5, etc.)
         ├── Populate-SambaAD-Scenario8.ps1                  # Samba AD population (Scenario 8)
@@ -1877,6 +2032,8 @@ JIM/
         │   ├── Invoke-Scenario12-RelativeDateScoping.ps1         # Relative-date inbound scoping
         │   ├── Invoke-Scenario13-RelativeDateOutboundScoping.ps1 # Relative-date outbound scoping
         │   ├── Invoke-Scenario14-AttributePriority.ps1          # Attribute Priority winner resolution (OpenLDAP only)
+        │   ├── Invoke-Scenario15-ScimConnector.ps1              # SCIM 2.0 Client Connector end to end
+        │   ├── Invoke-Scenario16-SqlConnectorMatrix.ps1         # JIM SQL Connector provider x capability matrix
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
         ├── docker/
@@ -1913,10 +2070,12 @@ All integration-test containers are internal to the `jim-network` Docker network
 | `samba-ad-source` | Cross-domain source (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
 | `samba-ad-target` | Cross-domain target (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
 | `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenario 14 only) | 1389 / 1636 | LDAP / LDAPS |
-| `sqlserver-hris-a` | Phase 2 source (road-mapped) | 1433 | TCP |
-| `oracle-hris-b` | Phase 2 source (road-mapped) | 1521 | TCP |
-| `postgres-target` | Phase 2 target (road-mapped) | 5432 | TCP |
-| `mysql-test` | Phase 2 (road-mapped) | 3306 | TCP |
+| `sqlserver-hris-a` | Phase 2 source: Microsoft SQL Server 2022 (Scenario 16) | 1433 | TCP |
+| `oracle-hris-b` | Phase 2 source: Oracle Database Free 23ai, CDB service `FREE`, pluggable database `FREEPDB1` (Scenario 16) | 1521 | TCP |
+| `postgres-target` | Phase 2, PostgreSQL 16: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 16 | 5432 | TCP |
+| `mysql-test` | Phase 2, MySQL 8: staged for the JIM SQL Connector's priority 2 providers, not used by Scenario 16 | 3306 | TCP |
+
+The four `phase2` containers publish nothing to the host either: connect to Oracle and SQL Server with `docker exec` (see [Phase 2 Database Containers](#phase-2-database-containers-scenario-16) for the verified commands), and JIM's own containers reach them by container name on `jim-network`.
 
 ### Environment Variables
 
@@ -1925,8 +2084,8 @@ All integration-test containers are internal to the `jim-network` Docker network
 | `INTEGRATION_TEST_TEMPLATE` | `Medium`           | Default template for test runs       |
 | `INTEGRATION_TEST_TIMEOUT`  | `7200` (2 hours)   | Maximum test execution time          |
 | `SAMBA_ADMIN_PASSWORD`      | `Test@123!`        | Samba AD admin password              |
-| `SQL_SA_PASSWORD`           | `Test@123!`        | SQL Server SA password               |
-| `ORACLE_ADMIN_PASSWORD`     | `Test@123!`        | Oracle SYS/SYSTEM password           |
+| `SQL_SA_PASSWORD`           | `Test@123!`        | SQL Server SA password. Compose passes it to the container as `MSSQL_SA_PASSWORD`; the unprefixed `SA_PASSWORD` is deprecated and warns on every start |
+| `ORACLE_SYS_PASSWORD`       | `Test@123!`        | Oracle SYS/SYSTEM password (`ORACLE_PWD` inside the container) |
 | `POSTGRES_PASSWORD`         | `Test@123!`        | PostgreSQL admin password            |
 
 ---
@@ -1954,16 +2113,19 @@ All integration-test containers are internal to the `jim-network` Docker network
 | Scenario 12 | ✅ Complete | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock (#85) |
 | Scenario 13 | ✅ Complete | Relative-date outbound scoping: staged downstream provisioning via the Temporal Scope Reconciler's outbound lane (#892) |
 | Scenario 14 | ✅ Complete | Attribute Priority multi-source winner resolution: 12 steps covering winner-takes-all scalar resolution, multi-valued handling, recall/re-election and null/withdrawal/priority-reorder behaviour (OpenLDAP only) (#91) |
+| Scenario 15 | ✅ Implemented | SCIM 2.0 Client Connector driven end to end against the containerised test service provider over HTTPS, with the provider's certificate trusted (#545) |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenarios 15-17 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
+| Scenario 16 | ✅ Implemented | JIM SQL Connector provider x capability matrix against Microsoft SQL Server and Oracle Database, with `-Provider` / `-Quick` / `-FullMatrix` coverage control; the runner starts the `phase2` containers the chosen provider needs (#170) |
+| Scenarios 17-18 | ⏳ Road-mapped | Remaining database scenarios: multi-source aggregation (follows Scenario 16 going green) and performance baselines |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Remaining Work
 
 - **Scenario 3 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
 - **GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
-- **Entitlement Management** (both deferred scenarios) and **Scenarios 15-17** - blocked on Internal MVO design and the Database Connector ([#170](https://github.com/TetronIO/JIM/issues/170)) respectively
+- **Entitlement Management** (both deferred scenarios) - blocked on Internal MVO design
+- **Scenarios 17-18** (multi-source aggregation, performance baselines) - sequenced after the Scenario 16 matrix is green ([#170](https://github.com/TetronIO/JIM/issues/170))
 
 ### Known Gaps
 
@@ -2033,7 +2195,7 @@ When either variable is missing the runner skips the streaming step and continue
 - [MVP Definition](plans/done/MVP_DEFINITION.md) - Overall project status
 - [Developer Guide](DEVELOPER_GUIDE.md) - Development setup and architecture
 - [GitHub Issue #173](https://github.com/TetronIO/JIM/issues/173) - Integration Testing Framework tracking issue
-- [GitHub Issue #170](https://github.com/TetronIO/JIM/issues/170) - SQL Database Connector (Phase 2 dependency)
+- [GitHub Issue #170](https://github.com/TetronIO/JIM/issues/170) - SQL Database Connector (Phase 2; Scenario 16 is its integration gate)
 - [GitHub Issue #175](https://github.com/TetronIO/JIM/issues/175) - API Key Authentication (required for non-interactive testing)
 - [GitHub Issue #176](https://github.com/TetronIO/JIM/issues/176) - PowerShell Module (required for JIM configuration)
 - [GitHub Issue #238](https://github.com/TetronIO/JIM/issues/238) - Workflow Test Framework

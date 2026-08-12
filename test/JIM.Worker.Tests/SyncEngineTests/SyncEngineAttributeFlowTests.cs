@@ -123,8 +123,8 @@ public class SyncEngineAttributeFlowTests
         var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), MetaverseObject = null };
         var syncRule = new SyncRule { AttributeFlowRules = [] };
 
-        Assert.DoesNotThrow(() =>
-            _engine.FlowInboundAttributes(cso, syncRule, Array.Empty<ConnectedSystemObjectType>()));
+        Assert.That(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, Array.Empty<ConnectedSystemObjectType>()), Throws.Nothing);
     }
 
     #region Multi-valued to single-valued (#435): more than one value to a single-valued target errors

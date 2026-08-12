@@ -8,7 +8,17 @@
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>..\..\..</DockerfileContext>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591;1587</NoWarn>
+    <!-- AV0029 / AV0030 are Asp.Versioning analyser rules (shipped transitively from 10.2.0) that
+         steer applications onto the library's own OpenAPI integration:
+         AddApiVersioning().AddOpenApi() plus MapOpenApi().WithDocumentPerVersion(). JIM deliberately
+         drives the native ASP.NET Core OpenAPI pipeline instead, because it needs document
+         transformers for the OAuth2 and API key security schemes, a raised serialiser MaxDepth for
+         the DTO graph, static document serving in production and response caching in development;
+         none of which the per-version integration exposes. The API serves a single version, so the
+         per-version document generation those rules ask for would add no documents. Revisit if JIM
+         ever publishes a second API version. AV0029 also fires inside generated source, so it can
+         only be suppressed at project level, not with a pragma. -->
+    <NoWarn>$(NoWarn);1591;1587;AV0029;AV0030</NoWarn>
 
     <!-- Pin the ASP.NET Core shared framework version explicitly. Without this,
          Microsoft.NET.Sdk.Web + RestorePackagesWithLockFile resolves the implicit
@@ -22,12 +32,12 @@
          Keep in sync with the ASP.NET Core runtime version bundled by the pinned
          mcr.microsoft.com/dotnet/aspnet and dotnet/sdk digests whenever either is
          bumped (see engineering/DEPENDENCY_PINNING.md). -->
-    <RuntimeFrameworkVersion>10.0.9</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion>10.0.11</RuntimeFrameworkVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.1" />
-    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="10.0.1" />
+    <PackageReference Include="Asp.Versioning.Mvc" Version="10.2.1" />
+    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="10.2.1" />
     <PackageReference Include="Humanizer.Core" Version="3.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.10" />
@@ -44,7 +54,7 @@
          package references a patched version. -->
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.18" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
-    <PackageReference Include="MudBlazor" Version="9.7.0" />
+    <PackageReference Include="MudBlazor" Version="9.8.0" />
   </ItemGroup>
 
   <ItemGroup>

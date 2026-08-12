@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Interfaces;
 using JIM.Models.Transactional;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 namespace JIM.Models.Staging;
 
 public class ConnectedSystem : IAuditable
@@ -118,6 +119,29 @@ public class ConnectedSystem : IAuditable
     /// with separate DbContext and connector instances per batch.
     /// </summary>
     public int? MaxExportParallelism { get; set; }
+
+    /// <summary>
+    /// How long an account provisioned into this Connected System stays owed an initial password before JIM
+    /// records an expiry and stops trying. Null follows JIM's default of seven days.
+    /// <para>
+    /// Held per Connected System because the thing it has to outlast is that system being unavailable, and how
+    /// long that lasts is a property of the system rather than of the deployment. A directory taken out of
+    /// service for a fortnight expires every account provisioned against it under the default; raising the value
+    /// here beforehand is what prevents that, and it should not raise it for every other system too.
+    /// </para>
+    /// </summary>
+    public TimeSpan? InitialPasswordTimeToLive { get; set; }
+
+    /// <summary>
+    /// The time to live actually applied to a new <see cref="PendingInitialPassword"/> for this Connected System.
+    /// A value of zero or less is treated as unconfigured rather than obeyed, because it would expire every
+    /// account the instant it was provisioned, which is the one outcome nobody setting this can be asking for.
+    /// </summary>
+    [NotMapped]
+    public TimeSpan EffectiveInitialPasswordTimeToLive =>
+        InitialPasswordTimeToLive is { } timeToLive && timeToLive > TimeSpan.Zero
+            ? timeToLive
+            : PendingInitialPassword.DefaultTimeToLive;
 
     /// <summary>
     /// EF back-link.

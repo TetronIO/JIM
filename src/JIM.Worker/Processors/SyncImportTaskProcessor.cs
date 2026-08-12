@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
 using System.Diagnostics;
+using System.Globalization;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
@@ -256,6 +258,12 @@ public class SyncImportTaskProcessor
         }
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
+
+        // What each excluded Container cost this run, accumulated across every call the Connector answers
+        // (#1255). Declared out here because both import shapes report it and the Activity carries one figure
+        // per Container for the run, not per page.
+        var entriesDiscardedByExclusion = new Dictionary<int, long>();
+
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
         // connecting out before it began.
@@ -390,6 +398,8 @@ public class SyncImportTaskProcessor
                             connectorWarningMessage = result.WarningMessage;
                         }
 
+                        AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
+
                         // process the results from this page
                         using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
                         {
@@ -491,6 +501,8 @@ public class SyncImportTaskProcessor
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 
+                AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
+
                 // Progress is now initialised inside ProcessImportObjectsAsync
 
                 // add the external ids from the results to our external id collection for later deletion calculation
@@ -511,6 +523,10 @@ public class SyncImportTaskProcessor
             default:
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
         }
+
+        // Recorded before the cancellation check below, because an abandoned run still read and threw those
+        // entries away and the administrator asking why it was slow is owed the figure either way.
+        await RecordExclusionDiscardsAsync(entriesDiscardedByExclusion);
 
         // If cancelled during import, skip all post-import phases (deletions, references, persistence).
         // In-memory CSO collections are discarded cleanly — nothing has been persisted yet.
@@ -1047,13 +1063,42 @@ public class SyncImportTaskProcessor
                         await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
                     break;
                 }
+                case AttributeDataType.Decimal:
+                {
+                    // Oracle's NUMBER is discovered as Decimal, so this is the ordinary sequence-backed
+                    // primary key on that provider (#1283). Set comparison is safe without normalising
+                    // the scale: equal decimals hash equally regardless of how many trailing zeros
+                    // they carry, so 4200.00m and 4200m are the same member.
+                    var connectedSystemObjectExternalIdsOfTypeDecimal = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(_connectedSystem.Id, selectedObjectType.Id, partitionId);
+
+                    // get the decimal import object external ids for this object type
+                    var connectedSystemDecimalExternalIdValues = externalIdsImported
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
+                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.DecimalValues);
+
+                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
+                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeDecimal.Except(connectedSystemDecimalExternalIdValues);
+
+                    // obsolete the Connected System Objects no longer in the Connected System for this object type
+                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
+                        await ObsoleteConnectedSystemObjectAsync(externalId, objectTypeExternalIdAttribute.Id, connectedSystemObjectsToBeUpdated, processedCsoIds);
+                    break;
+                }
                 case AttributeDataType.NotSet:
                 case AttributeDataType.DateTime:
                 case AttributeDataType.Binary:
                 case AttributeDataType.Reference:
                 case AttributeDataType.Boolean:
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    // Name what could not be handled. A bare ArgumentOutOfRangeException here cost a
+                    // day of Scenario 16 triage: deletion detection is the phase that decides whether
+                    // an object still exists, so a failure must say which Object Type and which type
+                    // of anchor it could not answer for (#1283).
+                    throw new ArgumentOutOfRangeException(
+                        nameof(objectTypeExternalIdAttribute),
+                        objectTypeExternalIdAttribute.Type,
+                        $"Deletion detection cannot handle an external ID attribute of type {objectTypeExternalIdAttribute.Type} " +
+                        $"('{objectTypeExternalIdAttribute.Name}' on Object Type '{selectedObjectType.Name}').");
             }
         }
     }
@@ -1163,7 +1208,21 @@ public class SyncImportTaskProcessor
             int intId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, intId),
             string stringId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, stringId),
             Guid guidId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, guidId),
-            _ => null
+            // long was missing here, though the deletion-detection switch has handed this method a
+            // LongNumber anchor since it was written and the repository overload existed the whole time.
+            // Every such deletion fell to the null arm below, reported itself as "not found. No work to
+            // do." and changed nothing, so a LongNumber-anchored Object Type never had a deletion
+            // detected, silently and with the run reporting success.
+            long longId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, longId),
+            decimal decimalId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, decimalId),
+            // Deletion detection decides whether an object still exists, so an anchor type this method
+            // cannot fetch by is a programming error and must say so. Returning null here is what let
+            // the long gap above go unnoticed: it is indistinguishable from an object legitimately
+            // already gone, which is the one outcome deletion detection is entitled to shrug at.
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(connectedSystemObjectExternalId),
+                connectedSystemObjectExternalId,
+                $"Deletion detection cannot obsolete a Connected System Object by an external ID of type {typeof(T).Name}.")
         };
 
         if (cso == null)
@@ -1581,6 +1640,7 @@ public class SyncImportTaskProcessor
                         AttributeDataType.Text => externalIdImportAttr.StringValues.FirstOrDefault(),
                         AttributeDataType.Number => externalIdImportAttr.IntValues.FirstOrDefault().ToString(),
                         AttributeDataType.LongNumber => externalIdImportAttr.LongValues.FirstOrDefault().ToString(),
+                        AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(externalIdImportAttr.DecimalValues.FirstOrDefault()),
                         AttributeDataType.Guid => externalIdImportAttr.GuidValues.FirstOrDefault().ToString(),
                         _ => null
                     };
@@ -1786,6 +1846,7 @@ public class SyncImportTaskProcessor
                                 AttributeDataType.Text => extIdImportAttr.StringValues.FirstOrDefault(),
                                 AttributeDataType.Number => extIdImportAttr.IntValues.FirstOrDefault().ToString(),
                                 AttributeDataType.LongNumber => extIdImportAttr.LongValues.FirstOrDefault().ToString(),
+                                AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(extIdImportAttr.DecimalValues.FirstOrDefault()),
                                 AttributeDataType.Guid => extIdImportAttr.GuidValues.FirstOrDefault().ToString(),
                                 _ => null
                             };
@@ -2129,6 +2190,7 @@ public class SyncImportTaskProcessor
 
         if (importObjectAttribute.IntValues.Count > 1 ||
             importObjectAttribute.LongValues.Count > 1 ||
+            importObjectAttribute.DecimalValues.Count > 1 ||
             importObjectAttribute.StringValues.Count > 1 ||
             importObjectAttribute.GuidValues.Count > 1)
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
@@ -2145,6 +2207,10 @@ public class SyncImportTaskProcessor
             AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.LongNumber => importObjectAttribute.LongValues[0].ToString(),
+            AttributeDataType.Decimal when importObjectAttribute.DecimalValues.Count == 0 =>
+                throw new ExternalIdAttributeValueMissingException($"External Id decimal attribute ({externalIdAttribute.Name}) on the imported object has no value."),
+            // Canonical, so the key matches the one the repository built for the stored value (#1283).
+            AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(importObjectAttribute.DecimalValues[0]),
             AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
@@ -3040,7 +3106,7 @@ public class SyncImportTaskProcessor
                             rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
                             if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
                             {
-                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it.";
                                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
                             }
                             else
@@ -3054,7 +3120,7 @@ public class SyncImportTaskProcessor
                         case UnresolvedReferenceHandling.Warn:
                             // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
                             // summary warning after the loop instead (see below).
-                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope.",
+                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope, or inside a Container it excludes.",
                                 LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
                             break;
 
@@ -3076,7 +3142,10 @@ public class SyncImportTaskProcessor
 
             if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
             {
-                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope. View the affected Connected System Objects for details.";
+                // Both ways an object can be out of scope, named explicitly (#1255): its Container was never
+                // selected, or a Container excludes it. The second is the harder to spot, because the branch above
+                // the referenced object is selected and looks right.
+                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope, or inside a Container it excludes. View the affected Connected System Objects for details.";
                 _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
                     ? warningSummary
                     : $"{_activity.WarningMessage}\n{warningSummary}";
@@ -3085,6 +3154,42 @@ public class SyncImportTaskProcessor
 
         // persist final progress so the UI reflects completion before moving to the next phase
         await _syncRepo.UpdateActivityAsync(_activity);
+    }
+
+    /// <summary>
+    /// Adds what one import call discarded through exclusions to the run's running totals.
+    /// </summary>
+    private static void AccumulateExclusionDiscards(ConnectedSystemImportResult result, Dictionary<int, long> runningTotals)
+    {
+        foreach (var discarded in result.EntriesDiscardedByExclusion)
+            runningTotals[discarded.ContainerId] = runningTotals.GetValueOrDefault(discarded.ContainerId) + discarded.EntriesDiscarded;
+    }
+
+    /// <summary>
+    /// Records what the run's exclusions cost onto the Activity, so the transfer an exclusion causes is visible
+    /// where the administrator who configured it will look (#1255).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not a warning: an exclusion discarding entries is it doing exactly what it was configured to
+    /// do, and flagging every exclusion-configured import as warned would train administrators to ignore the
+    /// field. Deliberately not fatal either; reporting how a run was performed must never fail the run, so a
+    /// failure here is logged and swallowed, as it is for the run's steps.
+    /// </remarks>
+    private async Task RecordExclusionDiscardsAsync(IReadOnlyDictionary<int, long> entriesDiscardedByExclusion)
+    {
+        if (entriesDiscardedByExclusion.Count == 0)
+            return;
+
+        try
+        {
+            await _syncRepo.RecordExclusionDiscardCountsAsync(_activity.Id, entriesDiscardedByExclusion);
+            Log.Information("PerformImportAsync: {DiscardedCount} entries were read and discarded across {ContainerCount} excluded Container(s)",
+                entriesDiscardedByExclusion.Values.Sum(), entriesDiscardedByExclusion.Count);
+        }
+        catch (Exception ex) when (ex is DbException or InvalidOperationException)
+        {
+            Log.Warning(ex, "PerformImportAsync: Could not record what this run's exclusions discarded. The import itself is unaffected.");
+        }
     }
 
     /// <summary>
@@ -3119,6 +3224,15 @@ public class SyncImportTaskProcessor
                         throw new InvalidCastException(
                             $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
                     break;
+                case AttributeDataType.Decimal:
+                    // Invariant culture: the unresolved value was written by whichever thread built it,
+                    // and a comma decimal separator would otherwise fail to parse here (#1283).
+                    if (decimal.TryParse(referenceAttributeValue.UnresolvedReferenceValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
+                        lookups.PrimaryDecimalLookup?.TryGetValue(decimalValue, out referencedConnectedSystemObject);
+                    else
+                        throw new InvalidCastException(
+                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a decimal.");
+                    break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidValue))
                         lookups.PrimaryGuidLookup?.TryGetValue(guidValue, out referencedConnectedSystemObject);
@@ -3152,6 +3266,14 @@ public class SyncImportTaskProcessor
                         lookups.SecondaryLongLookup?.TryGetValue(longValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
+                    break;
+                case AttributeDataType.Decimal:
+                    // Invariant culture, for the same reason as the primary switch above (#1283).
+                    if (decimal.TryParse(referenceAttributeValue.UnresolvedReferenceValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var secondaryDecimalValue))
+                        lookups.SecondaryDecimalLookup?.TryGetValue(secondaryDecimalValue, out referencedConnectedSystemObject);
+                    else
+                        throw new InvalidCastException(
+                            $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a decimal.");
                     break;
                 case AttributeDataType.Guid:
                     if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidValue))
@@ -3232,6 +3354,11 @@ public class SyncImportTaskProcessor
                                 if (!lookups.PrimaryLongLookup.TryAdd(primaryIdAttrValue.LongValue.Value, cso))
                                     throw new InvalidOperationException($"Duplicate primary external ID long value '{primaryIdAttrValue.LongValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
                                 break;
+                            case AttributeDataType.Decimal when primaryIdAttrValue.DecimalValue.HasValue:
+                                lookups.PrimaryDecimalLookup ??= new Dictionary<decimal, ConnectedSystemObject>();
+                                if (!lookups.PrimaryDecimalLookup.TryAdd(primaryIdAttrValue.DecimalValue.Value, cso))
+                                    throw new InvalidOperationException($"Duplicate primary external ID decimal value '{ExternalIdValue.ToCanonicalString(primaryIdAttrValue.DecimalValue.Value)}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                break;
                             case AttributeDataType.Guid when primaryIdAttrValue.GuidValue.HasValue:
                                 lookups.PrimaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
                                 if (!lookups.PrimaryGuidLookup.TryAdd(primaryIdAttrValue.GuidValue.Value, cso))
@@ -3271,6 +3398,11 @@ public class SyncImportTaskProcessor
                                     if (!lookups.SecondaryLongLookup.TryAdd(secondaryIdAttrValue.LongValue.Value, cso))
                                         throw new InvalidOperationException($"Duplicate secondary external ID long value '{secondaryIdAttrValue.LongValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
                                     break;
+                                case AttributeDataType.Decimal when secondaryIdAttrValue.DecimalValue.HasValue:
+                                    lookups.SecondaryDecimalLookup ??= new Dictionary<decimal, ConnectedSystemObject>();
+                                    if (!lookups.SecondaryDecimalLookup.TryAdd(secondaryIdAttrValue.DecimalValue.Value, cso))
+                                        throw new InvalidOperationException($"Duplicate secondary external ID decimal value '{ExternalIdValue.ToCanonicalString(secondaryIdAttrValue.DecimalValue.Value)}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    break;
                                 case AttributeDataType.Guid when secondaryIdAttrValue.GuidValue.HasValue:
                                     lookups.SecondaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
                                     if (!lookups.SecondaryGuidLookup.TryAdd(secondaryIdAttrValue.GuidValue.Value, cso))
@@ -3297,10 +3429,15 @@ public class SyncImportTaskProcessor
         public Dictionary<string, ConnectedSystemObject>? PrimaryTextLookup { get; set; }
         public Dictionary<int, ConnectedSystemObject>? PrimaryIntLookup { get; set; }
         public Dictionary<long, ConnectedSystemObject>? PrimaryLongLookup { get; set; }
+
+        // Keyed on the decimal itself, not on its canonical string: equal decimals hash equally
+        // regardless of scale, so 4200.00m and 4200m are the same key here without normalising (#1283).
+        public Dictionary<decimal, ConnectedSystemObject>? PrimaryDecimalLookup { get; set; }
         public Dictionary<Guid, ConnectedSystemObject>? PrimaryGuidLookup { get; set; }
         public Dictionary<string, ConnectedSystemObject>? SecondaryTextLookup { get; set; }
         public Dictionary<int, ConnectedSystemObject>? SecondaryIntLookup { get; set; }
         public Dictionary<long, ConnectedSystemObject>? SecondaryLongLookup { get; set; }
+        public Dictionary<decimal, ConnectedSystemObject>? SecondaryDecimalLookup { get; set; }
         public Dictionary<Guid, ConnectedSystemObject>? SecondaryGuidLookup { get; set; }
     }
 

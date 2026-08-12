@@ -67,6 +67,14 @@ public class UpdateConnectedSystemRequest
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
+    /// How long an account provisioned into this Connected System stays owed an initial password before JIM
+    /// records an expiry and stops trying. Omitted or null leaves the current value unchanged; JIM's default when
+    /// none has ever been set is seven days. Raise it ahead of a planned outage longer than the current window,
+    /// or every account provisioned meanwhile expires without a password.
+    /// </summary>
+    public TimeSpan? InitialPasswordTimeToLive { get; set; }
+
+    /// <summary>
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated: Error (default), Warn, or Ignore. Null or omitted leaves the current value unchanged.
     /// </summary>
@@ -215,6 +223,14 @@ public class UpdateConnectedSystemContainerRequest
     /// When selected, objects within this container will be imported during sync.
     /// </summary>
     public bool? Selected { get; set; }
+
+    /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported. Mutually exclusive with <see cref="Selected"/>: a request that would leave both set
+    /// is rejected with 400, whether it states both itself or states one against a stored other.
+    /// Omit to leave the stored exclusion unchanged.
+    /// </summary>
+    public bool? Excluded { get; set; }
 
     /// <summary>
     /// How far beneath this Container objects are imported from, when it is selected. Subtree imports from this

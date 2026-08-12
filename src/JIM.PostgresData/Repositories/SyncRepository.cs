@@ -87,6 +87,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, long attributeValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
 
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, decimal attributeValue)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, attributeId, attributeValue);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
         int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
         => _repo.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
@@ -129,6 +132,9 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<List<long>> GetAllExternalIdAttributeValuesOfTypeLongAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeLongAsync(connectedSystemId, objectTypeId, partitionId);
+
+    public Task<List<decimal>> GetAllExternalIdAttributeValuesOfTypeDecimalAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
+        => _repo.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(connectedSystemId, objectTypeId, partitionId);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
@@ -335,6 +341,21 @@ public partial class SyncRepository : ISyncRepository
             """;
 
         await _context.Database.ExecuteSqlRawAsync(sql, parameters);
+    }
+
+    public async Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
+    {
+        ArgumentNullException.ThrowIfNull(entriesDiscardedByContainerId);
+
+        if (entriesDiscardedByContainerId.Count == 0)
+            return;
+
+        // The same incremental upsert every other counter uses, which is what makes calling this once per page
+        // and once at the end of a run interchangeable.
+        await ActivityStatCounterWriter.UpsertDeltasAsync(_context, entriesDiscardedByContainerId.ToDictionary(
+            entry => new ActivityStatCounterKey(activityId, ActivityStatDimension.ExcludedContainer,
+                entry.Key.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            entry => entry.Value));
     }
 
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
