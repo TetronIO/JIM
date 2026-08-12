@@ -580,15 +580,22 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
-    /// Whether a distinguished name falls within the scope of any of the supplied Containers. An empty
-    /// collection means the caller has no Container-level opinion to apply, and every name is admitted.
+    /// Whether a distinguished name is within the scope the supplied Containers describe: the Container with the
+    /// final say over it admits it rather than carving it out. An empty collection means the caller has no
+    /// Container-level opinion to apply, and every name is admitted.
     /// </summary>
-    internal static bool IsDnWithinAnyContainerScope(string? distinguishedName, IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers)
+    /// <remarks>
+    /// Callers must supply every Container stating something about scope, exclusions included; the selections alone
+    /// answer a different question (see <c>ConnectedSystemExtensions.GetScopeDecidingContainers</c>). Supplying only
+    /// the selections is not a partial answer but a wrong one: an exclusion that is not present cannot carve
+    /// anything out.
+    /// </remarks>
+    internal static bool IsDnInScope(string? distinguishedName, IReadOnlyCollection<ConnectedSystemContainer> connectedSystemContainers)
     {
         if (connectedSystemContainers.Count == 0)
             return true;
 
-        return ResolveMostSpecificContainerScope(distinguishedName, connectedSystemContainers) is not null;
+        return ContainerSpecificity.IsInScope(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
     }
 
     /// <summary>

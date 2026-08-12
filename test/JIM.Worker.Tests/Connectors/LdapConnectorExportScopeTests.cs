@@ -174,6 +174,64 @@ public class LdapConnectorExportScopeTests
         Assert.That(results[0].Success, Is.True);
     }
 
+    [Test]
+    public async Task ExecuteAsync_TargetWithinAnExcludedBranch_FailsThatObjectWithoutWritingAsync()
+    {
+        // An exclusion is as much a statement about where JIM may write as a selection is (#1255): an object
+        // written into an excluded branch is exactly as unreadable on the next import as one written outside the
+        // selection altogether, and produces the same churn.
+        var export = CreateExport();
+        export.SetManagedScope([Managed("OU=Corp,DC=test,DC=local"), Excluded("OU=Service Accounts,OU=Corp,DC=test,DC=local")]);
+
+        var results = await export.ExecuteAsync(
+            [CreateUpdatePendingExport("CN=svc-backup,OU=Service Accounts,OU=Corp,DC=test,DC=local")],
+            CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.OutsideManagedScope));
+        }
+        _mockExecutor.Verify(e => e.SendRequest(It.IsAny<ModifyRequest>()), Times.Never);
+        _mockExecutor.Verify(e => e.SendRequestAsync(It.IsAny<ModifyRequest>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_TargetElsewhereInABranchWithAnExclusion_WritesAsUsualAsync()
+    {
+        // The exclusion carves out its own branch and nothing else; the selection around it still permits writes.
+        SetupModifyResponse(ResultCode.Success);
+        var export = CreateExport();
+        export.SetManagedScope([Managed("OU=Corp,DC=test,DC=local"), Excluded("OU=Service Accounts,OU=Corp,DC=test,DC=local")]);
+
+        var results = await export.ExecuteAsync(
+            [CreateUpdatePendingExport("CN=Bob,OU=Users,OU=Corp,DC=test,DC=local")],
+            CancellationToken.None);
+
+        Assert.That(results[0].Success, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_TargetWithinASelectionBeneathAnExclusion_WritesAsUsualAsync()
+    {
+        // Re-inclusion: the most specific statement decides, so a selected container inside an excluded branch
+        // permits writes again.
+        SetupModifyResponse(ResultCode.Success);
+        var export = CreateExport();
+        export.SetManagedScope(
+        [
+            Managed("OU=Corp,DC=test,DC=local"),
+            Excluded("OU=Service Accounts,OU=Corp,DC=test,DC=local"),
+            Managed("OU=App1,OU=Service Accounts,OU=Corp,DC=test,DC=local")
+        ]);
+
+        var results = await export.ExecuteAsync(
+            [CreateUpdatePendingExport("CN=svc-app1,OU=App1,OU=Service Accounts,OU=Corp,DC=test,DC=local")],
+            CancellationToken.None);
+
+        Assert.That(results[0].Success, Is.True);
+    }
+
     #region Helper methods
 
     private LdapConnectorExport CreateExport()
@@ -254,4 +312,13 @@ public class LdapConnectorExportScopeTests
         string externalId,
         ConnectedSystemContainerScope scope = ConnectedSystemContainerScope.Subtree) =>
         new() { ExternalId = externalId, Scope = scope };
+
+    /// <summary>
+    /// A container the administrator has carved out of the selection around it (#1255), as JIM states it to the
+    /// Connector alongside the selections.
+    /// </summary>
+    private static ConnectedSystemContainer Excluded(
+        string externalId,
+        ConnectedSystemContainerScope scope = ConnectedSystemContainerScope.Subtree) =>
+        new() { ExternalId = externalId, Scope = scope, Excluded = true };
 }

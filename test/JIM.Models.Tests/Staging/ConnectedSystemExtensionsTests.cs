@@ -710,7 +710,116 @@ public class ConnectedSystemExtensionsTests
 
     #endregion
 
+    #region GetScopeDecidingContainers Tests
+
+    // Every Container stating something about scope, selections and exclusions alike (#1255). Distinct from
+    // GetSelectedContainers, which answers "where may we search and write?"; this answers "which Container decides
+    // an object's fate?", and an exclusion left out of that set cannot carve anything out.
+
+    [Test]
+    public void GetScopeDecidingContainers_SelectionsAndExclusions_ReturnsBoth()
+    {
+        // Arrange
+        var serviceAccounts = ExcludedContainer("OU=Service Accounts,OU=Corp,DC=example,DC=local");
+        var corp = SelectedContainer("OU=Corp,DC=example,DC=local", serviceAccounts);
+        var connectedSystem = SystemWithContainers(partitionSelected: true, corp);
+
+        // Act
+        var result = connectedSystem.GetScopeDecidingContainers();
+
+        // Assert
+        Assert.That(result, Is.EquivalentTo(new[] { corp, serviceAccounts }));
+    }
+
+    [Test]
+    public void GetScopeDecidingContainers_ContainerStatingNothing_IsNotReturned()
+    {
+        // A Container nobody has ticked or excluded has no say; including it would make it a match that decides
+        // nothing, and the most specific match would stop being the one that states something.
+        // Arrange
+        var sales = new ConnectedSystemContainer { Name = "Sales", ExternalId = "OU=Sales,OU=Corp,DC=example,DC=local" };
+        var corp = SelectedContainer("OU=Corp,DC=example,DC=local", sales);
+        var connectedSystem = SystemWithContainers(partitionSelected: true, corp);
+
+        // Act
+        var result = connectedSystem.GetScopeDecidingContainers();
+
+        // Assert
+        Assert.That(result, Is.EquivalentTo(new[] { corp }));
+    }
+
+    [Test]
+    public void GetScopeDecidingContainers_ExclusionNestedSeveralLevelsDown_IsReturned()
+    {
+        // Arrange
+        var app1 = SelectedContainer("OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=local");
+        var serviceAccounts = ExcludedContainer("OU=Service Accounts,OU=Corp,DC=example,DC=local", app1);
+        var corp = SelectedContainer("OU=Corp,DC=example,DC=local", serviceAccounts);
+        var connectedSystem = SystemWithContainers(partitionSelected: true, corp);
+
+        // Act
+        var result = connectedSystem.GetScopeDecidingContainers();
+
+        // Assert
+        Assert.That(result, Is.EquivalentTo(new[] { corp, serviceAccounts, app1 }));
+    }
+
+    [Test]
+    public void GetScopeDecidingContainers_DeselectedPartition_ReturnsNothingFromIt()
+    {
+        // A deselected partition is not imported at all, so its Containers decide nothing.
+        // Arrange
+        var corp = SelectedContainer("OU=Corp,DC=example,DC=local");
+        var connectedSystem = SystemWithContainers(partitionSelected: false, corp);
+
+        // Act
+        var result = connectedSystem.GetScopeDecidingContainers();
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public void GetScopeDecidingContainers_NoPartitions_ReturnsEmpty()
+    {
+        Assert.That(new ConnectedSystem { Name = "Test System" }.GetScopeDecidingContainers(), Is.Empty);
+    }
+
+    #endregion
+
     #region Helper Methods
+
+    private static ConnectedSystemContainer SelectedContainer(string externalId, params ConnectedSystemContainer[] children) =>
+        WithChildren(new ConnectedSystemContainer { Name = externalId, ExternalId = externalId, Selected = true }, children);
+
+    private static ConnectedSystemContainer ExcludedContainer(string externalId, params ConnectedSystemContainer[] children) =>
+        WithChildren(new ConnectedSystemContainer { Name = externalId, ExternalId = externalId, Excluded = true }, children);
+
+    private static ConnectedSystemContainer WithChildren(ConnectedSystemContainer container, params ConnectedSystemContainer[] children)
+    {
+        foreach (var child in children)
+        {
+            child.ParentContainer = container;
+            container.ChildContainers.Add(child);
+        }
+
+        return container;
+    }
+
+    private static ConnectedSystem SystemWithContainers(bool partitionSelected, params ConnectedSystemContainer[] rootContainers) =>
+        new()
+        {
+            Name = "Test System",
+            Partitions =
+            [
+                new ConnectedSystemPartition
+                {
+                    Name = "example.local",
+                    Selected = partitionSelected,
+                    Containers = [.. rootContainers]
+                }
+            ]
+        };
 
     private static ConnectedSystem CreateConnectedSystemWithMode(string mode)
     {

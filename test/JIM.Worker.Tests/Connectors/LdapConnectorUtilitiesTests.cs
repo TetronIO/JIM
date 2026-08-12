@@ -700,7 +700,7 @@ public class LdapConnectorUtilitiesTests
     }
 
     [Test]
-    public void IsDnWithinAnyContainerScope_DnInTheSecondContainer_ReturnsTrue()
+    public void IsDnInScope_DnInTheSecondContainer_ReturnsTrue()
     {
         var containers = new List<ConnectedSystemContainer>
         {
@@ -708,11 +708,11 @@ public class LdapConnectorUtilitiesTests
             CreateContainer("OU=Partners,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
         };
 
-        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=External,OU=Partners,DC=example,DC=local", containers), Is.True);
+        Assert.That(LdapConnectorUtilities.IsDnInScope("CN=Alice,OU=External,OU=Partners,DC=example,DC=local", containers), Is.True);
     }
 
     [Test]
-    public void IsDnWithinAnyContainerScope_DnBeneathAOneLevelContainerOnly_ReturnsFalse()
+    public void IsDnInScope_DnBeneathAOneLevelContainerOnly_ReturnsFalse()
     {
         var containers = new List<ConnectedSystemContainer>
         {
@@ -720,19 +720,19 @@ public class LdapConnectorUtilitiesTests
             CreateContainer("OU=Partners,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
         };
 
-        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.False);
+        Assert.That(LdapConnectorUtilities.IsDnInScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.False);
     }
 
     [Test]
-    public void IsDnWithinAnyContainerScope_NoContainers_ReturnsTrue()
+    public void IsDnInScope_NoContainers_ReturnsTrue()
     {
         // No selected Containers means no Container-level opinion to apply; the caller's partition filtering
         // still governs. Returning false here would silently empty every delta import.
-        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", []), Is.True);
+        Assert.That(LdapConnectorUtilities.IsDnInScope("CN=Alice,OU=Corp,DC=example,DC=local", []), Is.True);
     }
 
     [Test]
-    public void IsDnWithinAnyContainerScope_DnInsideNestedSelectedContainers_ReturnsTrue()
+    public void IsDnInScope_DnInsideNestedSelectedContainers_ReturnsTrue()
     {
         // Two Containers admit this object, one nested inside the other. The answer is the same either way; that it
         // stays the same is the point, because what decides it is now the deeper Container rather than whichever
@@ -743,7 +743,68 @@ public class LdapConnectorUtilitiesTests
             CreateContainer("OU=Sales,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
         };
 
-        Assert.That(LdapConnectorUtilities.IsDnWithinAnyContainerScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.True);
+        Assert.That(LdapConnectorUtilities.IsDnInScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.True);
+    }
+
+    [Test]
+    public void IsDnInScope_DnWithinAnExcludedBranchOfASelectedContainer_ReturnsFalse()
+    {
+        // "Manage Corp, except its Service Accounts" (#1255), asked of this Connector's own containment rule.
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree),
+            CreateExcludedContainer("OU=Service Accounts,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapConnectorUtilities.IsDnInScope("CN=svc-backup,OU=Service Accounts,OU=Corp,DC=example,DC=local", containers), Is.False);
+            Assert.That(LdapConnectorUtilities.IsDnInScope("CN=Alice,OU=Sales,OU=Corp,DC=example,DC=local", containers), Is.True);
+        }
+    }
+
+    [Test]
+    public void IsDnInScope_ExcludedContainerItself_ReturnsFalse()
+    {
+        // The excluded Container is an object in the directory too, and a Subtree statement covers its own entry.
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree),
+            CreateExcludedContainer("OU=Service Accounts,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        Assert.That(LdapConnectorUtilities.IsDnInScope("OU=Service Accounts,OU=Corp,DC=example,DC=local", containers), Is.False);
+    }
+
+    [Test]
+    public void IsDnInScope_SelectedContainerBeneathAnExcludedOne_ReturnsTrue()
+    {
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree),
+            CreateExcludedContainer("OU=Service Accounts,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree),
+            CreateContainer("OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapConnectorUtilities.IsDnInScope("CN=svc-app1,OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=local", containers), Is.True);
+            Assert.That(LdapConnectorUtilities.IsDnInScope("CN=svc-backup,OU=Service Accounts,OU=Corp,DC=example,DC=local", containers), Is.False);
+        }
+    }
+
+    [Test]
+    public void IsDnInScope_ExclusionWrittenWithTheSpacingSomeDirectoriesEmit_StillCarvesItOut()
+    {
+        // The exclusion has to survive the same normalisation the selections do; a spacing difference silently
+        // reinstating an excluded branch is precisely the failure this Connector's own predicate exists to prevent.
+        var containers = new List<ConnectedSystemContainer>
+        {
+            CreateContainer("OU=Corp,DC=example,DC=local", ConnectedSystemContainerScope.Subtree),
+            CreateExcludedContainer("OU=Service Accounts, OU=Corp, DC=example, DC=local", ConnectedSystemContainerScope.Subtree)
+        };
+
+        Assert.That(LdapConnectorUtilities.IsDnInScope("CN=svc-backup,OU=Service Accounts,OU=Corp,DC=example,DC=local", containers), Is.False);
     }
 
     #endregion
@@ -805,7 +866,7 @@ public class LdapConnectorUtilitiesTests
     [Test]
     public void ResolveMostSpecificContainerScope_NoContainers_ReturnsNull()
     {
-        // No Containers is no opinion, which IsDnWithinAnyContainerScope reads as "admit everything". There is no
+        // No Containers is no opinion, which IsDnInScope reads as "admit everything". There is no
         // Container to name as the one that decided, so this says so rather than inventing one.
         Assert.That(LdapConnectorUtilities.ResolveMostSpecificContainerScope("CN=Alice,OU=Corp,DC=example,DC=local", []), Is.Null);
     }
@@ -821,6 +882,17 @@ public class LdapConnectorUtilitiesTests
             Name = externalId,
             ExternalId = externalId,
             Selected = true,
+            Scope = scope
+        };
+    }
+
+    private static ConnectedSystemContainer CreateExcludedContainer(string externalId, ConnectedSystemContainerScope scope)
+    {
+        return new ConnectedSystemContainer
+        {
+            Name = externalId,
+            ExternalId = externalId,
+            Excluded = true,
             Scope = scope
         };
     }

@@ -816,10 +816,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         {
             case ConnectedSystemRunType.FullImport:
                 logger.Debug("ImportAsync: Full Import requested");
-                return WithPinValidationWarningAsync(import, import.GetFullImportObjectsAsync());
+                return FinaliseImportResultAsync(import, import.GetFullImportObjectsAsync());
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
-                return WithPinValidationWarningAsync(import, import.GetDeltaImportObjectsAsync());
+                return FinaliseImportResultAsync(import, import.GetDeltaImportObjectsAsync());
             case ConnectedSystemRunType.FullSynchronisation:
             case ConnectedSystemRunType.DeltaSynchronisation:
             case ConnectedSystemRunType.Export:
@@ -829,15 +829,20 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     }
 
     /// <summary>
-    /// Carries a rejected-domain-controller warning from the import session onto its result, which is how it
-    /// reaches the Activity (issue #230 Phase 2). A warning the import raised about itself always wins: it
-    /// describes how the import was performed, which matters more than a note about domain controller pinning.
+    /// Everything an import session has to say once its work is done, applied to the result it is about to hand
+    /// back: the entries excluded Containers caused it to discard, and any rejected-domain-controller warning.
     /// </summary>
-    private static async Task<ConnectedSystemImportResult> WithPinValidationWarningAsync(
+    /// <remarks>
+    /// A warning the import raised about itself always wins over the domain controller pinning note (issue #230
+    /// Phase 2): it describes how the import was performed, which matters more than a note about plumbing.
+    /// </remarks>
+    private static async Task<ConnectedSystemImportResult> FinaliseImportResultAsync(
         LdapConnectorImport import,
         Task<ConnectedSystemImportResult> resultTask)
     {
         var result = await resultTask;
+
+        import.LogEntriesDiscardedByExclusion();
 
         if (result.WarningMessage == null && import.PinValidationWarning != null)
             result.WarningMessage = import.PinValidationWarning;
