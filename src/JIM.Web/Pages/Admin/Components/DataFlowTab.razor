@@ -106,15 +106,17 @@
                 <VirtualisedSortHeader Title="Connected System Attribute" Name="csattribute" />
             </HeaderTemplate>
             <CellTemplate>
+                @* A row in a virtualised grid is one line, and a flow can have several sources, so the sources
+                   show their first and open the rest in a dialog drawn with the same chips. *@
                 @if (context.Item.Direction == SyncRuleDirection.Import)
                 {
-                    @foreach (var source in context.Item.Sources.OrderBy(s => s.Order))
-                    {
-                        <AttributeChip @key="@($"{context.Item.SyncRuleMappingId}-{source.Order}")"
-                                       Kind="@SourceKind(source)"
-                                       Name="@source.DisplayName"
-                                       Expression="@source.Expression" />
-                    }
+                    <OverflowList TItem="DataFlowSource" Items="@context.Item.Sources.OrderBy(s => s.Order).ToList()" Title="Sources">
+                        <ItemTemplate Context="source">
+                            <AttributeChip Kind="@SourceKind(source)"
+                                           Name="@source.DisplayName"
+                                           Expression="@source.Expression" />
+                        </ItemTemplate>
+                    </OverflowList>
                 }
                 else
                 {
@@ -153,13 +155,13 @@
                 }
                 else
                 {
-                    @foreach (var source in context.Item.Sources.OrderBy(s => s.Order))
-                    {
-                        <AttributeChip @key="@($"{context.Item.SyncRuleMappingId}-{source.Order}")"
-                                       Kind="@SourceKind(source)"
-                                       Name="@source.DisplayName"
-                                       Expression="@source.Expression" />
-                    }
+                    <OverflowList TItem="DataFlowSource" Items="@context.Item.Sources.OrderBy(s => s.Order).ToList()" Title="Sources">
+                        <ItemTemplate Context="source">
+                            <AttributeChip Kind="@SourceKind(source)"
+                                           Name="@source.DisplayName"
+                                           Expression="@source.Expression" />
+                        </ItemTemplate>
+                    </OverflowList>
                 }
             </CellTemplate>
         </TemplateColumn>

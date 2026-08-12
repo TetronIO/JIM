@@ -648,13 +648,19 @@
                             <VirtualisedSortHeader Title="Description" Name="description" />
                         </HeaderTemplate>
                         <CellTemplate>
+                            @* Raw imported LDAP/SCIM text, so its length is the directory's business, not JIM's:
+                               a row in a virtualised grid is one line, so it is clipped rather than wrapped, and
+                               the whole description is on the cell's title. The class is used directly here
+                               rather than through <OneLineText /> because the linkified RFC references are
+                               markup. *@
                             @if (string.IsNullOrEmpty(context.Item.Description))
                             {
                                 <EmptyValue />
                             }
                             else
                             {
-                                @((MarkupString)Helpers.LinkifyRfcReferences(context.Item.Description))
+                                var description = context.Item.Description;
+                                <span class="jim-one-line" title="@description">@((MarkupString)Helpers.LinkifyRfcReferences(description))</span>
                             }
                         </CellTemplate>
                     </TemplateColumn>

@@ -285,8 +285,8 @@
                                    carrying several changes therefore shows the first and sends the rest to a
                                    dialog, which holds a virtualised grid of them so none is out of reach. *@
                                 @{ var group = context.Item; }
-                                <div class="jim-attr-single-line">
-                                    <span class="jim-attr-single-line-value">@GetAttributeValue(group.Values[0])</span>
+                                <div class="jim-one-line-list">
+                                    <span class="jim-one-line-list-value">@GetAttributeValue(group.Values[0])</span>
                                     @if (group.TotalCount > 1)
                                     {
                                         <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"

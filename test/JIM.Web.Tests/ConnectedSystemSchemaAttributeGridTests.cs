@@ -113,6 +113,25 @@ public class ConnectedSystemSchemaAttributeGridTests : JimComponentTestContext
     }
 
     /// <summary>
+    /// A schema attribute's description is raw imported directory text, so its length is the directory's business:
+    /// left to wrap it makes a row as tall as it likes, in a grid whose virtualiser positions every row from one
+    /// fixed height. It is clipped to one line, and the whole description stays readable on the cell itself.
+    /// </summary>
+    [Test]
+    public void SchemaTab_AttributeDescription_IsClippedToOneLineAndKeptInFull()
+    {
+        const string description = "RFC 4519: the common name of the entry, as long as the directory that "
+                                   + "published it cares to make it, which is not a length any column can hold.";
+        var connectedSystem = ConnectedSystemWithSelectedObjectType();
+        connectedSystem.ObjectTypes!.Single().Attributes.Single(a => a.Name == "alpha").Description = description;
+
+        var component = RenderSchemaTabOnObjectTypeSubTab(connectedSystem);
+
+        var clamped = component.FindAll(".jim-one-line").Single(e => e.TextContent.Contains("RFC 4519"));
+        Assert.That(clamped.GetAttribute("title"), Is.EqualTo(description));
+    }
+
+    /// <summary>
     /// Renders the schema tab with the object type's own sub-tab active, which is where the attribute grid lives.
     /// Uses the tab's documented "?ot=" deep link rather than clicking through MudBlazor's tab markup.
     /// </summary>

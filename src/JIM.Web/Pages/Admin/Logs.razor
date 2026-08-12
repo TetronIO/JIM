@@ -91,8 +91,13 @@
         </TemplateColumn>
         <TemplateColumn T="LogEntry" Title="Message" Sortable="false" CellStyleFunc="@GetRowStyle">
             <CellTemplate>
-                <div class="d-flex align-center gap-2">
-                    <span style="word-break: break-word; flex: 1;">@TruncateMessage(context.Item.Message, 150)</span>
+                @* A row in a virtualised grid is one line, so the message is clipped rather than wrapped, and the
+                   exception and property markers beside it never give way to a long one. A log line is what the
+                   reader is here to read, so the loss is covered twice over rather than accepted: the whole
+                   message is on the cell's title, and the row already opens the entry in full, selectable and
+                   copyable, in the detail panel below. *@
+                <div class="jim-one-line-list">
+                    <span class="jim-one-line-list-value" title="@MessageTooltip(context.Item.Message)">@FlattenMessage(context.Item.Message)</span>
                     @if (!string.IsNullOrEmpty(context.Item.Exception))
                     {
                         <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
@@ -403,15 +408,25 @@
         return value[..maxLength] + "...";
     }
 
-    private static string TruncateMessage(string message, int maxLength)
+    /// <summary>
+    /// The message as one line: a multi-line message would otherwise be as tall as it liked in a grid whose
+    /// virtualiser positions every row from one fixed height. The width is left to the cell, which clips with an
+    /// ellipsis; truncating here as well would print a second ellipsis inside the first.
+    /// </summary>
+    private static string FlattenMessage(string message)
     {
         if (string.IsNullOrEmpty(message))
             return message;
 
-        // Replace newlines with spaces for table display
-        var singleLine = message.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
-        return TruncateValue(singleLine, maxLength);
+        return message.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
     }
+
+    /// <summary>
+    /// What hovering the message reveals. Capped, because a hover is for reading the rest of a line rather than
+    /// a stack of them, and the row already opens the whole entry (message, exception, properties, raw JSON) in
+    /// the detail panel, where it can be selected and copied.
+    /// </summary>
+    private static string MessageTooltip(string message) => TruncateValue(FlattenMessage(message), 500);
 
     private static string FormatPropertyValue(object? value)
     {

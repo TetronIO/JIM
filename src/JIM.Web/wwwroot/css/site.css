@@ -1691,10 +1691,44 @@ html[lang] .jim-schema-change-table td {
     align-self: flex-start;
 }
 
-/* A multi-valued attribute's cell inside a virtualised grid. The virtualiser positions every row from one fixed
-   ItemSize, so the cell has to stay exactly one line however many values the attribute holds: the first value is
-   shown, clipped rather than wrapped, and the "+n more" affordance beside it opens the whole set in a dialog. */
-.jim-attr-single-line {
+/* ─── One-line cells (every virtualised row is exactly one line) ───
+   The virtualiser positions every row arithmetically from one fixed ItemSize, so a cell that wraps, or that
+   stacks two block elements, puts every row below it at an offset nothing else on the page agrees with: the
+   scroll position, the row index written to the URL and the reserved scroll space all drift from what is on
+   screen. These two primitives are how a cell is kept to one line without losing anything.
+
+   .jim-one-line is the clamp: a block box whose content is truncated with an ellipsis rather than wrapped. It
+   is used directly wherever the cell's content is markup (a linkified description, an icon beside a name), and
+   through <OneLineText /> wherever it is a string. Whatever is clipped stays available in the element's title,
+   in a dialog, or on the detail page the row links to; nothing is ever only visible when it happens to fit. */
+.jim-one-line {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* An icon sharing the line with text sits on the text's baseline by default, which drops it below the line it
+   belongs to; centre it against the text instead. */
+.jim-one-line .mud-icon-root {
+    vertical-align: middle;
+}
+
+/* Secondary text that used to sit on a second line, now inline after the value it qualifies. The colour and
+   opacity are set here rather than borrowing .mud-text-secondary, because site.css gives that class an extra
+   opacity of its own and the two routes render as two different greys (see JIM.Web/CLAUDE.md). */
+.jim-one-line-secondary {
+    margin-left: 8px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.8;
+}
+
+/* .jim-one-line-list is the clamp for a cell holding a LIST: the first item is shown, clipped rather than
+   wrapped, and the "+n more" affordance beside it opens the whole set in a dialog (<OverflowList />). Also used
+   directly where a cell holds a small fixed set of elements that must not wrap. */
+.jim-one-line-list {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1702,18 +1736,23 @@ html[lang] .jim-schema-change-table td {
     white-space: nowrap;
 }
 
-.jim-attr-single-line-value {
+/* Everything on the row holds its size; only the designated value gives way, so the affordance (or a modifier
+   chip) can never be the thing that disappears when the value beside it is long. */
+.jim-one-line-list > * {
+    flex-shrink: 0;
+}
+
+.jim-one-line-list > .jim-one-line-list-value {
+    flex-shrink: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
 }
 
 /* The shared affordance button is authored for the old stacked layout, where it sat under the values and so
-   aligned to the start of a column. On this one-line row it has to sit beside the value, and it must not be the
-   thing that gives way when the value is long. */
-.jim-attr-single-line .jim-attr-expand-btn {
+   aligned to the start of a column. On this one-line row it has to sit beside the value. */
+.jim-one-line-list .jim-attr-expand-btn {
     align-self: center;
-    flex-shrink: 0;
 }
 
 .jim-attr-expanded {
@@ -1724,6 +1763,14 @@ html[lang] .jim-schema-change-table td {
 
 .jim-attr-expanded-item {
     padding: 2px 0;
+}
+
+/* The whole set, inside <OverflowListDialog />. The ceiling is stated rather than measured, because the dialog's
+   container is not the page; it matches the figure the Connected System Object's and Pending Export's own value
+   dialogs state, so the three read as the same kind of thing. */
+.jim-overflow-list-dialog {
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 /* MVA rows: top-align cells so attribute name stays at top when values stack vertically */

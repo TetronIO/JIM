@@ -48,18 +48,15 @@
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetCategoryDisplayName(context.Item.Category.ToString())</MudText>
             </CellTemplate>
         </TemplateColumn>
-        @* py-3 balances the cell's vertical breathing room against its generous horizontal padding, so the
-           name/description block is not cramped against the row edges. *@
-        <TemplateColumn Title="Setting" Sortable="false" CellClass="py-3">
+        <TemplateColumn Title="Setting" Sortable="false">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Setting" Name="setting" />
             </HeaderTemplate>
             <CellTemplate>
-                <MudText Typo="Typo.body1">@context.Item.DisplayName</MudText>
-                @if (!string.IsNullOrEmpty(context.Item.Description))
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Item.Description</MudText>
-                }
+                @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the description
+                   under the name was a second line and a second row height. It reads inline after the name
+                   instead, low-lighted, with both available in full on hover. *@
+                <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Value" Sortable="false" CellClass="jim-nowrap">

@@ -123,7 +123,9 @@
                 <VirtualisedSortHeader Title="Object Mapping" Name="objectmapping" />
             </HeaderTemplate>
             <CellTemplate>
-                <div class="d-flex align-center flex-wrap" style="gap: 2px;">
+                @* A row in a virtualised grid is one line: this pair of chips and the arrow between them is a
+                   single statement, so it stays on one line and clips rather than wrapping into a second. *@
+                <div class="jim-one-line-list" style="gap: 2px;">
                     @if (context.Item.Direction == SyncRuleDirection.Import)
                     {
                         @* Inbound: CS -> MV *@

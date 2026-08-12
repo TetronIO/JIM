@@ -58,8 +58,10 @@
                 <VirtualisedSortHeader Title="Attribute" Name="attribute" />
             </HeaderTemplate>
             <CellTemplate>
-                @context.Item.Name
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Item.TypeAndPlurality</MudText>
+                @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the type and
+                   plurality under the name made every row two lines (worst in dense mode, where the fixed row
+                   height is smallest). They read inline after the name instead. *@
+                <OneLineText Text="@context.Item.Name" Secondary="@context.Item.TypeAndPlurality" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Value" Sortable="false">
@@ -67,11 +69,15 @@
                 <VirtualisedSortHeader Title="Value" Name="value" />
             </HeaderTemplate>
             <CellTemplate>
-                @if (!string.IsNullOrEmpty(context.Item.PreviousValue))
-                {
-                    <span class="mud-text-secondary attr-previous-value">@context.Item.PreviousValue</span>
-                }
-                <TextValueDisplay Value="@context.Item.Value" />
+                @* Same one-line rule: an attribute value is unbounded text, and a struck-through previous value
+                   beside it doubles what has to fit, so the pair is clipped rather than wrapped. *@
+                <span class="jim-one-line" title="@(string.IsNullOrEmpty(context.Item.PreviousValue) ? context.Item.Value : $"{context.Item.PreviousValue} -> {context.Item.Value}")">
+                    @if (!string.IsNullOrEmpty(context.Item.PreviousValue))
+                    {
+                        <span class="mud-text-secondary attr-previous-value">@context.Item.PreviousValue</span>
+                    }
+                    <TextValueDisplay Value="@context.Item.Value" />
+                </span>
             </CellTemplate>
         </TemplateColumn>
     </Columns>

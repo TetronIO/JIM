@@ -220,23 +220,23 @@
                         <MudText Typo="Typo.button">Object Types</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
+                        @* A row in a virtualised grid is one line, so a chip per bound Object Type is a row that
+                           grows with the attribute's bindings; the first is shown and the rest open in a dialog,
+                           which draws them with the same linked chips rather than flattening them to names. *@
                         @{
                             var boundTypes = context.Item.MetaverseObjectTypes?.ToList() ?? new List<KeyValuePair<int, string>>();
                         }
-                        @if (boundTypes.Count == 0)
-                        {
-                            <MudTooltip Text="This custom attribute is not bound to any Object Type, so it is not collecting data." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RemoveCircleOutline">Not assigned</MudChip>
-                            </MudTooltip>
-                        }
-                        else
-                        {
-                            foreach (var stub in boundTypes)
-                            {
-                                var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
-                                <MudChip T="string" Color="Color.Default" Variant="Variant.Filled" Href="@attributeUrl">@stub.Value</MudChip>
-                            }
-                        }
+                        <OverflowList TItem="KeyValuePair<int, string>" Items="@boundTypes" Title="Object Types">
+                            <ItemTemplate Context="stub">
+                                <MudChip T="string" Color="Color.Default" Variant="Variant.Filled"
+                                         Href="@($"/admin/schema/object-types/{stub.Key}")">@stub.Value</MudChip>
+                            </ItemTemplate>
+                            <EmptyContent>
+                                <MudTooltip Text="This custom attribute is not bound to any Object Type, so it is not collecting data." Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RemoveCircleOutline">Not assigned</MudChip>
+                                </MudTooltip>
+                            </EmptyContent>
+                        </OverflowList>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false">

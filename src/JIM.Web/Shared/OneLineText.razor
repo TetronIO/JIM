@@ -1,0 +1,57 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A cell's text kept to exactly one line: the value, optionally followed by the secondary text that would
+   otherwise sit under it, clipped with an ellipsis rather than wrapped. Every virtualised row is one line (the
+   virtualiser positions rows arithmetically from a single fixed ItemSize), so unbounded free text and a
+   MudText stacked under a value are both row-height faults, and this is the shared answer to both.
+
+   Whatever is clipped stays available: the full text (value and secondary together) is the element's title. A
+   title rather than a MudTooltip is deliberate, and is the one place JIM does not reach for the component: a
+   MudTooltip wraps its child in an inline-flex box of its own, which is precisely the box the ellipsis needs to
+   be the block container, so the wrapper would silently defeat the clipping it was added to explain. Where a
+   cell's content is markup rather than a string (a linkified description, an icon beside a name), use the
+   .jim-one-line class directly instead of this component; the class is the primitive. *@
+
+@if (string.IsNullOrEmpty(Text) && string.IsNullOrEmpty(Secondary))
+{
+    <EmptyValue />
+}
+else
+{
+    <span class="jim-one-line" title="@FullText">
+        @Text
+        @if (!string.IsNullOrEmpty(Secondary))
+        {
+            <span class="jim-one-line-secondary">@Secondary</span>
+        }
+    </span>
+}
+
+@code {
+    /// <summary>
+    /// The value to show. Null or empty renders the <see cref="EmptyValue"/> placeholder, unless secondary text
+    /// is present.
+    /// </summary>
+    [Parameter]
+    public string? Text { get; set; }
+
+    /// <summary>
+    /// Text qualifying the value (a setting's description, an attribute's type and plurality, a change's
+    /// pattern), rendered low-lighted on the same line rather than as a second block below it.
+    /// </summary>
+    [Parameter]
+    public string? Secondary { get; set; }
+
+    /// <summary>
+    /// What the reader sees on hover, when the value alone is not what should be revealed: a message flattened
+    /// for display but held in full here, or a value capped so the hover does not become a wall of text.
+    /// Defaults to the value and its secondary text together, since either half can be the part that is clipped.
+    /// </summary>
+    [Parameter]
+    public string? Tooltip { get; set; }
+
+    private string FullText =>
+        Tooltip
+        ?? (string.IsNullOrEmpty(Secondary) ? Text ?? string.Empty : $"{Text} ({Secondary})");
+}

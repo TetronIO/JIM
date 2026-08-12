@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
+using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using Moq;
@@ -324,6 +325,36 @@ public class DataFlowTabTests : JimComponentTestContext
         var cut = Render<DataFlowTab>();
 
         Assert.That(cut.Markup, Does.Contain("Department"));
+    }
+
+    /// <summary>
+    /// A row in the virtualised grid is one line, and the virtualiser positions every row from a single fixed
+    /// height, so a flow joining several sources must not render a chip per source: the first is shown, and the
+    /// affordance beside it counts what the dialog holds.
+    /// </summary>
+    [Test]
+    public void DataFlowTab_FlowWithSeveralSources_ShowsOnlyTheFirstOnTheRow()
+    {
+        var flow = BuildImportFlow();
+        flow.Sources =
+        [
+            new DataFlowSource { Order = 0, ConnectedSystemAttributeId = 9, ConnectedSystemAttributeName = "givenName" },
+            new DataFlowSource { Order = 1, ConnectedSystemAttributeId = 10, ConnectedSystemAttributeName = "sn" },
+            new DataFlowSource { Order = 2, ConnectedSystemAttributeId = 11, ConnectedSystemAttributeName = "middleName" }
+        ];
+        SetupFlows(flow);
+
+        var cut = Render<DataFlowTab>();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("givenName"));
+            Assert.That(cut.Markup, Does.Not.Contain("middleName"), "a second source on the row is a second line");
+
+            // One chip for the shown source and one for the flow's target; a chip per source would be four.
+            Assert.That(cut.FindComponents<AttributeChip>(), Has.Count.EqualTo(2));
+            Assert.That(cut.Find(".jim-attr-expand-btn").TextContent.Trim(), Is.EqualTo("+2 more"));
+        }
     }
 
     private static DataFlowHeader BuildImportFlow() => new()

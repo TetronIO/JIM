@@ -203,19 +203,24 @@
                                         @* A dot, not a chip. The outlined pill was carrying five unrelated meanings on  *@
                                         @* one panel (status, transition, sampling, scope), so it had stopped encoding  *@
                                         @* anything; severity is the one thing worth reading at a glance here.          *@
-                                        <div class="d-flex align-center gap-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small"
-                                                     Color="@Helpers.GetOutcomeTypeMudBlazorColor(row.Item.TransitionType)" />
-                                            <span>@Helpers.GetOutcomeTypePlainName(row.Item.TransitionType)</span>
-                                        </div>
                                         @* The pattern is what turns a transition into a sentence: "38,900 would have Email
                                            changed" reads very differently from "38,900 would have their email domain changed".
                                            Absent where no detector recognised the change, or where the group's deltas did not
-                                           all agree on one, and nothing is shown in its place. *@
-                                        @if (PreviewPatternKeys.GetDisplayName(row.Item.PatternKey) is { Length: > 0 } patternName)
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@patternName</MudText>
+                                           all agree on one, and nothing is shown in its place. It sits inline after the
+                                           transition rather than under it, because a row in a virtualised grid is one line. *@
+                                        @{
+                                            var transitionName = Helpers.GetOutcomeTypePlainName(row.Item.TransitionType);
+                                            var patternName = PreviewPatternKeys.GetDisplayName(row.Item.PatternKey);
                                         }
+                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(patternName) ? transitionName : $"{transitionName} ({patternName})")">
+                                            <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Class="mr-2"
+                                                     Color="@Helpers.GetOutcomeTypeMudBlazorColor(row.Item.TransitionType)" />
+                                            @transitionName
+                                            @if (!string.IsNullOrEmpty(patternName))
+                                            {
+                                                <span class="jim-one-line-secondary">@patternName</span>
+                                            }
+                                        </span>
                                     </CellTemplate>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Applies to" Sortable="false">
@@ -248,19 +253,23 @@
                                         <VirtualisedSortHeader Title="Attribute" Name="attribute" />
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
+                                        @* One line: the value transition reads inline after the attribute it
+                                           belongs to rather than as a paragraph under it. *@
                                         @if (string.IsNullOrEmpty(row.Item.AttributeName))
                                         {
                                             <EmptyValue />
                                         }
                                         else
                                         {
-                                            @row.Item.AttributeName
-                                            @if (!string.IsNullOrEmpty(row.Item.OldValue) || !string.IsNullOrEmpty(row.Item.NewValue))
-                                            {
-                                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                                    <TextValueDisplay Value="@row.Item.OldValue" /> &rarr; <TextValueDisplay Value="@row.Item.NewValue" />
-                                                </MudText>
-                                            }
+                                            <span class="jim-one-line" title="@($"{row.Item.AttributeName}: {row.Item.OldValue} -> {row.Item.NewValue}")">
+                                                @row.Item.AttributeName
+                                                @if (!string.IsNullOrEmpty(row.Item.OldValue) || !string.IsNullOrEmpty(row.Item.NewValue))
+                                                {
+                                                    <span class="jim-one-line-secondary">
+                                                        <TextValueDisplay Value="@row.Item.OldValue" /> &rarr; <TextValueDisplay Value="@row.Item.NewValue" />
+                                                    </span>
+                                                }
+                                            </span>
                                         }
                                     </CellTemplate>
                                 </TemplateColumn>
@@ -388,13 +397,19 @@
                                         <MudText Typo="Typo.button">Attribute</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
-                                        <TextValueDisplay Value="@row.Item.AttributeName" />
                                         @* Per row as well as per group: a group that collapsed back to the attribute level
-                                           holds rows of several kinds, and this is where an administrator sees which is which. *@
-                                        @if (PreviewPatternKeys.GetDisplayName(row.Item.PatternKey) is { Length: > 0 } deltaPatternName)
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@deltaPatternName</MudText>
+                                           holds rows of several kinds, and this is where an administrator sees which is which.
+                                           Inline after the attribute, because a row in a virtualised grid is one line. *@
+                                        @{
+                                            var deltaPatternName = PreviewPatternKeys.GetDisplayName(row.Item.PatternKey);
                                         }
+                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(deltaPatternName) ? row.Item.AttributeName : $"{row.Item.AttributeName} ({deltaPatternName})")">
+                                            <TextValueDisplay Value="@row.Item.AttributeName" />
+                                            @if (!string.IsNullOrEmpty(deltaPatternName))
+                                            {
+                                                <span class="jim-one-line-secondary">@deltaPatternName</span>
+                                            }
+                                        </span>
                                     </CellTemplate>
                                 </TemplateColumn>
                                 <TemplateColumn Title="Current value" Sortable="false">

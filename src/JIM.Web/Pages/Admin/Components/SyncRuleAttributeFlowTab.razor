@@ -122,25 +122,30 @@
                         <VirtualisedSortHeader Title="Source" Name="source" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        @foreach (var source in context.Item.Sources.OrderBy(q => q.Order))
-                        {
-                            if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
-                            {
-                                <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
-                                               Name="@source.ConnectedSystemAttribute.Name"
-                                               Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, source.ConnectedSystemAttribute.Type, source.ConnectedSystemAttribute.AttributePlurality)" />
-                            }
-                            else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
-                            {
-                                <AttributeChip Kind="AttributeChipKind.Metaverse"
-                                               Name="@source.MetaverseAttribute.Name"
-                                               Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, source.MetaverseAttribute.Type, source.MetaverseAttribute.AttributePlurality)" />
-                            }
-                            else if (!string.IsNullOrWhiteSpace(source.Expression))
-                            {
-                                <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
-                            }
-                        }
+                        @* A row in a virtualised grid is one line, and a flow can join several sources, so the
+                           first is shown and the rest open in a dialog drawn with the same chips. *@
+                        <OverflowList TItem="SyncRuleMappingSource" Items="@context.Item.Sources.OrderBy(q => q.Order).ToList()" Title="Sources">
+                            <ItemTemplate Context="source">
+                                @if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
+                                {
+                                    var connectedSystemSource = source.ConnectedSystemAttribute;
+                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                   Name="@connectedSystemSource.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemSource.Type, connectedSystemSource.AttributePlurality)" />
+                                }
+                                else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
+                                {
+                                    var metaverseSource = source.MetaverseAttribute;
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                   Name="@metaverseSource.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseSource.Type, metaverseSource.AttributePlurality)" />
+                                }
+                                else if (!string.IsNullOrWhiteSpace(source.Expression))
+                                {
+                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
+                                }
+                            </ItemTemplate>
+                        </OverflowList>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false">
@@ -154,18 +159,24 @@
                         <VirtualisedSortHeader Title="Target" Name="target" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        <div class="d-flex align-center flex-wrap">
+                        @* One line, and the attribute name is the part that gives way: the modifier chips beside
+                           it qualify what the flow does, so they must never be what a long name pushes out. *@
+                        <div class="jim-one-line-list">
                             @if (SyncRule.Direction == SyncRuleDirection.Import && context.Item.TargetMetaverseAttribute is { } metaverseTarget)
                             {
-                                <AttributeChip Kind="AttributeChipKind.Metaverse"
-                                               Name="@metaverseTarget.Name"
-                                               Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseTarget.Type, metaverseTarget.AttributePlurality)" />
+                                <span class="jim-one-line-list-value">
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                   Name="@metaverseTarget.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseTarget.Type, metaverseTarget.AttributePlurality)" />
+                                </span>
                             }
                             else if (SyncRule.Direction == SyncRuleDirection.Export && context.Item.TargetConnectedSystemAttribute is { } connectedSystemTarget)
                             {
-                                <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
-                                               Name="@connectedSystemTarget.Name"
-                                               Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemTarget.Type, connectedSystemTarget.AttributePlurality)" />
+                                <span class="jim-one-line-list-value">
+                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                   Name="@connectedSystemTarget.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemTarget.Type, connectedSystemTarget.AttributePlurality)" />
+                                </span>
                                 @if (context.Item.InitialExportOnly)
                                 {
                                     <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">

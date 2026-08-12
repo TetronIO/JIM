@@ -331,4 +331,29 @@ public class CausalityAttributeDetailTests : JimComponentTestContext
             Assert.That(locationRow.TextContent, Does.Contain("Remove"));
         }
     }
+
+    /// <summary>
+    /// The type and plurality used to be a MudText under the name, which renders a paragraph: a second line, and
+    /// so a row taller than the one fixed height the virtualiser positions every row from (worst in dense mode,
+    /// where that height is smallest). Both now share one clamped element, and both stay readable in full.
+    /// </summary>
+    [Test]
+    public void Render_AttributeNameAndItsTypeAndPlurality_ShareOneClampedLine()
+    {
+        var cut = RenderDetail();
+
+        cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(6)));
+
+        var displayNameRow = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Display Name"));
+        var clamped = displayNameRow.QuerySelectorAll(".jim-one-line")
+            .Single(e => e.TextContent.Contains("Display Name"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(clamped.TextContent, Does.Contain("Text · Single-valued"),
+                "the demoted text belongs on the same line as the name, not in a block beneath it");
+            Assert.That(clamped.GetAttribute("title"), Does.Contain("Text · Single-valued"),
+                "whichever half is clipped stays readable");
+        }
+    }
 }

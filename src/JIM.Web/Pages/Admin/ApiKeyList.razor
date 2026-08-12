@@ -64,14 +64,16 @@
                 <MudText Typo="Typo.button">Roles</MudText>
             </HeaderTemplate>
             <CellTemplate>
-                @foreach (var role in context.Item.Roles)
-                {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
-                }
-                @if (context.Item.Roles.Count == 0)
-                {
-                    <span class="mud-text-secondary">No roles</span>
-                }
+                @* A row in a virtualised grid is one line, so a chip per role is a row that grows with the key's
+                   roles; the first is shown and the rest open in a dialog. *@
+                <OverflowList TItem="Role" Items="@context.Item.Roles" Title="Roles">
+                    <ItemTemplate Context="role">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                    </ItemTemplate>
+                    <EmptyContent>
+                        <span class="mud-text-secondary">No roles</span>
+                    </EmptyContent>
+                </OverflowList>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Last Used" Sortable="false">

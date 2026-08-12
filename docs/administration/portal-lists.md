@@ -50,7 +50,15 @@ The same behaviour applies to the tables that live inside a page, not just the l
 
 This matters most for group membership: a group with half a million members is read by scrolling it, and narrowed by typing into its search box, rather than by working through pages ten values at a time.
 
-Where a multi-valued attribute appears as one row of a scrolling table (a Connected System Object's attributes, a Pending Export's Attribute Changes), the row shows the attribute's first value and a **+n more** beside it. Every row of a scrolling table is one line tall, which is what lets the table place a row without having drawn the rows above it; **+n more** opens the whole set in a dialog, which scrolls in exactly the same way, so no value is out of reach however many there are.
+## One line per row
+
+Every row of a scrolling table is one line tall, which is what lets the table place a row without having drawn the rows above it. Three things follow from that, and none of them loses you anything.
+
+**A cell holding a list shows its first item and a +n more beside it.** This covers a multi-valued attribute's values (a Connected System Object's attributes, a Pending Export's Attribute Changes), an API Key's roles, the Object Types a Metaverse Attribute is bound to, the sources of an Attribute Flow, and an Example Data Template Attribute's generation rules. **+n more** opens the whole set in a dialog, drawn exactly as it is in the row, so no item is out of reach however many there are.
+
+**Long text is clipped with an ellipsis rather than wrapped.** Descriptions, service log messages and imported schema descriptions are all as long as whatever wrote them chose to make them. Hover the text to read it in full; where there is a detail page or panel behind the row, as there is for a log entry, that holds the complete, selectable version.
+
+**Secondary text reads after the value rather than under it.** A setting's description, an attribute's data type and plurality, and the pattern behind a previewed change now follow what they qualify on the same line, low-lighted. Hovering shows both in full.
 
 ## Automation
 
