@@ -8,6 +8,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.Interfaces;
@@ -252,10 +253,14 @@ public interface ISyncServer
     /// <summary>
     /// Evaluates if an MVO has fallen out of scope for any export rules (deprovisioning).
     /// </summary>
+    /// <param name="objectTypeConflicts">Collects Synchronisation Rules that could not deprovision because the
+    /// Metaverse Object's Connected System Object is of a different Connected System Object Type than the Rule
+    /// targets (#1331), for the caller to report as Run Profile Execution Items.</param>
     Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
         ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache);
+        ExportEvaluationCache cache,
+        List<ExportObjectTypeConflict>? objectTypeConflicts = null);
 
     /// <summary>
     /// Evaluates export rules for an MVO being deleted. Creates delete exports for CSOs matched by

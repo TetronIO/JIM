@@ -219,6 +219,16 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            // The object retrieved is the Metaverse Object's only one in this system whatever its Object Type,
+            // so it may not be the one this Rule targets (#1331). Deprovisioning it would disconnect or delete
+            // an object this Rule never owned, so skip rather than act.
+            var deprovisionConflict = DetectObjectTypeConflict(mvo, exportRule, existingCso);
+            if (deprovisionConflict != null)
+            {
+                LogObjectTypeConflict(nameof(EvaluateOutOfScopeExportsAsync), deprovisionConflict, exportRule.ConnectedSystemId);
+                continue;
+            }
+
             Log.Information("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}. Handling deprovisioning for CSO {CsoId}",
                 mvo.Id, exportRule.Name, existingCso.Id);
 
@@ -438,7 +448,8 @@ public class ExportEvaluationServer
     public async Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
         ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache)
+        ExportEvaluationCache cache,
+        List<ExportObjectTypeConflict>? objectTypeConflicts = null)
     {
         var pendingExports = new List<PendingExport>();
 
@@ -475,6 +486,17 @@ public class ExportEvaluationServer
             if (!cache.CsoLookup.TryGetValue(lookupKey, out var existingCso))
             {
                 // No CSO exists, nothing to deprovision
+                continue;
+            }
+
+            // The lookup carries no Object Type, so the object found may belong to a different Object Type
+            // than this Rule targets (#1331). Deprovisioning it would disconnect or delete an object this
+            // Rule never owned, which is a worse outcome than the export case, so skip rather than act.
+            var deprovisionConflict = DetectObjectTypeConflict(mvo, exportRule, existingCso);
+            if (deprovisionConflict != null)
+            {
+                objectTypeConflicts?.Add(deprovisionConflict);
+                LogObjectTypeConflict(nameof(EvaluateOutOfScopeExportsAsync), deprovisionConflict, exportRule.ConnectedSystemId);
                 continue;
             }
 
@@ -1645,6 +1667,18 @@ public class ExportEvaluationServer
         // Find existing CSO for this MVO in the target system
         var existingCso = await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
 
+        // The Metaverse Object's one Connected System Object in this system may be of a different Object Type
+        // than this Rule targets, in which case exporting onto it would write this Rule's attribute values to
+        // an object of the wrong type (#1331). This overload has no channel to a Run Profile Execution Item,
+        // so the conflict is logged rather than reported; the cached entry point used by the synchronisation
+        // engine raises a CouldNotExportDueToExistingConnectedSystemObject RPEI.
+        var objectTypeConflict = DetectObjectTypeConflict(mvo, exportRule, existingCso);
+        if (objectTypeConflict != null)
+        {
+            LogObjectTypeConflict(nameof(CreateOrUpdatePendingExportAsync), objectTypeConflict, exportRule.ConnectedSystemId);
+            return null;
+        }
+
         PendingExportChangeType changeType;
         ConnectedSystemObject? csoForExport = existingCso;
 
@@ -1755,6 +1789,18 @@ public class ExportEvaluationServer
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
         cache.CsoLookup.TryGetValue(lookupKey, out var existingCso);
+
+        // The Metaverse Object's one Connected System Object in this system may be of a different Object Type
+        // than this Rule targets, in which case exporting onto it would write this Rule's attribute values to
+        // an object of the wrong type (#1331). This overload has no channel to a Run Profile Execution Item,
+        // so the conflict is logged rather than reported; the cached entry point used by the synchronisation
+        // engine raises a CouldNotExportDueToExistingConnectedSystemObject RPEI.
+        var objectTypeConflict = DetectObjectTypeConflict(mvo, exportRule, existingCso);
+        if (objectTypeConflict != null)
+        {
+            LogObjectTypeConflict(nameof(CreateOrUpdatePendingExportAsync), objectTypeConflict, exportRule.ConnectedSystemId);
+            return null;
+        }
 
         PendingExportChangeType changeType;
         ConnectedSystemObject? csoForExport = existingCso;
@@ -1887,6 +1933,21 @@ public class ExportEvaluationServer
     /// second Object for the Metaverse Object, which that index rejects. An Object joined to no Metaverse
     /// Object occupies nothing, so export matching is still free to claim it.
     /// </remarks>
+    /// <summary>
+    /// Logs an Object Type conflict identically wherever it is detected, so the three export entry points
+    /// read the same way in a service log.
+    /// </summary>
+    private static void LogObjectTypeConflict(string caller, ExportObjectTypeConflict conflict, int connectedSystemId)
+    {
+        Log.Error("{Caller}: Synchronisation Rule '{SyncRule}' targets Connected System Object Type '{TargetType}', but " +
+            "Metaverse Object {MvoId} already holds Connected System Object {CsoId} of type '{ExistingType}' in Connected " +
+            "System {SystemId}. A Metaverse Object can hold only one Connected System Object per Connected System, so " +
+            "nothing was staged for this Rule.",
+            caller, LogSanitiser.Sanitise(conflict.SyncRuleName), LogSanitiser.Sanitise(conflict.TargetObjectTypeName),
+            conflict.MetaverseObjectId, conflict.ExistingConnectedSystemObjectId,
+            LogSanitiser.Sanitise(conflict.ExistingObjectTypeName), connectedSystemId);
+    }
+
     internal static ExportObjectTypeConflict? DetectObjectTypeConflict(
         MetaverseObject mvo,
         SyncRule exportRule,
@@ -1942,13 +2003,7 @@ public class ExportEvaluationServer
         if (objectTypeConflict != null)
         {
             objectTypeConflicts?.Add(objectTypeConflict);
-            Log.Error("CreateOrUpdatePendingExportWithNoNetChangeAsync: Synchronisation Rule '{SyncRule}' targets Connected System " +
-                "Object Type '{TargetType}', but Metaverse Object {MvoId} already holds Connected System Object {CsoId} of type " +
-                "'{ExistingType}' in Connected System {SystemId}. No Pending Export staged.",
-                LogSanitiser.Sanitise(objectTypeConflict.SyncRuleName),
-                LogSanitiser.Sanitise(objectTypeConflict.TargetObjectTypeName),
-                mvo.Id, objectTypeConflict.ExistingConnectedSystemObjectId,
-                LogSanitiser.Sanitise(objectTypeConflict.ExistingObjectTypeName), exportRule.ConnectedSystemId);
+            LogObjectTypeConflict(nameof(CreateOrUpdatePendingExportWithNoNetChangeAsync), objectTypeConflict, exportRule.ConnectedSystemId);
             return (null, null, 0);
         }
 
