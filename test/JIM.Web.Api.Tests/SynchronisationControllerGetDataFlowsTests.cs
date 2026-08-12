@@ -163,7 +163,7 @@ public class SynchronisationControllerGetDataFlowsTests
 
     /// <summary>
     /// Two Import flows contributing the same Metaverse Attribute, and one Export flow writing it back out: the
-    /// smallest set that exercises both directions and a contested attribute.
+    /// smallest set that exercises both directions and an attribute with more than one contributor.
     /// </summary>
     private static IList<DataFlowHeader> BuildFlows()
     {

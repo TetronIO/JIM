@@ -13,6 +13,13 @@
 <svg class="jim-diagram" viewBox="0 0 1160 160" role="img" aria-labelledby="jimdg-mp-title jimdg-mp-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-mp-title">The metaverse pattern</title>
   <desc id="jimdg-mp-desc">Source systems on the left import identity data into the Metaverse, the single source of truth at the centre. Target systems on the right receive exports from it. Data always flows through the Metaverse; it never moves directly between systems.</desc>
+  <defs>
+    <mask id="jimdg-mp-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="160">
+      <rect x="0" y="0" width="1160" height="160" fill="#ffffff"/>
+      <rect x="372.6" y="71" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="742.6" y="71" width="45.3" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
   <g id="jimdg-mp-nodes">
     <rect class="jimdg-system" x="100" y="40" width="240" height="80" rx="8"/>
     <text class="jimdg-system-name" x="220" y="73">Source Systems</text>
@@ -24,13 +31,12 @@
     <text class="jimdg-system-name" x="940" y="73">Target Systems</text>
     <text class="jimdg-system-sub" x="940" y="96">directories · applications</text>
   </g>
+  <g mask="url(#jimdg-mp-labelcut)">
   <g id="jimdg-mp-edges">
     <line class="jimdg-spoke" x1="340" y1="80" x2="440" y2="80"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(450,80) rotate(0)"/>
-    <text class="jimdg-spoke-label" x="395" y="68">import</text>
     <line class="jimdg-spoke" x1="710" y1="80" x2="810" y2="80"/>
     <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(820,80) rotate(0)"/>
-    <text class="jimdg-spoke-label" x="765" y="68">export</text>
   </g>
   <g id="jimdg-mp-packets">
     <circle class="jimdg-packet" r="4.5">
@@ -41,5 +47,10 @@
       <animateMotion dur="2.4s" begin="-1.2s" repeatCount="indefinite" path="M710,80 L808,80"/>
       <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.2s" repeatCount="indefinite"/>
     </circle>
+  </g>
+  </g>
+  <g id="jimdg-mp-labels">
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="395" y="84">import</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="765" y="84">export</text>
   </g>
 </svg>

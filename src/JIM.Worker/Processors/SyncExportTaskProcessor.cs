@@ -158,13 +158,15 @@ public class SyncExportTaskProcessor
         // Full Import treated the object as deleted, and synchronisation then disconnected and re-provisioned it.
         // Stated only when there is a selection to state; a Connected System with none permits everything, exactly
         // as before.
+        // Selections and exclusions both, because both decide where JIM may write: an export into an excluded
+        // branch is as unreadable on the way back as one into a container that was never selected (#1255).
         if (_connector is IConnectorManagedScope scopedConnector)
         {
-            var managedContainers = _connectedSystem.GetSelectedContainers();
+            var managedContainers = _connectedSystem.GetScopeDecidingContainers();
             if (managedContainers.Count > 0)
             {
                 scopedConnector.SetManagedScope(managedContainers);
-                Log.Debug("PerformExportAsync: Stated a managed scope of {ContainerCount} selected container(s) to the {Connector} connector",
+                Log.Debug("PerformExportAsync: Stated a managed scope of {ContainerCount} container(s) to the {Connector} connector",
                     managedContainers.Count, _connector.Name);
             }
         }

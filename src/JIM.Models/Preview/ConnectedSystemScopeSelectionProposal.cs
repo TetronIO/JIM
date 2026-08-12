@@ -23,9 +23,16 @@ namespace JIM.Models.Preview;
 /// appear here to be in scope; this is the set of containers explicitly ticked, exactly as
 /// <see cref="ConnectedSystemContainer.Selected"/> records it.
 /// </param>
+/// <param name="ExcludedContainerIds">
+/// The containers that would be carved out of the selection around them (#1255), exactly as
+/// <see cref="ConnectedSystemContainer.Excluded"/> records it. Null and empty mean the same thing: nothing carved
+/// out. A proposal that omits an exclusion the Connected System currently carries is proposing to remove it, so
+/// callers building a partial proposal must carry the current exclusions forward rather than leaving this unset.
+/// </param>
 public record ConnectedSystemScopeSelectionProposal(
     IReadOnlyList<int> SelectedPartitionIds,
-    IReadOnlyList<int> SelectedContainerIds)
+    IReadOnlyList<int> SelectedContainerIds,
+    IReadOnlyList<int>? ExcludedContainerIds = null)
 {
     /// <summary>
     /// The selection currently in force on <paramref name="connectedSystem"/>, as a proposal. What "no change"
@@ -40,7 +47,10 @@ public record ConnectedSystemScopeSelectionProposal(
             [.. partitions.Where(p => p.Selected).Select(p => p.Id)],
             [.. partitions
                 .Where(p => p.Containers != null)
-                .SelectMany(p => CollectSelectedContainerIds(p.Containers!))]);
+                .SelectMany(p => CollectContainerIds(p.Containers!, container => container.Selected))],
+            [.. partitions
+                .Where(p => p.Containers != null)
+                .SelectMany(p => CollectContainerIds(p.Containers!, container => container.Excluded))]);
     }
 
     /// <summary>
@@ -58,17 +68,20 @@ public record ConnectedSystemScopeSelectionProposal(
             return false;
 
         return SelectedPartitionIds.Order().SequenceEqual(other.SelectedPartitionIds.Order()) &&
-               SelectedContainerIds.Order().SequenceEqual(other.SelectedContainerIds.Order());
+               SelectedContainerIds.Order().SequenceEqual(other.SelectedContainerIds.Order()) &&
+               (ExcludedContainerIds ?? []).Order().SequenceEqual((other.ExcludedContainerIds ?? []).Order());
     }
 
-    private static IEnumerable<int> CollectSelectedContainerIds(IEnumerable<ConnectedSystemContainer> containers)
+    private static IEnumerable<int> CollectContainerIds(
+        IEnumerable<ConnectedSystemContainer> containers,
+        Func<ConnectedSystemContainer, bool> statesSomething)
     {
         foreach (var container in containers)
         {
-            if (container.Selected)
+            if (statesSomething(container))
                 yield return container.Id;
 
-            foreach (var descendantId in CollectSelectedContainerIds(container.ChildContainers))
+            foreach (var descendantId in CollectContainerIds(container.ChildContainers, statesSomething))
                 yield return descendantId;
         }
     }

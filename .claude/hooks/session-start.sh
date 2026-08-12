@@ -56,14 +56,21 @@ fi
 # containerd is started first, and dockerd is pointed at it. Left to supervise
 # its own containerd, dockerd gives up with "failed to start containerd:
 # timeout waiting for containerd to start" and shuts itself down; starting
-# containerd separately and waiting for its socket makes this reliable.
+# containerd separately and waiting for it to answer makes this reliable.
+#
+# Liveness is probed with `ctr version`, not with the presence of the socket
+# file: the socket survives in the filesystem when a session's container is
+# resumed, so a file-existence test skips the start and leaves dockerd dialling
+# a dead socket ("connection refused"), which reads as Docker being unavailable
+# for the whole session when it only needed containerd starting.
 if ! docker info >/dev/null 2>&1; then
   log "Starting Docker daemon..."
 
-  if [ ! -S /run/containerd/containerd.sock ]; then
+  if ! ctr --address /run/containerd/containerd.sock version >/dev/null 2>&1; then
+    rm -f /run/containerd/containerd.sock
     nohup containerd > /tmp/containerd.log 2>&1 &
     for _ in $(seq 1 30); do
-      [ -S /run/containerd/containerd.sock ] && break
+      ctr --address /run/containerd/containerd.sock version >/dev/null 2>&1 && break
       sleep 1
     done
   fi

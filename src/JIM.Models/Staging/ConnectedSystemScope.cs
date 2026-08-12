@@ -39,6 +39,20 @@ public sealed class ConnectedSystemScope
     public IReadOnlyList<ConnectedSystemContainer> SelectedContainers { get; }
 
     /// <summary>
+    /// The containers this selection carves out of the branches around them (#1255), from partitions in this
+    /// selection only. Each carries its own <see cref="ConnectedSystemContainer.Scope"/>, which decides how far
+    /// its exclusion reaches, exactly as a selection's does.
+    /// </summary>
+    public IReadOnlyList<ConnectedSystemContainer> ExcludedContainers { get; }
+
+    /// <summary>
+    /// Every container with something to say about membership, which is what <see cref="Contains"/> ranks. Held
+    /// rather than composed per call: it is asked once per object, and the two lists never change after
+    /// construction.
+    /// </summary>
+    private readonly IReadOnlyList<ConnectedSystemContainer> _scopeDecidingContainers;
+
+    /// <summary>
     /// Whether container membership is part of scope for this Connected System. False for a Connector with
     /// partitions but no containers, where a selected partition is the whole answer.
     /// </summary>
@@ -47,13 +61,16 @@ public sealed class ConnectedSystemScope
     private ConnectedSystemScope(
         IReadOnlySet<int> selectedPartitionIds,
         IReadOnlyList<ConnectedSystemContainer> selectedContainers,
+        IReadOnlyList<ConnectedSystemContainer> excludedContainers,
         bool containersDecideScope,
         IConnectorContainment? containment)
     {
         SelectedPartitionIds = selectedPartitionIds;
         SelectedContainers = selectedContainers;
+        ExcludedContainers = excludedContainers;
         ContainersDecideScope = containersDecideScope;
         _containment = containment;
+        _scopeDecidingContainers = [.. selectedContainers, .. excludedContainers];
     }
 
     /// <summary>
@@ -78,15 +95,18 @@ public sealed class ConnectedSystemScope
         ArgumentNullException.ThrowIfNull(selection);
 
         var partitionIds = selection.SelectedPartitionIds.ToHashSet();
-        var containerIds = selection.SelectedContainerIds.ToHashSet();
-        var containers = new List<ConnectedSystemContainer>();
+        var selectedIds = selection.SelectedContainerIds.ToHashSet();
+        var excludedIds = (selection.ExcludedContainerIds ?? []).ToHashSet();
+        var selectedContainers = new List<ConnectedSystemContainer>();
+        var excludedContainers = new List<ConnectedSystemContainer>();
 
         foreach (var partition in (connectedSystem.Partitions ?? []).Where(p => partitionIds.Contains(p.Id) && p.Containers != null))
-            CollectSelectedContainers(partition.Containers!, containerIds, containers);
+            CollectContainers(partition.Containers!, selectedIds, excludedIds, selectedContainers, excludedContainers);
 
         return new ConnectedSystemScope(
             partitionIds,
-            containers,
+            selectedContainers,
+            excludedContainers,
             connectedSystem.ConnectorDefinition?.SupportsPartitionContainers ?? false,
             containment);
     }
@@ -124,23 +144,37 @@ public sealed class ConnectedSystemScope
         if (_containment is null || string.IsNullOrEmpty(containerIdentifier))
             return null;
 
-        // The most specific selected container decides, rather than any of them being enough
+        // The most specific container decides, rather than any selected one being enough
         // (<see cref="ContainerSpecificity"/>). While every container says the same thing the two are the same
-        // answer; they part company once a container can contradict the branch it sits in (#1255).
-        return ContainerSpecificity.ResolveMostSpecific(containerIdentifier, SelectedContainers, _containment.IsWithinContainer) is not null;
+        // answer; they part company once a container can contradict the branch it sits in (#1255), which is why
+        // the exclusions are ranked alongside the selections rather than subtracted afterwards.
+        //
+        // Which containers carve out is answered from this selection rather than from the containers' own flags,
+        // for the same reason the selection is a parameter at all: a proposal exists to differ from what is
+        // stored, and reading the stored flags would evaluate the configuration the administrator is trying to
+        // change instead of the one they are proposing.
+        return ContainerSpecificity.IsInScope(
+            containerIdentifier,
+            _scopeDecidingContainers,
+            _containment.IsWithinContainer,
+            ExcludedContainers.Contains);
     }
 
-    private static void CollectSelectedContainers(
+    private static void CollectContainers(
         IEnumerable<ConnectedSystemContainer> containers,
         IReadOnlySet<int> selectedContainerIds,
-        List<ConnectedSystemContainer> collected)
+        IReadOnlySet<int> excludedContainerIds,
+        List<ConnectedSystemContainer> selected,
+        List<ConnectedSystemContainer> excluded)
     {
         foreach (var container in containers)
         {
             if (selectedContainerIds.Contains(container.Id))
-                collected.Add(container);
+                selected.Add(container);
+            else if (excludedContainerIds.Contains(container.Id))
+                excluded.Add(container);
 
-            CollectSelectedContainers(container.ChildContainers, selectedContainerIds, collected);
+            CollectContainers(container.ChildContainers, selectedContainerIds, excludedContainerIds, selected, excluded);
         }
     }
 }
