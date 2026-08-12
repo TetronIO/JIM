@@ -9,6 +9,7 @@ using Bunit;
 using JIM.Web.Models;
 using JIM.Web.Services;
 using JIM.Web.Shared;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 
@@ -38,6 +39,38 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             .Add(c => c.ContainerId, "test-grid")
             .Add(c => c.DefaultSortBy, "Name")
             .Add(c => c.StateKey, stateKey));
+
+    [Test]
+    public void VirtualisedDataGrid_ToolBar_AnchorsActionsLeftAndPutsTheCountBesideTheSearch()
+    {
+        // The toolbar has two anchored ends and nothing in between: the page's actions sit against the left edge
+        // with the density toggle, and the count sits immediately left of the search box that changes it. A count
+        // in the left slot pushed the primary action into open space in the middle, where it read as leftover.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 4)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Widgets")
+            .Add(c => c.ToolBarExtras, (RenderFragment)(builder => builder.AddMarkupContent(0, "<span>Create Widget</span>"))));
+
+        cut.WaitForAssertion(() =>
+        {
+            var markup = cut.Markup;
+            var action = markup.IndexOf("Create Widget", StringComparison.Ordinal);
+            var count = markup.IndexOf("4 Widgets", StringComparison.Ordinal);
+            var search = markup.IndexOf("placeholder=\"Search", StringComparison.Ordinal);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(action, Is.GreaterThan(-1), "the toolbar actions did not render");
+                Assert.That(count, Is.GreaterThan(-1), "the count did not render");
+                Assert.That(search, Is.GreaterThan(-1), "the search box did not render");
+                Assert.That(action, Is.LessThan(count), "the page's actions must sit left of the count, against the density toggle");
+                Assert.That(count, Is.LessThan(search), "the count must sit immediately left of the search box");
+            }
+        });
+    }
 
     [Test]
     public void VirtualisedDataGrid_RowClassFunc_IsForwardedToTheUnderlyingGrid()

@@ -38,14 +38,23 @@
                  RowClass="@(RowClicked.HasDelegate ? "cursor-pointer" : null)" RowClassFunc="@RowClassFunc"
                  RowClick="HandleRowClick" Class="mt-5">
         <ToolBarContent>
+            @* The toolbar has two anchored ends and nothing loose in between. Left: how the table is displayed,
+               then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
+               the left slot pushed the primary action into the middle, where the loudest thing on the page was
+               also the only one floating in open space. *@
             <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
-            @* The total match count, in the toolbar's title slot; with no pager, this is the only place the list
-               says how big it is. While a search narrows the list it reads "x of y" against the unfiltered baseline. *@
+            @if (ToolBarExtras != null)
+            {
+                <MudText Class="mx-2 mud-text-disabled">|</MudText>
+                @ToolBarExtras
+            }
+            <MudSpacer />
+            @* The total match count. With no pager this is the only place the list says how big it is, and while a
+               search narrows it the text becomes "x of y" against the unfiltered baseline; it sits against the
+               search box because that is the control the reader just changed it with. *@
             <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
                               SingularName="@SingularName" PluralName="@PluralName"
-                              ShowSeparator="true" />
-            <MudSpacer />
-            @ToolBarExtras
+                              Class="mr-3" />
             @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
                filtered by a term the reader cannot see. *@
             <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />

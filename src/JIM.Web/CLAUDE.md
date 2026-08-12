@@ -130,12 +130,16 @@ Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTot
 
 ## Object counts in table toolbars
 
-The toolbar's left side is one slot with a fixed order: **density toggle | title (if the table has one) | count**. The count is always a `<TableObjectCount />`; the convention exists because two hand-rolled treatments had already diverged (a count baked into a title's parentheses on `PendingExportDetail`, a right-aligned "Showing x of y" on `PendingDeletionList`) before it was extracted.
+A table toolbar has two anchored ends and nothing loose in between: **left** is how the table is displayed (the density toggle) followed by the page's own actions; **right** is the count followed by the search box. The count is always a `<TableObjectCount />`; the convention exists because two hand-rolled treatments had already diverged (a count baked into a title's parentheses on `PendingExportDetail`, a right-aligned "Showing x of y" on `PendingDeletionList`) before it was extracted.
+
+The count is on the **right, immediately left of the search box**, for two reasons: "12 of 3,868" is feedback from that box, so it answers where the reader just typed; and the left slot then belongs to the primary action, which is what a page's Create button wants. It was briefly in the left slot instead, which pushed the action into the middle of the toolbar, where the loudest thing on the page was also the only one floating in open space. Where a table has a **title** and no search box (the child tables on detail pages), the count follows the title instead, since there is nothing on the right for it to answer to.
 
 ```razor
-@* No toolbar title (the page header already names the list): the count carries the nouns *@
+@* In a toolbar with a search box (every VirtualisedDataGrid): right side, nouns and all *@
+<MudSpacer />
 <TableObjectCount Count="@_totalItems" Total="@_unfilteredTotalItems"
-                  SingularName="@type?.Name" PluralName="@type?.PluralName" ShowSeparator="true" />
+                  SingularName="@type?.Name" PluralName="@type?.PluralName" Class="mr-3" />
+<SearchField ... />
 
 @* Beside a title: bare number, because the title already names the objects *@
 <MudText Typo="Typo.h6">Attribute Changes</MudText>
@@ -144,7 +148,8 @@ The toolbar's left side is one slot with a fixed order: **density toggle | title
 
 - Pass the nouns **only when there is no title**; beside one, the bare number avoids restating it.
 - Pass `Total` when the caller holds an unfiltered baseline; the text becomes "12 of 3,868 ..." while a filter narrows the list and collapses to the plain count when nothing is filtered.
-- A null `Count` renders nothing (including the separator, which the component owns so it cannot dangle): null is "not counted yet", and a zero in its place would read as an empty list.
+- A null `Count` renders nothing (including its optional `ShowSeparator` separator, which the component owns so it cannot dangle): null is "not counted yet", and a zero in its place would read as an empty list.
+- `<VirtualisedDataGrid>` builds this whole toolbar itself; a page only supplies its actions via `ToolBarExtras` (the grid adds the `|` separator after the density toggle when it has any) and never places the count or the search box by hand.
 
 ## Table empty states
 
