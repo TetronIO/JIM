@@ -602,3 +602,201 @@ function Get-LDAPGroupList {
 
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
+
+<#
+    Active Directory bind sub-codes.
+
+    Every refused bind comes back as result code 49 (invalidCredentials) with the real reason in a
+    hexadecimal sub-code inside the diagnostic message, so the result code alone cannot tell a wrong
+    password from a correct one that must be changed. Samba AD emits the same Windows sub-codes.
+
+    Reference: the "data <code>" field of the AcceptSecurityContext error, as documented for Active
+    Directory's LDAP bind response and reproduced by Samba's LDAP server.
+#>
+$script:LDAPBindSubCodes = @{
+    '525' = 'UserNotFound'
+    '52e' = 'InvalidCredentials'
+    '530' = 'LogonTimeRestricted'
+    '531' = 'WorkstationRestricted'
+    '532' = 'PasswordExpired'
+    '533' = 'AccountDisabled'
+    '701' = 'AccountExpired'
+    '773' = 'MustChangePassword'
+    '775' = 'AccountLockedOut'
+}
+
+function Get-LDAPBindOutcome {
+    <#
+    .SYNOPSIS
+        Classify the outcome of an LDAP simple bind from a client's exit code and output.
+
+    .DESCRIPTION
+        Turns ldapwhoami's exit code and diagnostic text into one word describing what the directory
+        actually decided. The distinction that matters is between 'InvalidCredentials' (the password is
+        wrong) and 'MustChangePassword' (the password is right, and the directory is insisting the
+        account holder chooses a new one). Both arrive as LDAP result code 49.
+
+        Anything unrecognised is reported as 'Failed' rather than being guessed at, so a new failure
+        mode surfaces as a test failure instead of being quietly folded into an existing category.
+
+    .PARAMETER ExitCode
+        The client's exit code. Zero means the bind succeeded.
+
+    .PARAMETER BindOutput
+        The client's combined output, which carries the diagnostic message on failure.
+
+    .OUTPUTS
+        One of: Success, MustChangePassword, InvalidCredentials, AccountDisabled, PasswordExpired,
+        AccountLockedOut, AccountExpired, UserNotFound, LogonTimeRestricted, WorkstationRestricted,
+        Failed.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ExitCode,
+
+        [Parameter(Mandatory=$false)]
+        [AllowEmptyString()]
+        [string]$BindOutput = ""
+    )
+
+    if ($ExitCode -eq 0) {
+        return 'Success'
+    }
+
+    if ($BindOutput -match ',\s*data\s+([0-9a-fA-F]+)\s*,') {
+        $subCode = $matches[1].ToLowerInvariant()
+        if ($script:LDAPBindSubCodes.ContainsKey($subCode)) {
+            return $script:LDAPBindSubCodes[$subCode]
+        }
+    }
+
+    return 'Failed'
+}
+
+function Test-LDAPBind {
+    <#
+    .SYNOPSIS
+        Attempt an LDAP simple bind as a given account and report what the directory decided.
+
+    .DESCRIPTION
+        Binds with ldapwhoami inside the directory container, which is how the account holder's own
+        credentials are checked without JIM in the path at all. Returns the classified outcome
+        alongside the raw output, so a failing assertion can show what the directory actually said.
+
+        Cleartext LDAP is deliberate and sufficient here: this reads a credential decision, it does not
+        write a password. The password *writes* this scenario depends on go over LDAPS, because Active
+        Directory refuses them otherwise.
+
+    .PARAMETER BindDN
+        The Distinguished Name to bind as.
+
+    .PARAMETER BindPassword
+        The password to bind with.
+
+    .PARAMETER DirectoryConfig
+        Directory configuration hashtable from Get-DirectoryConfig.
+
+    .OUTPUTS
+        A hashtable with Outcome (see Get-LDAPBindOutcome), ExitCode and Output.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$BindDN,
+
+        [Parameter(Mandatory=$true)]
+        [string]$BindPassword,
+
+        [Parameter(Mandatory=$false)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory=$false)]
+        [int]$Port = 389,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Scheme = "ldap"
+    )
+
+    if ($DirectoryConfig) {
+        $ContainerName = $DirectoryConfig.ContainerName
+        $Port = $DirectoryConfig.LdapSearchPort
+        $Scheme = $DirectoryConfig.LdapSearchScheme
+    }
+    if (-not $ContainerName) { $ContainerName = "samba-ad-primary" }
+
+    $output = & docker exec $ContainerName ldapwhoami -x `
+        -H "${Scheme}://localhost:${Port}" -D $BindDN -w $BindPassword 2>&1
+    $exitCode = $LASTEXITCODE
+    $outputText = ($output | Out-String).Trim()
+
+    return @{
+        Outcome  = Get-LDAPBindOutcome -ExitCode $exitCode -BindOutput $outputText
+        ExitCode = $exitCode
+        Output   = $outputText
+    }
+}
+
+function Set-LDAPUserPasswordAsAccountHolder {
+    <#
+    .SYNOPSIS
+        Change an account's password as the account holder, authenticating with the current one.
+
+    .DESCRIPTION
+        Uses smbpasswd's remote mode, which performs the account holder's own password change against
+        the domain controller. This is the flow a new starter is put through at first sign-in, and it
+        is the only one that proves an initial password is *usable* rather than merely correct: an
+        administrative reset would prove nothing about the credential JIM set.
+
+        Note this is a change, not a set: the directory enforces the parts of its password policy that
+        only apply to a change (minimum age, history, minimum length), which an administrative set
+        such as JIM's own bypasses.
+
+    .PARAMETER AccountName
+        The account's sAMAccountName.
+
+    .PARAMETER CurrentPassword
+        The password the account currently holds.
+
+    .PARAMETER NewPassword
+        The password to change it to.
+
+    .PARAMETER DirectoryConfig
+        Directory configuration hashtable from Get-DirectoryConfig.
+
+    .OUTPUTS
+        A hashtable with Success, ExitCode and Output.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$AccountName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$CurrentPassword,
+
+        [Parameter(Mandatory=$true)]
+        [string]$NewPassword,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig
+    )
+
+    # smbpasswd -r reads the current password then the new one twice, from standard input.
+    $input = "$CurrentPassword`n$NewPassword`n$NewPassword`n"
+
+    # The domain controller is addressed by the name it advertises as its dNSHostName, which is what
+    # its TLS certificate carries and what the kpasswd exchange expects.
+    $domainControllerName = "dc1.$($DirectoryConfig.Domain)"
+
+    $output = $input | & docker exec -i $DirectoryConfig.ContainerName `
+        smbpasswd -r $domainControllerName -U $AccountName -s 2>&1
+    $exitCode = $LASTEXITCODE
+    $outputText = ($output | Out-String).Trim()
+
+    return @{
+        Success  = ($exitCode -eq 0)
+        ExitCode = $exitCode
+        Output   = $outputText
+    }
+}
