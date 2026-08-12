@@ -814,7 +814,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     {
         var result = await resultTask;
 
-        import.LogEntriesDiscardedByExclusion();
+        import.ReportEntriesDiscardedByExclusion(result);
 
         if (result.WarningMessage == null && import.PinValidationWarning != null)
             result.WarningMessage = import.PinValidationWarning;

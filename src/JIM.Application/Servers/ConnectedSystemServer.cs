@@ -4990,6 +4990,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Names the given Containers, for a surface holding their ids and needing to render them. Ids that no longer
+    /// resolve are absent from the result rather than faked, so a caller can say plainly that a Container has
+    /// gone rather than inventing a name for it.
+    /// </summary>
+    public async Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds)
+    {
+        ArgumentNullException.ThrowIfNull(containerIds);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerSummariesAsync(containerIds);
+    }
+
+    /// <summary>
     /// Updates a Connected System Container (e.g. its import-scope selection), recording the change with an Activity
     /// and a versioned configuration snapshot of the owning Connected System.
     /// </summary>

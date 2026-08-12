@@ -165,6 +165,8 @@ Get-JIMActivityStats -Id <guid>
 
 Returns a `PSCustomObject` containing execution statistics with properties such as `TotalObjectsProcessed`, `TotalObjectChangeCount`, `TotalUnchanged`, `TotalObjectErrors`, and `TotalObjectTypes`, plus per-operation breakdowns (`TotalCsoAdds`, `TotalJoins`, `TotalAttributeFlows`, `TotalExported`, and similar).
 
+An import that read entries and discarded them because a [Container Scope exclusion](../connectors/jim-ldap-connector.md#excluding-a-container) carved them out also carries `TotalEntriesDiscardedByExclusion` and `EntriesDiscardedByExcludedContainer`, the latter keyed by the excluded Container's ID. Both are absent, or zero and empty, for every run that discarded nothing. Resolve a Container ID to a name with [`Get-JIMConnectedSystemPartition`](connected-systems.md#get-jimconnectedsystempartition); the counts are keyed by ID because the Container can be renamed after the run.
+
 ### Examples
 
 ```powershell title="Get statistics by activity ID"
