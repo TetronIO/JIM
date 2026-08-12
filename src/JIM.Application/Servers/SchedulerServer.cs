@@ -69,6 +69,32 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetScheduleHeadersAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
+    /// <summary>
+    /// Gets a window of Schedule headers addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Schedules grid. Takes the same search and sort as
+    /// <see cref="GetScheduleHeadersAsync"/> and shares its query core. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first Schedule wanted; negative values read as zero.</param>
+    /// <param name="count">How many Schedules are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over name and description.</param>
+    /// <param name="sortBy">Optional field to sort by (name, isEnabled, lastRunTime, nextRunTime).</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ScheduleHeader>> GetScheduleHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Scheduling.GetScheduleHeadersRangeAsync(
+            offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+    }
+
     public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Every configuration change is tracked with an immutable Activity, the same as Connected Systems and
@@ -260,6 +286,7 @@ public class SchedulerServer
     /// <param name="scheduleId">Optional filter by Schedule ID; null lists every Schedule's executions.</param>
     /// <param name="offset">The zero-based index of the first execution wanted; negative values read as zero.</param>
     /// <param name="count">How many executions are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over the Schedule name and the initiator's name.</param>
     /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
@@ -268,12 +295,13 @@ public class SchedulerServer
         Guid? scheduleId,
         int offset,
         int count,
+        string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true)
     {
         return await Application.Repository.Scheduling.GetScheduleExecutionsRangeAsync(
-            scheduleId, offset, count, sortBy, sortDescending, includeTotalCount);
+            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
     }
 
     /// <summary>

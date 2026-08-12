@@ -3,88 +3,70 @@
 @using JIM.Models.Scheduling.DTOs
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (_preferencesLoaded)
-{
-    <MudTable @ref="_table" T="ScheduleHeader" ServerData="ServerReload"
-              RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
-              Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer schedules-row"
-              Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                       StartIcon="@Icons.Material.Filled.Add" OnClick="HandleCreateScheduleAsync">
-                New Schedule
-            </MudButton>
-            <MudSpacer />
-            <SearchField ValueChanged="@(s => OnSearch(s))" Class="mt-0" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh Style="width: 48px;"></MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="name" T="ScheduleHeader">
-                    <MudText Typo="Typo.button">Name</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudText Typo="Typo.button">Steps</MudText>
-            </MudTh>
-            <MudTh>
-                <MudText Typo="Typo.button">Trigger</MudText>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="nextruntime" T="ScheduleHeader">
-                    <MudText Typo="Typo.button">Next Run</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="lastruntime" T="ScheduleHeader">
-                    <MudText Typo="Typo.button">Last Run</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudText Typo="Typo.button">Status</MudText>
-            </MudTh>
-            <MudTh Style="text-align: right;">
-                <MudText Typo="Typo.button">Actions</MudText>
-            </MudTh>
-        </HeaderContent>
-        <RowTemplate Context="context">
-            @* The expander is its own leading cell so that a row click keeps opening the Schedule editor; the cell
-               stops propagation exactly as the Actions cell below does. *@
-            <MudTd Style="width: 48px;" @onclick:stopPropagation="true">
-                <MudTooltip Text="@(_expandedScheduleIds.Contains(context.Id) ? "Hide recent Schedule Executions" : "Show recent Schedule Executions")" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Size="Size.Small"
-                                   Icon="@(_expandedScheduleIds.Contains(context.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                   OnClick="@(() => ToggleScheduleExpandedAsync(context.Id))" />
-                </MudTooltip>
-            </MudTd>
-            <MudTd DataLabel="Name">
-                <MudText Typo="Typo.body1">@context.Name</MudText>
-                @if (!string.IsNullOrEmpty(context.Description))
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+   and the toolbar count) lives in the shared grid; this tab supplies the columns, the window loader and the
+   empty states. The URL parameters are prefixed so this grid's state cannot collide with the History tab's on
+   the shared Operations page URL. *@
+<VirtualisedDataGrid @ref="_grid" T="ScheduleHeader"
+                     ContainerId="operations-schedules"
+                     UrlParameterPrefix="s-"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadScheduleWindowAsync"
+                     RowClicked="HandleRowClicked"
+                     SingularName="Schedule"
+                     PluralName="Schedules"
+                     SearchPlaceholder="Search by name or description">
+    <ToolBarExtras>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="HandleCreateScheduleAsync">
+            New Schedule
+        </MudButton>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn T="ScheduleHeader" Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                <MudText Typo="Typo.body1">@schedule.Name</MudText>
+                @if (!string.IsNullOrEmpty(schedule.Description))
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@context.Description</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@schedule.Description</MudText>
                 }
-            </MudTd>
-            <MudTd DataLabel="Steps">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="ScheduleHeader" Title="Steps" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Steps</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
-                    @context.StepCount step@(context.StepCount != 1 ? "s" : "")
+                    @schedule.StepCount step@(schedule.StepCount != 1 ? "s" : "")
                 </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Trigger">
-                @if (context.TriggerType == ScheduleTriggerType.Cron)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="ScheduleHeader" Title="Trigger" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Trigger</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                @if (schedule.TriggerType == ScheduleTriggerType.Cron)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
                              Icon="@Icons.Material.Filled.Schedule">
-                        @GetScheduleDescription(context)
+                        @GetScheduleDescription(schedule)
                     </MudChip>
                 }
                 else
@@ -94,11 +76,17 @@
                         Manual
                     </MudChip>
                 }
-            </MudTd>
-            <MudTd DataLabel="Next Run">
-                @if (context.NextRunTime.HasValue && context.IsEnabled && context.TriggerType == ScheduleTriggerType.Cron)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="ScheduleHeader" Title="Next Run" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Next Run" Name="nextruntime" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                @if (schedule.NextRunTime.HasValue && schedule.IsEnabled && schedule.TriggerType == ScheduleTriggerType.Cron)
                 {
-                    var nextRunTime = context.NextRunTime.Value;
+                    var nextRunTime = schedule.NextRunTime.Value;
                     <MudTooltip Text="@nextRunTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body1">@nextRunTime.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
@@ -107,11 +95,17 @@
                 {
                     <EmptyValue />
                 }
-            </MudTd>
-            <MudTd DataLabel="Last Run">
-                @if (context.LastRunTime.HasValue)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="ScheduleHeader" Title="Last Run" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Last Run" Name="lastruntime" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                @if (schedule.LastRunTime.HasValue)
                 {
-                    var lastRunTime = context.LastRunTime.Value;
+                    var lastRunTime = schedule.LastRunTime.Value;
                     <MudTooltip Text="@lastRunTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body1">@lastRunTime.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
@@ -122,19 +116,25 @@
                 }
                 @* When it last ran is only half the story: a Schedule failing every night looks identical to a
                    healthy one without its outcome. A failed run also says which step it stopped on. *@
-                @if (context.LastExecutionStatus.HasValue)
+                @if (schedule.LastExecutionStatus.HasValue)
                 {
-                    var lastExecutionStatus = context.LastExecutionStatus.Value;
+                    var lastExecutionStatus = schedule.LastExecutionStatus.Value;
                     <div>
                         <MudChip T="string" Variant="Variant.Text" Class="ml-0"
                                  Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)">
-                            @GetLastOutcomeLabel(context)
+                            @GetLastOutcomeLabel(schedule)
                         </MudChip>
                     </div>
                 }
-            </MudTd>
-            <MudTd DataLabel="Status">
-                @if (context.IsEnabled)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="ScheduleHeader" Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                @if (schedule.IsEnabled)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
                         Enabled
@@ -146,284 +146,285 @@
                         Disabled
                     </MudChip>
                 }
-            </MudTd>
-            <MudTd DataLabel="Actions" Style="text-align: right;" @onclick:stopPropagation="true">
-                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-                    @if (context.IsEnabled)
-                    {
-                        <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small"
-                                           OnClick="@(() => HandleToggleEnabledAsync(context))" />
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="ScheduleHeader" Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                <div @onclick:stopPropagation="true">
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <MudTooltip Text="Show this Schedule's executions" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small"
+                                           OnClick="@(() => OpenExecutionsDialog(schedule))" />
                         </MudTooltip>
-                    }
-                    else
-                    {
-                        <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small"
-                                           OnClick="@(() => HandleToggleEnabledAsync(context))" />
+                        @if (schedule.IsEnabled)
+                        {
+                            <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small"
+                                               OnClick="@(() => HandleToggleEnabledAsync(schedule))" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small"
+                                               OnClick="@(() => HandleToggleEnabledAsync(schedule))" />
+                            </MudTooltip>
+                        }
+                        <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Color="Color.Primary"
+                                           OnClick="@(() => HandleRunNowAsync(schedule))"
+                                           Disabled="@(schedule.StepCount == 0)" />
                         </MudTooltip>
-                    }
-                    <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Color="Color.Primary"
-                                       OnClick="@(() => HandleRunNowAsync(context))"
-                                       Disabled="@(context.StepCount == 0)" />
-                    </MudTooltip>
-                    @if (context.BuiltIn)
-                    {
-                        <MudTooltip Text="Built-in schedule; cannot be deleted" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
-                        </MudTooltip>
-                    }
-                    else
-                    {
-                        <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                           OnClick="@(() => HandleDeleteAsync(context))" />
-                        </MudTooltip>
-                    }
-                </MudStack>
-            </MudTd>
-        </RowTemplate>
-        <ChildRowContent Context="context">
-            @if (_expandedScheduleIds.Contains(context.Id))
-            {
-                <MudTr>
-                    @* The executions belong to the Schedule above them, so they are inset rather than laid out
-                       full-bleed: the left padding clears the parent table's expander column. The listing itself
-                       is an ordinary bordered table, exactly as every other listing in JIM; the border is what
-                       stops its header row reading as more rows of the Schedules table. *@
-                    <td colspan="8" class="pa-0">
-                        <div class="pl-12 pr-4 py-3">
-                            @* Nested container treatment: a bordered table inside an outlined MudPaper. site.css
-                               styles this automatically off the .mud-paper descendant selectors (recessed
-                               --jim-inner-surface header, paper-surface data rows, inner border colour), so the
-                               nesting is expressed by the structure rather than by a hand-picked tint. Canonical
-                               example: ThemePreview.razor > Nested Table. *@
-                            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                                @* Deliberately no TableDensityToggle: this is a short child listing inside another
-                                   table's row, and a second density toggle on the same page would be confusing. *@
-                                <MudTable Items="@GetRecentExecutions(context.Id)" T="ScheduleExecution"
-                                          Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-                                          Outlined="true" Elevation="0"
-                                          Loading="@_loadingScheduleIds.Contains(context.Id)" LoadingProgressColor="Color.Primary">
-                                <ToolBarContent>
-                                    @* The Schedule is named on the parent row directly above, so repeating it here is noise. *@
-                                    <MudText Typo="Typo.subtitle2">Recent Schedule Executions</MudText>
-                                </ToolBarContent>
-                                <HeaderContent>
-                                    <MudTh><MudText Typo="Typo.button">Started</MudText></MudTh>
-                                    <MudTh><MudText Typo="Typo.button">Outcome</MudText></MudTh>
-                                    <MudTh><MudText Typo="Typo.button">Duration</MudText></MudTh>
-                                    <MudTh><MudText Typo="Typo.button">Steps</MudText></MudTh>
-                                    <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
-                                    <MudTh></MudTh>
-                                </HeaderContent>
-                                @* MudTable keys each row on its item internally, so the loop's own @key moves with the rows. *@
-                                <RowTemplate Context="execution">
-                                    <MudTd DataLabel="Started">
-                                        @if (execution.StartedAt.HasValue)
-                                        {
-                                            var startedAt = execution.StartedAt.Value;
-                                            <MudTooltip Text="@startedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                                                <span>@startedAt.ToLocalTime().ToRelativeTime()</span>
-                                            </MudTooltip>
-                                        }
-                                        else
-                                        {
-                                            <EmptyValue />
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Outcome">
-                                        <MudChip T="string" Variant="Variant.Text" Class="ml-0"
-                                                 Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(execution.Status)">
-                                            @execution.Status.ToString().SplitOnCapitalLetters()
-                                        </MudChip>
-                                    </MudTd>
-                                    <MudTd DataLabel="Duration">
-                                        @{ var duration = GetExecutionDuration(execution); }
-                                        @if (duration.HasValue)
-                                        {
-                                            var durationValue = duration.Value;
-                                            <span>@durationValue.ToAbbreviatedString()</span>
-                                        }
-                                        else
-                                        {
-                                            <EmptyValue />
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Steps">
-                                        @if (execution.TotalSteps > 0)
-                                        {
-                                            <span>@(Math.Min(execution.CurrentStepIndex + 1, execution.TotalSteps)) of @execution.TotalSteps</span>
-                                        }
-                                        else
-                                        {
-                                            <EmptyValue />
-                                        }
-                                    </MudTd>
-                                    <MudTd DataLabel="Initiated By">
-                                        <AuditPrincipalLink PrincipalType="execution.InitiatedByType"
-                                                            PrincipalId="execution.InitiatedById"
-                                                            PrincipalName="@execution.InitiatedByName" />
-                                    </MudTd>
-                                    <MudTd>
-                                        <MudLink Href="@($"/admin/operations/schedule-executions/{execution.Id}")">View Schedule Execution</MudLink>
-                                    </MudTd>
-                                </RowTemplate>
-                                <NoRecordsContent>
-                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">This Schedule has not run yet.</MudText>
-                                </NoRecordsContent>
-                                </MudTable>
-                            </MudPaper>
-                        </div>
-                    </td>
-                </MudTr>
-            }
-        </ChildRowContent>
-        <NoRecordsContent>
-            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
-                <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Large" Class="mud-text-disabled" />
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">No schedules have been created yet.</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                           StartIcon="@Icons.Material.Filled.Add" OnClick="HandleCreateScheduleAsync" Class="mt-2">
-                    Create Your First Schedule
-                </MudButton>
-            </MudStack>
-        </NoRecordsContent>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
-
-    @* The table is dense, which tightens vertical cell padding; restore top/bottom breathing room so it
-       balances the horizontal padding. MudBlazor's dense rule (.mud-table-dense * .mud-table-row
-       .mud-table-cell) is three classes, so this selector adds the row+cell element names to outrank it. *@
-    <style>
-        tr.schedules-row.mud-table-row td.mud-table-cell {
-            padding-top: 12px;
-            padding-bottom: 12px;
+                        @if (schedule.BuiltIn)
+                        {
+                            <MudTooltip Text="Built-in schedule; cannot be deleted" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => HandleDeleteAsync(schedule))" />
+                            </MudTooltip>
+                        }
+                    </MudStack>
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Schedules match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
         }
-    </style>
-}
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Outlined.Schedule"
+                             PrimaryText="No Schedules have been created yet"
+                             SecondaryText="A Schedule runs a sequence of Run Profiles on a trigger you choose, or on demand."
+                             ActionText="Create Your First Schedule"
+                             OnAction="HandleCreateScheduleAsync" />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
+
+@* ─── Schedule Executions ─── *@
+@* A Schedule's executions are unbounded, and a virtualised grid's rows are a fixed height, so they cannot be
+   an expandable row inside the Schedules grid: the virtualiser sizes its scroll area from that fixed height and
+   a row that grows to hold a table puts every row below it in the wrong place. They open in a dialog instead,
+   where the grid is embedded (no density toggle of its own, no URL state to collide with the page's) and given
+   an explicit height ceiling, because a dialog has no relationship with the page footer the grid would
+   otherwise measure against. The list is the Schedule's whole history rather than a fixed five most recent. *@
+<MudDialog @bind-Visible="_executionsDialogVisible" Options="_executionsDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
+            @(_executionsSchedule?.Name ?? "Schedule")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_executionsSchedule != null)
+        {
+            var executionsScheduleId = _executionsSchedule.Id;
+            <VirtualisedDataGrid T="ScheduleExecution"
+                                 ContainerId="schedule-executions"
+                                 Embedded="true"
+                                 MaxHeight="420px"
+                                 StateKey="@executionsScheduleId.ToString()"
+                                 DefaultSortBy="queuedAt"
+                                 DefaultSortDescending="true"
+                                 LoadWindow="LoadExecutionWindowAsync"
+                                 SingularName="Schedule Execution"
+                                 PluralName="Schedule Executions"
+                                 SearchPlaceholder="Search by initiator">
+                <Columns>
+                    <TemplateColumn T="ScheduleExecution" Title="Started" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Started" Name="startedAt" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @if (context.Item.StartedAt.HasValue)
+                            {
+                                var startedAt = context.Item.StartedAt.Value;
+                                <MudTooltip Text="@startedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                    <span>@startedAt.ToLocalTime().ToRelativeTime()</span>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="ScheduleExecution" Title="Outcome" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Outcome" Name="status" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudChip T="string" Variant="Variant.Text" Class="ml-0"
+                                     Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(context.Item.Status)">
+                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="ScheduleExecution" Title="Duration" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Duration" Name="completedAt" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @{ var duration = GetExecutionDuration(context.Item); }
+                            @if (duration.HasValue)
+                            {
+                                var durationValue = duration.Value;
+                                <span>@durationValue.ToAbbreviatedString()</span>
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="ScheduleExecution" Title="Steps" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Steps</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @if (context.Item.TotalSteps > 0)
+                            {
+                                <span>@(Math.Min(context.Item.CurrentStepIndex + 1, context.Item.TotalSteps)) of @context.Item.TotalSteps</span>
+                            }
+                            else
+                            {
+                                <EmptyValue />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="ScheduleExecution" Title="Initiated By" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Initiated By</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <AuditPrincipalLink PrincipalType="context.Item.InitiatedByType"
+                                                PrincipalId="context.Item.InitiatedById"
+                                                PrincipalName="@context.Item.InitiatedByName" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="ScheduleExecution" Sortable="false">
+                        <HeaderTemplate></HeaderTemplate>
+                        <CellTemplate>
+                            <MudLink Href="@($"/admin/operations/schedule-executions/{context.Item.Id}")">View Schedule Execution</MudLink>
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <EmptyContent Context="grid">
+                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="@($"No Schedule Executions match \"{grid.SearchText}\"")"
+                                         SecondaryText="Try a different search term, or clear the search."
+                                         ActionText="Clear Search"
+                                         OnAction="@(() => grid.ClearSearchAsync())" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Outlined.Schedule"
+                                         PrimaryText="This Schedule has not run yet"
+                                         SecondaryText="Executions appear here once the Schedule's trigger fires, or once it is run with the Run Now action." />
+                    }
+                </EmptyContent>
+            </VirtualisedDataGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _executionsDialogVisible = false)" DropShadow="false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    private VirtualisedDataGrid<ScheduleHeader>? _grid;
+
+    // The Schedule whose executions the dialog is showing. Held as the header rather than the id alone so the
+    // dialog title can name it without a second read.
+    private ScheduleHeader? _executionsSchedule;
+    private bool _executionsDialogVisible;
+
+    private readonly DialogOptions _executionsDialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Large,
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+
     /// <summary>
-    /// How many recent Schedule Executions an expanded row lists. Enough to see a pattern (a run that has failed
-    /// every night) without turning the row into a history page; the Schedule Execution detail page is one click away.
+    /// Loads one window of Schedule headers, honouring the request's skip-the-count contract. Schedules are read
+    /// through a repository range read rather than loaded whole and sliced: the paged reader they used to share
+    /// caps a page at 100, so an installation with more Schedules than that would silently lose the rest.
     /// </summary>
-    private const int RecentExecutionCount = 5;
-
-    private MudTable<ScheduleHeader>? _table;
-    private string _searchString = "";
-    private bool _loading;
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
-
-    // Rows whose recent-executions panel is open, and the executions loaded for them. Both are keyed on the Schedule
-    // id and are cleared whenever the table reloads, because ServerData replaces the whole item set on paging,
-    // searching and sorting; a stale id would otherwise leave a panel open over a different Schedule.
-    private readonly HashSet<Guid> _expandedScheduleIds = new();
-    private readonly HashSet<Guid> _loadingScheduleIds = new();
-    private readonly Dictionary<Guid, List<ScheduleExecution>> _recentExecutions = new();
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task<VirtualisedWindow<ScheduleHeader>> LoadScheduleWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _preferencesLoaded = true;
-                StateHasChanged();
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
+        using var jim = JimFactory.Create();
+        var result = await jim.Scheduler.GetScheduleHeadersRangeAsync(
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            request.IncludeTotalCount);
 
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-    }
-
-    private async Task<TableData<ScheduleHeader>> ServerReload(TableState state, CancellationToken token)
-    {
-        _loading = true;
-        StateHasChanged();
-
-        // The item set is about to be replaced, so any expansion state describing the previous set is meaningless.
-        _expandedScheduleIds.Clear();
-        _loadingScheduleIds.Clear();
-        _recentExecutions.Clear();
-
-        try
-        {
-            using var jim = JimFactory.Create();
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
-
-            var result = await jim.Scheduler.GetScheduleHeadersAsync(
-                page,
-                state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
-                state.SortLabel,
-                sortDescending);
-
-            return new TableData<ScheduleHeader>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
-    }
-
-    private void OnSearch(string text)
-    {
-        _searchString = text;
-        _table?.ReloadServerData();
+        return new VirtualisedWindow<ScheduleHeader>(result.Results, result.TotalResults);
     }
 
     /// <summary>
-    /// Opens or closes a Schedule's recent-executions panel, loading its executions the first time it is opened.
+    /// Loads one window of the open Schedule's executions. Executions are unbounded (a Schedule running every
+    /// fifteen minutes accumulates thousands a month), so this is a repository range read, and the total is only
+    /// counted when the grid asks for it.
     /// </summary>
-    private async Task ToggleScheduleExpandedAsync(Guid scheduleId)
+    private async Task<VirtualisedWindow<ScheduleExecution>> LoadExecutionWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        if (_expandedScheduleIds.Remove(scheduleId))
-            return;
+        var scheduleId = _executionsSchedule?.Id;
+        if (scheduleId == null)
+            return new VirtualisedWindow<ScheduleExecution>([], request.IncludeTotalCount ? 0 : null);
 
-        _expandedScheduleIds.Add(scheduleId);
+        using var jim = JimFactory.Create();
+        var result = await jim.Scheduler.GetScheduleExecutionsRangeAsync(
+            scheduleId,
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            request.IncludeTotalCount);
 
-        // Already loaded for this item set; re-opening the panel costs nothing.
-        if (_recentExecutions.ContainsKey(scheduleId))
-            return;
-
-        _loadingScheduleIds.Add(scheduleId);
-        try
-        {
-            using var jim = JimFactory.Create();
-            var result = await jim.Scheduler.GetScheduleExecutionsAsync(scheduleId, 1, RecentExecutionCount, "queuedAt", true);
-            _recentExecutions[scheduleId] = result.Results;
-        }
-        finally
-        {
-            _loadingScheduleIds.Remove(scheduleId);
-        }
+        return new VirtualisedWindow<ScheduleExecution>(result.Results, result.TotalResults);
     }
 
-    private IReadOnlyList<ScheduleExecution> GetRecentExecutions(Guid scheduleId) =>
-        _recentExecutions.TryGetValue(scheduleId, out var executions) ? executions : [];
+    /// <summary>
+    /// Re-reads the Schedules grid after a write. The totals are invalidated because creating or deleting a
+    /// Schedule changes how many there are, and the toolbar count would otherwise keep the old figure.
+    /// </summary>
+    private async Task RefreshSchedulesAsync()
+    {
+        if (_grid != null)
+            await _grid.RefreshAsync(invalidateTotals: true);
+    }
+
+    private void OpenExecutionsDialog(ScheduleHeader header)
+    {
+        _executionsSchedule = header;
+        _executionsDialogVisible = true;
+    }
 
     /// <summary>
     /// How long an execution took: the elapsed time so far while it is still running, and the total once it has
@@ -463,12 +464,9 @@
         return $"Failed on step {stepNumber}";
     }
 
-    private async Task HandleRowClick(TableRowClickEventArgs<ScheduleHeader> args)
+    private async Task HandleRowClicked(ScheduleHeader header)
     {
-        if (_loading || args.Item == null)
-            return;
-
-        await OpenScheduleEditorAsync(args.Item.Id);
+        await OpenScheduleEditorAsync(header.Id);
     }
 
     private async Task HandleCreateScheduleAsync()
@@ -499,7 +497,7 @@
         var result = await dialog.Result;
         if (result is { Canceled: false })
         {
-            _table?.ReloadServerData();
+            await RefreshSchedulesAsync();
         }
     }
 
@@ -513,7 +511,7 @@
         if (schedule == null)
         {
             Snackbar.Add($"Schedule '{header.Name}' no longer exists.", Severity.Warning);
-            _table?.ReloadServerData();
+            await RefreshSchedulesAsync();
             return;
         }
 
@@ -531,7 +529,7 @@
         var action = schedule.IsEnabled ? "enabled" : "disabled";
         Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
 
-        _table?.ReloadServerData();
+        await RefreshSchedulesAsync();
     }
 
     private async Task HandleRunNowAsync(ScheduleHeader header)
@@ -577,7 +575,7 @@
             Snackbar.Add($"Failed to start schedule '{header.Name}'. It may have no steps.", Severity.Warning);
         }
 
-        _table?.ReloadServerData();
+        await RefreshSchedulesAsync();
     }
 
     private async Task HandleDeleteAsync(ScheduleHeader header)
@@ -611,14 +609,14 @@
         if (schedule == null)
         {
             Snackbar.Add($"Schedule '{header.Name}' no longer exists.", Severity.Warning);
-            _table?.ReloadServerData();
+            await RefreshSchedulesAsync();
             return;
         }
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
-        _table?.ReloadServerData();
+        await RefreshSchedulesAsync();
     }
 
     /// <summary>

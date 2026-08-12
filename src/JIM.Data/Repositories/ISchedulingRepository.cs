@@ -36,6 +36,28 @@ public interface ISchedulingRepository
         string? sortBy = null,
         bool sortDescending = false);
 
+    /// <summary>
+    /// Gets a window of Schedule headers addressed by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, for the virtualised (infinite-scroll) Schedules grid. Takes the same search and
+    /// sort as <see cref="GetScheduleHeadersAsync"/> and shares its query core, so the two reads can never
+    /// disagree on which Schedules match.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first Schedule wanted; negative values read as zero.</param>
+    /// <param name="count">How many Schedules are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over name and description.</param>
+    /// <param name="sortBy">Optional sort key: "name", "isEnabled", "lastRunTime", "nextRunTime"; defaults to created.</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    Task<RangeResultSet<ScheduleHeader>> GetScheduleHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        bool includeTotalCount = true);
+
     Task CreateScheduleAsync(Schedule schedule);
 
     Task UpdateScheduleAsync(Schedule schedule);
@@ -82,6 +104,8 @@ public interface ISchedulingRepository
     /// <param name="scheduleId">Optional Schedule to narrow to; null lists every Schedule's executions.</param>
     /// <param name="offset">The zero-based index of the first execution wanted; negative values read as zero.</param>
     /// <param name="count">How many executions are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive filter over the Schedule name and the initiator's
+    /// name; the paged read passes none.</param>
     /// <param name="sortBy">Optional sort key: "status", "startedat"/"started", "completedat"/"completed", or
     /// the queued time (the default).</param>
     /// <param name="sortDescending">Whether the sort is descending (default: true, newest first).</param>
@@ -92,6 +116,7 @@ public interface ISchedulingRepository
         Guid? scheduleId,
         int offset,
         int count,
+        string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true);
