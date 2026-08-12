@@ -18,7 +18,8 @@
         </MudText>
         <VirtualisedDataGrid T="PendingExportAttributeValueChange"
                              ContainerId="pending-export-mva"
-                             UrlParameterPrefix="pemva-"
+                             TrackUrlState="false"
+                             MaxHeight="400px"
                              StateKey="@AttributeName"
                              DefaultSortBy="@SourceOrderSort"
                              LoadWindow="LoadChangeWindowAsync"

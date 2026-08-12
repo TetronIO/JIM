@@ -146,11 +146,11 @@ public class VirtualisedDataGridTests : JimComponentTestContext
     }
 
     [Test]
-    public void VirtualisedDataGrid_Embedded_RendersNoDensityToggleAndNoSearchBox()
+    public void VirtualisedDataGrid_Embedded_DropsTheDensityToggleAndKeepsItsSearchBox()
     {
         // An embedded grid is one of many on its page (a value table per attribute, one per event in a
-        // timeline). A density toggle and a search box per instance is chrome repeated a dozen times over
-        // tables of three rows, so an embedded grid carries neither; the host page owns both.
+        // timeline). Row density is one saved preference for the whole portal, so a toggle per instance is the
+        // same switch drawn a dozen times; the search box is per table by nature and stays.
         var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
             .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
             .Add(c => c.Columns, _ => { })
@@ -164,7 +164,7 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(cut.HasComponent<TableDensityToggle>(), Is.False, "an embedded grid must not repeat the density toggle");
-                Assert.That(cut.HasComponent<SearchField>(), Is.False, "an embedded grid must not repeat the search box");
+                Assert.That(cut.HasComponent<SearchField>(), Is.True, "each embedded table still narrows itself");
                 Assert.That(cut.HasComponent<TableObjectCount>(), Is.True, "the count still says how many values there are");
             }
         });

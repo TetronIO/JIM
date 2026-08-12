@@ -17,7 +17,7 @@
 
 <VirtualisedDataGrid @ref="_grid" T="CausalityAttributeRow"
                      ContainerId="@($"causality-attributes-{_instanceId}")"
-                     UrlParameterPrefix="@($"ca{_instanceId}-")"
+                     Embedded="true"
                      DefaultSortBy="@SourceOrderSort"
                      LoadWindow="LoadRowWindowAsync"
                      SearchPlaceholder="Filter attributes..."

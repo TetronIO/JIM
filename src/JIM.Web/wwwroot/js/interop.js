@@ -79,15 +79,32 @@ window.jimVirtualList = {
         var entry = { element: element, timer: null };
         entry.apply = function () {
             var footer = document.querySelector('.jim-page-footer');
+            // A dialog is its own window onto the page: it is positioned against the viewport, scrolls its own
+            // body, and the page footer behind it describes geometry the dialog has no relationship with. A grid
+            // in one takes a readable share of the viewport instead of measuring anything.
+            var inDialog = !!element.closest('.mud-dialog');
+            // A grid that starts below the fold cannot be sized against a viewport it is not in: the measurement
+            // below goes to nothing and the grid collapses to its floor. Such a grid takes the same readable
+            // share, which is what the reader sees once they scroll to it.
+            var readableShare = Math.min(480, Math.round(window.innerHeight * 0.6));
             // A couple of passes, because changing the ceiling can re-wrap content and move the measurements.
             for (var i = 0; i < 3; i++) {
                 var gap = footer ? parseFloat(window.getComputedStyle(footer).marginTop) || 20 : 20;
                 var rect = element.getBoundingClientRect();
-                // Everything between the container's bottom edge and the footer's bottom edge moves with the
-                // container, so their distance is the same however tall the container is; the ceiling is what
-                // remains of the viewport after the chrome above the container and that fixed tail below it.
-                var below = footer ? footer.getBoundingClientRect().bottom - rect.bottom : 0;
-                var ceiling = Math.max(240, Math.round(window.innerHeight - (rect.top + window.scrollY) - below - gap));
+                var ceiling;
+                if (inDialog) {
+                    ceiling = readableShare;
+                } else {
+                    // Everything between the container's bottom edge and the footer's bottom edge moves with the
+                    // container, so their distance is the same however tall the container is; the ceiling is what
+                    // remains of the viewport after the chrome above the container and that fixed tail below it.
+                    // Measured in viewport coordinates throughout: getBoundingClientRect is already viewport
+                    // relative, so adding the page's scroll offset (as this once did) shrank every grid on a page
+                    // long enough to scroll, which is every page holding a grid among other content.
+                    var below = footer ? footer.getBoundingClientRect().bottom - rect.bottom : 0;
+                    ceiling = Math.round(window.innerHeight - Math.max(0, rect.top) - below - gap);
+                    if (ceiling < 240) ceiling = readableShare;
+                }
                 var current = parseFloat(element.style.maxHeight) || 0;
                 if (Math.abs(ceiling - current) < 1) break;
                 element.style.maxHeight = ceiling + 'px';

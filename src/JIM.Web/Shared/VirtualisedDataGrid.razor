@@ -42,10 +42,11 @@
                then the page's own actions. Right: how big the list is, then the box that narrows it. A count in
                the left slot pushed the primary action into the middle, where the loudest thing on the page was
                also the only one floating in open space. *@
-            @* An embedded grid is one of many on its page, so it carries neither control: a density toggle and a
-               search box repeated once per attribute (or once per event in a timeline) is more chrome than the
-               three rows underneath it, and the host page owns both for all of them. The count stays, because
-               how many values there are is the one thing each embedded table has to say for itself. *@
+            @* An embedded grid is one of many on its page (a value table per multi-valued attribute, a table per
+               event in a timeline), so it drops the density toggle: row density is one saved preference for the
+               whole portal, and a control for it once per attribute is the same switch drawn a dozen times. It
+               keeps its search box, which is per table by nature and is how a member is found among half a
+               million, and its count, which is the one thing each embedded table must say for itself. *@
             @if (!Embedded)
             {
                 <TableDensityToggle @bind-Dense="_dense" @bind-Dense:after="OnDensityChangedAsync" />
@@ -64,13 +65,10 @@
                search box because that is the control the reader just changed it with. *@
             <TableObjectCount Count="@TotalItems" Total="@UnfilteredTotalItems"
                               SingularName="@SingularName" PluralName="@PluralName"
-                              Class="@(Embedded ? null : "mr-3")" />
-            @if (!Embedded)
-            {
-                @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
-                   filtered by a term the reader cannot see. *@
-                <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
-            }
+                              Class="mr-3" />
+            @* Value is bound so a search restored from the URL appears in the box, rather than the list arriving
+               filtered by a term the reader cannot see. *@
+            <SearchField Value="@SearchText" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@SearchPlaceholder" Class="mt-0" />
         </ToolBarContent>
         <Columns>
             @Columns
@@ -164,12 +162,21 @@
 
     /// <summary>
     /// Marks a grid that is one of many on its page: a value table per multi-valued attribute, a table per event
-    /// in a timeline. Such a grid drops the density toggle and the search box (repeated chrome the host page owns
-    /// once), and keeps its search, sort and scroll position to itself instead of writing them to an address bar
-    /// every sibling shares, where which instance a parameter belongs to is a rendering accident.
+    /// in a timeline. Such a grid drops the density toggle, which is one saved preference for the whole portal
+    /// rather than a per-table choice, and keeps its search, sort and position to itself instead of writing them
+    /// to an address bar every sibling shares, where which instance a parameter belongs to is a rendering
+    /// accident. Its own search box stays: that is per table by nature.
     /// </summary>
     [Parameter]
     public bool Embedded { get; set; }
+
+    /// <summary>
+    /// Whether this grid keeps its search, sort and scroll position in the address bar. A grid in a dialog sets
+    /// this false: its state would outlive the dialog that owns it, and a deep link cannot reopen the dialog to
+    /// put it back. <see cref="Embedded"/> implies it, since several siblings cannot share one set of parameters.
+    /// </summary>
+    [Parameter]
+    public bool TrackUrlState { get; set; } = true;
 
     /// <summary>
     /// An explicit height ceiling (any CSS length, e.g. "400px"), for a grid whose container is not the page: a
@@ -209,6 +216,9 @@
     private string? _appliedStateKey;
 
     private string ScrollContainerSelector => $"#{ContainerId} .mud-table-container";
+
+    // Whether this grid's state belongs in the address bar at all; see TrackUrlState and Embedded.
+    private bool KeepsUrlState => TrackUrlState && !Embedded;
 
     // A stated ceiling is applied as a plain style on the container, so it holds from the first paint and needs no
     // measurement; the CSS fallback ceiling is scoped to the same element, so this overrides it.
@@ -250,7 +260,7 @@
 
         // An embedded grid writes no URL state, so there is none of its own to read back; reading anyway would
         // adopt whatever the page's own list happens to have put there.
-        var urlState = Embedded
+        var urlState = !KeepsUrlState
             ? new VirtualisedListUrlState { SortBy = DefaultSortBy, SortDescending = DefaultSortDescending }
             : VirtualisedListUrlState.Read(
                 NavManager.ToAbsoluteUri(NavManager.Uri).Query, DefaultSortBy, UrlParameterPrefix, DefaultSortDescending);
@@ -298,10 +308,10 @@
         if (string.IsNullOrWhiteSpace(MaxHeight))
             await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
 
-        if (Embedded)
+        if (!KeepsUrlState)
         {
-            // Nothing to restore and nothing to watch for: an embedded grid holds no URL state, and scroll
-            // tracking exists only to keep that state current. Marked observed so this pass runs once.
+            // Nothing to restore and nothing to watch for: this grid holds no URL state, and scroll tracking
+            // exists only to keep that state current. Marked observed so this pass runs once.
             _scrollRestored = true;
             _scrollObserved = true;
         }
@@ -405,7 +415,7 @@
     {
         _firstVisibleRow = 0;
         await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, 0, RowHeight, ScrollRestoreTimeoutMilliseconds);
-        if (!Embedded)
+        if (KeepsUrlState)
             await WriteUrlStateAsync();
     }
 
