@@ -158,10 +158,20 @@
   }
 
   // The visible window always carries the stage's aspect ratio, so the SVG maps
-  // onto the stage exactly and "meet" never letterboxes. 100% is fit-to-width:
-  // a diagram taller than the stage is shown full width and panned down, which
-  // is what makes tall Mermaid flowcharts readable rather than shrunk to a
-  // thumbnail the way fitting the whole thing to viewport height would.
+  // onto the stage exactly and "meet" never letterboxes.
+  //
+  // The opening view ("home", and what 100% and Reset mean) is the whole
+  // diagram where that is worth having, and fit-to-width where it is not.
+  // Fit-to-width alone was the original rule, because containing a long Mermaid
+  // flowchart shrinks it to a thumbnail: measured at 1294px wide fit-to-width
+  // against 180px fitting the whole thing to viewport height. But it is wrong
+  // for a diagram only slightly taller than the stage, which is every concept
+  // SVG -- a 1160x640 diagram on a 2.01-aspect stage opens with its bottom 10%
+  // quietly cut off, looking whole rather than looking panable. So contain by
+  // default, and fall back to fit-to-width only when containing would cost more
+  // than MIN_CONTAIN_SCALE of the width.
+  var MIN_CONTAIN_SCALE = 0.6;
+
   function initView(svg) {
     var base = parseViewBox(svg);
     if (!base) {
@@ -176,8 +186,10 @@
 
     // Start at the top of the diagram; clampView centres it on any axis where
     // the window is larger than the diagram.
-    var w = base[2];
-    view = { svg: svg, base: base, x: base[0], y: base[1], w: w, h: w / stageAspect() };
+    var aspect = stageAspect();
+    var contained = Math.max(base[2], base[3] * aspect);
+    var home = base[2] / contained >= MIN_CONTAIN_SCALE ? contained : base[2];
+    view = { svg: svg, base: base, home: home, x: base[0], y: base[1], w: home, h: home / aspect };
     applyView();
   }
 
@@ -190,7 +202,9 @@
     if (!view) return;
     clampView();
     view.svg.setAttribute("viewBox", view.x + " " + view.y + " " + view.w + " " + view.h);
-    ovLevel.textContent = Math.round((view.base[2] / view.w) * 100) + "%";
+    // Relative to home, so the overlay always opens at 100% and Reset returns
+    // to it, whichever of the two home is.
+    ovLevel.textContent = Math.round((view.home / view.w) * 100) + "%";
     ovStage.dataset.panable =
       view.w < view.base[2] || view.h < view.base[3] ? "true" : "false";
   }
@@ -201,7 +215,9 @@
   function clampView() {
     var b = view.base;
     var minW = b[2] / MAX_SCALE;
-    if (view.w > b[2]) { view.w = b[2]; view.h = view.w / stageAspect(); }
+    // Zooming out stops at home, which may be wider than the diagram when home
+    // contains it; capping at b[2] here is what used to crop the opening view.
+    if (view.w > view.home) { view.w = view.home; view.h = view.w / stageAspect(); }
     if (view.w < minW) { view.w = minW; view.h = view.w / stageAspect(); }
 
     view.x = view.w >= b[2]
@@ -221,7 +237,7 @@
 
     var b = view.base;
     var minW = b[2] / MAX_SCALE;
-    var nw = Math.min(b[2], Math.max(minW, view.w / factor));
+    var nw = Math.min(view.home, Math.max(minW, view.w / factor));
     var k = nw / view.w;
 
     view.x = cx - (cx - view.x) * k;
@@ -238,12 +254,12 @@
     applyView();
   }
 
-  // Back to fit-to-width, scrolled to the top of the diagram.
+  // Back to the opening view, scrolled to the top of the diagram.
   function resetView() {
     if (!view) return;
     view.x = view.base[0];
     view.y = view.base[1];
-    view.w = view.base[2];
+    view.w = view.home;
     view.h = view.w / stageAspect();
     applyView();
   }
@@ -557,8 +573,15 @@
       if (!svg) return;
       layoutStage(svg);
       if (view) {
-        // Keep the zoom level; re-derive the window height from the new stage.
-        view.h = view.w / stageAspect();
+        // home depends on the stage's aspect ratio, so a resize moves it. Keep
+        // the reader's zoom level relative to home rather than their absolute
+        // window width, so a diagram opened whole stays whole across a resize.
+        var aspect = stageAspect();
+        var wasAtHome = view.w >= view.home;
+        var contained = Math.max(view.base[2], view.base[3] * aspect);
+        view.home = view.base[2] / contained >= MIN_CONTAIN_SCALE ? contained : view.base[2];
+        if (wasAtHome) view.w = view.home;
+        view.h = view.w / aspect;
         applyView();
       }
     });
