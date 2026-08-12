@@ -44,6 +44,12 @@ Note that the browser's back button does not step backwards through searches and
 
 A list with nothing in it says which of the two reasons applies. If your search matched nothing, it says so and offers to clear the search. If the list is genuinely empty, it says what would put objects in it and, where there is one obvious next step (creating your first Connected System, for instance), offers it.
 
+## Tables inside a page
+
+The same behaviour applies to the tables that live inside a page, not just the lists you navigate to. The values of a multi-valued attribute on a Metaverse Object or a Connected System Object, the queued changes behind a Pending Export's multi-valued attribute, and the attribute changes shown for a causality event all scroll continuously, carry the same search box and count, and have no page controls.
+
+This matters most for group membership: a group with half a million members is read by scrolling it, and narrowed by typing into its search box, rather than by working through pages ten values at a time.
+
 ## Automation
 
 Continuous scrolling is a portal behaviour only. The REST API and the PowerShell module are paged, and are unchanged: see [Rate Limiting](../api/rate-limiting.md) for the API's retrieval limits, and use `-All` on the paginated `Get-JIM*` cmdlets to page through a full result set.

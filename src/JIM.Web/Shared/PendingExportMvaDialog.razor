@@ -1,48 +1,77 @@
 @using JIM.Models.Transactional
 @using JIM.Utilities
+@using JIM.Web.Models
 @using System.Globalization
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
+@* Every queued change to one multi-valued attribute of a Pending Export. The list is virtualised rather than
+   paged: the shared grid streams windows as the reader scrolls, and owns the search box, the count and the
+   density toggle. *@
+
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
             @TotalCount.ToString("N0") changes
         </MudText>
-        <MudTable @ref="_table" T="PendingExportAttributeValueChange"
-                  ServerData="ServerReloadAsync"
-                  Dense="true" Hover="true" Elevation="0" Outlined="true"
-                  FixedHeader="true" Height="400px"
-                  Loading="@_loading" LoadingProgressColor="Color.Primary">
-            <ToolBarContent>
-                <SearchField Value="@_searchText"
-                             ValueChanged="@OnSearch"
-                             Placeholder="@($"Search {AttributeName.ToLower()}...")" />
-            </ToolBarContent>
-            <HeaderContent>
-                <MudTh>Change Type</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Value</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Change Type">
-                    <MudChip T="string" Variant="Variant.Text" Color="GetChangeTypeColor(context.ChangeType)">
-                        @context.ChangeType
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(context.Status)">
-                        @context.Status.ToString().SplitOnCapitalLetters()
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Value"><TextValueDisplay Value="@GetValueText(context)" /></MudTd>
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
+        <VirtualisedDataGrid T="PendingExportAttributeValueChange"
+                             ContainerId="pending-export-mva"
+                             UrlParameterPrefix="pemva-"
+                             StateKey="@AttributeName"
+                             DefaultSortBy="@SourceOrderSort"
+                             LoadWindow="LoadChangeWindowAsync"
+                             SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
+                             SingularName="Change"
+                             PluralName="Changes">
+            <Columns>
+                <TemplateColumn Title="Change Type" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Change Type</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Variant="Variant.Text" Color="GetChangeTypeColor(context.Item.ChangeType)">
+                            @context.Item.ChangeType
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Status" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Status</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(context.Item.Status)">
+                            @context.Item.Status.ToString().SplitOnCapitalLetters()
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Value" Sortable="false">
+                    <HeaderTemplate>
+                        <MudText Typo="Typo.button">Value</MudText>
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <TextValueDisplay Value="@GetValueText(context.Item)" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No changes match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.PublishedWithChanges"
+                                     PrimaryText="No changes are queued for this attribute"
+                                     SecondaryText="Changes appear here while the Pending Export is waiting to be exported, and are cleared once the Connected System confirms them." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
     </DialogContent>
     <DialogActions>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
@@ -62,41 +91,52 @@
     [Parameter]
     public int TotalCount { get; set; }
 
-    private MudTable<PendingExportAttributeValueChange>? _table;
-    private string _searchText = string.Empty;
-    private bool _loading;
+    /// <summary>
+    /// The sort key standing for "the order the application layer returned them in". Attribute value changes are
+    /// read a page at a time with no sort parameter, so no column offers a sort; naming the default something no
+    /// header claims keeps the grid from showing a sort arrow over an order it did not choose.
+    /// </summary>
+    private const string SourceOrderSort = "order";
 
-    private async Task<TableData<PendingExportAttributeValueChange>> ServerReloadAsync(
-        TableState state, CancellationToken token)
+    /// <summary>
+    /// The page size windows are stitched from. It matches the largest page the application layer will serve
+    /// (larger requests are clamped there), so a window never silently comes back from a different offset.
+    /// </summary>
+    private const int SourcePageSize = 100;
+
+    /// <summary>
+    /// Reads one window of this attribute's queued changes. The application layer serves them a page at a time,
+    /// so a window is stitched from the pages spanning it rather than read at an arbitrary offset; the changes
+    /// are ordered by their own id, so the pages join without gaps or repeats.
+    /// </summary>
+    private async Task<VirtualisedWindow<PendingExportAttributeValueChange>> LoadChangeWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken _)
     {
-        _loading = true;
+        var items = new List<PendingExportAttributeValueChange>(request.Count);
+        var firstPage = request.StartIndex / SourcePageSize;
+        var skipInFirstPage = request.StartIndex % SourcePageSize;
+        var totalChanges = 0;
 
-        try
+        using var jim = JimFactory.Create();
+        for (var page = firstPage; items.Count < request.Count; page++)
         {
-            var page = state.Page + 1;
-            var pageSize = state.PageSize;
-            var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
-
-            using var jim = JimFactory.Create();
             var result = await jim.ConnectedSystems.GetPendingExportAttributeChangesPagedAsync(
-                PendingExportId, AttributeName, page, pageSize, searchText);
+                PendingExportId, AttributeName, page + 1, SourcePageSize, request.SearchText);
+            totalChanges = result.TotalResults;
 
-            return new TableData<PendingExportAttributeValueChange>
-            {
-                Items = result.Results,
-                TotalItems = result.TotalResults
-            };
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
+            IEnumerable<PendingExportAttributeValueChange> changes = result.Results;
+            if (page == firstPage)
+                changes = changes.Skip(skipInFirstPage);
 
-    private void OnSearch(string text)
-    {
-        _searchText = text;
-        _table?.ReloadServerData();
+            items.AddRange(changes.Take(request.Count - items.Count));
+
+            // A short page is the last one; asking for the next would only cost a round trip to learn that.
+            if (result.Results.Count < SourcePageSize)
+                break;
+        }
+
+        return new VirtualisedWindow<PendingExportAttributeValueChange>(
+            items, request.IncludeTotalCount ? totalChanges : null);
     }
 
     private static string GetValueText(PendingExportAttributeValueChange change)
