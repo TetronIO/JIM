@@ -1937,9 +1937,16 @@ public class ExportEvaluationServer
     /// Logs an Object Type conflict identically wherever it is detected, so the three export entry points
     /// read the same way in a service log.
     /// </summary>
+    /// <remarks>
+    /// Warning, not Error. This is a handled, per-object configuration outcome, not a failure of the
+    /// synchronisation run: the authoritative report is the CouldNotExportDueToExistingConnectedSystemObject
+    /// Run Profile Execution Item raised against the Activity. Logging it at Error would emit one application
+    /// error per object per Rule (a single misconfiguration over fifty objects yields a hundred lines), burying
+    /// genuine errors and tripping any consumer that treats an Error line as a run-level failure.
+    /// </remarks>
     private static void LogObjectTypeConflict(string caller, ExportObjectTypeConflict conflict, int connectedSystemId)
     {
-        Log.Error("{Caller}: Synchronisation Rule '{SyncRule}' targets Connected System Object Type '{TargetType}', but " +
+        Log.Warning("{Caller}: Synchronisation Rule '{SyncRule}' targets Connected System Object Type '{TargetType}', but " +
             "Metaverse Object {MvoId} already holds Connected System Object {CsoId} of type '{ExistingType}' in Connected " +
             "System {SystemId}. A Metaverse Object can hold only one Connected System Object per Connected System, so " +
             "nothing was staged for this Rule.",
