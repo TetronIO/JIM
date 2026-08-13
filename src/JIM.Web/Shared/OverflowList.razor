@@ -18,13 +18,27 @@
    rule in JIM.Web/CLAUDE.md: a pattern guard does not satisfy CodeQL, a local bound by one does. *@
 @if (Items is { Count: > 0 } items)
 {
+    var visibleCount = Math.Min(MaxVisible, items.Count);
     <div class="jim-one-line-list">
-        <span class="jim-one-line-list-value">@ItemTemplate(items[0])</span>
-        @if (items.Count > 1)
+        @for (var i = 0; i < visibleCount; i++)
         {
-            <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn" OnClick="OpenAllAsync">
-                +@((items.Count - 1).ToString("N0")) more
-            </MudButton>
+            var item = items[i];
+            @if (i == visibleCount - 1)
+            {
+                @* Only the last visible item needs to give way: everything before it is guaranteed to fit
+                   because it already rendered, so only the one at the truncation boundary can overflow. *@
+                <span class="jim-one-line-list-value">@ItemTemplate(item)</span>
+            }
+            else
+            {
+                @ItemTemplate(item)
+            }
+        }
+        @if (items.Count > visibleCount)
+        {
+            <MudLink Color="Color.Default" Underline="Underline.Hover" Class="jim-attr-expand-link" OnClick="OpenAllAsync">
+                +@((items.Count - visibleCount).ToString("N0")) more
+            </MudLink>
         }
     </div>
 }
@@ -56,6 +70,13 @@ else
     /// </summary>
     [Parameter, EditorRequired]
     public string Title { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How many items to show inline before the rest collapse behind the "+n more" affordance. Defaults to 1;
+    /// raise it where the cell has room and the items are short (e.g. a handful of short chips).
+    /// </summary>
+    [Parameter]
+    public int MaxVisible { get; set; } = 1;
 
     /// <summary>
     /// What to render when there are no items at all. Defaults to the <see cref="EmptyValue"/> placeholder;

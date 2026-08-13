@@ -1717,6 +1717,21 @@ html[lang] .jim-schema-change-table td {
     align-self: flex-start;
 }
 
+/* The "+n more" affordance on a single-line list (<OverflowList />): low-lighted text rather than a button, so
+   it reads as a quiet continuation of the row instead of competing with the chips beside it. !important beats
+   MudLink's own .mud-primary-text colour rule (site.css > "Content/data links"), which otherwise wins on
+   specificity per the cascade note in JIM.Web/CLAUDE.md. */
+.jim-attr-expand-link.mud-link {
+    color: var(--mud-palette-text-secondary) !important;
+    opacity: 0.8;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.jim-attr-expand-link.mud-link:hover {
+    opacity: 1;
+}
+
 /* ─── One-line cells (every virtualised row is exactly one line) ───
    The virtualiser positions every row arithmetically from one fixed ItemSize, so a cell that wraps, or that
    stacks two block elements, puts every row below it at an offset nothing else on the page agrees with: the
