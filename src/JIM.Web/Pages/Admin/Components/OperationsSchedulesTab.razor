@@ -110,31 +110,41 @@
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
-                @* One line: the outcome sits beside the timestamp rather than under it, because a virtualised
-                   row is a fixed height and a stacked chip is clipped on exactly the rows that have run. *@
-                <div class="jim-attr-single-line">
-                    @if (schedule.LastRunTime.HasValue)
-                    {
-                        var lastRunTime = schedule.LastRunTime.Value;
-                        <MudTooltip Text="@lastRunTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <MudText Typo="Typo.body1">@lastRunTime.ToLocalTime().ToRelativeTime()</MudText>
-                        </MudTooltip>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
-                    }
-                    @* When it last ran is only half the story: a Schedule failing every night looks identical to a
-                       healthy one without its outcome. A failed run also says which step it stopped on. *@
-                    @if (schedule.LastExecutionStatus.HasValue)
-                    {
-                        var lastExecutionStatus = schedule.LastExecutionStatus.Value;
-                        <MudChip T="string" Variant="Variant.Text" Class="ma-0 jim-attr-single-line-value"
-                                 Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)">
-                            @GetLastOutcomeLabel(schedule)
-                        </MudChip>
-                    }
-                </div>
+                @if (schedule.LastRunTime.HasValue)
+                {
+                    var lastRunTime = schedule.LastRunTime.Value;
+                    <MudTooltip Text="@lastRunTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.body1" Class="jim-nowrap">@lastRunTime.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Class="mud-text-disabled jim-nowrap">Never</MudText>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        @* When it last ran is only half the story: a Schedule failing every night looks identical to a healthy
+           one without its outcome. A failed run also says which step it stopped on. Its own column, rather than
+           sharing the Last Run cell, because a virtualised row is a fixed height and a stacked chip is clipped
+           on exactly the rows that have run. *@
+        <TemplateColumn T="ScheduleHeader" Title="Outcome" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Outcome</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var schedule = context.Item; }
+                @if (schedule.LastExecutionStatus.HasValue)
+                {
+                    var lastExecutionStatus = schedule.LastExecutionStatus.Value;
+                    <MudChip T="string" Variant="Variant.Text" Class="ma-0"
+                             Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)">
+                        @GetLastOutcomeLabel(schedule)
+                    </MudChip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="ScheduleHeader" Title="Status" Sortable="false">
