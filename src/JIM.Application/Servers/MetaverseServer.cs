@@ -290,10 +290,15 @@ public class MetaverseServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null,
         bool includeTotalCount = true)
     {
         return await Application.Repository.Metaverse.GetMetaverseAttributeHeadersRangeAsync(
-            offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+            offset, count, searchQuery, sortBy, sortDescending, typeFilter, pluralityFilter, builtInFilter,
+            objectTypeId, includeTotalCount);
     }
 
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false)

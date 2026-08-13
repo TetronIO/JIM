@@ -562,6 +562,10 @@ public interface IMetaverseRepository
     /// <param name="searchQuery">Optional case-insensitive search filter over the attribute name.</param>
     /// <param name="sortBy">Optional column key to sort by (name, type, plurality, builtin, created).</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="typeFilter">Optional: restrict to attributes of this data type.</param>
+    /// <param name="pluralityFilter">Optional: restrict to attributes of this plurality.</param>
+    /// <param name="builtInFilter">Optional: restrict to built-in (true) or custom (false) attributes.</param>
+    /// <param name="objectTypeId">Optional: restrict to attributes bound to this Metaverse Object Type.</param>
     /// <param name="includeTotalCount">
     /// Whether to count the whole match set alongside the window. Counting is a second query over every matching
     /// attribute, so a scroller that already knows the total (the filters have not changed since it last asked)
@@ -574,6 +578,10 @@ public interface IMetaverseRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null,
         bool includeTotalCount = true);
 
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false);

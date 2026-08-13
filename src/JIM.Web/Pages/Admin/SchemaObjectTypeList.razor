@@ -31,6 +31,34 @@
            database range read. The URL parameters are prefixed so this grid's state cannot collide with the
            Attributes grid's (unprefixed) q/sort/desc/row on the shared page URL. The tab already says "Object
            Types", so there is no toolbar title and the count carries the nouns. *@
+        @* ─── Filters ─── *@
+        @if (_metaverseObjectTypeHeaders is { Count: > 0 })
+        {
+            <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
+                <MudItem Class="flex-grow-1">
+                    <MudSelect T="MetaverseObjectDeletionRule?" Label="Deletion Rule" Variant="Variant.Outlined"
+                               Dense="true" Clearable="true" Value="_deletionRuleFilter" ValueChanged="OnDeletionRuleFilterChangedAsync">
+                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.Manual">Manual</MudSelectItem>
+                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">Auto</MudSelectItem>
+                        <MudSelectItem T="MetaverseObjectDeletionRule?" Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">Authoritative Source</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem Class="flex-grow-1">
+                    <MudSelect T="bool?" Label="Predefined Searches?" Variant="Variant.Outlined"
+                               Dense="true" Clearable="true" Value="_predefinedSearchesFilter" ValueChanged="OnPredefinedSearchesFilterChangedAsync">
+                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem Class="flex-grow-1">
+                    <MudSelect T="bool?" Label="Built-in?" Variant="Variant.Outlined"
+                               Dense="true" Clearable="true" Value="_objectTypeBuiltInFilter" ValueChanged="OnObjectTypeBuiltInFilterChangedAsync">
+                        <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudStack>
+        }
         <VirtualisedDataGrid @ref="_objectTypeGrid" T="MetaverseObjectTypeHeader"
                              ContainerId="metaverse-object-type-list"
                              UrlParameterPrefix="ot-"
@@ -135,6 +163,14 @@
                                      ActionText="Clear Search"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
+                else if (IsObjectTypeFilterActive)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                     PrimaryText="No Metaverse Object Types match the current filters"
+                                     SecondaryText="Try different filters, or clear them."
+                                     ActionText="Clear Filters"
+                                     OnAction="@(() => ClearObjectTypeFiltersAsync())" />
+                }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.Category"
@@ -148,6 +184,44 @@
         @* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
            shared grid; this tab supplies the columns, the window loader and the empty states. The tab itself already
            says "Attributes", so there is no toolbar title and the count carries the nouns. *@
+        @* ─── Filters ─── *@
+        <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="AttributeDataType?" Label="Type" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" Value="_attributeTypeFilter" ValueChanged="OnAttributeTypeFilterChangedAsync">
+                    @foreach (var type in Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet))
+                    {
+                        <MudSelectItem T="AttributeDataType?" Value="@type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="AttributePlurality?" Label="Plurality" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" Value="_attributePluralityFilter" ValueChanged="OnAttributePluralityFilterChangedAsync">
+                    <MudSelectItem T="AttributePlurality?" Value="AttributePlurality.SingleValued">Single-Valued</MudSelectItem>
+                    <MudSelectItem T="AttributePlurality?" Value="AttributePlurality.MultiValued">Multi-Valued</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="bool?" Label="Built-in?" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" Value="_attributeBuiltInFilter" ValueChanged="OnAttributeBuiltInFilterChangedAsync">
+                    <MudSelectItem T="bool?" Value="true">Yes</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="false">No</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem Class="flex-grow-1">
+                <MudSelect T="int?" Label="Object Type" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" Value="_attributeObjectTypeFilter" ValueChanged="OnAttributeObjectTypeFilterChangedAsync">
+                    @if (_metaverseObjectTypeHeaders != null)
+                    {
+                        @foreach (var objectType in _metaverseObjectTypeHeaders)
+                        {
+                            <MudSelectItem T="int?" Value="@objectType.Id">@objectType.Name</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudStack>
         <VirtualisedDataGrid @ref="_attributeGrid" T="MetaverseAttributeHeader"
                              ContainerId="metaverse-attribute-list"
                              DefaultSortBy="name"
@@ -274,6 +348,14 @@
                                      ActionText="Clear Search"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
+                else if (IsAttributeFilterActive)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                     PrimaryText="No Metaverse Attributes match the current filters"
+                                     SecondaryText="Try different filters, or clear them."
+                                     ActionText="Clear Filters"
+                                     OnAction="@(() => ClearAttributeFiltersAsync())" />
+                }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
@@ -305,6 +387,19 @@
     private VirtualisedDataGrid<MetaverseObjectTypeHeader>? _objectTypeGrid;
     private VirtualisedDataGrid<MetaverseAttributeHeader>? _attributeGrid;
     private readonly TypeChipColorAssigner _objectTypeChipColors = new();
+
+    private MetaverseObjectDeletionRule? _deletionRuleFilter;
+    private bool? _predefinedSearchesFilter;
+    private bool? _objectTypeBuiltInFilter;
+    private bool IsObjectTypeFilterActive =>
+        _deletionRuleFilter.HasValue || _predefinedSearchesFilter.HasValue || _objectTypeBuiltInFilter.HasValue;
+
+    private AttributeDataType? _attributeTypeFilter;
+    private AttributePlurality? _attributePluralityFilter;
+    private bool? _attributeBuiltInFilter;
+    private int? _attributeObjectTypeFilter;
+    private bool IsAttributeFilterActive =>
+        _attributeTypeFilter.HasValue || _attributePluralityFilter.HasValue || _attributeBuiltInFilter.HasValue || _attributeObjectTypeFilter.HasValue;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -344,6 +439,12 @@
         var filtered = headers.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(request.SearchText))
             filtered = filtered.Where(x => x.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
+        if (_deletionRuleFilter.HasValue)
+            filtered = filtered.Where(x => x.DeletionRule == _deletionRuleFilter.Value);
+        if (_predefinedSearchesFilter.HasValue)
+            filtered = filtered.Where(x => x.HasPredefinedSearches == _predefinedSearchesFilter.Value);
+        if (_objectTypeBuiltInFilter.HasValue)
+            filtered = filtered.Where(x => x.BuiltIn == _objectTypeBuiltInFilter.Value);
 
         Func<MetaverseObjectTypeHeader, object> sortKey = request.SortBy switch
         {
@@ -371,9 +472,90 @@
             request.SearchText,
             request.SortBy,
             request.SortDescending,
+            typeFilter: _attributeTypeFilter,
+            pluralityFilter: _attributePluralityFilter,
+            builtInFilter: _attributeBuiltInFilter,
+            objectTypeId: _attributeObjectTypeFilter,
             includeTotalCount: request.IncludeTotalCount);
 
         return new VirtualisedWindow<MetaverseAttributeHeader>(result.Results, result.TotalResults);
+    }
+
+    private async Task OnDeletionRuleFilterChangedAsync(MetaverseObjectDeletionRule? value)
+    {
+        _deletionRuleFilter = value;
+        await RefreshObjectTypeGridAfterFilterChangeAsync();
+    }
+
+    private async Task OnPredefinedSearchesFilterChangedAsync(bool? value)
+    {
+        _predefinedSearchesFilter = value;
+        await RefreshObjectTypeGridAfterFilterChangeAsync();
+    }
+
+    private async Task OnObjectTypeBuiltInFilterChangedAsync(bool? value)
+    {
+        _objectTypeBuiltInFilter = value;
+        await RefreshObjectTypeGridAfterFilterChangeAsync();
+    }
+
+    private async Task ClearObjectTypeFiltersAsync()
+    {
+        _deletionRuleFilter = null;
+        _predefinedSearchesFilter = null;
+        _objectTypeBuiltInFilter = null;
+        await RefreshObjectTypeGridAfterFilterChangeAsync();
+    }
+
+    private async Task RefreshObjectTypeGridAfterFilterChangeAsync()
+    {
+        if (_objectTypeGrid == null)
+            return;
+
+        await _objectTypeGrid.ResetScrollAsync();
+        await _objectTypeGrid.RefreshAsync(invalidateTotals: true);
+    }
+
+    private async Task OnAttributeTypeFilterChangedAsync(AttributeDataType? value)
+    {
+        _attributeTypeFilter = value;
+        await RefreshAttributeGridAfterFilterChangeAsync();
+    }
+
+    private async Task OnAttributePluralityFilterChangedAsync(AttributePlurality? value)
+    {
+        _attributePluralityFilter = value;
+        await RefreshAttributeGridAfterFilterChangeAsync();
+    }
+
+    private async Task OnAttributeBuiltInFilterChangedAsync(bool? value)
+    {
+        _attributeBuiltInFilter = value;
+        await RefreshAttributeGridAfterFilterChangeAsync();
+    }
+
+    private async Task OnAttributeObjectTypeFilterChangedAsync(int? value)
+    {
+        _attributeObjectTypeFilter = value;
+        await RefreshAttributeGridAfterFilterChangeAsync();
+    }
+
+    private async Task ClearAttributeFiltersAsync()
+    {
+        _attributeTypeFilter = null;
+        _attributePluralityFilter = null;
+        _attributeBuiltInFilter = null;
+        _attributeObjectTypeFilter = null;
+        await RefreshAttributeGridAfterFilterChangeAsync();
+    }
+
+    private async Task RefreshAttributeGridAfterFilterChangeAsync()
+    {
+        if (_attributeGrid == null)
+            return;
+
+        await _attributeGrid.ResetScrollAsync();
+        await _attributeGrid.RefreshAsync(invalidateTotals: true);
     }
 
     /// <summary>
