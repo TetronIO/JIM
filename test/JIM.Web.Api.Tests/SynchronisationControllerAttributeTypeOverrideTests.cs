@@ -115,8 +115,30 @@ public class SynchronisationControllerAttributeTypeOverrideTests
         var result = await _controller.UpdateConnectedSystemAttributeAsync(ConnectedSystemId, ObjectTypeId, AttributeId,
             new UpdateConnectedSystemAttributeRequest { Type = AttributeDataType.Number });
 
-        Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Number));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Number));
+            Assert.That(attribute.TypeSetByAdministrator, Is.True,
+                "Recorded so the next schema refresh leaves the type alone instead of restoring what discovery inferred.");
+        }
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemAttributeAsync_TypeMatchingWhatDiscoveryInferred_IsStillRecordedAsChosenAsync()
+    {
+        // Choosing the type discovery happened to pick is still a choice. Inferring "not overridden" from the
+        // values being equal would leave it exposed to a Connector whose inference changes between releases.
+        Arrange(supportsUserSelectedAttributeTypes: true, out var attribute);
+
+        var result = await _controller.UpdateConnectedSystemAttributeAsync(ConnectedSystemId, ObjectTypeId, AttributeId,
+            new UpdateConnectedSystemAttributeRequest { Type = AttributeDataType.Decimal });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            Assert.That(attribute.TypeSetByAdministrator, Is.True);
+        }
     }
 
     [Test]
@@ -192,9 +214,14 @@ public class SynchronisationControllerAttributeTypeOverrideTests
         var result = await _controller.UpdateConnectedSystemAttributeAsync(ConnectedSystemId, ObjectTypeId, AttributeId,
             new UpdateConnectedSystemAttributeRequest { Selected = true });
 
-        Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Decimal));
-        Assert.That(attribute.Selected, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<OkObjectResult>());
+            Assert.That(attribute.Type, Is.EqualTo(AttributeDataType.Decimal));
+            Assert.That(attribute.Selected, Is.True);
+            Assert.That(attribute.TypeSetByAdministrator, Is.False,
+                "Selecting an attribute is not choosing its type, and must not pin it against future refreshes.");
+        }
     }
 
     [Test]

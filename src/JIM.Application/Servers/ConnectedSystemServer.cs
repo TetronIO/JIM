@@ -1620,7 +1620,19 @@ public class ConnectedSystemServer
                         // Update existing attribute properties but preserve the ID
                         existingAttribute.Description = schemaAttribute.Description;
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
-                        existingAttribute.Type = schemaAttribute.Type;
+
+                        // A refresh restates what the Connector discovered and leaves what the administrator
+                        // decided, which is why Selected and IsExternalId are absent from this block. A data
+                        // type is normally discovered, so it belongs here; one an administrator chose does
+                        // not, and overwriting it would silently undo the override. That matters more than it
+                        // sounds: the mapping validator runs when a mapping is created rather than
+                        // continuously, so a Synchronisation Rule validated against the chosen type would go
+                        // on running against the reverted one, and the Attribute Flow, which switches on the
+                        // source type, would write the value into the wrong column of the Metaverse Object.
+                        // It would also sidestep the rule that an override is refused once values exist (#1354).
+                        if (!existingAttribute.TypeSetByAdministrator)
+                            existingAttribute.Type = schemaAttribute.Type;
+
                         existingAttribute.ClassName = schemaAttribute.ClassName;
                         existingAttribute.Writability = schemaAttribute.Writability;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
