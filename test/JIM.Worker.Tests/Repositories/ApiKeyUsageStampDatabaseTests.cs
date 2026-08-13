@@ -141,6 +141,6 @@ public class ApiKeyUsageStampDatabaseTests
     {
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
-        Assert.DoesNotThrowAsync(async () => await repository.ApiKeys.RecordUsageAsync(Guid.NewGuid(), "203.0.113.7"));
+        Assert.That(async () => await repository.ApiKeys.RecordUsageAsync(Guid.NewGuid(), "203.0.113.7"), Throws.Nothing);
     }
 }

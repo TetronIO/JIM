@@ -70,18 +70,19 @@ jobs:
         run: pwsh -File ./scripts/Lint-DocExamples.ps1
       - name: Check every stylesheet closes its rules
         run: pwsh -File ./scripts/Test-CssBalance.ps1
-      - name: Check concept diagram label cuts
+      - name: Check concept diagrams (label cuts and lightbox framing)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Only a diagram source or a change to the diagram tokens can invalidate
-          # a label cut, and this check needs a browser download, so the cost is
-          # paid on those PRs alone. The step still runs (and passes) on every PR,
-          # so the job keeps reporting and stays safe as a required check.
+          # A label cut can only be invalidated by a diagram source or the diagram
+          # tokens; the lightbox framing can also be invalidated by the overlay
+          # script itself. Both need a browser download, so the cost is paid on
+          # those PRs alone. The step still runs (and passes) on every PR, so the
+          # job keeps reporting and stays safe as a required check.
           CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
-          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css)$'; then
-            echo "No diagram sources or diagram tokens changed; skipping the label cut check."
+          if ! printf '%s\n' "$CHANGED_FILES" | grep -qE '^docs/assets/(diagrams/.+\.svg|stylesheets/custom\.css|javascripts/diagram-zoom\.js)$'; then
+            echo "No diagram sources, diagram tokens or overlay script changed; skipping the diagram checks."
             exit 0
           fi
           # Reuse the @playwright/mcp pin from setup.sh rather than adding a third
@@ -95,5 +96,6 @@ jobs:
           npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" --silent
           PLAYWRIGHT_CORE_CLI="$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' | head -1)"
           node "$PLAYWRIGHT_CORE_CLI" install --with-deps chromium
-          JIM_PLAYWRIGHT_MODULE="$(dirname "$PLAYWRIGHT_CORE_CLI")" \
-            pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check
+          export JIM_PLAYWRIGHT_MODULE="$(dirname "$PLAYWRIGHT_CORE_CLI")"
+          pwsh -File ./scripts/Update-DiagramLabelCuts.ps1 -Check
+          pwsh -File ./scripts/Test-DiagramLightbox.ps1

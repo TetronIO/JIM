@@ -171,6 +171,161 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
         }
     }
 
+    #region Exclusions (#1255)
+
+    [Test]
+    public void Picker_ForAContainerCoveredByASelection_OffersToExcludeIt()
+    {
+        // Exclusion is meaningful on exactly the rows an ancestor already reaches, so the label saying why the row
+        // cannot be ticked is where the action belongs.
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true,
+            children: [Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com")]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var cut = Render(partition);
+
+        Assert.That(cut.FindAll("[data-testid='jim-picker-exclude']"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Picker_OffersExclusionNowhereElse()
+    {
+        // A Container nothing reaches, and one selected in its own right, both have nothing to be carved out of.
+        var partition = PartitionWith(
+            Container("Corp", "OU=Corp,DC=example,DC=com", selected: true),
+            Container("Groups", "OU=Groups,DC=example,DC=com"));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var cut = Render(partition);
+
+        Assert.That(cut.FindAll("[data-testid='jim-picker-exclude']"), Is.Empty);
+    }
+
+    [Test]
+    public void Picker_BeneathAOneLevelSelection_OffersNoExclusion()
+    {
+        // A One Level selection reaches no Container beneath it, so an exclusion there would carve out nothing.
+        var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com");
+        var corp = Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]);
+        corp.Scope = ConnectedSystemContainerScope.OneLevel;
+        var partition = PartitionWith(corp);
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var cut = Render(partition);
+
+        Assert.That(cut.FindAll("[data-testid='jim-picker-exclude']"), Is.Empty);
+    }
+
+    [Test]
+    public void Picker_ExcludingAContainer_CarvesItOutAndSaysWhichSelectionItLeft()
+    {
+        var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com");
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var cut = Render(partition);
+
+        cut.Find("[data-testid='jim-picker-exclude']").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Excluded, Is.True);
+            Assert.That(cut.Find("[data-testid='jim-picker-excluded']").TextContent, Does.Contain("Corp"));
+        }
+    }
+
+    [Test]
+    public void Picker_ForAnExcludedContainer_OffersToIncludeItAgain()
+    {
+        var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com", excluded: true);
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var cut = Render(partition);
+
+        cut.Find("[data-testid='jim-picker-include']").Click();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(serviceAccounts.Excluded, Is.False);
+            Assert.That(serviceAccounts.Selected, Is.False, "including hands the Container back to its ancestors rather than selecting it");
+            Assert.That(serviceAccounts.Included, Is.True, "Corp's selection reaches it again");
+        }
+    }
+
+    [Test]
+    public void Picker_ForAnExcludedContainer_DoesNotAlsoOfferItsTickBox()
+    {
+        // Ticking would clear the exclusion too, by a second route with a different meaning. One row, one action.
+        var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com", excluded: true);
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var cut = Render(partition);
+
+        var row = cut.FindAll("[data-testid='jim-picker-row']")
+            .Single(r => r.GetAttribute("data-container-name") == "Service Accounts");
+        Assert.That(row.QuerySelector("input[type=checkbox]")!.HasAttribute("disabled"), Is.True);
+    }
+
+    [Test]
+    public void Picker_ForAContainerInsideAnExclusion_SaysWhichExclusionCarvedItOutAndStillOffersItsTickBox()
+    {
+        // Rendered as plain and unselected it would read as "nothing has been decided here", when something has.
+        // Ticking it is meaningful: it brings the branch back into scope.
+        var app1 = Container("App1", "OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com");
+        var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com",
+            excluded: true, children: [app1]);
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+
+        var cut = Render(partition);
+
+        var row = cut.FindAll("[data-testid='jim-picker-row']")
+            .Single(r => r.GetAttribute("data-container-name") == "App1");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.QuerySelector("[data-testid='jim-picker-excluded-by-ancestor']")!.TextContent,
+                Does.Contain("Service Accounts"));
+            Assert.That(row.QuerySelector("input[type=checkbox]")!.HasAttribute("disabled"), Is.False);
+        }
+    }
+
+    [Test]
+    public void Picker_SelectingAContainerInsideAnExclusion_BringsThatBranchBackIntoScope()
+    {
+        var app1 = Container("App1", "OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com");
+        var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com",
+            excluded: true, children: [app1]);
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var cut = Render(partition);
+
+        var row = cut.FindAll("[data-testid='jim-picker-row']")
+            .Single(r => r.GetAttribute("data-container-name") == "App1");
+        row.QuerySelector("input[type=checkbox]")!.Change(true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(app1.Selected, Is.True);
+            Assert.That(serviceAccounts.Excluded, Is.True, "the surrounding exclusion still stands; only this branch came back");
+        }
+    }
+
+    [Test]
+    public void Picker_ExcludingAContainer_RaisesOnChanged()
+    {
+        var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true,
+            children: [Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com")]));
+        ContainerSelectionEditor.RecalculateCoverage(partition);
+        var raised = 0;
+        var cut = Render(partition, () => raised++);
+
+        cut.Find("[data-testid='jim-picker-exclude']").Click();
+
+        Assert.That(raised, Is.EqualTo(1), "the host gates its save button and its stale-preview notice on this");
+    }
+
+    #endregion
+
     #region Helpers
 
     private IRenderedComponent<ScopedHierarchyPicker> Render(ConnectedSystemPartition partition, Action? onChanged = null) =>
@@ -182,6 +337,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
         string name,
         string externalId,
         bool selected = false,
+        bool excluded = false,
         IEnumerable<ConnectedSystemContainer>? children = null)
     {
         var container = new ConnectedSystemContainer
@@ -189,7 +345,8 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
             Id = _nextId++,
             Name = name,
             ExternalId = externalId,
-            Selected = selected
+            Selected = selected,
+            Excluded = excluded
         };
 
         foreach (var child in children ?? [])

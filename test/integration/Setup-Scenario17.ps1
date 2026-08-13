@@ -141,18 +141,24 @@ Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 Write-Host "  ✓ Connected to $JIMUrl" -ForegroundColor Green
 
 try {
-    # Step 2b: Make sure the directory's containers were actually enumerated
+    # Step 2b: Make sure the directory's Partition and Containers were actually enumerated
     #
-    # Setup-Scenario1.ps1 imports the hierarchy once and then selects the partition. On a Connected System
-    # that has never had a partition selected, that order yields no containers: the import enumerates
-    # containers only for partitions already marked as selected, so the first import returns the partition
-    # alone and the container search that follows finds nothing. Setup-Scenario1 warns and carries on, which
-    # leaves a Connected System whose exports are refused with "selected partition(s) contain no enumerated
-    # containers" several steps later, a long way from the cause.
+    # Two observed behaviours make Setup-Scenario1's single hierarchy import unreliable against Samba AD, and
+    # both surface far from their cause, as an export refused several steps later with "selected partition(s)
+    # contain no enumerated containers":
     #
-    # Re-importing now that the partition is selected populates them. This is a workaround, not a fix: the
-    # ordering belongs to Setup-Scenario1 and affects every scenario that uses it.
-    Write-TestStep "Step 2b" "Verifying the directory hierarchy was enumerated"
+    #   1. The FIRST hierarchy import against a newly created Connected System fails with "An operation error
+    #      occurred. 00002020: Operation unavailable without authentication". A second, identical import
+    #      succeeds. Reproduced on every clean run of this scenario. Setup-Scenario1 catches the failure,
+    #      warns, and carries on, so the Connected System is left with no Partitions at all.
+    #   2. The import enumerates Containers only for a Partition already marked as selected, and
+    #      Setup-Scenario1 selects the Partition *after* importing, so even a successful first import returns
+    #      the Partition alone.
+    #
+    # This step recovers from both by driving the sequence to completion: import, select the Partition,
+    # import again for the Containers, select the one accounts are provisioned into. Every stage is checked,
+    # and a failure throws here rather than being carried into the run.
+    Write-TestStep "Step 2b" "Verifying the directory Partition and Containers were enumerated"
 
     $ldapSystem = @(Get-JIMConnectedSystem) |
         Where-Object { $_.name -eq $DirectoryConfig.ConnectedSystemName } | Select-Object -First 1
@@ -160,51 +166,82 @@ try {
         throw "Could not find the Connected System '$($DirectoryConfig.ConnectedSystemName)'."
     }
 
-    $selectedPartition = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id) |
-        Where-Object { $_.selected } | Select-Object -First 1
-    if (-not $selectedPartition) {
-        throw "No partition is selected on '$($DirectoryConfig.ConnectedSystemName)', so nothing can be imported or exported."
+    function Invoke-HierarchyImport {
+        param([int]$ConnectedSystemId, [int]$Attempts = 3)
+        for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+            try {
+                Import-JIMConnectedSystemHierarchy -Id $ConnectedSystemId -ErrorAction Stop | Out-Null
+                return
+            }
+            catch {
+                if ($attempt -eq $Attempts) { throw }
+                Write-Host "    Hierarchy import attempt $attempt failed, retrying: $($_.Exception.Message)" -ForegroundColor DarkYellow
+                Start-Sleep -Seconds 2
+            }
+        }
     }
 
-    if (-not $selectedPartition.containers -or $selectedPartition.containers.Count -eq 0) {
-        Write-Host "  Partition '$($selectedPartition.name)' has no enumerated containers; re-importing the hierarchy..." -ForegroundColor Yellow
-        Import-JIMConnectedSystemHierarchy -Id $ldapSystem.id | Out-Null
-
-        $selectedPartition = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id) |
+    function Get-SelectedPartition {
+        param([int]$ConnectedSystemId)
+        return @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ConnectedSystemId) |
             Where-Object { $_.selected } | Select-Object -First 1
+    }
+
+    function Find-ContainerByName {
+        param($Containers, [string]$Name)
+        foreach ($container in $Containers) {
+            if ($container.name -eq $Name) { return $container }
+            if ($container.childContainers) {
+                $found = Find-ContainerByName -Containers $container.childContainers -Name $Name
+                if ($found) { return $found }
+            }
+        }
+        return $null
+    }
+
+    # Select the Partition, importing the hierarchy first where nothing was discovered.
+    $selectedPartition = Get-SelectedPartition -ConnectedSystemId $ldapSystem.id
+    if (-not $selectedPartition) {
+        Write-Host "  No Partition is selected; importing the hierarchy..." -ForegroundColor Yellow
+        Invoke-HierarchyImport -ConnectedSystemId $ldapSystem.id
+
+        $partition = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id) |
+            Where-Object { $_.name -eq $DirectoryConfig.BaseDN -or $_.externalId -eq $DirectoryConfig.BaseDN } |
+            Select-Object -First 1
+        if (-not $partition) {
+            throw "The hierarchy import discovered no Partition matching '$($DirectoryConfig.BaseDN)' on " +
+                  "'$($DirectoryConfig.ConnectedSystemName)'. Nothing can be imported or exported without one."
+        }
+
+        Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $partition.id -Selected $true | Out-Null
+        $selectedPartition = Get-SelectedPartition -ConnectedSystemId $ldapSystem.id
+        Write-Host "  ✓ Selected Partition '$($selectedPartition.name)'" -ForegroundColor Green
+    }
+
+    # Enumerate the Containers, which only happens for a Partition that is already selected.
+    if (-not $selectedPartition.containers -or $selectedPartition.containers.Count -eq 0) {
+        Write-Host "  Partition '$($selectedPartition.name)' has no enumerated Containers; re-importing the hierarchy..." -ForegroundColor Yellow
+        Invoke-HierarchyImport -ConnectedSystemId $ldapSystem.id
+        $selectedPartition = Get-SelectedPartition -ConnectedSystemId $ldapSystem.id
 
         if (-not $selectedPartition.containers -or $selectedPartition.containers.Count -eq 0) {
-            throw "The partition '$($selectedPartition.name)' still reports no containers after a second hierarchy " +
-                  "import. Exports cannot run without them; check the Connected System's connectivity."
+            throw "The Partition '$($selectedPartition.name)' still reports no Containers after a second " +
+                  "hierarchy import. Exports cannot run without them; check the Connected System's connectivity."
         }
+    }
 
-        # Select the container users are provisioned into, which the first pass could not find.
-        $targetContainerName = if ($DirectoryConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "Corp" }
+    # Select the Container accounts are provisioned into.
+    $targetContainerName = if ($DirectoryConfig.UserContainer -match "^[Oo][Uu]=([^,]+)") { $matches[1] } else { "Corp" }
+    $targetContainer = Find-ContainerByName -Containers $selectedPartition.containers -Name $targetContainerName
+    if (-not $targetContainer) {
+        throw "Could not find the Container '$targetContainerName' under '$($selectedPartition.name)'. " +
+              "Accounts are provisioned into $($DirectoryConfig.UserContainer), which must exist in the directory."
+    }
 
-        function Find-ContainerByName {
-            param($Containers, [string]$Name)
-            foreach ($container in $Containers) {
-                if ($container.name -eq $Name) { return $container }
-                if ($container.childContainers) {
-                    $found = Find-ContainerByName -Containers $container.childContainers -Name $Name
-                    if ($found) { return $found }
-                }
-            }
-            return $null
-        }
-
-        $targetContainer = Find-ContainerByName -Containers $selectedPartition.containers -Name $targetContainerName
-        if (-not $targetContainer) {
-            throw "Could not find the container '$targetContainerName' under '$($selectedPartition.name)'. " +
-                  "Accounts are provisioned into $($DirectoryConfig.UserContainer), which must exist in the directory."
-        }
-
+    if (-not $targetContainer.selected) {
         Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $targetContainer.id -Selected $true | Out-Null
-        Write-Host "  ✓ Re-imported the hierarchy and selected the '$targetContainerName' container" -ForegroundColor Green
     }
-    else {
-        Write-Host "  ✓ Partition '$($selectedPartition.name)' carries $($selectedPartition.containers.Count) container(s)" -ForegroundColor Green
-    }
+    Write-Host "  ✓ Partition '$($selectedPartition.name)' carries $($selectedPartition.containers.Count) Container(s); '$targetContainerName' is selected" -ForegroundColor Green
 
     # Step 2c: Let the Initial Password be the only writer of the account's enabled state
     #

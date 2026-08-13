@@ -242,8 +242,8 @@ public class SecurityAuditServerAggregationTests
         // never fail the authentication path it is instrumenting.
         _dbContext.Dispose();
 
-        Assert.DoesNotThrowAsync(async () =>
-            await _jim.SecurityAudit.RecordFailedAuthenticationAsync("API key authentication failed", "API key not found", "jim_ak_1234", "10.0.0.1"));
+        Assert.That(async () =>
+            await _jim.SecurityAudit.RecordFailedAuthenticationAsync("API key authentication failed", "API key not found", "jim_ak_1234", "10.0.0.1"), Throws.Nothing);
     }
 
     [Test]
@@ -262,7 +262,7 @@ public class SecurityAuditServerAggregationTests
 
         _dbContext.Dispose();
 
-        Assert.DoesNotThrowAsync(async () =>
-            await _jim.SecurityAudit.RecordInteractiveSignInSucceededAsync(user, "198.51.100.7"));
+        Assert.That(async () =>
+            await _jim.SecurityAudit.RecordInteractiveSignInSucceededAsync(user, "198.51.100.7"), Throws.Nothing);
     }
 }

@@ -3077,6 +3077,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds)
+    {
+        ArgumentNullException.ThrowIfNull(containerIds);
+
+        if (containerIds.Count == 0)
+            return [];
+
+        // A projection, not a load: GetConnectedSystemContainerAsync pulls the partition, the Connected System
+        // and the children, all of which a caller that only wants to name a Container would throw away.
+        return await Repository.Database.ConnectedSystemContainers
+            .AsNoTracking()
+            .Where(c => containerIds.Contains(c.Id))
+            .Select(c => new ConnectedSystemContainerSummary(c.Id, c.Name, c.ExternalId))
+            .ToListAsync();
+    }
+
     public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
     {
         var container = await Repository.Database.ConnectedSystemContainers
@@ -5185,13 +5201,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Deletes a Synchronisation Rule mapping.
+    /// Deletes a Synchronisation Rule mapping and the sources beneath it.
     /// </summary>
+    /// <remarks>
+    /// The mapping is re-loaded here rather than removed as handed over, because a caller cannot know what else
+    /// is already in this context's change tracker. The API's delete handler loads the Synchronisation Rule to
+    /// return a 404 for an unknown one, and <see cref="GetSyncRuleAsync(int)"/> deliberately tracks, pulling
+    /// every one of the rule's mapping sources into the identity map; <see cref="GetSyncRuleMappingAsync"/> then
+    /// runs under the context default of NoTracking and materialises a second, detached copy of the same rows.
+    /// Removing that copy attached duplicate keys and EF threw, so the delete failed for every caller of the
+    /// endpoint and of Remove-JIMSyncRuleMapping.
+    ///
+    /// Re-loading with AsTracking() fixes it at the point that owns the problem: identity resolution returns the
+    /// instances already being tracked where there are any, and materialises them where there are not, so the
+    /// method is correct whatever the caller loaded first. Fixing it by dropping the handler's rule load would
+    /// work today and leave the same trap for the next caller.
+    /// </remarks>
     public async Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping)
     {
+        var tracked = await Repository.Database.SyncRuleMappings
+            .AsTracking()
+            .Include(m => m.Sources)
+            .SingleOrDefaultAsync(m => m.Id == mapping.Id);
+
+        // Already gone. Deleting the same mapping twice is not an error worth raising: the caller's intent holds.
+        if (tracked == null)
+            return;
+
         // Remove all sources first
-        Repository.Database.RemoveRange(mapping.Sources);
-        Repository.Database.SyncRuleMappings.Remove(mapping);
+        Repository.Database.RemoveRange(tracked.Sources);
+        Repository.Database.SyncRuleMappings.Remove(tracked);
         await Repository.Database.SaveChangesAsync();
     }
 

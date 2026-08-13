@@ -50,11 +50,37 @@ echo "Generating TLS certificates for LDAPS..."
 mkdir -p ${SAMBA_PRIVATE}/tls
 
 if [ ! -f ${SAMBA_PRIVATE}/tls/cert.pem ]; then
+    # The certificate must carry every name JIM might connect by, because certificate validation is
+    # always on and there is no option to skip it.
+    #
+    # Three names matter, and a certificate naming only the domain (which is what this generated before)
+    # covers none of the other two:
+    #   - the domain controller's own FQDN, which is what it advertises as its dNSHostName and what JIM
+    #     pins to after discovering it. Without this, every AD-family run logs "JIM could not open a
+    #     connection to that name, so it has not been pinned" and falls back, losing consistent delta
+    #     imports.
+    #   - the Docker Compose service name, which is the Host an administrator configures on the
+    #     Connected System and the name the first connection is made to.
+    #   - the domain itself, kept for anything addressing the directory by domain name.
+    DC_SHORT_NAME="$(hostname -s)"
+    DC_FQDN="${DC_SHORT_NAME}.${LDOMAIN}"
+    CERT_SANS="DNS:${DC_FQDN},DNS:${DC_SHORT_NAME},DNS:${LDOMAIN}"
+
+    # The Compose service name cannot be derived inside the container, so the build script passes it in.
+    if [ -n "${SAMBA_CERT_EXTRA_NAMES}" ]; then
+        for extra_name in $(echo "${SAMBA_CERT_EXTRA_NAMES}" | tr ',' ' '); do
+            CERT_SANS="${CERT_SANS},DNS:${extra_name}"
+        done
+    fi
+
+    echo "  Certificate names: ${CERT_SANS}"
+
     openssl req -x509 -nodes -days 3650 \
         -newkey rsa:2048 \
         -keyout ${SAMBA_PRIVATE}/tls/key.pem \
         -out ${SAMBA_PRIVATE}/tls/cert.pem \
-        -subj "/CN=${LDOMAIN}/O=JIM Integration Testing" \
+        -subj "/CN=${DC_FQDN}/O=JIM Integration Testing" \
+        -addext "subjectAltName=${CERT_SANS}" \
         2>/dev/null
 
     cp ${SAMBA_PRIVATE}/tls/cert.pem ${SAMBA_PRIVATE}/tls/ca.pem

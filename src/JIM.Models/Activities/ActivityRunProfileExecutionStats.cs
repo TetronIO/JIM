@@ -169,6 +169,23 @@ public class ActivityRunProfileExecutionStats
     /// Only includes error types with count > 0 (excludes NotSet).
     /// </summary>
     public Dictionary<ActivityRunProfileExecutionItemErrorType, int> ErrorTypeCounts { get; set; } = new();
+
+    /// <summary>
+    /// How many entries this import read from the Connected System and discarded because an excluded Container
+    /// carved them out (#1255), keyed by that Container's id. Empty for every run that discarded nothing, which
+    /// is every run on a Connected System carrying no exclusions.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by id rather than name because this is a historical record and the Container can be renamed, moved
+    /// or removed afterwards; whoever renders it resolves the name from the hierarchy and says so plainly when
+    /// the Container has since gone.
+    /// </remarks>
+    public Dictionary<int, int> EntriesDiscardedByExcludedContainer { get; set; } = new();
+
+    /// <summary>
+    /// Entries discarded across every exclusion, which is the figure that answers "why was this import slow?".
+    /// </summary>
+    public int TotalEntriesDiscardedByExclusion => EntriesDiscardedByExcludedContainer.Values.Sum();
     #endregion
 
     #region NoChange Reason Stats

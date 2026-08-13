@@ -674,6 +674,26 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalCreated { get; set; }
     #endregion
 
+    #region Container Exclusion Stats
+    /// <summary>
+    /// How many entries this import read from the Connected System and discarded because an excluded Container
+    /// carved them out, keyed by that Container's id.
+    /// </summary>
+    /// <remarks>
+    /// A directory cannot express "this subtree except that branch" in one search, so an exclusion is honoured by
+    /// reading the entries it covers and throwing them away. Empty for every run that discarded nothing, which is
+    /// every run on a Connected System carrying no exclusions. Keyed by id because the Container can be renamed
+    /// or removed after the run; resolve the name through
+    /// <c>GET connected-systems/{id}/partitions</c> when displaying it.
+    /// </remarks>
+    public Dictionary<int, int> EntriesDiscardedByExcludedContainer { get; set; } = new();
+
+    /// <summary>
+    /// Entries discarded across every exclusion, which is the figure that answers "why was this import slow?".
+    /// </summary>
+    public int TotalEntriesDiscardedByExclusion { get; set; }
+    #endregion
+
     /// <summary>
     /// Creates a DTO from the stats entity.
     /// </summary>
@@ -716,7 +736,11 @@ public class ActivityRunProfileExecutionStatsDto
             TotalPendingExportsFailed = stats.TotalPendingExportsFailed,
 
             // Direct Creation
-            TotalCreated = stats.TotalCreated
+            TotalCreated = stats.TotalCreated,
+
+            // Container exclusions
+            EntriesDiscardedByExcludedContainer = stats.EntriesDiscardedByExcludedContainer,
+            TotalEntriesDiscardedByExclusion = stats.TotalEntriesDiscardedByExclusion
         };
     }
 }

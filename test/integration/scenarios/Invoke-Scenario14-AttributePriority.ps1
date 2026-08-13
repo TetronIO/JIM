@@ -2205,17 +2205,16 @@ userPassword: Test@123!
             $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after removing the exception rule"
 
-            # Value only, deliberately, for Dave: deleting the Synchronisation Rule that contributed his value nulls
-            # the value row's ContributedBySyncRuleId (the FK is ON DELETE SET NULL), and the following Full
-            # Synchronisation does not re-stamp it, because the plain rule contributes the IDENTICAL string and the
-            # attribute-flow writers diff by value, so there is nothing to remove and re-add. Provenance therefore
-            # stays absent until the value itself changes. That is a real gap (a value with no contributing rule is
-            # invisible to drift detection's contributor check and to recall's incumbent lookup), but it belongs to
-            # Synchronisation Rule deletion rather than to Attribute Priority, so it is recorded separately rather
-            # than papered over here. Frank's value did change in this step, so his provenance is asserted in full.
+            # Dave is the provenance-repair case (#1292). Deleting the Synchronisation Rule that contributed his
+            # value nulls the value row's ContributedBySyncRuleId (the FK is ON DELETE SET NULL), and the plain rule
+            # then contributes the IDENTICAL string, so the attribute-flow writers diff to nothing: no removal, no
+            # addition, and nothing that would carry new provenance. The surviving contributor therefore has to take
+            # the row over explicitly, which is what this asserts. Frank's value did change in this step, so his
+            # provenance travels with the new value in the ordinary way.
             Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
                 -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
-                -Name "Dave's Description (exception rule removed: Primary's plain rule value holds)"
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (exception rule removed: Primary's plain rule takes over the orphaned value)"
 
             Assert-MvoAttributeValue -MvoId $frankMvo.id -AttributeName "Description" `
                 -ExpectedValue "Primary-sourced description for Frank Foster (S14)" `

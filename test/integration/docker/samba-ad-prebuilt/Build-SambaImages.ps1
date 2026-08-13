@@ -95,6 +95,7 @@ $imageDefinitions = @{
         Password  = "Test@123!"
         Container = "samba-build-primary"
         Hostname  = "dc1"
+        ServiceName = "samba-ad-primary"
     }
     Source  = @{
         Domain    = "RESURGAM.LOCAL"
@@ -102,6 +103,7 @@ $imageDefinitions = @{
         Password  = "Test@123!"
         Container = "samba-build-source"
         Hostname  = "dc1-source"
+        ServiceName = "samba-ad-source"
     }
     Target  = @{
         Domain    = "GENTIAN.LOCAL"
@@ -109,6 +111,7 @@ $imageDefinitions = @{
         Password  = "Test@123!"
         Container = "samba-build-target"
         Hostname  = "dc1-target"
+        ServiceName = "samba-ad-target"
     }
 }
 
@@ -247,7 +250,10 @@ foreach ($imageName in $imagesToBuild) {
     Write-Host "Step 4: Running post-provisioning setup (TLS, OUs)..." -ForegroundColor Cyan
     docker cp "$scriptDir/post-provision.sh" "${containerName}:/post-provision.sh"
     docker exec $containerName chmod +x /post-provision.sh
-    docker exec $containerName /post-provision.sh
+    # The Compose service name is the Host administrators configure on the Connected System, and the
+    # certificate has to carry it or the very first connection fails validation. It cannot be derived
+    # inside the container, so it is passed in.
+    docker exec -e SAMBA_CERT_EXTRA_NAMES=$($config.ServiceName) $containerName /post-provision.sh
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Post-provisioning failed" -ForegroundColor Red

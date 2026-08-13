@@ -79,14 +79,14 @@ public class SyncRepositorySettingsTests
     [Test]
     public void ClearChangeTracker_DoesNotThrow()
     {
-        Assert.DoesNotThrow(() => _repo.ClearChangeTracker());
+        Assert.That(() => _repo.ClearChangeTracker(), Throws.Nothing);
     }
 
     [Test]
     public void SetAutoDetectChangesEnabled_DoesNotThrow()
     {
-        Assert.DoesNotThrow(() => _repo.SetAutoDetectChangesEnabled(true));
-        Assert.DoesNotThrow(() => _repo.SetAutoDetectChangesEnabled(false));
+        Assert.That(() => _repo.SetAutoDetectChangesEnabled(true), Throws.Nothing);
+        Assert.That(() => _repo.SetAutoDetectChangesEnabled(false), Throws.Nothing);
     }
 
     [Test]

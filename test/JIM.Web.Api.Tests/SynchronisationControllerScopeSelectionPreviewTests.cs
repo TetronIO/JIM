@@ -44,6 +44,7 @@ public class SynchronisationControllerScopeSelectionPreviewTests
     private const int PartitionId = 11;
     private const int UsersContainerId = 21;
     private const int ContractorsContainerId = 22;
+    private const int ServiceAccountsContainerId = 23;
 
     private Mock<IRepository> _repository = null!;
     private Mock<IConnectedSystemRepository> _connectedSystemRepo = null!;
@@ -228,6 +229,78 @@ public class SynchronisationControllerScopeSelectionPreviewTests
         Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
     }
 
+    [Test]
+    public async Task StartScopeSelectionPreview_OmittedExclusions_PreviewTheStoredExclusionsAsync()
+    {
+        // Same reasoning as the omitted selection lists: a caller changing only the containers has not asked to
+        // lift every carve-out, and reading silence that way would report objects flooding back into scope.
+        var result = await _controller.StartConnectedSystemScopeSelectionPreviewAsync(ConnectedSystemId,
+            new StartConnectedSystemScopeSelectionPreviewRequest { SelectedContainerIds = [UsersContainerId] });
+
+        Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
+        Assert.That(QueuedProposal().ExcludedContainerIds, Is.EquivalentTo(new[] { ServiceAccountsContainerId }));
+    }
+
+    [Test]
+    public async Task StartScopeSelectionPreview_SuppliedExclusions_PreviewTheProposedExclusionsAsync()
+    {
+        // The point of the field: a caller must be able to ask what carving a branch out would cost before doing
+        // it, exactly as the portal's tree can.
+        var result = await _controller.StartConnectedSystemScopeSelectionPreviewAsync(ConnectedSystemId,
+            new StartConnectedSystemScopeSelectionPreviewRequest
+            {
+                SelectedContainerIds = [UsersContainerId, ContractorsContainerId],
+                ExcludedContainerIds = [ServiceAccountsContainerId]
+            });
+
+        Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
+        Assert.That(QueuedProposal().ExcludedContainerIds, Is.EquivalentTo(new[] { ServiceAccountsContainerId }));
+    }
+
+    [Test]
+    public async Task StartScopeSelectionPreview_EmptyExclusionList_PreviewsLiftingEveryExclusionAsync()
+    {
+        // The destructive-direction sibling of the empty container list, in reverse: lifting a carve-out brings a
+        // whole branch back into scope, and substituting the stored exclusions would report that it does nothing.
+        var result = await _controller.StartConnectedSystemScopeSelectionPreviewAsync(ConnectedSystemId,
+            new StartConnectedSystemScopeSelectionPreviewRequest { ExcludedContainerIds = [] });
+
+        Assert.That(result, Is.InstanceOf<AcceptedAtRouteResult>());
+        Assert.That(QueuedProposal().ExcludedContainerIds, Is.Empty);
+    }
+
+    [Test]
+    public async Task StartScopeSelectionPreview_UnknownExcludedContainer_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.StartConnectedSystemScopeSelectionPreviewAsync(ConnectedSystemId,
+            new StartConnectedSystemScopeSelectionPreviewRequest { ExcludedContainerIds = [9999] });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(_queuedWorkerTasks, Is.Empty, "nothing should be evaluated for an incoherent proposal");
+        }
+    }
+
+    [Test]
+    public async Task StartScopeSelectionPreview_ContainerBothSelectedAndExcluded_ReturnsBadRequestAsync()
+    {
+        // The same contradiction the update endpoints refuse, refused here for the same reason: there is no
+        // answer to "what would this do?" when the proposal states that a Container both is and is not managed.
+        var result = await _controller.StartConnectedSystemScopeSelectionPreviewAsync(ConnectedSystemId,
+            new StartConnectedSystemScopeSelectionPreviewRequest
+            {
+                SelectedContainerIds = [UsersContainerId],
+                ExcludedContainerIds = [UsersContainerId]
+            });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(_queuedWorkerTasks, Is.Empty, "nothing should be evaluated for a contradictory proposal");
+        }
+    }
+
     private ConnectedSystemScopeSelectionProposal QueuedProposal()
     {
         var task = _queuedWorkerTasks.OfType<ConfigurationChangePreviewWorkerTask>().SingleOrDefault();
@@ -246,13 +319,25 @@ public class SynchronisationControllerScopeSelectionPreviewTests
             Containers = []
         };
 
-        partition.Containers.Add(new ConnectedSystemContainer
+        var users = new ConnectedSystemContainer
         {
             Id = UsersContainerId,
             Name = "Users",
             ExternalId = "OU=Users,DC=example,DC=com",
             Selected = true
+        };
+
+        // A carve-out inside the selected branch (#1255), so the fixture can tell "the proposal said nothing about
+        // exclusions" apart from "the proposal removed them".
+        users.ChildContainers.Add(new ConnectedSystemContainer
+        {
+            Id = ServiceAccountsContainerId,
+            Name = "Service Accounts",
+            ExternalId = "OU=Service Accounts,OU=Users,DC=example,DC=com",
+            Excluded = true
         });
+
+        partition.Containers.Add(users);
 
         partition.Containers.Add(new ConnectedSystemContainer
         {

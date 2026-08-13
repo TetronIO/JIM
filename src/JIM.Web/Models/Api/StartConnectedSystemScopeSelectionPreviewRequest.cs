@@ -36,6 +36,17 @@ public class StartConnectedSystemScopeSelectionPreviewRequest
     public List<int>? SelectedContainerIds { get; set; }
 
     /// <summary>
+    /// The containers that would be carved out of the selection around them (#1255). Omitted or null previews the
+    /// exclusions currently in force, so a request changing only the selection need not restate them; an empty
+    /// list previews lifting every exclusion, which brings those branches back into scope.
+    ///
+    /// An exclusion overrules the selected Container above it for everything beneath the excluded Container, so a
+    /// Container listed here must not also appear in <see cref="SelectedContainerIds"/>; a proposal stating both is
+    /// refused rather than resolved.
+    /// </summary>
+    public List<int>? ExcludedContainerIds { get; set; }
+
+    /// <summary>
     /// Whether every drill-down row is kept, or only the per-group cap's worth. Capped by default, which is the
     /// right answer for all but the largest previews. Group counts are exact either way; this decides only how much
     /// of the detail behind them can be read back.

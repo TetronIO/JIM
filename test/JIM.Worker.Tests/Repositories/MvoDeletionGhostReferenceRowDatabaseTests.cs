@@ -175,14 +175,14 @@ public class MvoDeletionGhostReferenceRowDatabaseTests
             .Include(m => m.AttributeValues)
             .SingleAsync(m => m.Id == groupId);
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.DeleteMetaverseObjectsAsync([member]),
+        Assert.That(() => repository.Sync.DeleteMetaverseObjectsAsync([member]), Throws.Nothing,
             "Tracked ghost rows must be surgically detached before the MVO delete saves");
 
         Assert.That(trackedGroup.AttributeValues.Count(av => av.ReferenceValueId == null && !av.NullValue && av.StringValue == null),
             Is.EqualTo(0), "The tracked group's collection must no longer contain the deleted ghost row");
 
         // A later save on the same context (any subsequent page work) must not resurrect the row.
-        Assert.DoesNotThrowAsync(() => ctx.SaveChangesAsync());
+        Assert.That(() => ctx.SaveChangesAsync(), Throws.Nothing);
 
         await using var verify = NewContext();
         var rows = await LoadGroupRowsAsync(verify, groupId);
@@ -233,7 +233,7 @@ public class MvoDeletionGhostReferenceRowDatabaseTests
             .Where(m => m.Id == leaverAId || m.Id == leaverBId)
             .ToListAsync();
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.DeleteMetaverseObjectsAsync(leavers),
+        Assert.That(() => repository.Sync.DeleteMetaverseObjectsAsync(leavers), Throws.Nothing,
             "Rows owned by co-deleted MVOs must be left to the database cascade, not raw-deleted from under the tracker");
 
         await using var verify = NewContext();
@@ -259,7 +259,7 @@ public class MvoDeletionGhostReferenceRowDatabaseTests
             .Include(m => m.AttributeValues)
             .SingleAsync(m => m.Id == groupId);
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.DeleteMetaverseObjectAsync(member));
+        Assert.That(() => repository.Sync.DeleteMetaverseObjectAsync(member), Throws.Nothing);
 
         Assert.That(trackedGroup.AttributeValues.Count(av => av.ReferenceValueId == null && !av.NullValue && av.StringValue == null),
             Is.EqualTo(0), "The singular form must surgically remove the tracked ghost row too");

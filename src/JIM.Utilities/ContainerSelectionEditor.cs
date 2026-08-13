@@ -23,15 +23,14 @@ public static class ContainerSelectionEditor
     /// </summary>
     /// <remarks>
     /// A Container the administrator can see but not tick is one a selected ancestor already covers, shown that way
-    /// by <see cref="ConnectedSystemContainer.Included"/>. Clicking one means "stop covering me", not "select me",
-    /// so it clears both flags rather than selecting it.
+    /// by <see cref="ConnectedSystemContainer.Included"/>. Ticking one would only restate what that ancestor already
+    /// says, so it is left unselected; the coverage itself is the ancestor's to give up.
     /// </remarks>
     public static void ToggleSelected(ConnectedSystemContainer container)
     {
         ArgumentNullException.ThrowIfNull(container);
 
         container.Selected = !container.Included && !container.Selected;
-        container.Included = false;
 
         // A Container states one thing about itself, so selecting it replaces any exclusion it carried rather than
         // leaving both standing. Selecting a Container an exclusion had carved out is how a branch is brought back
@@ -39,22 +38,17 @@ public static class ContainerSelectionEditor
         if (container.Selected)
             container.Excluded = false;
 
-        container.ExcludedByAncestor = false;
-
-        // A Subtree selection covers everything beneath it, so those Containers can no longer be selected
-        // separately; a OneLevel selection covers nothing beneath it, so they stay selectable in their own right.
-        var coversDescendants = container.Selected && container.Scope == ConnectedSystemContainerScope.Subtree;
+        // Selecting a Container as a whole subtree makes any selection beneath it redundant, and deselecting one
+        // takes its descendants out of scope with it; either way they stop stating anything of their own.
         foreach (var child in container.ChildContainers)
-        {
-            child.Included = coversDescendants;
-            child.Selected = false;
-            ApplyDownBranch(child, coversDescendants);
-        }
+            ClearSelectionsDownBranch(child);
 
         if (container.ParentContainer != null)
             RollUpToParent(container.ParentContainer);
 
         SelectPartitionOfSelectedContainer(container);
+
+        SettleCoverage(container);
     }
 
     /// <summary>
@@ -76,11 +70,7 @@ public static class ContainerSelectionEditor
         if (container.Excluded)
             container.Selected = false;
 
-        // An exclusion changes what every Container beneath it has had decided about it, and clearing one hands
-        // that whole branch back, so the partition's coverage is recalculated rather than nudged.
-        var partition = FindPartition(container);
-        if (partition != null)
-            RecalculateCoverage(partition);
+        SettleCoverage(container);
     }
 
     /// <summary>
@@ -95,11 +85,48 @@ public static class ContainerSelectionEditor
             ? ConnectedSystemContainerScope.OneLevel
             : ConnectedSystemContainerScope.Subtree;
 
-        // Narrowing releases the Containers beneath this one and widening takes them back, so the whole branch's
-        // coverage has to be recalculated rather than nudged.
+        SettleCoverage(container);
+    }
+
+    /// <summary>
+    /// Re-derives what every Container in the partition has had decided about it, after an edit somewhere in it.
+    /// </summary>
+    /// <remarks>
+    /// Every edit ends here rather than maintaining <see cref="ConnectedSystemContainer.Included"/> and
+    /// <see cref="ConnectedSystemContainer.ExcludedByAncestor"/> along the way, because only the full
+    /// nearest-ancestor walk knows which statement now governs a Container. Nudging the flags instead was how a
+    /// re-inclusion deselected inside an excluded branch ended up claiming nothing had been decided about it, when
+    /// the exclusion above had just taken it back.
+    /// </remarks>
+    private static void SettleCoverage(ConnectedSystemContainer container)
+    {
         var partition = FindPartition(container);
         if (partition != null)
             RecalculateCoverage(partition);
+    }
+
+    /// <summary>
+    /// The Container above this one whose statement decides its fate: the nearest ancestor that says something about
+    /// itself and whose statement reaches this far. Null where nothing above has an opinion.
+    /// </summary>
+    /// <remarks>
+    /// This is what a row names when it says "Covered by ou=Corp" or "Excluded from ou=Service Accounts", and it has
+    /// to agree with <see cref="ConnectedSystemUtilities.ApplyContainerInclusion"/>, which is what actually set the
+    /// row's state. Two rules follow from that walk: an ancestor stating nothing is skipped, and so is one whose
+    /// statement is OneLevel, because such a statement reaches the objects held directly in that Container and no
+    /// Container beneath it, leaving whatever came from further up still governing.
+    /// </remarks>
+    public static ConnectedSystemContainer? DecidingAncestor(ConnectedSystemContainer container)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+
+        for (var ancestor = container.ParentContainer; ancestor != null; ancestor = ancestor.ParentContainer)
+        {
+            if ((ancestor.Selected || ancestor.Excluded) && ancestor.Scope == ConnectedSystemContainerScope.Subtree)
+                return ancestor;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -128,6 +155,11 @@ public static class ContainerSelectionEditor
     /// How many Containers in a partition are selected, at any depth.
     /// </summary>
     public static int CountSelected(ConnectedSystemPartition partition) => Flatten(partition).Count(c => c.Selected);
+
+    /// <summary>
+    /// How many Containers in a partition are excluded, at any depth.
+    /// </summary>
+    public static int CountExcluded(ConnectedSystemPartition partition) => Flatten(partition).Count(c => c.Excluded);
 
     /// <summary>
     /// How many Containers a partition holds, at any depth.
@@ -170,14 +202,23 @@ public static class ContainerSelectionEditor
     private static IEnumerable<ConnectedSystemContainer> Flatten(IEnumerable<ConnectedSystemContainer> containers) =>
         containers.SelectMany(c => new[] { c }.Concat(Flatten(c.ChildContainers)));
 
-    private static void ApplyDownBranch(ConnectedSystemContainer container, bool included)
+    /// <summary>
+    /// Clears the selections a Container's own statement has made redundant, down its branch.
+    /// </summary>
+    /// <remarks>
+    /// It stops at an exclusion. The selections inside a carved-out branch are re-inclusions, and a statement made
+    /// above the exclusion does not reach past it to make them redundant; clearing them would take that branch back
+    /// out of scope while leaving the exclusion standing, which is the opposite of what the administrator asked for.
+    /// </remarks>
+    private static void ClearSelectionsDownBranch(ConnectedSystemContainer container)
     {
+        if (container.Excluded)
+            return;
+
+        container.Selected = false;
+
         foreach (var child in container.ChildContainers)
-        {
-            child.Included = included;
-            child.Selected = false;
-            ApplyDownBranch(child, included);
-        }
+            ClearSelectionsDownBranch(child);
     }
 
     /// <summary>
@@ -200,14 +241,9 @@ public static class ContainerSelectionEditor
         if (parentContainer.ChildContainers.All(c => c.Selected && c.Scope == ConnectedSystemContainerScope.Subtree))
         {
             parentContainer.Selected = true;
-            parentContainer.Included = false;
 
             foreach (var childContainer in parentContainer.ChildContainers)
-            {
-                childContainer.Selected = false;
-                childContainer.Included = true;
-                ApplyDownBranch(childContainer, true);
-            }
+                ClearSelectionsDownBranch(childContainer);
         }
 
         if (parentContainer.ParentContainer != null)
