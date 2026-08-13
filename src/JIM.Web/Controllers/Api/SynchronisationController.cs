@@ -333,7 +333,14 @@ public class SynchronisationController(
             attribute.Selected = request.Selected.Value;
 
         if (request.Type.HasValue)
+        {
             attribute.Type = request.Type.Value;
+
+            // Recorded, not inferred from the value being different: a schema refresh must leave this type
+            // alone even where the administrator happened to choose what discovery would have picked anyway,
+            // because the Connector's inference can change between releases.
+            attribute.TypeSetByAdministrator = true;
+        }
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
