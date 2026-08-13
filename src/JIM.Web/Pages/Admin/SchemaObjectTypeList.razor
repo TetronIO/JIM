@@ -103,26 +103,26 @@
                 <TemplateColumn Sortable="false">
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
-                        <div class="d-flex justify-end">
+                        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
                             @if (!context.Item.BuiltIn)
                             {
                                 <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditObjectTypeDialogAsync(context.Item))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" OnClick="@(() => OpenEditObjectTypeDialogAsync(context.Item))" />
                                 </MudTooltip>
                                 <MudTooltip Text="Delete Object Type" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteObjectTypeDialogAsync(context.Item))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => OpenDeleteObjectTypeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             else
                             {
                                 <MudTooltip Text="Built-in Object Types cannot be renamed or deleted." Arrow="true" Placement="Placement.Top">
-                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
                                 </MudTooltip>
                             }
                             <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowObjectTypeHistoryDialogAsync(context.Item))" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small" OnClick="@(() => ShowObjectTypeHistoryDialogAsync(context.Item))" />
                             </MudTooltip>
-                        </div>
+                        </MudStack>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -242,26 +242,26 @@
                 <TemplateColumn Sortable="false">
                     <HeaderTemplate></HeaderTemplate>
                     <CellTemplate>
-                        <div class="d-flex justify-end">
+                        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
                             @if (!context.Item.BuiltIn)
                             {
                                 <MudTooltip Text="Edit attribute" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditAttributeDialogAsync(context.Item))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" OnClick="@(() => OpenEditAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                                 <MudTooltip Text="Delete attribute" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" OnClick="@(() => OpenDeleteAttributeDialogAsync(context.Item))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" OnClick="@(() => OpenDeleteAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             else
                             {
                                 <MudTooltip Text="View attribute and Standard Mappings" Arrow="true" Placement="Placement.Top">
-                                    <MudIconButton Icon="@Icons.Material.Outlined.Visibility" OnClick="@(() => OpenViewAttributeDialogAsync(context.Item))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Size="Size.Small" OnClick="@(() => OpenViewAttributeDialogAsync(context.Item))" />
                                 </MudTooltip>
                             }
                             <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context.Item))" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small" OnClick="@(() => ShowAttributeHistoryDialogAsync(context.Item))" />
                             </MudTooltip>
-                        </div>
+                        </MudStack>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
