@@ -147,26 +147,27 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            @if (_hasSecondaryExternalId)
-            {
-                <TemplateColumn Sortable="false" CellClass="jim-text-code mud-text-secondary">
-                    <HeaderTemplate>
-                        <VirtualisedSortHeader Title="@_secondaryExternalIdColumnHeader" Name="secondaryexternalid" />
-                    </HeaderTemplate>
-                    <CellTemplate>
-                        @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
-                        {
-                            @context.Item.SecondaryExternalIdValue
-                        }
-                        else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
-                        {
-                            <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                                <MudText Color="Color.Info">@context.Item.PendingSecondaryExternalId</MudText>
-                            </MudTooltip>
-                        }
-                    </CellTemplate>
-                </TemplateColumn>
-            }
+            @* Hidden rather than omitted: MudDataGrid orders its columns by the order they register with it, not by
+               their position in this markup, and whether the rows carry a secondary external ID is only known once
+               the first window has loaded. Wrapping this column in an @if therefore registers it after every column
+               below and renders it last, whatever the markup says. *@
+            <TemplateColumn Sortable="false" Hidden="@(!_hasSecondaryExternalId)" CellClass="jim-text-code mud-text-secondary">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="@_secondaryExternalIdColumnHeader" Name="secondaryexternalid" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (!string.IsNullOrEmpty(context.Item.SecondaryExternalIdValue))
+                    {
+                        @context.Item.SecondaryExternalIdValue
+                    }
+                    else if (!string.IsNullOrEmpty(context.Item.PendingSecondaryExternalId))
+                    {
+                        <MudTooltip Text="Pending Export - not yet confirmed" Arrow="true" Placement="Placement.Top">
+                            <MudText Color="Color.Info">@context.Item.PendingSecondaryExternalId</MudText>
+                        </MudTooltip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
                     <VirtualisedSortHeader Title="Display Name" Name="displayname" />

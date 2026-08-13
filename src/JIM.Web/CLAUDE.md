@@ -149,6 +149,8 @@ A page supplies:
 
 Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTotals: true)` after changing what matches, plus `ResetScrollAsync()`; the old total describes a match set that no longer exists. Sorting deliberately does not invalidate the total.
 
+**A conditional column is `Hidden`, never wrapped in an `@if`.** `MudDataGrid` orders its columns by the order they *register* with it (each `Column` adds itself on initialisation), not by their position in the markup. A column inside an `@if` whose condition is false on first render therefore registers after every column below it and appears at the far right when the condition later becomes true, however the markup reads. This is not hypothetical: the Connector Space's Secondary External Id column (derived from the first loaded window) and three of the Schema tab's attribute columns (derived from the selected Object Type, which changes under the reader) all rendered last. Write `Hidden="@(!_condition)"` on the column instead, so it registers in markup position and only its visibility changes. An `@if` remains correct where the condition is fixed for the component's lifetime (a Connector capability flag), because every column still registers on the first render.
+
 ## One line per row
 
 **Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (50px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it.

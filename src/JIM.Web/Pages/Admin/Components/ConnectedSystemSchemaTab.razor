@@ -593,17 +593,19 @@
                         @context.Item.Name
                     </CellTemplate>
                 </TemplateColumn>
-                @if (_selectedObjectTypeHasClasses)
-                {
-                    <TemplateColumn Title="Class" Sortable="false">
-                        <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Class" Name="class" />
-                        </HeaderTemplate>
-                        <CellTemplate>
-                            @context.Item.ClassName
-                        </CellTemplate>
-                    </TemplateColumn>
-                }
+                @* Hidden rather than omitted, here and on Writability and Description below: MudDataGrid orders its
+                   columns by the order they register with it, not by their position in this markup, so a column
+                   whose condition only becomes true after the grid has rendered (each of these three is derived
+                   from the selected Object Type's attributes, and the selection changes under the reader) would
+                   register last and render at the far right, whatever the markup says. *@
+                <TemplateColumn Title="Class" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Class" Name="class" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.ClassName
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn Title="Type" Sortable="false">
                     <HeaderTemplate>
                         <VirtualisedSortHeader Title="Type" Name="type" />
@@ -624,47 +626,41 @@
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>
-                @if (_selectedObjectTypeHasConstrainedAttributes)
-                {
-                    <TemplateColumn Title="Writability" Sortable="false">
-                        <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Writability" Name="writability" />
-                        </HeaderTemplate>
-                        <CellTemplate>
-                            <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Item.Writability)" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string"
-                                         Color="@Helpers.GetAttributeWritabilityChipColour(context.Item.Writability)"
-                                         Variant="Variant.Outlined">
-                                    @Helpers.GetAttributeWritabilityLabel(context.Item.Writability)
-                                </MudChip>
-                            </MudTooltip>
-                        </CellTemplate>
-                    </TemplateColumn>
-                }
-                @if (_selectedObjectTypeHasDescriptions)
-                {
-                    <TemplateColumn Title="Description" Sortable="false">
-                        <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Description" Name="description" />
-                        </HeaderTemplate>
-                        <CellTemplate>
-                            @* Raw imported LDAP/SCIM text, so its length is the directory's business, not JIM's:
-                               a row in a virtualised grid is one line, so it is clipped rather than wrapped, and
-                               the whole description is on the cell's title. The class is used directly here
-                               rather than through <OneLineText /> because the linkified RFC references are
-                               markup. *@
-                            @if (string.IsNullOrEmpty(context.Item.Description))
-                            {
-                                <EmptyValue />
-                            }
-                            else
-                            {
-                                var description = context.Item.Description;
-                                <span class="jim-one-line" title="@description">@((MarkupString)Helpers.LinkifyRfcReferences(description))</span>
-                            }
-                        </CellTemplate>
-                    </TemplateColumn>
-                }
+                <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Writability" Name="writability" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Item.Writability)" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string"
+                                     Color="@Helpers.GetAttributeWritabilityChipColour(context.Item.Writability)"
+                                     Variant="Variant.Outlined">
+                                @Helpers.GetAttributeWritabilityLabel(context.Item.Writability)
+                            </MudChip>
+                        </MudTooltip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Description" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Description" Name="description" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @* Raw imported LDAP/SCIM text, so its length is the directory's business, not JIM's:
+                           a row in a virtualised grid is one line, so it is clipped rather than wrapped, and
+                           the whole description is on the cell's title. The class is used directly here
+                           rather than through <OneLineText /> because the linkified RFC references are
+                           markup. *@
+                        @if (string.IsNullOrEmpty(context.Item.Description))
+                        {
+                            <EmptyValue />
+                        }
+                        else
+                        {
+                            var description = context.Item.Description;
+                            <span class="jim-one-line" title="@description">@((MarkupString)Helpers.LinkifyRfcReferences(description))</span>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                 {
                     <TemplateColumn Title="Action" Sortable="false">
