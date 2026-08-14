@@ -151,14 +151,17 @@ internal class LdapConnectorContainerCounts
                 break;
             }
 
-            foreach (SearchResultEntry entry in response.Entries)
-            {
-                var parentDn = LdapConnectorUtilities.ParseDistinguishedName(entry.DistinguishedName).ParentDn;
-                if (string.IsNullOrEmpty(parentDn))
-                    continue;
+            // The parent of each returned Distinguished Name is the Container the object sits in, which is what
+            // makes this one search per partition rather than one per Container. An entry with no parent is at the
+            // top of the namespace and belongs to no Container here.
+            var containerIdentifiers = response.Entries.Cast<SearchResultEntry>()
+                .Select(entry => LdapConnectorUtilities.ParseDistinguishedName(entry.DistinguishedName).ParentDn)
+                .Where(parentDn => !string.IsNullOrEmpty(parentDn));
 
-                result.DirectCountsByContainerIdentifier[parentDn] =
-                    result.DirectCountsByContainerIdentifier.GetValueOrDefault(parentDn) + 1;
+            foreach (var containerIdentifier in containerIdentifiers)
+            {
+                result.DirectCountsByContainerIdentifier[containerIdentifier!] =
+                    result.DirectCountsByContainerIdentifier.GetValueOrDefault(containerIdentifier!) + 1;
                 counted++;
             }
 
