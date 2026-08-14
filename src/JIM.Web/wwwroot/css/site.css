@@ -3564,9 +3564,13 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
 
 /* The scope is a list of Distinguished Names, so it is read column-by-column: a proportional face makes two
    near-identical paths hard to tell apart, which is the one thing an administrator is doing here. */
-.jim-scope-text .mud-input-slot {
-    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 0.875rem;
+/* The scope is a column of Distinguished Names read one against another, so it is set in the same monospace face
+   as every other code-like value in the portal (.jim-text-code). Qualified with html[lang] and !important for the
+   reason that class documents: MudBlazor's stylesheet loads after this one and its own input typography
+   (.mud-input-root and friends) otherwise wins the tie, leaving the field silently proportional. */
+html[lang] .jim-scope-text .mud-input-slot {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace !important;
+    font-size: 0.875rem !important;
     white-space: pre;
     overflow-x: auto;
 }
