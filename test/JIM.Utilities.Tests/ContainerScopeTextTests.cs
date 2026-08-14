@@ -362,6 +362,99 @@ public class ContainerScopeTextTests
     }
 
     [Test]
+    public void Apply_APathWithAnEscapedSeparator_ResolvesDespiteTheOptionalWhitespace()
+    {
+        // The paste-from-elsewhere case where the Container's own name contains a comma: the whitespace after the
+        // real separator is dropped, and the whitespace inside the name is kept.
+        var partition = HierarchyWithAnEscapedSeparator();
+
+        var errors = ContainerScopeText.Apply(@"include OU=Sales\, EMEA, OU=Corp", [partition]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors, Is.Empty);
+            Assert.That(Find(partition, "Sales EMEA").Selected, Is.True);
+        }
+    }
+
+    [Test]
+    public void Apply_APathDifferingOnlyInsideAnEscapedName_ResolvesToNoContainer()
+    {
+        // The space after an escaped comma is part of the Container's name, so "OU=Sales\,EMEA" and
+        // "OU=Sales\, EMEA" are two different Containers and neither may stand in for the other. This is the only
+        // shape that can prove it: the authored path and the stored one go through the same normalisation, so an
+        // error applied to both cancels out everywhere except where the two names genuinely differ.
+        var partition = HierarchyWithAnEscapedSeparator();
+
+        var errors = ContainerScopeText.Apply(@"include OU=Sales\,EMEA,OU=Corp", [partition]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors, Has.Count.EqualTo(1), "a Container that is not there is an error, not a near-enough match");
+            Assert.That(Find(partition, "Sales EMEA").Selected, Is.False);
+        }
+    }
+
+    [Test]
+    public void Project_AContainerWithAnEscapedSeparator_WritesAPathThatResolvesBack()
+    {
+        var partition = HierarchyWithAnEscapedSeparator();
+        Find(partition, "Sales EMEA").Selected = true;
+
+        var text = ContainerScopeText.Project([partition]);
+        var reapplied = HierarchyWithAnEscapedSeparator();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ContainerScopeText.Apply(text, [reapplied]), Is.Empty);
+            Assert.That(Find(reapplied, "Sales EMEA").Selected, Is.True);
+        }
+    }
+
+    [Test]
+    public void Apply_ContainersInDifferentPartitions_StatesBothInOneText()
+    {
+        // The text covers a Connected System, not a partition, so a path is resolved against every partition's
+        // hierarchy and each one it names is selected along with the Containers in it.
+        var first = HierarchyWithServiceAccounts();
+        var second = PartitionWithArchive();
+        second.Selected = false;
+
+        var errors = ContainerScopeText.Apply(
+            """
+            include OU=Corp
+            include OU=Archive
+            """,
+            [first, second]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(errors, Is.Empty);
+            Assert.That(Find(first, "Corp").Selected, Is.True);
+            Assert.That(Find(second, "Archive").Selected, Is.True);
+            Assert.That(second.Selected, Is.True, "naming a Container selects the partition holding it, in either partition");
+        }
+    }
+
+    [Test]
+    public void Apply_TextNamingOnlyTheOtherPartition_ClearsTheFirstOne()
+    {
+        // The whole-scope rule has to hold across partitions too: a Container omitted from the text states nothing,
+        // wherever it lives, or an administrator restating one partition would silently keep another's selection.
+        var first = HierarchyWithServiceAccounts();
+        var second = PartitionWithArchive();
+        Find(first, "Corp").Selected = true;
+
+        ContainerScopeText.Apply("include OU=Archive", [first, second]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Find(first, "Corp").Selected, Is.False);
+            Assert.That(Find(second, "Archive").Selected, Is.True);
+        }
+    }
+
+    [Test]
     public void Apply_EmptyText_ClearsEveryStatement()
     {
         var partition = HierarchyWithServiceAccounts();
@@ -456,6 +549,46 @@ public class ContainerScopeTextTests
         var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp", [app1]);
         var sales = Container("Sales", "OU=Sales,OU=Corp");
         var corp = Container("Corp", "OU=Corp", [sales, serviceAccounts]);
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = _nextId++,
+            Name = "DC=example,DC=com",
+            Selected = true,
+            Containers = [corp]
+        };
+
+        corp.Partition = partition;
+        return partition;
+    }
+
+    /// <summary>
+    /// A second partition, holding OU=Archive: enough to show that the text states a Connected System's scope
+    /// rather than one partition's.
+    /// </summary>
+    private ConnectedSystemPartition PartitionWithArchive()
+    {
+        var archive = Container("Archive", "OU=Archive");
+
+        var partition = new ConnectedSystemPartition
+        {
+            Id = _nextId++,
+            Name = "DC=archive,DC=example,DC=com",
+            Selected = true,
+            Containers = [archive]
+        };
+
+        archive.Partition = partition;
+        return partition;
+    }
+
+    /// <summary>
+    /// A hierarchy holding a Container whose own name contains a comma, escaped as RFC 4514 requires.
+    /// </summary>
+    private ConnectedSystemPartition HierarchyWithAnEscapedSeparator()
+    {
+        var salesEmea = Container("Sales EMEA", @"OU=Sales\, EMEA,OU=Corp");
+        var corp = Container("Corp", "OU=Corp", [salesEmea]);
 
         var partition = new ConnectedSystemPartition
         {
