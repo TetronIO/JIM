@@ -36,8 +36,7 @@
 }
 else if (_syncRule != null)
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true"
-                      @bind-ActivePanelIndex="_activeTabIndex">
+    <NavigableMudTabs TabPanelsClass="pt-5" Class="mt-2" @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"

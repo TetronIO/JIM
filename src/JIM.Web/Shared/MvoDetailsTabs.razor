@@ -10,7 +10,9 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 {
-    <NavigableMudTabs Elevation="0" Rounded="true" Outlined="true" Class="mt-3" TabPanelsClass="pa-4 jim-tabs-surface"
+    @* ApplyEffectsToContainer is the one presentation parameter worth naming here: the tinted panel surface
+       below needs the tabs' own effects carried onto it. The rest are JIM's defaults. *@
+    <NavigableMudTabs Class="mt-3" TabPanelsClass="pa-4 jim-tabs-surface"
                       ApplyEffectsToContainer="true" QueryParameterName="c">
         @foreach (var category in _categoryGroups)
         {
