@@ -47,7 +47,7 @@
                 <OneLineText Text="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Built-in?" Sortable="false" HeaderClass="jim-nowrap">
+        <TemplateColumn Title="Built-in?" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 90px;">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
             </HeaderTemplate>
@@ -55,7 +55,7 @@
                 @(context.Item.BuiltIn ? "Yes" : "No")
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="In-use?" Sortable="false" HeaderClass="jim-nowrap">
+        <TemplateColumn Title="In-use?" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 90px;">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="In-use?" Name="inuse" />
             </HeaderTemplate>
@@ -63,7 +63,7 @@
                 @(context.Item.InUse ? "Yes" : "No")
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Version(s)" Sortable="false">
+        <TemplateColumn Title="Version(s)" Sortable="false" HeaderStyle="width: 110px;">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Version(s)" Name="versions" />
             </HeaderTemplate>
