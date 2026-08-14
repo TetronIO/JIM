@@ -28,10 +28,12 @@
         <MudText Typo="Typo.h3" Class="mb-2"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
         <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
-        @* The item's own story (what it did, why, and what it changed) is one subject; the Pending Export
-           it created or failed on is another, with its own status, retries and attribute table. Keeping
-           both inline made the page a scroll rather than an answer, so each has its own tab. The Pending
-           Export tab appears only where there is one. *@
+        @* Three subjects, three tabs. What the run did to this item and any error it hit is one; why it
+           happened and what it caused is another, and the largest, since Causality carries three switchable
+           views, an attribute drawer and the upward Caused by chain; the Pending Export it created or failed
+           on is a third, with its own status, retries and staged changes. Inline, the page was a scroll
+           rather than an answer, and Causality pushed the execution summary off the top of the screen. The
+           Causality and Pending Export tabs each appear only where there is something to put in them. *@
         <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-5">
         <MudTabPanel Text="Overview">
 
@@ -274,38 +276,6 @@
             </MudAlert>
         }
 
-        @* Causality - shows what the run did to this object and what it caused *@
-        @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
-        {
-            <MudText Typo="Typo.h6" Class="mb-2">
-                Causality
-            </MudText>
-            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                What happened during processing and the downstream consequences.
-            </MudText>
-            <div class="mb-5">
-                <CausalityPanel Item="_activityRunProfileExecutionItem"
-                                Context="@BuildCausalityPageContext()"
-                                LivePendingExportIds="_livePendingExportIds"
-                                Timestamp="@_activity?.Executed"
-                                Chain="_causalChain"
-                                DeletionPolicySnapshot="_deletionPolicySnapshot"
-                                IsSynchronisationRun="IsSyncContext()" />
-            </div>
-
-            @* The decision-time Deletion Rule (#119), as detail behind the outcome rather than as a titled
-               section of its own. The causality panel above already says what happened to the Identity; this
-               is the rule that decided it, which most readers never need to open. *@
-            @if (_deletionPolicySnapshot != null)
-            {
-                <MudExpansionPanels Class="mb-5" Elevation="0" Outlined="true">
-                    <MudExpansionPanel Text="Deletion Rule in force at the time">
-                        <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot"
-                                                    ObjectTypeName="@_metaverseObjectType?.Name" />
-                    </MudExpansionPanel>
-                </MudExpansionPanels>
-            }
-        }
 
         @* Projection Flow Visualisation - shown for Projected items *@
         @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
@@ -668,6 +638,40 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                             <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
                         }
         </MudTabPanel>
+
+        @* Causality is the item's answer to "why", and on a cascade it is the longest thing on the
+           page: three switchable views, an attribute drawer and the upward Caused by chain. On the
+           Overview tab it pushed the execution summary and any error off the top of the screen. *@
+        @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
+        {
+            <MudTabPanel Text="Causality">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                    What happened during processing and the downstream consequences.
+                </MudText>
+                <div class="mb-5">
+                    <CausalityPanel Item="_activityRunProfileExecutionItem"
+                                    Context="@BuildCausalityPageContext()"
+                                    LivePendingExportIds="_livePendingExportIds"
+                                    Timestamp="@_activity?.Executed"
+                                    Chain="_causalChain"
+                                    DeletionPolicySnapshot="_deletionPolicySnapshot"
+                                    IsSynchronisationRun="IsSyncContext()" />
+                </div>
+
+                @* The decision-time Deletion Rule (#119), as detail behind the outcome rather than as a titled
+                   section of its own. The causality panel above already says what happened to the Identity; this
+                   is the rule that decided it, which most readers never need to open. *@
+                @if (_deletionPolicySnapshot != null)
+                {
+                    <MudExpansionPanels Class="mb-5" Elevation="0" Outlined="true">
+                        <MudExpansionPanel Text="Deletion Rule in force at the time">
+                            <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot"
+                                                        ObjectTypeName="@_metaverseObjectType?.Name" />
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+            </MudTabPanel>
+        }
 
         @* Shown only where there is one: an empty tab invites a click that answers nothing. *@
         @if (_pendingExport != null)
