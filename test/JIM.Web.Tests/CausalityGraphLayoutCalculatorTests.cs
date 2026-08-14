@@ -114,6 +114,18 @@ public class CausalityGraphLayoutCalculatorTests
     }
 
     [Test]
+    public void Compute_TechnicalNames_RenamesTheSyntheticSourceNodeToo()
+    {
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var layout = CausalityGraphLayoutCalculator.Compute(model, technicalNames: true);
+
+        // The source node is synthetic and had no technical label of its own, so it kept saying "record"
+        // while every node beneath it swapped to JIM's vocabulary.
+        Assert.That(NodeById(layout, "src").Title, Is.EqualTo("Connected System Object"));
+    }
+
+    [Test]
     public void Compute_NewJoiner_DerivesTitlesSubsTonesAndAttributeFlags()
     {
         var layout = ComputeNewJoiner();
@@ -148,8 +160,9 @@ public class CausalityGraphLayoutCalculatorTests
 
         Assert.That(NodeById(layout, "evt-0").Title, Is.EqualTo("MVO Projected"));
         Assert.That(NodeById(layout, "evt-3").Title, Is.EqualTo("CSO Pending Export"));
-        // The synthetic source root keeps its plain title in both modes
-        Assert.That(NodeById(layout, "src").Title, Is.EqualTo("Source record"));
+        // The synthetic source root swaps with everything else; it used to be exempt, which made the
+        // toggle skip the first node on screen.
+        Assert.That(NodeById(layout, "src").Title, Is.EqualTo("Connected System Object"));
     }
 
     [Test]

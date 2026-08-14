@@ -111,7 +111,7 @@ public static class CausalityGraphLayoutCalculator
         var sourceNode = new WorkingNode(
             SourceNodeId,
             0,
-            Truncate("Source record", TitleMaxLength),
+            Truncate(CausalitySourceLabels.Title(technicalNames), TitleMaxLength),
             Truncate(GetSourceLabel(model.Context), SubMaxLength),
             CausalityTone.Secondary,
             hasAttributeRows: false,

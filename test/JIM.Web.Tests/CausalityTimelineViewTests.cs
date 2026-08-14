@@ -28,6 +28,21 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
+    public async Task Render_TechnicalNames_RenamesTheOpeningVerbTooAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var plain = RenderTimeline(context, model);
+        Assert.That(plain.FindAll(".verb")[0].TextContent.Trim(), Is.EqualTo("Record processed"));
+
+        await using var technicalContext = CausalityBunitContext.Create();
+        var technical = RenderTimeline(technicalContext, model, technicalNames: true);
+        Assert.That(technical.FindAll(".verb")[0].TextContent.Trim(),
+            Is.EqualTo("Connected System Object processed"));
+    }
+
+    [Test]
     public async Task Render_SourceRow_KeepsTheExternalIdTheOtherViewsDropAsync()
     {
         await using var context = CausalityBunitContext.Create();

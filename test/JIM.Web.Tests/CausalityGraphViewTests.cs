@@ -163,8 +163,10 @@ public class CausalityGraphViewTests
         var titles = cut.FindAll(".g-node text:not(.sub)").Select(t => t.TextContent.Trim()).ToList();
         Assert.That(titles, Does.Contain("MVO Projected"));
         Assert.That(titles, Does.Not.Contain("Identity created"));
-        // The synthetic source root keeps its plain title in both modes
-        Assert.That(titles, Does.Contain("Source record"));
+        // The synthetic source root swaps with everything else; it used to be exempt, which made the
+        // toggle skip the first node on screen.
+        Assert.That(titles, Does.Contain("Connected System Object"));
+        Assert.That(titles, Does.Not.Contain("Source record"));
     }
 
     [Test]
