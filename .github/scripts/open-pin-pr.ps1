@@ -135,8 +135,12 @@ mutation($input: CreateCommitOnBranchInput!) {
 }
 '@
 
+# The commit is built on a staging ref and the bot branch is then moved onto it in
+# one step; see "Staging the commit" below for why it is not committed directly.
+$stagingBranch = "$Branch-staging"
+
 $commitInput = @{
-    branch          = @{ repositoryNameWithOwner = $Repository; branchName = $Branch }
+    branch          = @{ repositoryNameWithOwner = $Repository; branchName = $stagingBranch }
     message         = @{ headline = $commitHeadline; body = $commitBody }
     fileChanges     = @{ additions = @($additions) }
     expectedHeadOid = $baseSha
@@ -161,22 +165,39 @@ if ($DryRun) {
     exit 0
 }
 
-# Reset (or create) the bot branch at the base tip so the PR contains exactly one
-# fresh commit and updates cleanly in place. Note: native `gh` failures do NOT
-# raise a terminating error in PowerShell, so branch existence is probed via
-# $LASTEXITCODE, not try/catch, and each mutation's exit code is checked.
-$refPath = "repos/$Repository/git/refs/heads/$Branch"
-Invoke-Gh @('api', $refPath, '--silent') 2>$null
-$branchExists = ($LASTEXITCODE -eq 0)
-if ($branchExists) {
-    Write-Host "Resetting $Branch to $baseSha"
-    Invoke-Gh @('api', '-X', 'PATCH', $refPath, '-f', "sha=$baseSha", '-F', 'force=true') | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to reset branch $Branch to $baseSha." }
-} else {
-    Write-Host "Creating $Branch at $baseSha"
-    Invoke-Gh @('api', '-X', 'POST', "repos/$Repository/git/refs", '-f', "ref=refs/heads/$Branch", '-f', "sha=$baseSha") | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Failed to create branch $Branch at $baseSha." }
+# Point a branch ref at a sha, creating it when it does not exist. Native `gh`
+# failures do NOT raise a terminating error in PowerShell, so existence is probed
+# via $LASTEXITCODE, not try/catch, and each mutation's exit code is checked.
+function Set-GitRef {
+    param([string]$BranchName, [string]$Sha)
+
+    $path = "repos/$Repository/git/refs/heads/$BranchName"
+    Invoke-Gh @('api', $path, '--silent') 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Invoke-Gh @('api', '-X', 'PATCH', $path, '-f', "sha=$Sha", '-F', 'force=true') | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to move $BranchName to $Sha." }
+    } else {
+        Invoke-Gh @('api', '-X', 'POST', "repos/$Repository/git/refs", '-f', "ref=refs/heads/$BranchName", '-f', "sha=$Sha") | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to create $BranchName at $Sha." }
+    }
 }
+
+# Staging the commit.
+#   The bot branch must end up carrying exactly one fresh commit on top of the base
+#   tip, and the obvious way to get there is to reset it to base and commit onto it.
+#   That is what this script used to do, and it has a window: between the reset and
+#   the commit the branch is identical to base, so an open PR from it has no commits,
+#   and GitHub closes an emptied pull request. On 2026-08-14 that closed PR #1364
+#   mid-run; the "is a PR open?" probe below raced the close, won, edited a PR that
+#   was already closing, and the security bump silently lost its only PR while the
+#   workflow reported success.
+#
+#   Building the commit on a staging ref and then moving the bot branch onto it in a
+#   single ref update closes the window: the branch goes from its previous commit
+#   straight to the new one and is never equal to base, so nothing auto-closes. That
+#   in turn makes a closed PR unambiguous below.
+Write-Host "Staging the commit on $stagingBranch at $baseSha"
+Set-GitRef -BranchName $stagingBranch -Sha $baseSha
 
 # Create the signed commit via GraphQL. Parse the response explicitly so a
 # GraphQL-level error (which still exits 0 in some cases) is caught.
@@ -187,19 +208,46 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "createCommitOnBranch call failed (exit $LASTEXITCODE): $resp" }
     $commitOid = ($resp | ConvertFrom-Json).data.createCommitOnBranch.commit.oid
     if (-not $commitOid) { throw "createCommitOnBranch returned no commit oid: $resp" }
-    Write-Host "Created signed commit $commitOid on $Branch"
+    Write-Host "Created signed commit $commitOid"
 } finally {
     Remove-Item $tmp -ErrorAction SilentlyContinue
 }
 
-# Open the PR if one is not already open for this branch; otherwise it has been
-# updated in place by the branch reset + new commit.
-$openPr = (Invoke-Gh @('pr', 'list', '--repo', $Repository, '--head', $Branch, '--state', 'open', '--json', 'number', '--jq', '.[0].number')).Trim()
-if ($openPr) {
-    Write-Host "Updated existing PR #$openPr"
-    Invoke-Gh @('pr', 'edit', $openPr, '--repo', $Repository, '--body', $commitBody) | Out-Null
+Write-Host "Moving $Branch to $commitOid"
+Set-GitRef -BranchName $Branch -Sha $commitOid
+Invoke-Gh @('api', '-X', 'DELETE', "repos/$Repository/git/refs/heads/$stagingBranch") | Out-Null
+
+# Resolve this branch's most recent PR in any state. Now that the branch is never
+# emptied, a closed PR means a maintainer closed it deliberately, so it is left
+# closed: the pin stays behind and is reported by the check step every day, but
+# reopening a decision somebody made is not this script's call. A merged one means
+# the previous bump landed and this is a new one.
+$prJson = (Invoke-Gh @('pr', 'list', '--repo', $Repository, '--head', $Branch, '--state', 'all',
+    '--json', 'number,state', '--limit', '1')).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Failed to list pull requests for $Branch." }
+$pr = if ($prJson) { @($prJson | ConvertFrom-Json)[0] } else { $null }
+
+if ($pr -and $pr.state -eq 'CLOSED') {
+    Write-Host "PR #$($pr.number) for $Branch was closed without merging; leaving it closed."
+    Write-Host 'The pins remain behind and will be reported by the check step until they are bumped.'
+    exit 0
+}
+
+if ($pr -and $pr.state -eq 'OPEN') {
+    Write-Host "Updating existing PR #$($pr.number)"
+    Invoke-Gh @('pr', 'edit', $pr.number, '--repo', $Repository, '--body', $commitBody) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to update PR #$($pr.number)." }
 } else {
     Write-Host 'Opening new PR ...'
     Invoke-Gh @('pr', 'create', '--repo', $Repository, '--base', $BaseBranch, '--head', $Branch,
         '--title', $commitHeadline, '--body', $commitBody, '--label', $Label) | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to open a pull request for $Branch." }
 }
+
+# The only way this automation fails is by finishing with nothing to merge, and that
+# is exactly what it did on 2026-08-14 while reporting success. Assert the outcome
+# rather than trusting the calls that were supposed to produce it.
+$openNumber = (Invoke-Gh @('pr', 'list', '--repo', $Repository, '--head', $Branch, '--state', 'open',
+    '--json', 'number', '--jq', '.[0].number')).Trim()
+if (-not $openNumber) { throw "Finished with no open pull request for $Branch; the bump has not been proposed." }
+Write-Host "Open pull request for $Branch is #$openNumber"
