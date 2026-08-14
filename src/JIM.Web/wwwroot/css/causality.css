@@ -465,8 +465,20 @@
     color: var(--cz-text-faint);
 }
 
+/* The connector overlay is drawn behind the columns, so every card masks the lines running under it with
+   its own background. This placeholder was the one piece of column content with no ground of its own, and
+   it sits in the lane a connector crosses when that lane is empty: the line was drawn straight through its
+   text. Giving it the same ground the cards have breaks the line around the words instead, so the phrase
+   reads as a label on the connector it interrupts, which is exactly what it is.
+
+   align-self keeps the ground the width of the text rather than the column (a full-width mask would erase
+   the connector across the whole lane), and the negative margin offsets the padding so the text still lines
+   up with the column heading above it. */
 .causality-panel .flow-empty {
-    padding: 6px 2px;
+    align-self: flex-start;
+    padding: 6px 8px;
+    margin-left: -6px;
+    background: var(--cz-surface);
     font-size: 1rem;
     color: var(--cz-text-dim);
 }
