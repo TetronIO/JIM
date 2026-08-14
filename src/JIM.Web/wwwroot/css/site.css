@@ -3363,7 +3363,26 @@ html[lang] .jim-password-guidance.mud-alert {
 /* Count chip inside a navigation button (the Connector Space and Pending Exports actions on a
    Connected System). Sits inside the button label rather than as a MudBadge corner overlay, so the
    number reads as part of the destination's name. The warning variant marks work waiting to be
-   exported without turning the whole button orange. */
+   exported without turning the whole button orange.
+
+   The number takes the button's own text colour rather than naming a palette token, because every
+   theme repaints outlined primary button text to --mud-palette-primary-lighten for readability
+   ("Lighten outlined/text primary button text" in each theme file). A chip hard-coded to
+   --mud-palette-primary therefore rendered the count in the un-lightened base colour beside a
+   lightened label: two different purples in one button, the count failing contrast on the dark
+   themes. Inheriting also tracks the hover and disabled states for free.
+
+   The fill and the ring are derived from that same currentColor for the same reason, and because
+   --mud-palette-*-hover is not theme-aware: the theme files override --mud-palette-primary but not
+   its -hover sibling, so the tint was a 6%-alpha wash of MudBlazor's default indigo regardless of
+   the theme in force, and all but invisible against a dark surface.
+
+   The ring does the work of defining the chip and the fill is kept to 8%, which is deliberate and
+   measured. A chip fill can only ever move the background TOWARDS the text it sits behind, so it
+   costs contrast in every theme: on navy-o6-dark the label's own 7.83:1 against the page drops to
+   7.0:1 at 8% and 5.74:1 at 18%. An outline costs nothing, so the chip reads as a chip on its ring
+   and spends only 0.8 of a ratio on looking filled. Measured against the rendered page across all
+   twelve themes; if this is ever retuned, re-measure rather than eyeball it. */
 .jim-nav-count {
     display: inline-flex;
     align-items: center;
@@ -3377,12 +3396,13 @@ html[lang] .jim-password-guidance.mud-alert {
     font-weight: 600;
     letter-spacing: 0;
     font-variant-numeric: tabular-nums;
-    background-color: var(--mud-palette-primary-hover);
-    color: var(--mud-palette-primary);
+    color: inherit;
+    background-color: color-mix(in srgb, currentColor 8%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
 }
 
+/* Only the colour changes; the fill and ring above follow currentColor, so they re-mix themselves. */
 .jim-nav-count-warning {
-    background-color: var(--mud-palette-warning-hover);
     color: var(--mud-palette-warning);
 }
 
@@ -3754,4 +3774,19 @@ html[lang] .jim-scope-text .mud-input-slot {
 
 .jim-scope-text-error-list li + li {
     margin-top: 0.25rem;
+}
+
+/* Connectors list: auto table layout sizes a column to its widest content before .jim-one-line ever gets a
+   chance to clip it, so the SCIM Connector's long, unbroken Description grows its column past the grid's own
+   width and the whole table gains a horizontal scrollbar instead of the cell's ellipsis firing. Fixed layout
+   gives every column a bounded box up front instead: the three narrow columns keep their explicit
+   HeaderStyle width (the pattern already used in Logs.razor and OperationsQueueTab.razor) and Description
+   takes what is left. Scoped to this one grid rather than added to .jim-virtualised-list generally: several
+   other grids (the Activity list's Target column among them) rely on auto layout handing them more room than
+   their content needs and have no width hint or .jim-one-line of their own, so applying this portal-wide
+   turns their cells' overflow into a wrap instead, which breaks the virtualiser's fixed row height. Fixing
+   those is a separate, larger sweep (audit every virtualised grid's columns for a width hint or
+   OneLineText), not a side effect of this one page's fix. */
+#connector-list .mud-table-root {
+    table-layout: fixed;
 }

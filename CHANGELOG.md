@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The object counts on a Connected System's **Connector Space** and **Pending Exports** buttons are now legible. They were painted a shade darker than the button they sit in, on a tint that belonged to no theme JIM ships, which on the darker themes left the number below the contrast a person can comfortably read: on the default dark theme it measured 3.4:1 where 4.5:1 is the accessible minimum, and now measures 7.0:1. The count takes its colour from the button it labels, so it stays legible on every theme.
+
 - 🐛 A link into a list now opens at the row it names. The position in the address bar was worked out from the row height the list asks for rather than the height a row occupies once padding and content land on it, so a link to row 200 opened at about row 178, and further out the deeper into the list it pointed.
 
 - 🐛 A table inside a page no longer collapses to a few rows on a page long enough to scroll. It sized itself against the viewport using a measurement that double-counted how far the page had been scrolled, which the lists you navigate to never showed, because those pages do not scroll.
