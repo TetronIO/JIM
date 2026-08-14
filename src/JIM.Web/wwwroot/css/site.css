@@ -43,21 +43,17 @@ h1:focus {
 }
 
 .mud-skeleton-wave::after {
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.55),
-        transparent
-    ) !important;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.55),
+            transparent) !important;
 }
 
 body.jim-dark-mode .mud-skeleton-wave::after {
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.18),
-        transparent
-    ) !important;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.18),
+            transparent) !important;
 }
 
 .mud-simple-table table * tr>th {
@@ -289,7 +285,7 @@ html[lang] .mud-table-outlined {
 
 /* Thin separator between adjacent panels — skips the first to avoid
    doubling with the container's top border */
-.jim-expansion-panel .mud-expand-panel + .mud-expand-panel {
+.jim-expansion-panel .mud-expand-panel+.mud-expand-panel {
     border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
 }
 
@@ -426,21 +422,24 @@ html[lang] .jim-queue-grid--joined.mud-table-outlined {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        var(--mud-palette-primary) 40%,
-        var(--mud-palette-primary) 60%,
-        transparent 100%
-    );
+    background: linear-gradient(90deg,
+            transparent 0%,
+            var(--mud-palette-primary) 40%,
+            var(--mud-palette-primary) 60%,
+            transparent 100%);
     opacity: 0.08;
     background-size: 200% 100%;
     animation: jim-worker-shimmer 3s ease-in-out infinite;
 }
 
 @keyframes jim-worker-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 .jim-worker-activity-text {
@@ -463,12 +462,29 @@ html[lang] .jim-queue-grid--joined.mud-table-outlined {
 }
 
 @keyframes jim-worker-icon-tick {
-    0%   { transform: rotate(0deg); }
-    8%   { transform: rotate(0deg); }
-    13%  { transform: rotate(90deg); }
-    50%  { transform: rotate(90deg); }
-    55%  { transform: rotate(180deg); }
-    100% { transform: rotate(180deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    8% {
+        transform: rotate(0deg);
+    }
+
+    13% {
+        transform: rotate(90deg);
+    }
+
+    50% {
+        transform: rotate(90deg);
+    }
+
+    55% {
+        transform: rotate(180deg);
+    }
+
+    100% {
+        transform: rotate(180deg);
+    }
 }
 
 /* Idle worker status bar: resting state (no shimmer rendered, icon static and muted) */
@@ -754,7 +770,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
    flex child of `.jim-drawer-logo`, so the auto margin must be applied there.
    Icon rotates 180deg when the drawer is unpinned so the chevron always points the
    direction the drawer will move when clicked. */
-.jim-drawer-logo > .mud-tooltip-root:has(.jim-drawer-toggle) {
+.jim-drawer-logo>.mud-tooltip-root:has(.jim-drawer-toggle) {
     margin-left: auto;
     margin-right: 8px;
 }
@@ -1316,7 +1332,7 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
 /* Fix double scrollbar on MudSelect dropdown popovers.
    Both the popover container and the inner mud-list have overflow-y: auto by default,
    producing two nested scrollbars. Let the popover handle scrolling alone. */
-.mud-popover.mud-popover-open > .mud-list {
+.mud-popover.mud-popover-open>.mud-list {
     overflow-y: unset;
     max-height: unset;
 }
@@ -1480,7 +1496,7 @@ html[lang] .jim-schema-change-table td {
 
 .jim-json-syntax {
     font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     line-height: 1.5;
     margin: 0;
     padding: 12px;
@@ -1785,11 +1801,11 @@ html[lang] .jim-schema-change-table td {
 
 /* Everything on the row holds its size; only the designated value gives way, so the affordance (or a modifier
    chip) can never be the thing that disappears when the value beside it is long. */
-.jim-one-line-list > * {
+.jim-one-line-list>* {
     flex-shrink: 0;
 }
 
-.jim-one-line-list > .jim-one-line-list-value {
+.jim-one-line-list>.jim-one-line-list-value {
     flex-shrink: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1849,7 +1865,7 @@ html[lang] .jim-schema-change-table td {
    top-level chip back by that much so every value in the column shares one left edge.
    Chips nested inside a link (the CSO/MVO chip links) are deliberately excluded: they
    lead with an avatar that already carries its own negative margin. */
-.jim-detail-table tbody tr td > .mud-chip {
+.jim-detail-table tbody tr td>.mud-chip {
     margin-left: -12px;
 }
 
@@ -2634,9 +2650,17 @@ html[lang] .jim-schema-change-table td {
 }
 
 @keyframes jim-phase-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0.5); }
-    70%  { box-shadow: 0 0 0 0.5rem rgba(var(--mud-palette-primary-rgb), 0); }
-    100% { box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0.5);
+    }
+
+    70% {
+        box-shadow: 0 0 0 0.5rem rgba(var(--mud-palette-primary-rgb), 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--mud-palette-primary-rgb), 0);
+    }
 }
 
 .jim-phase-h-title {
@@ -2700,18 +2724,22 @@ html[lang] .jim-schema-change-table td {
    even while its width holds steady. */
 .jim-phase-h-connector-fill--active {
     background-color: var(--mud-palette-primary);
-    background-image: linear-gradient(
-        45deg,
-        rgba(255, 255, 255, 0.25) 25%, transparent 25%,
-        transparent 50%, rgba(255, 255, 255, 0.25) 50%,
-        rgba(255, 255, 255, 0.25) 75%, transparent 75%);
+    background-image: linear-gradient(45deg,
+            rgba(255, 255, 255, 0.25) 25%, transparent 25%,
+            transparent 50%, rgba(255, 255, 255, 0.25) 50%,
+            rgba(255, 255, 255, 0.25) 75%, transparent 75%);
     background-size: 0.75rem 0.75rem;
     animation: jim-phase-stripes 1s linear infinite;
 }
 
 @keyframes jim-phase-stripes {
-    from { background-position: 0 0; }
-    to   { background-position: 0.75rem 0; }
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0.75rem 0;
+    }
 }
 
 /* The steps inside the running step, shown in the readout beneath the rail rather than above it,
@@ -2723,6 +2751,7 @@ html[lang] .jim-schema-change-table td {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     .jim-phase-h-label--active,
     .jim-password-rail-marker--active,
     .jim-phase-h-connector-fill--active {
@@ -2772,6 +2801,7 @@ html[lang] .jim-schema-change-table td {
 :root {
     --jim-run-step-pending: #8a8a8a;
 }
+
 .jim-queue-step {
     flex: 1 1 0;
     min-width: 10px;
@@ -2799,8 +2829,8 @@ html[lang] .jim-schema-change-table td {
    fourth solid colour would make a Delta Import's rail look busier than an import that did more. */
 .jim-queue-step--skipped {
     background-image: repeating-linear-gradient(45deg,
-        var(--mud-palette-text-disabled) 0 2px,
-        transparent 2px 4px);
+            var(--mud-palette-text-disabled) 0 2px,
+            transparent 2px 4px);
     background-color: transparent;
     opacity: 0.55;
 }
@@ -2810,15 +2840,20 @@ html[lang] .jim-schema-change-table td {
 .jim-queue-step--active {
     background-color: color-mix(in srgb, var(--mud-palette-info) 28%, transparent);
     background-image: repeating-linear-gradient(45deg,
-        var(--mud-palette-info) 0 4px,
-        color-mix(in srgb, var(--mud-palette-info) 45%, transparent) 4px 8px);
+            var(--mud-palette-info) 0 4px,
+            color-mix(in srgb, var(--mud-palette-info) 45%, transparent) 4px 8px);
     background-size: 11.31px 11.31px;
     animation: jim-queue-step-stripes 1s linear infinite;
 }
 
 @keyframes jim-queue-step-stripes {
-    from { background-position: 0 0; }
-    to { background-position: 11.31px 0; }
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 11.31px 0;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3217,7 +3252,7 @@ html[lang] .jim-schema-change-table td {
 html[lang] .jim-password-guidance.mud-alert {
     margin-top: 0.5rem;
     background-color: color-mix(in srgb, var(--mud-palette-info) 10%,
-        var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
+            var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
 }
 
 /* The alert supplies the tint, the rule and the icon; the layout of the advice inside it stays here. */
@@ -3418,7 +3453,7 @@ html[lang] .jim-password-guidance.mud-alert {
     padding: 0.125rem 0.75rem 0.125rem calc(0.25rem + (var(--jim-picker-depth) * var(--jim-picker-indent)));
 }
 
-.jim-picker-row + .jim-picker-row {
+.jim-picker-row+.jim-picker-row {
     border-top: 1px solid var(--mud-palette-divider-light);
 }
 
@@ -3679,7 +3714,7 @@ html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell
    reading as one heavy 2px edge. Target the row before the spacer instead. On a list long enough to scroll
    this is a row well below the fold (OverscanCount renders 30 beyond the viewport), so it only ever shows
    where it should: at the true bottom of the list. */
-html[lang] .jim-virtualised-list .mud-table-root > tbody > tr:nth-last-of-type(2) > .mud-table-cell {
+html[lang] .jim-virtualised-list .mud-table-root>tbody>tr:nth-last-of-type(2)>.mud-table-cell {
     border-bottom: none;
 }
 
