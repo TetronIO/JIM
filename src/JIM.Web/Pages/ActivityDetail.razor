@@ -689,29 +689,35 @@
                 {
                     <div>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Outcome Type:</MudText>
-                        <MudChipSet T="ActivityRunProfileExecutionItemSyncOutcomeType"
-                                    SelectionMode="SelectionMode.MultiSelection"
-                                    SelectedValues="_selectedOutcomeTypes"
-                                    SelectedValuesChanged="OnOutcomeTypeFilterChanged">
-                            @foreach (var (outcomeType, count) in GetAvailableOutcomeTypes())
+                        @* One wrapping flex row for the filter chips and the informational Unchanged chip: the chip
+                           set is d-contents so its chips are items of this row, letting Unchanged sit beside them
+                           rather than forcing a line of its own and pushing the table down. *@
+                        <div class="d-flex flex-wrap align-center">
+                            <MudChipSet T="ActivityRunProfileExecutionItemSyncOutcomeType"
+                                        SelectionMode="SelectionMode.MultiSelection"
+                                        SelectedValues="_selectedOutcomeTypes"
+                                        SelectedValuesChanged="OnOutcomeTypeFilterChanged"
+                                        Class="d-contents">
+                                @foreach (var (outcomeType, count) in GetAvailableOutcomeTypes())
+                                {
+                                    <MudChip Value="@outcomeType"
+                                             Color="@(IsOutcomeTypeSelected(outcomeType) ? Color.Default : Helpers.GetOutcomeTypeMudBlazorColor(outcomeType))"
+                                             Variant="@(IsOutcomeTypeSelected(outcomeType) ? Variant.Filled : Variant.Outlined)"
+                                             SelectedColor="@Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)">
+                                        @Helpers.GetOutcomeTypeDisplayName(outcomeType)
+                                        <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
+                                    </MudChip>
+                                }
+                            </MudChipSet>
+                            @* Unchanged chip: informational, not a filter *@
+                            @if (GetUnchangedCount() > 0)
                             {
-                                <MudChip Value="@outcomeType"
-                                         Color="@(IsOutcomeTypeSelected(outcomeType) ? Color.Default : Helpers.GetOutcomeTypeMudBlazorColor(outcomeType))"
-                                         Variant="@(IsOutcomeTypeSelected(outcomeType) ? Variant.Outlined : Variant.Text)"
-                                         SelectedColor="@Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)">
-                                    @Helpers.GetOutcomeTypeDisplayName(outcomeType)
-                                    <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Disabled="true">
+                                    Unchanged
+                                    <MudText Typo="Typo.caption" Class="ml-1">(@GetUnchangedCount().ToString("N0"))</MudText>
                                 </MudChip>
                             }
-                        </MudChipSet>
-                        @* Unchanged chip — informational, not a filter *@
-                        @if (GetUnchangedCount() > 0)
-                        {
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Disabled="true" Class="mt-1">
-                                Unchanged
-                                <MudText Typo="Typo.caption" Class="ml-1">(@GetUnchangedCount().ToString("N0"))</MudText>
-                            </MudChip>
-                        }
+                        </div>
                     </div>
                 }
 
@@ -728,7 +734,7 @@
                             {
                                 <MudChip Value="@objectType.Key"
                                          Color="Color.Default"
-                                         Variant="@(IsObjectTypeSelected(objectType.Key) ? Variant.Outlined : Variant.Text)"
+                                         Variant="@(IsObjectTypeSelected(objectType.Key) ? Variant.Filled : Variant.Outlined)"
                                          SelectedColor="Color.Default">
                                     @objectType.Key
                                     <MudText Typo="Typo.caption" Class="ml-1">(@objectType.Value.ToString("N0"))</MudText>
@@ -751,7 +757,7 @@
                             {
                                 <MudChip Value="@errorType.Key"
                                          Color="@(IsErrorTypeSelected(errorType.Key) ? Color.Default : Color.Error)"
-                                         Variant="@(IsErrorTypeSelected(errorType.Key) ? Variant.Outlined : Variant.Text)"
+                                         Variant="@(IsErrorTypeSelected(errorType.Key) ? Variant.Filled : Variant.Outlined)"
                                          SelectedColor="Color.Error">
                                     @errorType.Key.ToString().SplitOnCapitalLetters()
                                     <MudText Typo="Typo.caption" Class="ml-1">(@errorType.Value.ToString("N0"))</MudText>

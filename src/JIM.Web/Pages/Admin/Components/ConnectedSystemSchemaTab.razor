@@ -272,12 +272,12 @@
                                     SelectedValueChanged="@((bool val) => _objectTypeSelectedFilter = val)">
                             <MudChip Value="false"
                                      Color="Color.Default"
-                                     Variant="@(!_objectTypeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                     Variant="@(!_objectTypeSelectedFilter ? Variant.Filled : Variant.Outlined)">
                                 All (@visibleObjectTypeCount)
                             </MudChip>
                             <MudChip Value="true"
                                      Color="Color.Primary"
-                                     Variant="@(_objectTypeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                     Variant="@(_objectTypeSelectedFilter ? Variant.Filled : Variant.Outlined)">
                                 Selected (@selectedObjectTypes.Count)
                             </MudChip>
                         </MudChipSet>
@@ -461,7 +461,7 @@
                         {
                             <MudChip Value="@type.Key"
                                      Color="Color.Primary"
-                                     Variant="@(_selectedSchemaTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)">
+                                     Variant="@(_selectedSchemaTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)">
                                 @type.Key.ToString().SplitOnCapitalLetters() (@type.Value)
                             </MudChip>
                         }
@@ -478,7 +478,7 @@
                         {
                             <MudChip Value="@plurality.Key"
                                      Color="Color.Info"
-                                     Variant="@(_selectedSchemaPluralites.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)">
+                                     Variant="@(_selectedSchemaPluralites.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)">
                                 @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued") (@plurality.Value)
                             </MudChip>
                         }
@@ -497,7 +497,7 @@
                             {
                                 <MudChip Value="@writability.Key"
                                          Color="@Helpers.GetAttributeWritabilityChipColour(writability.Key)"
-                                         Variant="@(_selectedSchemaWritabilities.Contains(writability.Key) ? Variant.Outlined : Variant.Text)">
+                                         Variant="@(_selectedSchemaWritabilities.Contains(writability.Key) ? Variant.Filled : Variant.Outlined)">
                                     @Helpers.GetAttributeWritabilityLabel(writability.Key) (@writability.Value)
                                 </MudChip>
                             }
@@ -516,12 +516,12 @@
                                 SelectedValueChanged="OnAttributeSelectedFilterChangedAsync">
                         <MudChip Value="false"
                                  Color="Color.Default"
-                                 Variant="@(!_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                 Variant="@(!_attributeSelectedFilter ? Variant.Filled : Variant.Outlined)">
                             All (@selectionCounts.allCount)
                         </MudChip>
                         <MudChip Value="true"
                                  Color="Color.Default"
-                                 Variant="@(_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                 Variant="@(_attributeSelectedFilter ? Variant.Filled : Variant.Outlined)">
                             Selected Only (@selectionCounts.selectedCount)
                         </MudChip>
                     </MudChipSet>
