@@ -271,8 +271,8 @@ public class TaskingServerStepAdvancementTests
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         // Act & Assert: Should not throw
-        Assert.DoesNotThrowAsync(() =>
-            _application.Tasking.CompleteWorkerTaskAsync(task));
+        Assert.That(() =>
+            _application.Tasking.CompleteWorkerTaskAsync(task), Throws.Nothing);
     }
 
     #region Helper methods

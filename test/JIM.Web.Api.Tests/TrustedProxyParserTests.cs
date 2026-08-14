@@ -54,11 +54,11 @@ public class TrustedProxyParserTests
     [Test]
     public void Parse_UnparsableEntry_IsSkippedWithoutThrowing()
     {
-        Assert.DoesNotThrow(() =>
+        Assert.That(() =>
         {
             var result = TrustedProxyParser.Parse("not-an-ip, 10.0.0.1");
             Assert.That(result.KnownProxies, Has.Count.EqualTo(1));
-        });
+        }, Throws.Nothing);
     }
 
     [Test]

@@ -248,7 +248,7 @@ public class DynamicExpressoEvaluatorSecurityTests
 
         var expression = string.Concat(Enumerable.Repeat("IIF(true, ", 50)) + "mv[\"n\"]" + string.Concat(Enumerable.Repeat(", \"x\")", 50));
 
-        Assert.DoesNotThrow(() => _evaluator.Evaluate(expression, context));
+        Assert.That(() => _evaluator.Evaluate(expression, context), Throws.Nothing);
     }
 
     [Test]

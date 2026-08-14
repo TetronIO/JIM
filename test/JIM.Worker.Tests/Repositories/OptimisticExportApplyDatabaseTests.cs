@@ -181,7 +181,7 @@ public class OptimisticExportApplyDatabaseTests
         // attribute value above were left tracked (Unchanged), EF's cascade would issue a DELETE
         // against the already-gone row, affect 0 rows, and throw DbUpdateConcurrencyException.
         ctx.ConnectedSystemObjects.Remove(trackedCso);
-        Assert.DoesNotThrowAsync(async () => await ctx.SaveChangesAsync());
+        Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing);
 
         await using var verify = NewContext();
         Assert.That(await verify.ConnectedSystemObjects.AnyAsync(c => c.Id == csoId), Is.False);

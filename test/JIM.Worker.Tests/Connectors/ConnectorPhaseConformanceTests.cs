@@ -55,7 +55,7 @@ public abstract class ConnectorPhaseConformanceTests
 
         foreach (var runType in RunTypes)
         {
-            Assert.DoesNotThrow(() => connector.GetPhases(connectedSystem, RunProfile(runType)),
+            Assert.That(() => connector.GetPhases(connectedSystem, RunProfile(runType)), Throws.Nothing,
                 $"Declaring phases for {runType} threw. JIM survives it, but the Connector's steps are lost for that run type.");
         }
     }
