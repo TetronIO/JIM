@@ -3312,6 +3312,11 @@ public class ConnectedSystemServer
     private static async Task<HierarchyRefreshResult> RetrieveAndMergeHierarchyAsync(ConnectedSystem connectedSystem, IConnectorPartitions partitionsConnector, Activity activity)
     {
         var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+
+        // Counted against the same directory state that produced the hierarchy, and before the merge, because the
+        // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
+        // exist to hang the figures on.
+        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, activity);
         if (partitions.Count == 0)
         {
             // Zero partitions almost always means the connector could not enumerate them (connection,
@@ -3322,6 +3327,8 @@ public class ConnectedSystemServer
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);
+
+        ApplyContainerObjectCounts(connectedSystem, objectCounts);
 
         // Log the changes
         if (result.HasChanges)
@@ -3338,6 +3345,82 @@ public class ConnectedSystemServer
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Asks the Connector how many objects each Container holds, one partition at a time (#1276).
+    /// </summary>
+    /// <remarks>
+    /// Folded into the hierarchy retrieval rather than offered as a second action, so the Containers and their
+    /// figures always describe the same moment. A Connector that cannot answer returns nothing and the tab simply
+    /// shows no counts.
+    ///
+    /// A failure here must not fail the refresh. The hierarchy is what an administrator asked for and it has
+    /// already been retrieved; losing it because a supplementary count timed out would be a poor trade. The
+    /// Activity carries the warning instead.
+    /// </remarks>
+    /// <returns>Direct counts per Container identifier, keyed by partition external id. Empty when nothing counted.</returns>
+    private static async Task<Dictionary<string, ConnectorContainerObjectCountResult>> CountContainerObjectsAsync(
+        ConnectedSystem connectedSystem,
+        IConnectorPartitions partitionsConnector,
+        List<ConnectorPartition> partitions,
+        Activity activity)
+    {
+        var countsByPartition = new Dictionary<string, ConnectorContainerObjectCountResult>(StringComparer.OrdinalIgnoreCase);
+        if (partitionsConnector is not IConnectorContainerObjectCounts countingConnector)
+            return countsByPartition;
+
+        // A count across Object Types JIM will never import is not a number anyone can act on, so nothing is
+        // counted until the administrator has said what they are managing. The Schema tab sits before Partitions
+        // and Containers, so by the time anyone is choosing Containers this is normally already answered.
+        var objectTypeNames = (connectedSystem.ObjectTypes ?? [])
+            .Where(objectType => objectType.Selected)
+            .Select(objectType => objectType.Name)
+            .ToList();
+
+        if (objectTypeNames.Count == 0)
+            return countsByPartition;
+
+        foreach (var partition in partitions)
+        {
+            try
+            {
+                countsByPartition[partition.Id] = await countingConnector.GetContainerObjectCountsAsync(
+                    connectedSystem.SettingValues, partition, objectTypeNames, Log.Logger, CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warning(ex, "CountContainerObjectsAsync: could not count objects in partition {Partition} of {ConnectedSystem}",
+                    LogSanitiser.Sanitise(partition.Name), connectedSystem.Id);
+
+                activity.WarningMessage = "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+            }
+        }
+
+        return countsByPartition;
+    }
+
+    /// <summary>
+    /// Hangs the Connector's direct counts on JIM's own Containers, and rolls up each one's subtree total.
+    /// </summary>
+    /// <remarks>
+    /// A partition the Connector reported no counts for is left uncounted rather than zeroed: "not counted" and
+    /// "counted, and empty" are different statements, and only one of them says a Container holds nothing. An
+    /// incomplete count is discarded entirely for the same reason, because figures short of the truth read as whole
+    /// and understate what deselecting a Container costs.
+    /// </remarks>
+    private static void ApplyContainerObjectCounts(
+        ConnectedSystem connectedSystem,
+        Dictionary<string, ConnectorContainerObjectCountResult> countsByPartition)
+    {
+        foreach (var partition in connectedSystem.Partitions ?? [])
+        {
+            var counted = countsByPartition.TryGetValue(partition.ExternalId, out var result) && result.Complete
+                ? result.DirectCountsByContainerIdentifier
+                : null;
+
+            ContainerObjectCounts.Apply(partition, counted);
+        }
     }
     #endregion
 
