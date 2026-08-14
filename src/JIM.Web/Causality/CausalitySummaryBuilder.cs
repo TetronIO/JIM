@@ -57,7 +57,7 @@ public static class CausalitySummaryBuilder
                 CausalityEntityKind.ConnectedSystem));
         }
 
-        var recordLabel = context.RecordLabel;
+        var recordLabel = context.RecordName;
         if (recordLabel != null)
         {
             segments.Add(new SummarySegment.Text(" processed the record for ", " processed the Connected System Object "));

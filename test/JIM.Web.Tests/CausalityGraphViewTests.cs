@@ -64,7 +64,7 @@ public class CausalityGraphViewTests
 
         var subs = cut.FindAll(".g-node text.sub").Select(t => t.TextContent.Trim()).ToList();
         Assert.That(subs, Does.Contain("3 attributes"));
-        Assert.That(subs, Does.Contain("Liam Allen (S8-287551)"));
+        Assert.That(subs, Does.Contain("Liam Allen"));
     }
 
     [Test]

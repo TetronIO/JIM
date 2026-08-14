@@ -42,7 +42,7 @@ public class CausalitySummaryBandTests
 
         var sentence = cut.Find(".summary-sentence").TextContent;
         Assert.That(sentence, Is.EqualTo(
-            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen (S8-287551): " +
+            "A Full Synchronisation on Yellowstone APAC processed the record for Liam Allen: " +
             "a new Identity was created, 11 attributes flowed to it, and an export of 11 changes is now queued for Glitterband EMEA."));
     }
 
@@ -57,7 +57,7 @@ public class CausalitySummaryBandTests
         Assert.That(linkedTokens.Select(a => (a.TextContent, a.GetAttribute("href"))), Is.EqualTo(new[]
         {
             ("Yellowstone APAC", "/admin/connected-systems/1"),
-            ("Liam Allen (S8-287551)", $"/admin/connected-systems/1/connector-space/{CausalityTestData.CsoId}"),
+            ("Liam Allen", $"/admin/connected-systems/1/connector-space/{CausalityTestData.CsoId}"),
             ("Glitterband EMEA", "/admin/connected-systems/2")
         }));
 

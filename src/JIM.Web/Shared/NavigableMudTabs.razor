@@ -12,7 +12,7 @@
          ApplyEffectsToContainer="ApplyEffectsToContainer"
          Outlined="Outlined"
          TabPanelsClass="@TabPanelsClass"
-         Class="@Class"
+         Class="@RootClass"
          KeepPanelsAlive="KeepPanelsAlive"
          Centered="Centered"
          Border="Border"
@@ -30,6 +30,16 @@
     private bool _isNavigating;
     private bool _disposed;
     private int _renderedPanelCount;
+    private bool _barHiddenForSinglePanel;
+
+    /// <summary>
+    /// The caller's class plus the marker that hides a one-tab bar. The hiding is CSS rather than markup
+    /// because MudTabs owns the toolbar element; the class also zeroes the panels' top padding, so the
+    /// content lands exactly where it would have without tabs.
+    /// </summary>
+    private string? RootClass => _barHiddenForSinglePanel
+        ? $"{Class} jim-tabs-single".TrimStart()
+        : Class;
 
     // Pass-through parameters matching MudTabs
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -54,6 +64,18 @@
     [Parameter] public Color SliderColor { get; set; } = Color.Inherit;
     [Parameter] public Color IconColor { get; set; } = Color.Inherit;
     [Parameter] public bool Ripple { get; set; } = true;
+
+    /// <summary>
+    /// Hides the tab bar while only one panel is rendered, leaving its content where it would have sat with
+    /// no tabs at all. On by default: a bar with one tab offers nothing to click and spends a band of vertical
+    /// space repeating what the page heading already said.
+    /// </summary>
+    /// <remarks>
+    /// Applies to pages whose tabs are conditional (a Pending Export tab that appears only where there is one),
+    /// and is inert on pages with a fixed set of two or more. Set false where the bar is wanted regardless,
+    /// for instance so a page's height does not jump as a tab appears.
+    /// </remarks>
+    [Parameter] public bool HideBarWhenSingleTab { get; set; } = true;
 
     /// <summary>
     /// The query string parameter name used for URL-based tab navigation.
@@ -102,6 +124,16 @@
         // Record the registered panel count while the component is live; OnTabChangedAsync uses a
         // shrinking count to recognise panel-removal events raised during disposal.
         _renderedPanelCount = _mudTabs?.Panels.Count ?? 0;
+
+        // Panels register themselves with MudTabs during their own render, so the count is only knowable
+        // after one has happened; hiding the bar therefore costs a second render pass. It settles there,
+        // because the extra pass changes only a class and leaves the count alone.
+        var hideBar = HideBarWhenSingleTab && _renderedPanelCount == 1;
+        if (hideBar != _barHiddenForSinglePanel && !_disposed)
+        {
+            _barHiddenForSinglePanel = hideBar;
+            StateHasChanged();
+        }
     }
 
     private async Task OnTabChangedAsync(int newIndex)

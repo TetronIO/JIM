@@ -557,6 +557,21 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     border-bottom-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
 }
 
+/* A tab bar with one tab is a label, not a choice: nothing to click, and a band of vertical space
+   repeating what the page heading already said. NavigableMudTabs adds .jim-tabs-single once it knows only
+   one panel rendered (its HideBarWhenSingleTab parameter, on by default), and the content then sits
+   exactly where it would have with no tabs at all. Padding is zeroed as well as the bar hidden, because
+   the caller's TabPanelsClass (typically pt-5) exists to clear the bar that is no longer there.
+   Qualified with html[lang] so both rules beat MudBlazor's own sheet and the pt-* utility, which load
+   after site.css and carry !important themselves. */
+html[lang] .mud-tabs.jim-tabs-single .mud-tabs-tabbar {
+    display: none !important;
+}
+
+html[lang] .mud-tabs.jim-tabs-single .mud-tabs-panels {
+    padding-top: 0 !important;
+}
+
 /* JIM CUSTOM */
 
 /* Title segments wrap as complete units instead of breaking mid-phrase */

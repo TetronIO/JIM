@@ -120,7 +120,7 @@ public class CausalityGraphLayoutCalculatorTests
 
         var source = NodeById(layout, "src");
         Assert.That(source.Title, Is.EqualTo("Source record"));
-        Assert.That(source.Sub, Is.EqualTo("Liam Allen (S8-287551)"));
+        Assert.That(source.Sub, Is.EqualTo("Liam Allen"));
         Assert.That(source.Tone, Is.EqualTo(CausalityTone.Secondary));
         Assert.That(source.HasAttributeRows, Is.False);
         Assert.That(source.Event, Is.Null);

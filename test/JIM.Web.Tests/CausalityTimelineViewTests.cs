@@ -28,6 +28,19 @@ public class CausalityTimelineViewTests
     }
 
     [Test]
+    public async Task Render_SourceRow_KeepsTheExternalIdTheOtherViewsDropAsync()
+    {
+        await using var context = CausalityBunitContext.Create();
+        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        var cut = RenderTimeline(context, model);
+
+        // The Timeline is the one view with room to be precise: it reads RecordLabel while the summary
+        // sentence and the Flow and Graph views read RecordName. Pinned so the two never quietly converge.
+        Assert.That(cut.Markup, Does.Contain("Liam Allen (S8-287551)"));
+    }
+
+    [Test]
     public async Task Render_NewJoinerScenario_RendersSourceRowThenEventsInOrderAsync()
     {
         await using var context = CausalityBunitContext.Create();

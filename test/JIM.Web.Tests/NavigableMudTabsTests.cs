@@ -23,7 +23,7 @@ public class NavigableMudTabsTests : JimComponentTestContext
     public void Defaults_AreJimsTabLookRatherThanMudBlazors()
     {
         var cut = Render<NavigableMudTabs>(p => p
-            .Add(c => c.ChildContent, (RenderFragment)(builder => { })));
+            .Add(c => c.ChildContent, Panels("Overview", "Detail")));
 
         var tabs = cut.FindComponent<MudTabs>().Instance;
         Assert.Multiple(() =>
@@ -42,7 +42,7 @@ public class NavigableMudTabsTests : JimComponentTestContext
         var cut = Render<NavigableMudTabs>(p => p
             .Add(c => c.Outlined, false)
             .Add(c => c.Rounded, false)
-            .Add(c => c.ChildContent, (RenderFragment)(builder => { })));
+            .Add(c => c.ChildContent, Panels("Overview", "Detail")));
 
         var tabs = cut.FindComponent<MudTabs>().Instance;
         Assert.Multiple(() =>
@@ -72,6 +72,84 @@ public class NavigableMudTabsTests : JimComponentTestContext
 
         Assert.That(offenders, Is.Empty,
             "these pages turn off JIM's tab look; if that is deliberate, say why in a comment above the tag");
+    }
+
+    [Test]
+    public void OneTab_HidesTheBar()
+    {
+        var cut = Render<NavigableMudTabs>(p => p.Add(c => c.ChildContent, Panels("Overview")));
+
+        // The marker class, not MudBlazor's DOM: the class is JIM's, read back off the parameter we set.
+        Assert.That(cut.FindComponent<MudTabs>().Instance.Class, Does.Contain("jim-tabs-single"));
+    }
+
+    [Test]
+    public void TwoTabs_KeepTheBar()
+    {
+        var cut = Render<NavigableMudTabs>(p => p.Add(c => c.ChildContent, Panels("Overview", "Pending Export")));
+
+        Assert.That(cut.FindComponent<MudTabs>().Instance.Class ?? string.Empty,
+            Does.Not.Contain("jim-tabs-single"));
+    }
+
+    [Test]
+    public void OneTab_KeepsTheCallersOwnClasses()
+    {
+        var cut = Render<NavigableMudTabs>(p => p
+            .Add(c => c.Class, "mt-2")
+            .Add(c => c.ChildContent, Panels("Overview")));
+
+        var cls = cut.FindComponent<MudTabs>().Instance.Class;
+        Assert.Multiple(() =>
+        {
+            Assert.That(cls, Does.Contain("mt-2"));
+            Assert.That(cls, Does.Contain("jim-tabs-single"));
+        });
+    }
+
+    [Test]
+    public void OneTab_WithHidingTurnedOff_KeepsTheBar()
+    {
+        var cut = Render<NavigableMudTabs>(p => p
+            .Add(c => c.HideBarWhenSingleTab, false)
+            .Add(c => c.ChildContent, Panels("Overview")));
+
+        Assert.That(cut.FindComponent<MudTabs>().Instance.Class ?? string.Empty,
+            Does.Not.Contain("jim-tabs-single"));
+    }
+
+    [Test]
+    public void SingleTabMarker_IsActuallyStyled()
+    {
+        // A class named in markup but absent from site.css compiles, renders, and silently does nothing;
+        // there is no general sweep for that, so the one class this component invents checks itself.
+        var css = File.ReadAllText(Path.Combine(FindWebProjectRoot(), "wwwroot", "css", "site.css"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(css, Does.Contain(".jim-tabs-single .mud-tabs-tabbar"), "the bar is not hidden");
+            Assert.That(css, Does.Contain(".jim-tabs-single .mud-tabs-panels"),
+                "the panel padding that cleared the bar is not reclaimed");
+        });
+    }
+
+    private static RenderFragment Panels(params string[] titles)
+    {
+        // Literal sequence numbers with a per-panel region: the analyser requires literals, and a region
+        // keyed on the panel's title keeps the diffing correct across a changing panel set.
+        return builder =>
+        {
+            foreach (var title in titles)
+            {
+                builder.OpenRegion(0);
+                builder.OpenComponent<MudTabPanel>(0);
+                builder.AddAttribute(1, nameof(MudTabPanel.Text), title);
+                builder.AddAttribute(2, nameof(MudTabPanel.ChildContent),
+                    (RenderFragment)(panelBuilder => panelBuilder.AddContent(0, title)));
+                builder.CloseComponent();
+                builder.CloseRegion();
+            }
+        };
     }
 
     private static string FindWebProjectRoot()

@@ -197,7 +197,7 @@ public static class CausalityGraphLayoutCalculator
     /// </summary>
     private static string GetSourceLabel(CausalityPageContext context)
     {
-        return context.RecordLabel ?? context.CsoConnectedSystemName ?? string.Empty;
+        return context.RecordName ?? context.CsoConnectedSystemName ?? string.Empty;
     }
 
     /// <summary>

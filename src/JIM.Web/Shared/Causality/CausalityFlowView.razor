@@ -329,7 +329,7 @@
         return !string.IsNullOrWhiteSpace(system) ? $" on {system}." : ".";
     }
 
-    private string? GetRecordLabel() => Model.Context.RecordLabel;
+    private string? GetRecordLabel() => Model.Context.RecordName;
 
     private string? GetRecordHref()
     {
