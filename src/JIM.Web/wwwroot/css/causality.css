@@ -1129,6 +1129,12 @@
     color: var(--cz-text-faint);
 }
 
+/* The link sits on its own row rather than trailing the reason, so the chip and reason read as the one
+   sentence they are. Tighter above than .cb-meta because it belongs to the hop, not to a new thought. */
+.causality-panel .cb-actions {
+    margin-top: 5px;
+}
+
 .causality-panel .cb-link {
     font-size: 0.875rem;
     color: var(--cz-primary-text);

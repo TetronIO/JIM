@@ -57,20 +57,56 @@ public static class CausalityCauseWording
     }
 
     /// <summary>
-    /// The short phrase explaining why the causes happened, or null where no reason was recorded. Derived
-    /// from the code rather than stored as prose, so the wording can be improved without rewriting history.
+    /// Why the causes happened, or null where no reason was recorded. Derived from the code rather than stored
+    /// as prose, so the wording can be improved without rewriting history.
     /// </summary>
-    public static string? Reason(CausalReasonCode reasonCode)
+    /// <remarks>
+    /// Two forms of every phrase, because the row is a sentence and the Connected System chip is its subject.
+    /// Where the cohort names one, the chip renders immediately before this phrase and the phrase opens with
+    /// its verb ("Yellowstone APAC <i>was the last authoritative source to disconnect</i>"); where it does not,
+    /// the phrase has to name its own subject instead. The alternative shipped first and was the defect: an
+    /// unattributed fragment ("All authoritative sources disconnected") sat beside a chip with no stated role,
+    /// saying neither what had disconnected from what nor that any of it explained the deletion.
+    ///
+    /// Every phrase names the Deletion Rule for that last reason. The row explains why the <b>cause</b>
+    /// happened, one level above the sentence it sits under, and without naming the deletion a reader has no
+    /// way to tell which of the two it is about.
+    /// </remarks>
+    /// <param name="cohort">The cohort whose reason is being read, consulted for whether a Connected System
+    /// was recorded alongside it.</param>
+    public static string? Reason(CausalChainCohort cohort)
     {
-        return reasonCode switch
-        {
-            CausalReasonCode.LastConnectorDisconnected => "Last connector disconnected",
-            CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured =>
-                "Last connector disconnected, with no authoritative sources configured",
-            CausalReasonCode.AllAuthoritativeSourcesDisconnected => "All authoritative sources disconnected",
-            CausalReasonCode.AuthoritativeSourceDisconnected => "An authoritative source disconnected",
-            _ => null
-        };
+        ArgumentNullException.ThrowIfNull(cohort);
+
+        // Kept as one expression per code rather than a shared suffix: an administrator reads these, and a
+        // phrase assembled from fragments is a phrase nobody proof-reads as a whole sentence.
+        return cohort.HasConnectedSystem
+            ? cohort.ReasonCode switch
+            {
+                CausalReasonCode.LastConnectorDisconnected =>
+                    "held the last remaining connection, so the Deletion Rule deleted them",
+                CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured =>
+                    "held the last remaining connection, so the Deletion Rule deleted them " +
+                    "(no authoritative sources were configured)",
+                CausalReasonCode.AllAuthoritativeSourcesDisconnected =>
+                    "was the last authoritative source to disconnect, so the Deletion Rule deleted them",
+                CausalReasonCode.AuthoritativeSourceDisconnected =>
+                    "was an authoritative source and disconnected, so the Deletion Rule deleted them",
+                _ => null
+            }
+            : cohort.ReasonCode switch
+            {
+                CausalReasonCode.LastConnectorDisconnected =>
+                    "The last remaining connection was removed, so the Deletion Rule deleted them",
+                CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured =>
+                    "The last remaining connection was removed, so the Deletion Rule deleted them " +
+                    "(no authoritative sources were configured)",
+                CausalReasonCode.AllAuthoritativeSourcesDisconnected =>
+                    "The last authoritative source disconnected, so the Deletion Rule deleted them",
+                CausalReasonCode.AuthoritativeSourceDisconnected =>
+                    "An authoritative source disconnected, so the Deletion Rule deleted them",
+                _ => null
+            };
     }
 
     /// <summary>

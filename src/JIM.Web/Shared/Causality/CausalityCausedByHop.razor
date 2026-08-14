@@ -28,11 +28,11 @@
 
     @if (HasMeta)
     {
-        @* Chips lead the row and the reason follows them: the chips are fixed-shape tokens an eye can
-           skip down a chain, whereas the reason is a variable-length sentence fragment that pushed them
-           to a different horizontal position on every hop when it came first. *@
+        @* The row is a sentence and the Connected System chip is its subject, so the reason follows the chips
+           rather than leading them: the chips stay fixed-shape tokens an eye can skip down a chain, and the
+           reason reads on from the one naming the system it is about (see CausalityCauseWording.Reason). *@
         <div class="cb-meta">
-            @if (Cohort.ConnectedSystemId is { } connectedSystemId && !string.IsNullOrWhiteSpace(Cohort.ConnectedSystemName))
+            @if (Cohort.ConnectedSystemId is { } connectedSystemId && Cohort.HasConnectedSystem)
             {
                 <CausalityEntityChip Label="@Cohort.ConnectedSystemName"
                                      Href="@($"/admin/connected-systems/{connectedSystemId}")"
@@ -48,10 +48,15 @@
             {
                 <span class="cb-reason">@Reason</span>
             }
-            @if (SoleCause != null && LinkFor(SoleCause) is { } soleHref)
-            {
-                <a class="cb-link" href="@soleHref">View what recorded it</a>
-            }
+        </div>
+    }
+
+    @* The link is an action, not part of the claim above it. On the reason row it put a third register on one
+       baseline and read as the end of the sentence the chip and reason now form. *@
+    @if (SoleCause != null && LinkFor(SoleCause) is { } soleHref)
+    {
+        <div class="cb-actions">
+            <a class="cb-link" href="@soleHref">View what recorded it</a>
         </div>
     }
 
@@ -112,7 +117,7 @@
 
     private IReadOnlyList<CausalityCauseSentencePart> Sentence => CausalityCauseWording.Sentence(Cohort, EffectName);
 
-    private string? Reason => CausalityCauseWording.Reason(Cohort.ReasonCode);
+    private string? Reason => CausalityCauseWording.Reason(Cohort);
 
     /// <summary>
     /// The cohort's single cause where it speaks for one, otherwise null. Drives the whole flat-versus-listed
@@ -122,9 +127,8 @@
 
     private bool HasMeta =>
         Reason != null
-        || (Cohort.ConnectedSystemId.HasValue && !string.IsNullOrWhiteSpace(Cohort.ConnectedSystemName))
-        || (Cohort.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(Cohort.SyncRuleName))
-        || (SoleCause != null && LinkFor(SoleCause) != null);
+        || Cohort.HasConnectedSystem
+        || (Cohort.SyncRuleId.HasValue && !string.IsNullOrWhiteSpace(Cohort.SyncRuleName));
 
     private void ToggleMembers()
     {

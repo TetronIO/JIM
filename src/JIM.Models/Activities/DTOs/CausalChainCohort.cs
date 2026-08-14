@@ -47,6 +47,16 @@ public class CausalChainCohort
     public string? ConnectedSystemName { get; init; }
 
     /// <summary>
+    /// Whether this cohort names a Connected System that can be both linked to and read aloud.
+    /// </summary>
+    /// <remarks>
+    /// Exposed rather than left to each caller because two of them have to agree exactly: the chip renders on
+    /// this condition, and the reason phrase beside it is worded as the predicate of a sentence the chip is the
+    /// subject of. Were they to disagree, the row would read as a verb with nothing in front of it.
+    /// </remarks>
+    public bool HasConnectedSystem => ConnectedSystemId.HasValue && !string.IsNullOrWhiteSpace(ConnectedSystemName);
+
+    /// <summary>
     /// The Synchronisation Rule responsible, where one applies.
     /// </summary>
     public int? SyncRuleId { get; init; }

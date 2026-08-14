@@ -164,15 +164,75 @@ public class CausalityCauseWordingTests
             "2 objects were deleted, so they were removed from Project Diamond's Static Members"));
     }
 
-    [TestCase(CausalReasonCode.NotSet, null)]
-    [TestCase(CausalReasonCode.LastConnectorDisconnected, "Last connector disconnected")]
-    [TestCase(CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured,
-        "Last connector disconnected, with no authoritative sources configured")]
-    [TestCase(CausalReasonCode.AllAuthoritativeSourcesDisconnected, "All authoritative sources disconnected")]
-    [TestCase(CausalReasonCode.AuthoritativeSourceDisconnected, "An authoritative source disconnected")]
-    public void Reason_EveryCode_HasItsOwnPhraseAndNotSetHasNone(CausalReasonCode code, string? expected)
+    /// <summary>
+    /// A cohort carrying a reason, with or without the Connected System whose chip the reason reads on from.
+    /// </summary>
+    private static CausalChainCohort ReasonCohort(CausalReasonCode code, bool withConnectedSystem)
     {
-        Assert.That(CausalityCauseWording.Reason(code), Is.EqualTo(expected));
+        return new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
+            ReasonCode = code,
+            ConnectedSystemId = withConnectedSystem ? 4 : null,
+            ConnectedSystemName = withConnectedSystem ? "Yellowstone APAC" : null,
+            Members = [new CausalChainMember { DisplayName = "Tina Adams" }]
+        };
+    }
+
+    [TestCase(CausalReasonCode.LastConnectorDisconnected,
+        "held the last remaining connection, so the Deletion Rule deleted them")]
+    [TestCase(CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured,
+        "held the last remaining connection, so the Deletion Rule deleted them (no authoritative sources were configured)")]
+    [TestCase(CausalReasonCode.AllAuthoritativeSourcesDisconnected,
+        "was the last authoritative source to disconnect, so the Deletion Rule deleted them")]
+    [TestCase(CausalReasonCode.AuthoritativeSourceDisconnected,
+        "was an authoritative source and disconnected, so the Deletion Rule deleted them")]
+    public void Reason_WithAConnectedSystem_ContinuesTheSentenceTheChipStarts(CausalReasonCode code, string expected)
+    {
+        Assert.That(CausalityCauseWording.Reason(ReasonCohort(code, withConnectedSystem: true)), Is.EqualTo(expected));
+    }
+
+    [TestCase(CausalReasonCode.LastConnectorDisconnected,
+        "The last remaining connection was removed, so the Deletion Rule deleted them")]
+    [TestCase(CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured,
+        "The last remaining connection was removed, so the Deletion Rule deleted them (no authoritative sources were configured)")]
+    [TestCase(CausalReasonCode.AllAuthoritativeSourcesDisconnected,
+        "The last authoritative source disconnected, so the Deletion Rule deleted them")]
+    [TestCase(CausalReasonCode.AuthoritativeSourceDisconnected,
+        "An authoritative source disconnected, so the Deletion Rule deleted them")]
+    public void Reason_WithNoConnectedSystem_SuppliesItsOwnSubject(CausalReasonCode code, string expected)
+    {
+        Assert.That(CausalityCauseWording.Reason(ReasonCohort(code, withConnectedSystem: false)), Is.EqualTo(expected));
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Reason_NotSet_SaysNothingRatherThanGuessing(bool withConnectedSystem)
+    {
+        Assert.That(CausalityCauseWording.Reason(ReasonCohort(CausalReasonCode.NotSet, withConnectedSystem)), Is.Null);
+    }
+
+    [TestCase(CausalReasonCode.LastConnectorDisconnected)]
+    [TestCase(CausalReasonCode.LastConnectorDisconnectedNoSourcesConfigured)]
+    [TestCase(CausalReasonCode.AllAuthoritativeSourcesDisconnected)]
+    [TestCase(CausalReasonCode.AuthoritativeSourceDisconnected)]
+    public void Reason_EveryCode_ReadsAsAClauseAfterTheChipAndAsASentenceWithout(CausalReasonCode code)
+    {
+        // The chip renders immediately before the phrase, so with a Connected System the phrase is the
+        // predicate of a sentence the chip is the subject of and must open with its verb; without one the
+        // phrase stands alone and has to name its own subject. Getting either capital wrong is the whole
+        // defect this wording replaced: a fragment with nothing to attach to.
+        var continuing = CausalityCauseWording.Reason(ReasonCohort(code, withConnectedSystem: true))!;
+        var standalone = CausalityCauseWording.Reason(ReasonCohort(code, withConnectedSystem: false))!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(char.IsLower(continuing[0]), Is.True, "a phrase following the chip continues its sentence");
+            Assert.That(char.IsUpper(standalone[0]), Is.True, "a phrase standing alone opens its own sentence");
+            Assert.That(continuing, Does.Contain("the Deletion Rule deleted them"),
+                "the row's relevance is that it explains the deletion, so it has to say so");
+            Assert.That(standalone, Does.Contain("the Deletion Rule deleted them"));
+        });
     }
 
     [TestCase(CausalChainResolution.Resolved, null)]

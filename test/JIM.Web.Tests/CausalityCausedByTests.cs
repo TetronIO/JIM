@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -169,11 +170,14 @@ public class CausalityCausedByTests : JimComponentTestContext
         Assert.That(cut.FindAll("a.cb-link"), Is.Empty);
     }
 
-    [Test]
-    public void CausedBy_CohortWithAReasonCode_ExplainsWhyTheCauseHappened()
+    /// <summary>
+    /// A reason-bearing cohort, optionally attributed to the Connected System whose chip the reason reads on
+    /// from.
+    /// </summary>
+    private static CausalChain ReasonChain(CausalReasonCode code, bool withConnectedSystem)
     {
         var cohort = Cohort(Member("Tina Adams", CauseItemId));
-        var chain = new CausalChain
+        return new CausalChain
         {
             RunProfileExecutionItemId = RootItemId,
             Cohorts =
@@ -184,16 +188,64 @@ public class CausalityCausedByTests : JimComponentTestContext
                     ObjectTypeName = cohort.ObjectTypeName,
                     ObjectTypePluralName = cohort.ObjectTypePluralName,
                     AttributeName = cohort.AttributeName,
-                    ReasonCode = CausalReasonCode.AllAuthoritativeSourcesDisconnected,
+                    ReasonCode = code,
+                    ConnectedSystemId = withConnectedSystem ? 4 : null,
+                    ConnectedSystemName = withConnectedSystem ? "Yellowstone APAC" : null,
                     Members = cohort.Members
                 }
             ]
         };
+    }
 
-        var cut = RenderChain(chain);
+    [Test]
+    public void CausedBy_CohortAttributedToAConnectedSystem_ReadsTheChipAndReasonAsOneSentence()
+    {
+        var cut = RenderChain(ReasonChain(CausalReasonCode.AllAuthoritativeSourcesDisconnected,
+            withConnectedSystem: true));
 
-        Assert.That(cut.Find(".cb-reason").TextContent.Trim(),
-            Is.EqualTo("All authoritative sources disconnected"));
+        // The chip is the sentence's subject, so the row has to read as one statement across the two
+        // elements, in that order. Asserting the whole row rather than the reason alone is the point: a reason
+        // phrase that reads correctly on its own is exactly what the old orphan fragment did.
+        Assert.That(ReadRow(cut.Find(".cb-meta")), Is.EqualTo(
+            "Yellowstone APAC was the last authoritative source to disconnect, so the Deletion Rule deleted them"));
+    }
+
+    [Test]
+    public void CausedBy_CohortWithAReasonButNoConnectedSystem_StillReadsAsASentence()
+    {
+        var cut = RenderChain(ReasonChain(CausalReasonCode.AllAuthoritativeSourcesDisconnected,
+            withConnectedSystem: false));
+
+        Assert.That(ReadRow(cut.Find(".cb-meta")), Is.EqualTo(
+            "The last authoritative source disconnected, so the Deletion Rule deleted them"));
+    }
+
+    [Test]
+    public void CausedBy_CohortWithBothAReasonAndALink_KeepsTheLinkOutOfTheSentence()
+    {
+        var cut = RenderChain(ReasonChain(CausalReasonCode.AllAuthoritativeSourcesDisconnected,
+            withConnectedSystem: true));
+
+        // The link is an action, not part of the claim; leaving it on the reason row put a third register on
+        // one baseline and broke the sentence the chip and reason now form.
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll(".cb-meta a.cb-link"), Is.Empty);
+            Assert.That(cut.Find(".cb-actions a.cb-link").GetAttribute("href"),
+                Is.EqualTo($"/activity/item/{CauseItemId}"));
+        });
+    }
+
+    /// <summary>
+    /// Reads an attribution row back as its sentence: each chip's name followed by the reason, in document
+    /// order. The chips' glyph circles are <c>aria-hidden</c> and the gaps between the spans are CSS, so the
+    /// row's raw text content ("CSYellowstone APACwas the last...") is not what anybody reads.
+    /// </summary>
+    private static string ReadRow(IElement row)
+    {
+        return string.Join(' ', row
+            .QuerySelectorAll(".chip .name-ellip, .cb-reason")
+            .Select(element => element.TextContent.Trim()));
     }
 
     [Test]

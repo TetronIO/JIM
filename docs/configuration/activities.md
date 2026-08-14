@@ -71,6 +71,8 @@ The causality panel answers "what did this run do?", reading downstream. Beneath
 
 Each step is a sentence rather than a diagram, for example "10 Users were deleted, so they were removed from Project Diamond's Static Members", with the relationship the cascade acted through picked out in colour. Objects removed for the same reason, on the same Connected System, through the same Synchronisation Rule read as one statement carrying a count instead of as ten near-identical rows; expanding it names each of them individually. Two independent causes converging on one effect stay as two, because a hidden second cause is precisely what an administrator needs to see.
 
+Where JIM recorded why the cause itself happened, that follows as a second sentence, led by the Connected System responsible: "Yellowstone APAC was the last authoritative source to disconnect, so the Deletion Rule deleted them".
+
 Everything a step says was captured at the moment it happened: the causing object's name, its object type, the attribute, the Connected System and the Synchronisation Rule. A cause is by definition older than its effect, so the objects and records a chain names have very often been deleted, renamed, or aged out of history by the time anyone reads it; recording the wording alongside the link is what lets the chain still read correctly when they have.
 
 The chain always says why it ends, because the three reasons mean entirely different things:
