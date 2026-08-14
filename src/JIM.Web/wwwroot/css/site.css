@@ -1342,11 +1342,6 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     box-shadow: none !important;
 }
 
-/* Centre-align alert icon and close button vertically */
-html[lang] .mud-alert-position {
-    align-items: center;
-}
-
 /* Schema refresh results alert - position close icon in top right */
 .jim-alert-schema-refresh {
     position: relative;
@@ -3152,16 +3147,6 @@ html[lang] .jim-password-guidance.mud-alert {
     margin-top: 0.5rem;
     background-color: color-mix(in srgb, var(--mud-palette-info) 10%,
         var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
-}
-
-/* The icon belongs beside the headline, not halfway down the advice. JIM centres alert icons app-wide (see
-   "Centre-align alert icon and close button vertically" above), which is right for the one-line alerts that
-   rule was written for and leaves the icon adrift beside the third bullet of a panel this tall. Opting out
-   here rather than changing the global rule, and qualified with html[lang] to match that rule's specificity:
-   the alert root's own align-items does not reach the icon, and an equal-specificity selector loses to it. */
-html[lang] .jim-password-guidance .mud-alert-position {
-    align-items: flex-start;
-    padding-top: 0.125rem;
 }
 
 /* The alert supplies the tint, the rule and the icon; the layout of the advice inside it stays here. */
