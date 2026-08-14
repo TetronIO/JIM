@@ -238,7 +238,10 @@ public class CausalityFlowViewTests
         cut.WaitForAssertion(() =>
         {
             Assert.That(cut.FindAll(".flow-svg path"), Has.Count.EqualTo(2));
-            Assert.That(cut.FindAll(".flow-svg circle"), Has.Count.EqualTo(2));
+            Assert.That(cut.FindAll(".flow-svg circle.flow-dot"), Has.Count.EqualTo(2));
+            // Each dot is masked by an opaque disc so it can be painted in the connector's own colour
+            // without the path showing through it; the two are drawn concentrically.
+            Assert.That(cut.FindAll(".flow-svg circle.flow-dot-mask"), Has.Count.EqualTo(2));
         });
         // No viewBox: the overlay is CSS-sized to the canvas and draws in CSS pixel coordinates.
         // A viewBox frozen at measure-time size would uniformly scale and centre every connector

@@ -411,10 +411,18 @@
     stroke-width: 1.6;
 }
 
-.causality-panel .flow-svg circle {
-    /* An opaque flatten of the (translucent) line colour over the canvas surface: the path runs
-       underneath the dot to the card edge, and a translucent fill would show it through the dot. */
-    fill: color-mix(in srgb, var(--cz-text) 12%, var(--cz-surface));
+/* The dot masks the path beneath it rather than approximating the line's colour, so it can then be
+   painted in that colour exactly. The previous single dot was a hand-flattened guess (12% of the text
+   colour over the surface) which happened to land near the line in dark themes and well short of it in
+   light ones, where the line carries 28% alpha: the destination end of every connector read as a faded
+   smudge. There is no CSS that flattens a translucent colour against a background, hence two circles. */
+.causality-panel .flow-svg circle.flow-dot-mask {
+    fill: var(--cz-surface);
+    stroke: none;
+}
+
+.causality-panel .flow-svg circle.flow-dot {
+    fill: var(--cz-line);
     stroke: none;
 }
 

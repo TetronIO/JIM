@@ -27,8 +27,15 @@
             <svg class="flow-svg" aria-hidden="true">
                 @foreach (var connector in _connectors)
                 {
+                    @* The terminal dot is drawn twice: an opaque surface disc, then the dot itself in the
+                       connector's own colour. The line colour is translucent in light themes and the path
+                       runs on underneath the dot to the card edge, so a single translucent dot would show
+                       the path through itself as a darker stripe. Masking it first is what lets the dot use
+                       the line colour exactly rather than an approximation of it. *@
                     <path d="@connector.PathData"></path>
-                    <circle cx="@connector.DotX" cy="@connector.DotY"
+                    <circle class="flow-dot-mask" cx="@connector.DotX" cy="@connector.DotY"
+                            r="@CausalityFlowConnectorCalculator.FormatCoordinate(CausalityFlowConnectorCalculator.TerminalDotRadius)"></circle>
+                    <circle class="flow-dot" cx="@connector.DotX" cy="@connector.DotY"
                             r="@CausalityFlowConnectorCalculator.FormatCoordinate(CausalityFlowConnectorCalculator.TerminalDotRadius)"></circle>
                 }
             </svg>
