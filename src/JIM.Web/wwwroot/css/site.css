@@ -1943,8 +1943,13 @@ html[lang] .jim-schema-change-table td {
     transition: background-color 0.2s ease;
 }
 
+/* Raised towards the ink rather than towards a fixed grey, so the lift goes the right way in both
+   theme families: lighter on a dark surface, darker on a light one. It previously reached for
+   --mud-palette-background-gray, which no theme sets and which resolves to MudBlazor's opaque
+   rgb(245,245,245), so hovering this chip on any dark theme painted it near-white under near-white
+   text: 1.16:1, measured. It now reads 9.0:1 or better on every theme. */
 .jim-audit-chip:hover {
-    background-color: var(--mud-palette-background-gray);
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 8%, var(--mud-palette-surface));
 }
 
 .jim-audit-chip .mud-icon-root {
@@ -3481,8 +3486,13 @@ html[lang] .jim-password-guidance.mud-alert {
     background-color: var(--mud-palette-action-default-hover);
 }
 
+/* Tints throughout this picker are mixed from the accent rather than read from
+   --mud-palette-primary-hover, which no theme sets: that token keeps MudBlazor's stock indigo at 6%
+   alpha whatever the theme's accent is, so a selected row tinted indigo on a cyan-accented theme and
+   was close to invisible on the dark ones. 12% is measured: it leaves the row's own text at 9.3:1 or
+   better on every theme, against a ceiling of 10.6:1 to 17.3:1 untinted. */
 .jim-picker-row-selected {
-    background-color: var(--mud-palette-primary-hover);
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
 }
 
 /* A Container an ancestor has already spoken for, whether by covering it or by carving it out: still readable,
@@ -3495,7 +3505,7 @@ html[lang] .jim-password-guidance.mud-alert {
 /* A Container carved out of a selection above it. Tinted like a selected row is, because both are deliberate
    statements an administrator made; the colour is what says which one, so the label carries it too. */
 .jim-picker-row-excluded {
-    background-color: var(--mud-palette-warning-hover);
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 12%, transparent);
 }
 
 .jim-picker-row-excluded .jim-picker-meta-excluded {

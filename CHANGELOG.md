@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The **Created** and **Updated** chips on a Connected System no longer turn near-white, and unreadable, when the pointer passes over them on any of the dark themes. Their hover state asked for a colour none of JIM's themes set, so it came back as a fixed light grey whatever theme was in use, leaving pale text on a pale background: 1.2:1, against the 4.5:1 an accessible reading needs. The hover now lifts the chip away from its own surface, so it reads on every theme.
+
+- 🐛 Selections now show in the colour of the theme in use. The tint marking a selected Container in **Partitions & Containers**, an excluded Container beneath it, the Attribute Flow being edited in a Synchronisation Rule's priority list, and the row being dragged there, were all painted in one fixed violet rather than the theme's own accent, which on the dark themes was faint to the point of being hard to see at all, and on a theme whose accent is a different colour entirely simply looked wrong.
+
+- 🐛 A selected Object Type on a Connected System's **Schema** tab is now marked as selected. Its card was meant to carry the accent colour on its border and a tint behind it, and did neither: the styling was written so that it could never apply to the card. Selection was still shown by the switch on each card, so nothing was unusable, only harder to pick out while filtering a long list of types.
+
 - 🐛 The object counts on a Connected System's **Connector Space** and **Pending Exports** buttons are now legible. They were painted a shade darker than the button they sit in, on a tint that belonged to no theme JIM ships, which on the darker themes left the number below the contrast a person can comfortably read: on the default dark theme it measured 3.4:1 where 4.5:1 is the accessible minimum, and now measures 7.0:1. The count takes its colour from the button it labels, so it stays legible on every theme.
 
 - 🐛 A link into a list now opens at the row it names. The position in the address bar was worked out from the row height the list asks for rather than the height a row occupies once padding and content land on it, so a link to row 200 opened at about row 178, and further out the deeper into the list it pointed.
