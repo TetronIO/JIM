@@ -24,6 +24,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<RunPhaseStepper Phases="@x" />` | The steps of a Run Profile execution on an Activity | `engineering/notes/RUN_PROFILE_PHASES.md` |
 | `<RunProgressMetrics ObjectsProcessed="@x" ObjectsToProcess="@y" ... />` | A running Activity's progress bar and its count, rate and time remaining | "Live progress figures" below |
 | `<TooltipText Text="@x" />` | A multi-sentence tooltip explanation, inside `TooltipContent` | "Tooltips" below |
+| `<NavigableMudTabs>` | Top-level page tabs (syncs the active tab to `?t=slug`) | "Tabs" below |
 
 ## Form action gating and input immediacy
 
@@ -179,6 +180,8 @@ Three failure modes here are invisible to `dotnet build`, invisible to bUnit (wh
 ## Tabs
 - Use `<NavigableMudTabs>` instead of `<MudTabs>` for all top-level page tabs; it syncs the active tab with a `?t=slug` query string, enabling browser back/forward navigation
 - Use plain `<MudTabs>` only for tabs inside dialogs or nested sub-tabs where URL navigation is not needed
+- **Do not pass the presentation parameters; the component's defaults are JIM's tab look.** `Elevation="0" Rounded="true" Outlined="true" ApplyEffectsToContainer="false"` are the defaults on `NavigableMudTabs` itself. MudTabs' own defaults render an unbordered, unrounded white band that reads on screen as a broken tab bar, and that is exactly what a page got by omitting them. Most existing call sites still spell the four values out (harmlessly, since they match); do not copy that when adding a page. `NavigableMudTabsTests` pins the defaults and fails the build for any call site that passes `Outlined="false"` or `Rounded="false"`, so an opt-out has to be a deliberate, explained choice.
+- Only `Class` and `TabPanelsClass` are routinely worth passing; see "Panel spacing" above for which values (`Class="mt-2"` after breadcrumbs, `TabPanelsClass="pt-5"` when the first tab's content starts flush)
 
 ## `@key` on loops whose contents can change
 

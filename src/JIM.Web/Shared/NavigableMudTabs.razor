@@ -34,10 +34,17 @@
     // Pass-through parameters matching MudTabs
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment<MudTabs>? Header { get; set; }
+
+    // Presentation defaults are JIM's tab look, not MudTabs': flat, rounded and outlined, with the
+    // effects on the bar rather than the container. Every page in the app passes exactly these values,
+    // so they are the default here rather than something each new page has to remember; MudTabs' own
+    // defaults render an unbordered white band that reads as a broken tab bar, which is what a page
+    // that omitted them got. Existing call sites still spell them out and are unaffected.
+    // Pinned by NavigableMudTabsTests so a future edit cannot silently restyle every tab bar.
     [Parameter] public int Elevation { get; set; }
-    [Parameter] public bool Rounded { get; set; }
+    [Parameter] public bool Rounded { get; set; } = true;
     [Parameter] public bool ApplyEffectsToContainer { get; set; }
-    [Parameter] public bool Outlined { get; set; }
+    [Parameter] public bool Outlined { get; set; } = true;
     [Parameter] public string? TabPanelsClass { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public bool KeepPanelsAlive { get; set; }
