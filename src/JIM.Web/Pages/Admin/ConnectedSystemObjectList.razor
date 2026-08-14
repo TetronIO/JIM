@@ -40,7 +40,7 @@
                 {
                     <MudChip Value="@status"
                              Color="@(_selectedStatuses.Contains(status) ? Color.Default : GetStatusColor(status))"
-                             Variant="@(_selectedStatuses.Contains(status) ? Variant.Outlined : Variant.Text)"
+                             Variant="@(_selectedStatuses.Contains(status) ? Variant.Filled : Variant.Outlined)"
                              SelectedColor="@GetStatusColor(status)">
                         @status.ToString().SplitOnCapitalLetters()
                     </MudChip>
@@ -60,7 +60,7 @@
                     {
                         <MudChip Value="@type.Id"
                                  Color="Color.Default"
-                                 Variant="@(_selectedObjectTypeIds.Contains(type.Id) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedObjectTypeIds.Contains(type.Id) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="Color.Default">
                             @type.Name
                         </MudChip>
@@ -79,7 +79,7 @@
                 {
                     <MudChip Value="@joinType"
                              Color="Color.Default"
-                             Variant="@(_selectedJoinTypes.Contains(joinType) ? Variant.Outlined : Variant.Text)"
+                             Variant="@(_selectedJoinTypes.Contains(joinType) ? Variant.Filled : Variant.Outlined)"
                              SelectedColor="Color.Default">
                         @joinType.ToString().SplitOnCapitalLetters()
                     </MudChip>
