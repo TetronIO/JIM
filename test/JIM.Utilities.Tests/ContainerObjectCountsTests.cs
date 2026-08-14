@@ -223,6 +223,61 @@ public class ContainerObjectCountsTests
         Assert.That(Find(partition, "OU=People,DC=corp").ObjectCount, Is.EqualTo(11));
     }
 
+    [Test]
+    public void RecalculateSubtreeTotals_ContainersLoadedFromTheDatabase_RebuildsTheSubtreeTotals()
+    {
+        // ObjectCount persists; SubtreeObjectCount does not, because it is derivable and storing it would let the
+        // two disagree. Anything that loads a hierarchy has to rebuild it, or a Subtree Container reports its own
+        // direct count and understates its branch by however much sits beneath it.
+        var partition = Partition(
+            Container("ou=Corp,dc=corp",
+                Container("ou=Sales,ou=Corp,dc=corp")));
+
+        Find(partition, "ou=Corp,dc=corp").ObjectCount = 3;
+        Find(partition, "ou=Sales,ou=Corp,dc=corp").ObjectCount = 10;
+
+        ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Find(partition, "ou=Corp,dc=corp").SubtreeObjectCount, Is.EqualTo(13));
+            Assert.That(Find(partition, "ou=Sales,ou=Corp,dc=corp").SubtreeObjectCount, Is.EqualTo(10));
+        }
+    }
+
+    [Test]
+    public void RecalculateSubtreeTotals_AnUncountedHierarchy_LeavesEveryTotalNull()
+    {
+        var partition = Partition(Container("ou=Corp,dc=corp", Container("ou=Sales,ou=Corp,dc=corp")));
+
+        ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Find(partition, "ou=Corp,dc=corp").SubtreeObjectCount, Is.Null);
+            Assert.That(Find(partition, "ou=Sales,ou=Corp,dc=corp").SubtreeObjectCount, Is.Null);
+        }
+    }
+
+    [Test]
+    public void RecalculateSubtreeTotals_ACountedParentOfUncountedChildren_TotalsOnlyWhatWasCounted()
+    {
+        // A Container added to the directory since the last count has no figure of its own. Treating that as zero
+        // is right for the total (nothing is known to be in it) but the parent must still report a total, because
+        // it was itself counted.
+        var partition = Partition(Container("ou=Corp,dc=corp", Container("ou=New,ou=Corp,dc=corp")));
+        Find(partition, "ou=Corp,dc=corp").ObjectCount = 4;
+
+        ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Find(partition, "ou=Corp,dc=corp").SubtreeObjectCount, Is.EqualTo(4));
+            Assert.That(Find(partition, "ou=New,ou=Corp,dc=corp").SubtreeObjectCount, Is.Null,
+                "an uncounted Container has nothing to report, and zero would read as \"empty\"");
+        }
+    }
+
     private static ConnectedSystemPartition Partition(params ConnectedSystemContainer[] containers)
     {
         var partition = new ConnectedSystemPartition { Id = 1, Name = "dc=corp", ExternalId = "dc=corp", Containers = [] };

@@ -35,16 +35,42 @@ internal class LdapConnectorContainerCounts
     /// </summary>
     private const int PageSize = 1000;
 
+    /// <summary>
+    /// How long a single page may take before the directory is treated as unresponsive.
+    /// </summary>
+    private static readonly TimeSpan PageTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long the whole count may take before it gives up and reports what it has.
+    /// </summary>
+    /// <remarks>
+    /// Counting is folded into Retrieve Hierarchy, so it spends an administrator's wait on something they did not
+    /// ask for by name. The hierarchy is what they wanted, and on a directory large enough for the count to run
+    /// long it is also the thing they need soonest. A budget is the right control here rather than a confirmation
+    /// prompt: a prompt would interrupt every hierarchy refresh to ask about a cost that is usually trivial.
+    /// </remarks>
+    internal static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(60);
+
     private readonly LdapConnection _connection;
     private readonly ILogger _logger;
     private readonly bool _supportsPaging;
+    private readonly TimeSpan _budget;
 
-    internal LdapConnectorContainerCounts(LdapConnection ldapConnection, ILogger logger, bool supportsPaging)
+    internal LdapConnectorContainerCounts(LdapConnection ldapConnection, ILogger logger, bool supportsPaging, TimeSpan? budget = null)
     {
         _connection = ldapConnection;
         _logger = logger;
         _supportsPaging = supportsPaging;
+        _budget = budget ?? DefaultBudget;
     }
+
+    /// <summary>
+    /// Whether the count has spent its whole budget and should stop with what it has.
+    /// </summary>
+    /// <param name="elapsed">How long the count has been running.</param>
+    /// <param name="budget">The budget; zero or less means there is none, and only cancellation stops the count.</param>
+    internal static bool ShouldStopForBudget(TimeSpan elapsed, TimeSpan budget) =>
+        budget > TimeSpan.Zero && elapsed >= budget;
 
     internal async Task<ConnectorContainerObjectCountResult> CountAsync(
         ConnectorPartition connectorPartition,
@@ -81,6 +107,15 @@ internal class LdapConnectorContainerCounts
             if (cancellationToken.IsCancellationRequested)
                 return Incomplete(result, "The count was cancelled before every object had been counted.");
 
+            if (ShouldStopForBudget(stopwatch.Elapsed, _budget))
+            {
+                _logger.Warning("Count: '{Partition}' gave up after {Elapsed} having counted {Counted} objects",
+                    LogSanitiser.Sanitise(connectorPartition.Name), stopwatch.Elapsed, counted);
+
+                return Incomplete(result,
+                    $"Counting stopped after {_budget.TotalSeconds:N0} seconds so that the hierarchy was not held up, so these counts are lower than the true figures.");
+            }
+
             var searchRequest = new SearchRequest(connectorPartition.Name, filter, SearchScope.Subtree, NoAttributes);
             if (_supportsPaging)
             {
@@ -94,7 +129,7 @@ internal class LdapConnectorContainerCounts
             SearchResponse response;
             try
             {
-                response = (SearchResponse)_connection.SendRequest(searchRequest);
+                response = (SearchResponse)_connection.SendRequest(searchRequest, PageTimeout);
             }
             catch (DirectoryOperationException ex) when (IsLimitExceeded(ex))
             {

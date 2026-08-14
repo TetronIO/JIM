@@ -68,6 +68,47 @@ public static class ContainerObjectCounts
             RollUp(rootContainer, beneathUnknownContainers);
     }
 
+    /// <summary>
+    /// Rebuilds every Container's subtree total from the direct counts already on them.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ConnectedSystemContainer.ObjectCount"/> is stored;
+    /// <see cref="ConnectedSystemContainer.SubtreeObjectCount"/> is not, because it is derivable and storing it
+    /// would let the two disagree the moment a Container moved. Anything that loads a hierarchy for display
+    /// therefore has to rebuild it, or a Subtree Container reports its own direct count and understates its branch
+    /// by everything beneath it.
+    ///
+    /// A Container with no direct count of its own reports no total either, even where its descendants have been
+    /// counted: it has never been counted, and zero would read as "this Container is empty".
+    /// </remarks>
+    public static void RecalculateSubtreeTotals(ConnectedSystemPartition connectedSystemPartition)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemPartition);
+
+        foreach (var rootContainer in connectedSystemPartition.Containers ?? [])
+            RollUpPersisted(rootContainer);
+    }
+
+    /// <summary>
+    /// Sums a Container's branch from the stored direct counts, leaving an uncounted Container's total null while
+    /// still letting its counted descendants contribute to a counted ancestor above it.
+    /// </summary>
+    private static int RollUpPersisted(ConnectedSystemContainer container)
+    {
+        var beneath = 0;
+        foreach (var childContainer in container.ChildContainers)
+            beneath += RollUpPersisted(childContainer);
+
+        if (container.ObjectCount is not { } directCount)
+        {
+            container.SubtreeObjectCount = null;
+            return beneath;
+        }
+
+        container.SubtreeObjectCount = directCount + beneath;
+        return container.SubtreeObjectCount.Value;
+    }
+
     private static void ClearCounts(ConnectedSystemContainer container)
     {
         container.ObjectCount = null;

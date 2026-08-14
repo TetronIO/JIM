@@ -368,7 +368,18 @@ public class ConnectedSystemServer
 
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
+        if (connectedSystem == null)
+            return null;
+
+        // Each Container's own object count is stored; its subtree total is derived, so it has to be rebuilt on
+        // load (#1276). Doing it here rather than at each call site is what stops the portal, the REST API and
+        // PowerShell disagreeing about what a Subtree Container holds; a surface that forgot would silently report
+        // the Container's own count and understate its branch.
+        foreach (var partition in connectedSystem.Partitions ?? [])
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return connectedSystem;
     }
 
     /// <summary>

@@ -57,6 +57,35 @@ public class LdapConnectorContainerCountsTests
     }
 
     [Test]
+    public void ShouldStopForBudget_WellInsideTheBudget_KeepsGoing()
+    {
+        Assert.That(LdapConnectorContainerCounts.ShouldStopForBudget(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30)), Is.False);
+    }
+
+    [Test]
+    public void ShouldStopForBudget_PastTheBudget_Stops()
+    {
+        // Counting is folded into Retrieve Hierarchy, so it is spending an administrator's wait on something they
+        // did not ask for by name. The hierarchy is the thing they wanted; the count is not allowed to hold it
+        // hostage indefinitely on a large directory.
+        Assert.That(LdapConnectorContainerCounts.ShouldStopForBudget(TimeSpan.FromSeconds(31), TimeSpan.FromSeconds(30)), Is.True);
+    }
+
+    [Test]
+    public void ShouldStopForBudget_ExactlyOnTheBudget_Stops()
+    {
+        Assert.That(LdapConnectorContainerCounts.ShouldStopForBudget(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30)), Is.True);
+    }
+
+    [Test]
+    public void ShouldStopForBudget_NoBudgetSet_NeverStops()
+    {
+        // Zero or less means "no budget", which is what an unattended caller wants; the cancellation token is then
+        // the only thing that stops it.
+        Assert.That(LdapConnectorContainerCounts.ShouldStopForBudget(TimeSpan.FromHours(2), TimeSpan.Zero), Is.False);
+    }
+
+    [Test]
     public void BuildObjectClassFilter_ABackslashInAName_IsEscapedOnceNotTwice()
     {
         // The backslash must be escaped before the characters whose escapes introduce backslashes of their own,

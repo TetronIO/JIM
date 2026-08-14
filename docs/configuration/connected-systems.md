@@ -71,6 +71,22 @@ Inside a partition, or directly inside the connector space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
+### How many objects each container holds
+
+Each container row shows how many objects it holds, so you can tell a container worth managing from an empty one before you tick anything.
+
+The figure is read from the Connected System itself, not from what JIM has already imported, so it is there the first time you open the tab on a brand new Connected System. That is the moment it matters most: you are deciding what to manage, and JIM holds nothing yet.
+
+- **The figure follows the container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).** A container set to This and below reports what its whole branch holds; one narrowed to This level reports only what sits directly in it. Hover the number to see both, and which of them is on screen.
+- **Only the Object Types you have selected are counted**, so the number matches what a Full Import would actually bring back. Select them on the Schema tab first; nothing is counted until you have.
+- **Zero and blank mean different things.** Zero is a container that was searched and found empty. A blank means nobody has counted it: either the Connector cannot report counts, or the hierarchy has not been retrieved since this feature shipped.
+- **Selections and exclusions are ignored.** The figure says what is in the container, not what JIM would import from it once your exclusions apply. [Preview Changes](#previewing-a-partition-or-container-change) answers that second question.
+
+Counts are gathered as part of **Retrieve Hierarchy**, so refreshing the hierarchy refreshes the numbers, and the tab tells you when it last ran. Counting is bounded: if it takes longer than a minute, or the directory stops the search at its own size or time limit, JIM says the counts are incomplete rather than showing figures that are quietly short of the truth. The hierarchy itself still arrives either way.
+
+!!! note "This reads your directory"
+    Counting means retrieving the matching entries, because LDAP has no count operation. JIM asks for names only, which is far lighter than an import, and runs one search per partition rather than one per container. It is still a read against your production directory, so it happens when you retrieve the hierarchy and at no other time.
+
 ### What your selections mean
 
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
