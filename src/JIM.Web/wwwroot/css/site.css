@@ -521,7 +521,13 @@ html[lang] .mud-paper .mud-tabs-tabbar {
     background-color: var(--jim-inner-surface, transparent);
 }
 
-html[lang] .mud-paper .mud-tabs-panels {
+/* Only where the tab set applies its effects to the whole container (ApplyEffectsToContainer="true"), which is
+   the one arrangement whose panels sit INSIDE the outlined, rounded box and so have to carry its fill and its
+   bottom corners. MudBlazor marks that case by putting the paper classes on the tabs root rather than on the
+   tab bar. Every tab set in the portal is the other arrangement: the bar is its own outlined box and the panels
+   are ordinary page content below it, where a fill with no border and no padding is not a panel at all, just a
+   grey strip behind the content. */
+html[lang] .mud-paper .mud-tabs.mud-paper-outlined .mud-tabs-panels {
     background-color: var(--jim-inner-surface, transparent);
     border-radius: 0 0 8px 8px;
 }
@@ -3658,13 +3664,25 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
    it; anything shorter loses the cascade and the radius silently survives. */
 html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell {
     border-radius: 0;
+    /* The shaded header row every other table in the portal has. A sticky header must be opaque, because the
+       rows scroll underneath it, so MudBlazor paints each header CELL with the plain surface colour in the
+       same rule that makes it sticky; that fill covers the header ROW's inner-surface background (see "Table
+       header row background" above) and leaves a virtualised grid's header the same colour as its body. Paint
+       the cells with the inner surface instead, falling back to the surface so a theme that defines no inner
+       surface keeps MudBlazor's own behaviour. */
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
 }
 
-/* First-paint approximation only. The real ceiling is measured by jimVirtualList.fit the moment the grid is
-   in the DOM (sized so a long list ends with the page footer at the bottom of the viewport) and is then
-   written as an inline style, which wins over this rule. It is a maximum, not a height: a short list
-   collapses to its content like an ordinary table. The fallback exists so the virtualiser never sees an
-   unconstrained container while that first measurement is in flight. */
+/* The last row of a virtualised grid keeps the row separator that an ordinary table drops, because the
+   virtualiser closes its rows with a zero-height spacer <tr>: the real last row is no longer :last-child, so
+   MudBlazor's border-removal rule never matches it and the separator lands directly on the grid's own outline,
+   reading as one heavy 2px edge. Target the row before the spacer instead. On a list long enough to scroll
+   this is a row well below the fold (OverscanCount renders 30 beyond the viewport), so it only ever shows
+   where it should: at the true bottom of the list. */
+html[lang] .jim-virtualised-list .mud-table-root > tbody > tr:nth-last-of-type(2) > .mud-table-cell {
+    border-bottom: none;
+}
+
 /* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is
    not the page (a dialog, a cell) states its own ceiling instead, as the custom property, and skips the
    measurement; the property's fallback is what every ordinary list uses. */
