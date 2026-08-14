@@ -382,13 +382,17 @@ public static class CausalitySummaryBuilder
     {
         var eventsByType = new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, List<CausalityEvent>>();
         var typeOrder = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
-        foreach (var causalityEvent in allEvents)
+
+        // Synthetic events are excluded: the strip counts what the run recorded, and a synthetic event stands
+        // for something it decided not to do. A "1 Identity not deleted" pill would read as an outcome.
+        foreach (var causalityEvent in allEvents.Where(e => e.OutcomeType.HasValue))
         {
-            if (!eventsByType.TryGetValue(causalityEvent.OutcomeType, out var eventsForType))
+            var outcomeType = causalityEvent.OutcomeType!.Value;
+            if (!eventsByType.TryGetValue(outcomeType, out var eventsForType))
             {
                 eventsForType = [];
-                eventsByType[causalityEvent.OutcomeType] = eventsForType;
-                typeOrder.Add(causalityEvent.OutcomeType);
+                eventsByType[outcomeType] = eventsForType;
+                typeOrder.Add(outcomeType);
             }
             eventsForType.Add(causalityEvent);
         }

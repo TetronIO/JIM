@@ -5,6 +5,8 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
+using MudBlazor;
 using JimUtilities = JIM.Utilities.Utilities;
 
 namespace JIM.Web.Causality;
@@ -30,10 +32,20 @@ public static class CausalityModelBuilder
     /// target system's queue instead of promising a row that no longer exists. Null means "not
     /// resolved", NOT "none are live": a caller that cannot run the lookup keeps the precise links.
     /// </param>
+    /// <param name="deletionPolicySnapshot">
+    /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
+    /// the synthetic "Identity not deleted" event; see <see cref="BuildDeclinedDeletionEvent"/>.
+    /// </param>
+    /// <param name="isSynchronisationRun">
+    /// Whether the Run Profile that produced this item was a Full or Delta Synchronisation. Only a
+    /// Synchronisation evaluates a Deletion Rule, so only a Synchronisation can report that one declined.
+    /// </param>
     public static CausalityModel Build(
         ActivityRunProfileExecutionItem item,
         CausalityPageContext context,
-        IReadOnlySet<Guid>? livePendingExportIds = null)
+        IReadOnlySet<Guid>? livePendingExportIds = null,
+        MvoDeletionPolicySnapshot? deletionPolicySnapshot = null,
+        bool isSynchronisationRun = false)
     {
         var outcomes = item.SyncOutcomes;
         var outcomeIds = outcomes.Select(o => o.Id).ToHashSet();
@@ -63,7 +75,77 @@ public static class CausalityModelBuilder
                 livePendingExportIds))
             .ToList();
 
+        if (BuildDeclinedDeletionEvent(item, deletionPolicySnapshot, isSynchronisationRun) is { } declined)
+            roots.Add(declined);
+
         return new CausalityModel { Context = context, Roots = roots };
+    }
+
+    /// <summary>
+    /// The synthetic Identity-lane event saying the Deletion Rule evaluated and declined, or null where that is
+    /// not what happened.
+    /// </summary>
+    /// <remarks>
+    /// A Deletion Rule that declines records no outcome, because nothing happened. That leaves the most
+    /// consequential fact about a disconnection ("the Identity survived, and here is why") as the one thing the
+    /// causality views structurally cannot show, which is why it lived in a separate "Metaverse Impact" section
+    /// until this replaced it.
+    ///
+    /// Every condition below is a claim the event would otherwise make falsely:
+    /// only a Synchronisation evaluates the rule at all, so an import has no decision to report; a
+    /// disconnection is the only change that triggers an evaluation; an item with no outcomes did no work to
+    /// explain; a recorded deletion means the rule fired, and a synthetic card would contradict it; and the
+    /// snapshot is the only supported source of the explanation, since the object type's current configuration
+    /// may have changed since the decision.
+    /// </remarks>
+    private static CausalityEvent? BuildDeclinedDeletionEvent(
+        ActivityRunProfileExecutionItem item,
+        MvoDeletionPolicySnapshot? snapshot,
+        bool isSynchronisationRun)
+    {
+        if (!isSynchronisationRun || snapshot == null)
+            return null;
+
+        if (item.ObjectChangeType != ObjectChangeType.Disconnected || item.SyncOutcomes.Count == 0)
+            return null;
+
+        var deletionRecorded = item.SyncOutcomes.Any(o =>
+            o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+        if (deletionRecorded)
+            return null;
+
+        return new CausalityEvent
+        {
+            IsSynthetic = true,
+            Lane = CausalityLane.Identity,
+            // Neutral, not success: whether an Identity surviving a disconnection is the wanted outcome depends
+            // entirely on the deployment's intent, and the panel does not know it.
+            Tone = CausalityTone.Secondary,
+            Icon = Icons.Material.Filled.ShieldMoon,
+            PlainLabel = "Identity not deleted",
+            TechnicalLabel = "Metaverse Object not deleted",
+            DetailMessage = DeclinedDeletionDetail(snapshot)
+        };
+    }
+
+    /// <summary>
+    /// The one-line reason the rule declined, derived from the decision-time snapshot.
+    /// </summary>
+    private static string DeclinedDeletionDetail(MvoDeletionPolicySnapshot snapshot)
+    {
+        if (snapshot.DeletionRule == MetaverseObjectDeletionRule.Manual)
+            return "This object type's Deletion Rule is Manual, so a disconnection never deletes the Identity.";
+
+        if (snapshot.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+            && snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
+            && snapshot.RemainingConnectedSourceSystemNames.Count > 0)
+        {
+            var remaining = string.Join(", ", snapshot.RemainingConnectedSourceSystemNames);
+            return $"An authoritative source is still connected ({remaining}), and this object type deletes only when all of them disconnect.";
+        }
+
+        return "The Deletion Rule in force at the time was evaluated and did not delete the Identity.";
     }
 
     private static CausalityEvent BuildEvent(

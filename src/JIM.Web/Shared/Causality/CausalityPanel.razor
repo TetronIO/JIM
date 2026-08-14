@@ -1,5 +1,6 @@
 @using JIM.Models.Activities
 @using JIM.Models.Activities.DTOs
+@using JIM.Models.Sync
 @using JIM.Web.Causality
 @inject IUserPreferenceService PreferenceService
 
@@ -141,6 +142,21 @@
     [Parameter]
     public CausalChain? Chain { get; set; }
 
+    /// <summary>
+    /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
+    /// the synthetic "Identity not deleted" event, which is the one thing a Deletion Rule's decision leaves no
+    /// outcome to render.
+    /// </summary>
+    [Parameter]
+    public MvoDeletionPolicySnapshot? DeletionPolicySnapshot { get; set; }
+
+    /// <summary>
+    /// Whether the Run Profile behind this item was a Full or Delta Synchronisation. Only a Synchronisation
+    /// evaluates a Deletion Rule, so only a Synchronisation can report that one declined.
+    /// </summary>
+    [Parameter]
+    public bool IsSynchronisationRun { get; set; }
+
     private CausalityModel? _model;
     private CausalitySummary? _summary;
     private CausalityView _view = CausalityView.Flow;
@@ -162,7 +178,8 @@
         _builtItem = Item;
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
-        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds);
+        _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
+            DeletionPolicySnapshot, IsSynchronisationRun);
         _summary = CausalitySummaryBuilder.Build(_model);
         _expandedEvent = null;
         _selectedEvent = null;

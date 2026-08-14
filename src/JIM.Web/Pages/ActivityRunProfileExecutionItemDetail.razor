@@ -257,6 +257,23 @@
             </MudGrid>
         </MudPaper>
 
+        @* What a detected deletion means next. Forward-looking rather than causal: the run recorded that the
+           record is gone from the source, and the Deletion Rule has not been evaluated yet. It sits at page
+           level rather than inside a Deletion Rule section because it describes what a later Synchronisation
+           will do, not what this run decided. *@
+        @if (!IsSyncContext() && !IsHousekeepingContext()
+             && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                <MudText Typo="Typo.body1">
+                    The Connected System Object has been detected as deleted from the source system and marked for
+                    removal. When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will
+                    disconnect this object from the metaverse and evaluate the Deletion Rule for its Metaverse
+                    Object Type.
+                </MudText>
+            </MudAlert>
+        }
+
         @* Causality - shows what the run did to this object and what it caused *@
         @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
         {
@@ -271,8 +288,23 @@
                                 Context="@BuildCausalityPageContext()"
                                 LivePendingExportIds="_livePendingExportIds"
                                 Timestamp="@_activity?.Executed"
-                                Chain="_causalChain" />
+                                Chain="_causalChain"
+                                DeletionPolicySnapshot="_deletionPolicySnapshot"
+                                IsSynchronisationRun="IsSyncContext()" />
             </div>
+
+            @* The decision-time Deletion Rule (#119), as detail behind the outcome rather than as a titled
+               section of its own. The causality panel above already says what happened to the Identity; this
+               is the rule that decided it, which most readers never need to open. *@
+            @if (_deletionPolicySnapshot != null)
+            {
+                <MudExpansionPanels Class="mb-5" Elevation="0" Outlined="true">
+                    <MudExpansionPanel Text="Deletion Rule in force at the time">
+                        <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot"
+                                                    ObjectTypeName="@_metaverseObjectType?.Name" />
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
         }
 
         @* Projection Flow Visualisation - shown for Projected items *@
@@ -527,122 +559,6 @@
             </MudGrid>
         }
 
-        @* Deletion Impact Section - shown for CSO deletions and disconnections (source deletion triggers both) *@
-        @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
-        {
-            <MudText Typo="Typo.h6" Class="mb-2">Metaverse Impact</MudText>
-            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                How the Metaverse Object Deletion Rule for these objects applies to this change.
-            </MudText>
-
-            @* The Metaverse Object's fate (deleted or scheduled) and its reason are shown by the Causality
-               view above; this section explains the Deletion Rule behind that outcome. It also carries the
-               one thing Causality structurally cannot: a Deletion Rule that evaluated and declined produces
-               no outcome to render, so "The Metaverse Object was not deleted" has no event to hang off.
-               Housekeeping DOES record Causality outcomes (an MvoDeleted root plus one Pending Export child
-               per deprovisioned account, #1044); only the pre-sync import context has none. *@
-            var mvoDeletedOutcome = _activityRunProfileExecutionItem.SyncOutcomes
-                .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
-            var mvoDeletionScheduledOutcome = _activityRunProfileExecutionItem.SyncOutcomes
-                .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
-
-            @if (mvoDeletedOutcome == null && mvoDeletionScheduledOutcome == null
-                 && IsSyncContext() && _activityRunProfileExecutionItem.SyncOutcomes.Count > 0
-                 && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
-            {
-                @* Sync context with outcomes but no MVO deletion — the MVO survived *@
-                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-3">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
-                        <MudText Typo="Typo.body1">
-                            <strong>The Metaverse Object was not deleted.</strong>
-                            @* Every disconnect evaluates the Deletion Rule and records the decision-time policy
-                               snapshot (#119), so the explanation comes from what was in force at the time. The
-                               guard is a safety net for an unparseable snapshot, not a supported alternative:
-                               there is deliberately no fallback to the object type's current configuration,
-                               which would explain the outcome using a rule that may since have changed. *@
-                            @if (_deletionPolicySnapshot != null)
-                            {
-                                <DeletionNotTriggeredExplanation Snapshot="_deletionPolicySnapshot" ObjectTypeName="@_metaverseObjectType?.Name" />
-                            }
-                        </MudText>
-                    </MudStack>
-                </MudAlert>
-            }
-
-            @if (_metaverseObjectType != null)
-            {
-                @if (IsHousekeepingContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
-                {
-                    @* Housekeeping context: the Metaverse Object itself was deleted *@
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
-                        <MudText Typo="Typo.body1">
-                            The Metaverse Object's deletion grace period expired and the housekeeping process deleted it
-                            from the metaverse. Delete Pending Exports were staged for any remaining target Connected
-                            System Objects, and membership-removal Pending Exports for objects that referenced it.
-                        </MudText>
-                    </MudAlert>
-                }
-                else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
-                {
-                    @* Import context: deletion detected but not yet processed by sync *@
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
-                        <MudText Typo="Typo.body1">
-                            The Connected System Object has been detected as deleted from the source system and marked for removal.
-                            When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will disconnect
-                            this object from the metaverse and evaluate the deletion rule for its object type.
-                        </MudText>
-                    </MudAlert>
-                }
-
-                @if (_deletionPolicySnapshot != null)
-                {
-                    @* Decision-time snapshot (#119): render the policy recorded when the decision was made *@
-                    <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot" ObjectTypeName="@_metaverseObjectType.Name" />
-                }
-            }
-            else
-            {
-                @* Fallback generic message when object type info not available *@
-                @if (IsHousekeepingContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                        <MudText Typo="Typo.body1">
-                            The Metaverse Object's deletion grace period expired and the housekeeping process deleted it
-                            from the metaverse. Delete Pending Exports were staged for any remaining target Connected
-                            System Objects, and membership-removal Pending Exports for objects that referenced it.
-                        </MudText>
-                    </MudAlert>
-                }
-                else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                        <MudText Typo="Typo.body1">
-                            The Connected System Object has been detected as deleted from the source system and marked for removal.
-                            When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will disconnect
-                            this object from the metaverse. The Metaverse Object deletion rule for this object type determines
-                            what happens next.
-                        </MudText>
-                    </MudAlert>
-                }
-                else if (_deletionPolicySnapshot == null)
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                        <MudText Typo="Typo.body1">
-                            When a Connected System Object is deleted from the source system, JIM disconnects it from
-                            the metaverse. The Metaverse Object deletion rule for this object type determines what happens next.
-                        </MudText>
-                    </MudAlert>
-                }
-
-                @* Even without a resolvable object type, a decision-time snapshot (#119) can
-                   still explain the deletion policy that was in force *@
-                @if (_deletionPolicySnapshot != null)
-                {
-                    <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot" />
-                }
-            }
-        }
 
                     @* Attribute Changes Section - hide when:
                        - deletions (no attribute changes to show)

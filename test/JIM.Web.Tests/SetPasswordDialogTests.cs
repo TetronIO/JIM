@@ -172,11 +172,46 @@ public class SetPasswordDialogTests : JimComponentTestContext
     private static bool IsMasked(IRenderedComponent<MudDialogProvider> provider) =>
         PasswordInput(provider).GetAttribute("type") == "password";
 
-    private static void Generate(IRenderedComponent<MudDialogProvider> provider) =>
+    /// <summary>
+    /// Clicks Generate and waits for the generated value to reach the DOM.
+    /// <para>
+    /// The wait is the point. MudButton's click path is async, so <c>Click()</c> returning does not mean the
+    /// re-render carrying the new password has happened; asserting straight afterwards reads whatever the DOM
+    /// last settled on. It passes on a quiet machine and fails perhaps one run in thirty on a loaded one, which
+    /// is exactly the shape that gets dismissed as "flaky" rather than fixed.
+    /// </para>
+    /// </summary>
+    private static void Generate(IRenderedComponent<MudDialogProvider> provider)
+    {
         Button(provider, GenerateMarker).Click();
+        provider.WaitForState(() => PasswordInput(provider).GetAttribute("value")?.Length > 0);
+    }
 
-    private static void TickAccount(IRenderedComponent<MudDialogProvider> provider, int index) =>
+    /// <summary>
+    /// Clicks a control and waits for the render it causes.
+    /// <para>
+    /// Every interaction in this fixture goes through here rather than clicking the element directly, because
+    /// forgetting the wait at one call site is invisible on a quiet machine. MudBlazor's click path is async, so
+    /// <c>Click()</c> returning means the handler ran, not that the re-render it queued has been processed;
+    /// asserting straight afterwards reads whatever the DOM last settled on. Under load that lost race showed up
+    /// as roughly one failure in thirty, spread across whichever test happened to lose it, which is precisely the
+    /// shape that gets written off as "flaky" instead of fixed.
+    /// </para>
+    /// </summary>
+    private static void Click(IRenderedComponent<MudDialogProvider> provider, string marker)
+    {
+        var rendersBefore = provider.RenderCount;
+        Button(provider, marker).Click();
+        provider.WaitForState(() => provider.RenderCount > rendersBefore);
+    }
+
+    /// <inheritdoc cref="Click"/>
+    private static void TickAccount(IRenderedComponent<MudDialogProvider> provider, int index)
+    {
+        var rendersBefore = provider.RenderCount;
         provider.FindAll($"[data-testid='{AccountMarker}'] input[type=checkbox]")[index].Change(true);
+        provider.WaitForState(() => provider.RenderCount > rendersBefore);
+    }
 
     #region masked by default
 
@@ -215,7 +250,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog();
         Generate(provider);
-        Button(provider, RevealMarker).Click();
+        Click(provider, RevealMarker);
         provider.WaitForState(() => !IsMasked(provider));
 
         Generate(provider);
@@ -240,7 +275,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         Assert.That(IsMasked(provider), Is.True, "precondition: the value must still be masked");
         Assert.That(Button(provider, CopyMarker).HasAttribute("disabled"), Is.False);
 
-        Button(provider, CopyMarker).Click();
+        Click(provider, CopyMarker);
 
         provider.WaitForState(() => JSInterop.Invocations["jimInterop.copyToClipboard"]
             .Any(invocation => Equals(invocation.Arguments[0], $"{GeneratedPassword}-1")));
@@ -290,7 +325,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog();
         Generate(provider);
 
-        Button(provider, CancelMarker).Click();
+        Click(provider, CancelMarker);
 
         provider.WaitForState(() => JSInterop.Invocations["jimInterop.clearClipboard"].Count > 0);
 
@@ -307,7 +342,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog();
         Generate(provider);
 
-        Button(provider, RevealMarker).Click();
+        Click(provider, RevealMarker);
 
         provider.WaitForState(() => !IsMasked(provider));
 
@@ -323,7 +358,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog();
         Generate(provider);
-        Button(provider, RevealMarker).Click();
+        Click(provider, RevealMarker);
         provider.WaitForState(() => !IsMasked(provider));
 
         provider.WaitForState(() => IsMasked(provider), TimeSpan.FromSeconds(5));
@@ -336,10 +371,10 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog();
         Generate(provider);
-        Button(provider, RevealMarker).Click();
+        Click(provider, RevealMarker);
         provider.WaitForState(() => !IsMasked(provider));
 
-        Button(provider, RevealMarker).Click();
+        Click(provider, RevealMarker);
 
         Assert.That(IsMasked(provider), Is.True);
     }
@@ -378,7 +413,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog();
         Generate(provider);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
 
         provider.WaitForState(() => _runs.Count > 0);
 
@@ -400,7 +435,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog();
         Generate(provider);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
 
         provider.WaitForState(() => _runs.Count > 0);
 
@@ -420,7 +455,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog();
         Generate(provider);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
 
         provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
 
@@ -492,7 +527,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(allowSelection: true);
 
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
 
         Assert.That(provider.FindAll($"[data-testid='{AccountMarker}'] input[type=checkbox]:checked"), Has.Count.EqualTo(2));
     }
@@ -515,7 +550,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(allowSelection: true);
 
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
 
         Assert.That(provider.FindAll($"[data-testid='{RailMarker}']"), Is.Not.Empty);
     }
@@ -529,7 +564,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     {
         var provider = ShowDialog(allowSelection: true);
 
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
 
         Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Set on 2 accounts"));
     }
@@ -541,7 +576,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         TickAccount(provider, 0);
         Generate(provider);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
 
         provider.WaitForState(() => _runs.Count > 0);
 
@@ -567,10 +602,10 @@ public class SetPasswordDialogTests : JimComponentTestContext
             Account("Research LDAP", true, [PasswordExpiryBehaviour.NeverExpires])
         };
         var provider = ShowDialog(allowSelection: true, accounts: accounts);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count > 0);
 
         Assert.That(_runs[0].Options.ExpiryBehaviour, Is.EqualTo(PasswordExpiryBehaviour.NeverExpires),
@@ -583,7 +618,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog(allowSelection: true,
             reconciliation: Reconciliation(constraints: ["15 characters or more", "3 of 4 character categories"]));
 
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
 
         Assert.That(provider.Find($"[data-testid='{ConstraintsMarker}']").TextContent, Does.Contain("15 characters or more"));
     }
@@ -598,7 +633,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog(allowSelection: true,
             reconciliation: Reconciliation(conflicts: ["Contoso AD: requires at least 20 characters."]));
 
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
 
         Assert.Multiple(() =>
         {
@@ -617,7 +652,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
     public void SetPasswordDialog_WithSeveralAccountsAndNeverExpires_WarnsWithoutRefusing()
     {
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
 
         Assert.That(provider.FindAll($"[data-testid='{SharedPermanentMarker}']"), Is.Empty,
@@ -652,9 +687,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
 
         provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
 
@@ -675,9 +710,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => provider.FindAll($"[data-testid='{SummaryMarker}']").Count > 0);
 
         Assert.That(Button(provider, SubmitMarker).TextContent, Does.Contain("Retry Fabrikam HR"));
@@ -693,12 +728,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 2);
 
         Assert.That(_runs[1].Accounts.Select(a => a.ConnectedSystemName), Is.EqualTo(new[] { "Fabrikam HR" }));
@@ -714,12 +749,12 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Unreachable.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 2);
 
         Assert.Multiple(() =>
@@ -740,9 +775,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         provider.WaitForElement("[data-testid='jim-password-guidance-toggle']").Click();
@@ -843,9 +878,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         Assert.Multiple(() =>
@@ -867,9 +902,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         var rows = provider.FindAll($"[data-testid='{ResultMarker}']").Select(r => r.TextContent).ToList();
@@ -893,7 +928,7 @@ public class SetPasswordDialogTests : JimComponentTestContext
         var provider = ShowDialog(allowSelection: true);
         TickAccount(provider, 0);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         Assert.Multiple(() =>
@@ -916,9 +951,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Contoso AD"] = PasswordSetResult.Failed(PasswordSetFailureReason.Transient, "Unreachable.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         // One leg, between the failed first step and the second.
@@ -941,9 +976,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         Assert.That(provider.FindComponents<MudAlert>()
@@ -963,9 +998,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         Assert.That(provider.FindComponents<MudAlert>()
@@ -986,9 +1021,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         var rows = provider.FindAll($"[data-testid='{ResultMarker}']");
@@ -1009,9 +1044,9 @@ public class SetPasswordDialogTests : JimComponentTestContext
         _resultsBySystem["Fabrikam HR"] = PasswordSetResult.Failed(PasswordSetFailureReason.PolicyRejection, "Refused.");
 
         var provider = ShowDialog(allowSelection: true);
-        Button(provider, SelectAllMarker).Click();
+        Click(provider, SelectAllMarker);
         Generate(provider);
-        Button(provider, SubmitMarker).Click();
+        Click(provider, SubmitMarker);
         provider.WaitForState(() => _runs.Count == 1);
 
         var markers = provider.FindAll($"[data-testid='{RailMarker}'] .jim-password-rail-marker")

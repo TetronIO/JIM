@@ -65,6 +65,8 @@ A queued deprovision is distinguished from an ordinary **Export queued** because
 !!! note "Applies to new runs"
     Outcomes recorded before this distinction existed remain as they were written, so a deprovisioning cascade on an older Activity still reads **Export queued**. Runs from this version onwards use the new outcome.
 
+A Deletion Rule that evaluates and decides *not* to delete records nothing, because nothing happened, so the causality views show an **Identity not deleted** step in the Identity column with the reason beside it ("an authoritative source is still connected"). The rule that decided it is available underneath as **Deletion Rule in force at the time**, collapsed, and is the rule as it was recorded at the moment of the decision rather than the object type's current configuration.
+
 ### Caused by
 
 The causality panel answers "what did this run do?", reading downstream. Beneath it, **Caused by** answers the opposite question: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it.
