@@ -2875,6 +2875,15 @@ public class ConnectedSystemServer
                     ItemType = HierarchyItemType.Partition
                 });
 
+                // Record every container in the new partition as matched, for the same reason a new container
+                // under an existing partition is (see MatchContainersRecursive): the removal pass below walks
+                // every partition, this one included, and deletes anything it does not find in matchedContainers.
+                // A container the directory has just reported is matched by definition. Without this, the first
+                // retrieval on a Connected System discovered the whole hierarchy, reported it as added, and then
+                // threw it away before the save, so nothing appeared until the button was pressed again (#1369).
+                foreach (var newContainer in newPartition.Containers)
+                    MarkContainerTreeMatched(newContainer, matchedContainers);
+
                 // Count all new containers within the new partition
                 CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
             }
