@@ -140,6 +140,28 @@
                         }
                     </span>
 
+                    @* How many objects are in there, which is what the selection decision actually turns on. Read
+                       from the Connected System during the hierarchy retrieval, so it is there before anything has
+                       been imported. Absent where the Connector cannot report counts; a zero is the Connector
+                       having looked and found nothing, which is a different and useful statement. *@
+                    @if (container.ObjectCount is { } directCount)
+                    {
+                        var subtreeCount = container.SubtreeObjectCount ?? directCount;
+                        var shownCount = isOneLevel ? directCount : subtreeCount;
+
+                        @* The figure follows the Scope control rather than sitting statically beside it: narrowing
+                           a Container to This level changes which number is the relevant one, and showing the
+                           subtree total next to a One Level statement would overstate what the row imports. *@
+                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                            <TooltipContent>
+                                <TooltipText Text="@CountExplanation(directCount, subtreeCount, isOneLevel)" />
+                            </TooltipContent>
+                            <ChildContent>
+                                <span class="jim-picker-objects" data-testid="jim-picker-objects">@shownCount.ToString("N0")</span>
+                            </ChildContent>
+                        </MudTooltip>
+                    }
+
                     @* What has already been decided about this Container and by which of its ancestors, rather than
                        leaving a row greyed out with no explanation. A Container inside an exclusion says so too:
                        rendered plain it would read as "nothing has been decided here", when something has. *@
@@ -326,6 +348,27 @@
     /// </remarks>
     private static string DecidingContainerName(ConnectedSystemContainer container) =>
         ContainerSelectionEditor.DecidingAncestor(container)?.Name ?? "a Container above";
+
+    /// <summary>
+    /// What the object count on a row means, said in terms of the Container Scope the row is currently set to.
+    /// </summary>
+    /// <remarks>
+    /// The figure alone is ambiguous on a Container with children: it could be what sits directly in it or what
+    /// its whole branch holds, and those differ by orders of magnitude on a real directory. The tooltip states
+    /// which one is on screen and what the other would be, so narrowing the Scope is an informed move rather than
+    /// one made to find out.
+    /// </remarks>
+    internal static string CountExplanation(int directCount, int subtreeCount, bool isOneLevel)
+    {
+        var objects = directCount == 1 ? "1 object" : $"{directCount:N0} objects";
+
+        if (directCount == subtreeCount)
+            return $"This Container holds {objects}, counted in the Connected System when the hierarchy was last retrieved.";
+
+        return isOneLevel
+            ? $"This Container holds {objects} directly, which is what This level imports. Its whole branch holds {subtreeCount:N0}."
+            : $"This Container and everything beneath it hold {subtreeCount:N0} objects, which is what This and below imports. {objects} sit directly in it.";
+    }
 
     private static string RowClass(ConnectedSystemContainer container)
     {

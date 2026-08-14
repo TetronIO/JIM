@@ -3426,6 +3426,19 @@ html[lang] .jim-password-guidance.mud-alert {
     text-align: right;
 }
 
+/* How many objects a Container holds (#1276). Right-aligned and tabular so a column of them can be compared down
+   the tree, which is the whole point of putting the figure on the row; the Container names beside them are
+   indented by depth and cannot be. Weighted a step above the meta text beside it because the number is what the
+   selection decision turns on, not a footnote to it. */
+.jim-picker-objects {
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 4.5rem;
+    text-align: right;
+    color: var(--mud-palette-text-primary);
+}
+
 .jim-picker-scope {
     display: inline-flex;
     align-items: center;
