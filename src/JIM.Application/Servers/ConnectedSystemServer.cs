@@ -4995,12 +4995,21 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+        var partitions = await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+
+        foreach (var partition in partitions)
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return partitions;
     }
 
     public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
+        var partition = await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
+        if (partition != null)
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return partition;
     }
 
     /// <summary>
