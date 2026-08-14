@@ -184,6 +184,16 @@ A Container can be selected or excluded, never both. An exclusion beneath a **Th
 
 Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer), and previewable before they are made with `excludedContainerIds` on the scope-selection preview endpoint or [`New-JIMConfigurationChangePreview -ExcludedContainerIds`](../powershell/previews.md#new-jimconfigurationchangepreview).
 
+A whole scope of selections and exclusions can also be stated at once as text, which is how a directory with hundreds of Containers is practically managed:
+
+```text
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+```
+
+See [Stating Container Scope as text](../configuration/connected-systems.md#stating-container-scope-as-text-advanced-mode) for the full syntax, the portal's **Advanced** mode, and the [`Get-`](../powershell/connected-systems.md#get-jimconnectedsystemcontainerscopetext) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md#set-jimconnectedsystemcontainerscopetext) cmdlets.
+
 ### Credentials
 
 | Setting | Description | Example |
