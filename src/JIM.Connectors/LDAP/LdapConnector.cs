@@ -354,7 +354,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
                 throw new InvalidOperationException("No connection available to count Container objects with");
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
-            var containerCounts = new LdapConnectorContainerCounts(_connection, logger, rootDse.SupportsPaging);
+            var containerCounts = new LdapConnectorContainerCounts(
+                new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
 
             return await containerCounts.CountAsync(connectorPartition, objectTypeNames, cancellationToken);
         }
