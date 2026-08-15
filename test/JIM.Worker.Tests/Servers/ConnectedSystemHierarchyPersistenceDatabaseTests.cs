@@ -371,4 +371,89 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
                 "Scope says how far a Container's statement reaches, whether that statement is a selection or an exclusion");
         }
     }
+
+    /// <summary>
+    /// The discovered hierarchy for the merge-driven tests below: one naming context holding two containers, which
+    /// is the shape an LDAP Connected System presents on its first import.
+    /// </summary>
+    private static List<ConnectorPartition> DiscoveredHierarchy() =>
+    [
+        new()
+        {
+            Id = "dc=yellowstone,dc=local",
+            Name = "dc=yellowstone,dc=local",
+            Containers =
+            [
+                new ConnectorContainer("ou=People,dc=yellowstone,dc=local", "People"),
+                new ConnectorContainer("ou=Groups,dc=yellowstone,dc=local", "Groups")
+            ]
+        }
+    ];
+
+    /// <summary>
+    /// The first import against a Connected System with no partitions yet must keep the containers it discovered.
+    /// </summary>
+    /// <remarks>
+    /// The regression guard for #1369, which fixed the fault but shipped without one. It goes through
+    /// <see cref="ConnectedSystemServer.MergeHierarchy"/> rather than hand-building the graph, and that is the whole
+    /// point: the tests above construct a new partition and its containers directly, so they never ran the merge's
+    /// removal pass and stayed green while the real retrieval path was broken. Containers are recorded as matched
+    /// while the merge walks each EXISTING partition, and a later pass deletes every container not in that set so a
+    /// container moved between parents survives; a NEW partition took a different branch and never recorded its
+    /// containers, so the removal pass deleted every one of them. The partitions saved, the containers vanished, and
+    /// the refresh still reported them as added.
+    ///
+    /// What an administrator saw: add a Connected System, retrieve the hierarchy, and the partitions appear with no
+    /// containers to select. A second retrieval populated them, because by then the partitions existed and the merge
+    /// took the matching branch instead.
+    /// </remarks>
+    [Test]
+    public async Task MergeHierarchy_FirstImportOnSystemWithNoPartitions_KeepsTheDiscoveredContainersAsync()
+    {
+        var systemId = await SeedAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+            Assert.That(system.Partitions is null || system.Partitions.Count == 0, Is.True,
+                "the seeded Connected System must start with no partitions, so this exercises the first-import path");
+
+            ConnectedSystemServer.MergeHierarchy(system, DiscoveredHierarchy());
+            Assert.That(system.Partitions!.Single().Containers, Has.Count.EqualTo(2),
+                "the merge must leave the discovered containers attached to the new partition; a failure here is the merge losing them before persistence is even reached");
+
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        await using var verify = NewContext();
+        var containers = await verify.ConnectedSystemContainers.ToListAsync();
+        Assert.That(containers.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Groups" }),
+            "the containers discovered under a brand-new partition must persist on the FIRST import; without them an " +
+            "administrator has nothing to select and has to import a second time");
+    }
+
+    /// <summary>
+    /// Re-importing an unchanged hierarchy must be a no-op: the same containers, neither duplicated by the adding
+    /// branch nor deleted by the removal pass.
+    /// </summary>
+    [Test]
+    public async Task MergeHierarchy_RepeatImportOfUnchangedHierarchy_LeavesTheSameContainersAsync()
+    {
+        var systemId = await SeedAsync();
+
+        for (var pass = 0; pass < 2; pass++)
+        {
+            await using var ctx = NewContext();
+            var repository = new PostgresDataRepository(ctx);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+            ConnectedSystemServer.MergeHierarchy(system, DiscoveredHierarchy());
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        await using var verify = NewContext();
+        var containers = await verify.ConnectedSystemContainers.ToListAsync();
+        Assert.That(containers.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Groups" }),
+            "a repeat import of an unchanged hierarchy must leave exactly the same containers");
+    }
 }
