@@ -3333,17 +3333,34 @@ public class ConnectedSystemServer
     {
         var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
 
+        // Each of the things below that can go partly right writes a warning here rather than straight onto the
+        // Activity, which only has room for one message: a hierarchy that both failed to enumerate and failed to
+        // count used to report whichever happened to run last.
+        var warnings = new List<string>();
+
         // Counted against the same directory state that produced the hierarchy, and before the merge, because the
         // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
         // exist to hang the figures on.
-        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, activity);
+        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, warnings);
         if (partitions.Count == 0)
         {
             // Zero partitions almost always means the connector could not enumerate them (connection,
             // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
             // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+            warnings.Add("The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.");
         }
+
+        // A partition whose count was cut short has its figures discarded, so say so. Blank counts otherwise look
+        // exactly like a Connected System that cannot count at all, and only one of those is worth acting on.
+        var incompleteCounts = ContainerObjectCounts.DescribeIncompleteCounts(partitions
+            .Where(partition => objectCounts.ContainsKey(partition.Id))
+            .Select(partition => (partition.Name, objectCounts[partition.Id])));
+
+        if (incompleteCounts != null)
+            warnings.Add(incompleteCounts);
+
+        if (warnings.Count > 0)
+            activity.WarningMessage = string.Join(" ", warnings);
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);
@@ -3368,6 +3385,13 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// What an administrator is told when the count threw rather than merely stopping short. Held as a constant so
+    /// that a Connected System whose every partition fails says it once instead of once per partition.
+    /// </summary>
+    private const string CountFailedWarning =
+        "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+
+    /// <summary>
     /// Asks the Connector how many objects each Container holds, one partition at a time (#1276).
     /// </summary>
     /// <remarks>
@@ -3384,7 +3408,7 @@ public class ConnectedSystemServer
         ConnectedSystem connectedSystem,
         IConnectorPartitions partitionsConnector,
         List<ConnectorPartition> partitions,
-        Activity activity)
+        List<string> warnings)
     {
         var countsByPartition = new Dictionary<string, ConnectorContainerObjectCountResult>(StringComparer.OrdinalIgnoreCase);
         if (partitionsConnector is not IConnectorContainerObjectCounts countingConnector)
@@ -3413,7 +3437,8 @@ public class ConnectedSystemServer
                 Log.Warning(ex, "CountContainerObjectsAsync: could not count objects in partition {Partition} of {ConnectedSystem}",
                     LogSanitiser.Sanitise(partition.Name), connectedSystem.Id);
 
-                activity.WarningMessage = "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+                if (!warnings.Contains(CountFailedWarning))
+                    warnings.Add(CountFailedWarning);
             }
         }
 
