@@ -606,23 +606,13 @@
                                 <MudTd DataLabel="Value">
                                     @if (context.ReferenceValue != null)
                                     {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default">@context.ReferenceValue.Type.Name</MudChip>
-                                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                                                @context.ReferenceValue.NameOrId
-                                            </MudLink>
-                                            @if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
-                                            {
-                                                <MudText Class="mud-text-secondary">
-                                                    (@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</MudText>
-                                                }
-                                            </MudStack>
-                                        }
-            else
-                                        {
-                                            <MudText>@context.Value</MudText>
-                                        }
-                                    </MudTd>
+                                        <CsoReferenceLink ReferenceValue="@context.ReferenceValue" />
+                                    }
+                                    else
+                                    {
+                                        <MudText>@context.Value</MudText>
+                                    }
+                                </MudTd>
                                 </RowTemplate>
                                 <NoRecordsContent>
                                     <MudText Class="pa-4">No attribute changes recorded.</MudText>

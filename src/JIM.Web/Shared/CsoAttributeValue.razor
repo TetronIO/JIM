@@ -9,18 +9,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 {
-    <span class="jim-attr-reference">
-        <MudChip T="string" Color="Color.Default" Class="mr-1">
-            @Value.ReferenceValue.Type.Name
-        </MudChip>
-        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(Value.ReferenceValue)">
-            @Value.ReferenceValue.NameOrId
-        </MudLink>
-        @if (Value.ReferenceValue.SecondaryExternalIdAttributeValue != null)
-        {
-            <span class="mud-text-secondary jim-text-code ml-1">- @Value.ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName()</span>
-        }
-    </span>
+    <CsoReferenceLink ReferenceValue="@Value.ReferenceValue" />
 }
 else if (Value.UnresolvedReferenceValue != null)
 {
