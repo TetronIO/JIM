@@ -2848,6 +2848,13 @@ public class ConnectedSystemServer
                     ItemType = HierarchyItemType.Partition
                 });
 
+                // A new partition's containers are matched by construction: they were built from what the directory
+                // just reported, so nothing else in this refresh will claim them. Recording them is what keeps them,
+                // because the removal pass below runs over EVERY partition and deletes any container it does not find
+                // in this set. Without this a first import silently discarded every container it had just discovered:
+                // the partitions saved, the containers did not, and the refresh still reported them as added.
+                MarkContainersMatchedRecursive(newPartition.Containers, matchedContainers);
+
                 // Count all new containers within the new partition
                 CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
             }
@@ -3251,6 +3258,23 @@ public class ConnectedSystemServer
         foreach (var child in container.ChildContainers)
         {
             CollectRemovedContainerRecursive(child, result);
+        }
+    }
+
+    /// <summary>
+    /// Records a container and its whole subtree as matched, so the removal pass that follows a hierarchy merge
+    /// keeps them. Used for the containers of a newly discovered partition, which are matched by construction:
+    /// they were built from what the Connected System just reported.
+    /// </summary>
+    private static void MarkContainersMatchedRecursive(IEnumerable<ConnectedSystemContainer>? containers, HashSet<ConnectedSystemContainer> matchedContainers)
+    {
+        if (containers == null)
+            return;
+
+        foreach (var container in containers)
+        {
+            matchedContainers.Add(container);
+            MarkContainersMatchedRecursive(container.ChildContainers, matchedContainers);
         }
     }
 
