@@ -1185,6 +1185,7 @@ public partial class SyncRepository
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ProvisioningSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.QueuedByRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

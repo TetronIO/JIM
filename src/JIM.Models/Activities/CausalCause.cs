@@ -27,6 +27,19 @@ public class CausalCause
     public ActivityRunProfileExecutionItem? RunProfileExecutionItem { get; init; }
 
     /// <summary>
+    /// The id of the Run Profile Execution Item that recorded the causing event, for a cause that was
+    /// persisted in an earlier run and so is known only by id.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="RunProfileExecutionItem"/> covers a cause captured in the same run as its effect, where the
+    /// item has no id yet. An export runs long after the synchronisation that queued it, in a different
+    /// Activity, so its cause is the opposite case: the id is all there is, and the item itself is not loaded.
+    /// Set one or the other, never both; the reference wins where both are present, since it is the more
+    /// specific of the two.
+    /// </remarks>
+    public Guid? RunProfileExecutionItemId { get; init; }
+
+    /// <summary>
     /// The specific sync outcome node that was the causing event, if one was recorded.
     /// </summary>
     public ActivityRunProfileExecutionItemSyncOutcome? SyncOutcome { get; init; }
@@ -107,6 +120,9 @@ public class CausalCause
             // causing records have no ids yet either; every persistence path resolves all four together via
             // CausalEdge.ResolveTransientReferences once they do.
             CauseRunProfileExecutionItem = RunProfileExecutionItem,
+            // Already-known ids are set straight onto the edge; ResolveTransientReferences leaves a populated
+            // id alone, so a reference (where there is one) still overwrites this at persistence time.
+            CauseRunProfileExecutionItemId = RunProfileExecutionItemId,
             CauseSyncOutcome = SyncOutcome,
             CauseMetaverseObjectId = MetaverseObjectId,
             CauseConnectedSystemObjectId = ConnectedSystemObjectId,

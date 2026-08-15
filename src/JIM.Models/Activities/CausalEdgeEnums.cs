@@ -38,7 +38,25 @@ public enum CausalEdgeType
     /// an edge because reconciliation correlates only by Connected System Object id, and an object
     /// can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle.
     /// </summary>
-    ExportCausedImportConfirmation = 2
+    ExportCausedImportConfirmation = 2,
+
+    /// <summary>
+    /// The synchronisation that staged a Pending Export caused the export run that carried it out. The
+    /// two sit in different Activities, minutes or days apart, so the executing item cannot otherwise say
+    /// why it exported anything.
+    /// </summary>
+    /// <remarks>
+    /// The PRD expected this hop to be free, on the grounds that
+    /// <see cref="ActivityRunProfileExecutionItem.PendingExportId"/> already links the queueing item to the
+    /// executing one. It does not. That column is populated only on a <c>PendingExport</c>-type item (a
+    /// provisioning export with no Connected System Object yet) and is null on every ordinary <c>Exported</c>
+    /// item, so there is nothing to walk back along; the export path had no cause at all, which is the very
+    /// defect this feature exists to remove.
+    ///
+    /// An edge is also the only durable answer. The Pending Export row is deleted the moment the export
+    /// succeeds, so a link derived from it after the fact could never be resolved.
+    /// </remarks>
+    PendingExportQueueingCausedExportExecution = 3
 }
 
 /// <summary>

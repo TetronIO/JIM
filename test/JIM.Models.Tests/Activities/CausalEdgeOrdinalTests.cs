@@ -29,7 +29,8 @@ public class CausalEdgeOrdinalTests
     {
         [CausalEdgeType.MetaverseObjectDeletionCausedDeprovision] = 0,
         [CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval] = 1,
-        [CausalEdgeType.ExportCausedImportConfirmation] = 2
+        [CausalEdgeType.ExportCausedImportConfirmation] = 2,
+        [CausalEdgeType.PendingExportQueueingCausedExportExecution] = 3
     };
 
     /// <summary>

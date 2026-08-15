@@ -254,4 +254,45 @@ public class CausalityCauseWordingTests
             Assert.That(CausalityCauseWording.HideMembersLabel(ReferenceRemovalCohort(10)), Is.EqualTo("Hide the 10 Users"));
         });
     }
+
+    #region the synchronisation that queued an export (#1223)
+
+    private static CausalChainCohort QueueingCohort(string? displayName = "Project-AgileCore")
+    {
+        return new CausalChainCohort
+        {
+            EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
+            ConnectedSystemId = 4,
+            ConnectedSystemName = "Glitterband EMEA",
+            Members = [new CausalChainMember { DisplayName = displayName }]
+        };
+    }
+
+    /// <summary>
+    /// The sentence an export item leads with. It has to answer "why did this run change anything", which is
+    /// the question an export item could not previously answer at all.
+    /// </summary>
+    [Test]
+    public void Sentence_QueueingCohort_NamesTheSynchronisationThatStagedTheChange()
+    {
+        var sentence = CausalityCauseWording.Sentence(QueueingCohort(), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "A synchronisation of Project-AgileCore staged this change, and this run exported it"));
+    }
+
+    /// <summary>
+    /// An export staged before the cause was recorded, or against an object whose name was never snapshotted,
+    /// still states what happened rather than falling silent on a blank name.
+    /// </summary>
+    [Test]
+    public void Sentence_QueueingCohortWithNoName_StillStatesWhatHappened()
+    {
+        var sentence = CausalityCauseWording.Sentence(QueueingCohort(displayName: null), effectName: null);
+
+        Assert.That(Read(sentence), Is.EqualTo(
+            "A synchronisation of 1 object staged this change, and this run exported it"));
+    }
+
+    #endregion
 }

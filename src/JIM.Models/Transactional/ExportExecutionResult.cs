@@ -175,4 +175,43 @@ public class ProcessedExportItem
     /// Null when the export succeeded.
     /// </summary>
     public ConnectedSystemExportErrorType? ErrorType { get; set; }
+
+    /// <summary>
+    /// The Pending Export this item carried out, captured before it is deleted. Identifies the export cycle
+    /// on the causal edge recording why the export happened (#1223).
+    /// </summary>
+    public Guid? PendingExportId { get; set; }
+
+    /// <summary>
+    /// The Metaverse Object whose change produced the Pending Export, copied from
+    /// <see cref="PendingExport.SourceMetaverseObjectId"/>.
+    /// </summary>
+    public Guid? SourceMetaverseObjectId { get; set; }
+
+    /// <summary>
+    /// The Run Profile Execution Item of the synchronisation that staged the Pending Export, copied from
+    /// <see cref="PendingExport.QueuedByRunProfileExecutionItemId"/>. Null for an export staged before that
+    /// was recorded, or by a path that had no execution item to name.
+    /// </summary>
+    public Guid? QueuedByRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
+    /// Copies the identifiers that say why this export happened off the Pending Export being carried out, and
+    /// returns this item so it can be captured in a single expression at each call site.
+    /// </summary>
+    /// <remarks>
+    /// A method rather than three assignments repeated per site: the export path builds these items in eight
+    /// places, and a set of provenance fields that has to be remembered eight times is a set that will be
+    /// forgotten in the ninth. The Pending Export row is deleted the moment the export succeeds, so a field
+    /// missed here cannot be recovered afterwards.
+    /// </remarks>
+    public ProcessedExportItem WithCauseFrom(PendingExport export)
+    {
+        ArgumentNullException.ThrowIfNull(export);
+
+        PendingExportId = export.Id;
+        SourceMetaverseObjectId = export.SourceMetaverseObjectId;
+        QueuedByRunProfileExecutionItemId = export.QueuedByRunProfileExecutionItemId;
+        return this;
+    }
 }

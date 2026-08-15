@@ -42,6 +42,13 @@ public static class CausalityCauseWording
                     $"{Subject(cohort)} {(plural ? "were" : "was")} exported, and this import confirms {(plural ? "them" : "it")}"));
                 break;
 
+            case CausalEdgeType.PendingExportQueueingCausedExportExecution:
+                // Neutral about what the synchronisation did, deliberately: this one seam covers an update and a
+                // deprovision alike, and the effect outcome beside it already says which.
+                parts.Add(new CausalityCauseSentencePart(
+                    $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"));
+                break;
+
             case CausalEdgeType.MetaverseObjectDeletionCausedDeprovision:
                 parts.Add(new CausalityCauseSentencePart(
                     $"{Subject(cohort)} {(plural ? "were" : "was")} deleted, so this deprovisioning was queued"));

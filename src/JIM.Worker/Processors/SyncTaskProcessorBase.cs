@@ -1756,6 +1756,11 @@ public abstract class SyncTaskProcessorBase
             // Collect Pending Exports for batch saving at end of page
             if (result.PendingExports.Count > 0)
             {
+                // Name this synchronisation as the reason each export exists, before the export run that
+                // carries it out (a different Activity, minutes or days later) is left holding a queued change
+                // it cannot explain (#1223). Deliberately outside the outcome-tracking guard below: why a
+                // change happened is not a level of detail an administrator can turn off.
+                StampQueueingItemOnPendingExports(mvo.Id, result.PendingExports);
                 _pendingExportsToCreate.AddRange(result.PendingExports);
             }
 
@@ -2810,6 +2815,37 @@ public abstract class SyncTaskProcessorBase
         _pendingExportEvaluations.Clear();
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Names this synchronisation's Run Profile Execution Item on each Pending Export it just staged, so the
+    /// export run that carries them out can say what caused it (#1223).
+    /// </summary>
+    /// <remarks>
+    /// The two runs are separated by an Activity boundary and often by days, and nothing else spans it: the
+    /// export's own item carries no <c>PendingExportId</c> (that column is populated only on a
+    /// <see cref="ObjectChangeType.PendingExport"/>-type item), and the Pending Export row is deleted the moment
+    /// the export succeeds, so a link derived afterwards could never resolve.
+    ///
+    /// The item's id is assigned here rather than read, because the page flush writes Pending Exports before it
+    /// persists Run Profile Execution Items and it is the persistence that would otherwise assign one. Reading
+    /// the id as it stands would store <see cref="Guid.Empty"/> on every export. Assigning early is safe: the
+    /// flush only fills an id in where one is missing.
+    /// </remarks>
+    /// <param name="metaverseObjectId">The object being synchronised, which keys the per-object item map.</param>
+    /// <param name="pendingExports">The exports staged for that object during this evaluation.</param>
+    protected void StampQueueingItemOnPendingExports(Guid metaverseObjectId, List<PendingExport> pendingExports)
+    {
+        // Not every run records an item per object; those exports simply carry no queueing item, and the
+        // causality chain ends at the Metaverse Object rather than walking on to the run that staged them.
+        if (!_mvoIdToRpei.TryGetValue(metaverseObjectId, out var queueingItem))
+            return;
+
+        if (queueingItem.Id == Guid.Empty)
+            queueingItem.Id = Guid.NewGuid();
+
+        foreach (var pendingExport in pendingExports)
+            pendingExport.QueuedByRunProfileExecutionItemId = queueingItem.Id;
     }
 
     /// <summary>
@@ -4790,6 +4826,14 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ObjectChangeType = ObjectChangeType.DriftCorrection;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            // Name this drift correction as the reason the corrective exports exist (#1223). Without it the
+            // export run reads as an ordinary update, with nothing to say the values it is putting back were
+            // changed behind JIM's back.
+            if (runProfileExecutionItem.Id == Guid.Empty)
+                runProfileExecutionItem.Id = Guid.NewGuid();
+            foreach (var correctiveExport in result.CorrectiveExports)
+                correctiveExport.QueuedByRunProfileExecutionItemId = runProfileExecutionItem.Id;
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                 SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,

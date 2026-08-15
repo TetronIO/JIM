@@ -34,7 +34,7 @@ These were settled before planning and are recorded in the PRD; the plan impleme
 ### Current state
 
 - `ActivityRunProfileExecutionItem` (Guid key) holds a tree of `ActivityRunProfileExecutionItemSyncOutcome` (Guid key) nodes describing what happened to **one object in one run**.
-- `ActivityRunProfileExecutionItem.PendingExportId` already links the item that queued a Pending Export to the item that executed it. The PRD requires this be reused, not duplicated.
+- `ActivityRunProfileExecutionItem.PendingExportId` was expected to link the item that queued a Pending Export to the item that executed it, and the PRD required it be reused rather than duplicated. It does not: the column is populated only on a `PendingExport`-type item, and is null on every ordinary `Exported` one. See "Which hops earn an edge" below.
 - Connected System Object and Metaverse Object ids (both Guid) already answer "what else happened to this object".
 - Nothing links a cause and an effect on two *different* objects, which is exactly the Project-Pulse case.
 
@@ -136,7 +136,7 @@ Given both, edges are buffered on the Run Profile Execution Item they explain (`
 
 An edge is only worth writing where the link **cannot** be read off what is already persisted. A sync outcome tree is itself a causal structure: `SyncOutcomeBuilder` parents each consequence under the event that caused it, within one item. Writing an edge alongside a parent/child pair that already says the same thing costs rows on the deletion hot path and makes the Phase 1d affordance restate what the tree above it is already showing.
 
-This is the same test the PRD applies when it rejects the queueing-to-executing hop ("`ActivityRunProfileExecutionItem.PendingExportId` already expresses it"), applied consistently. Three hops from this plan's first draft fail it and are **dropped**:
+This is the same test the PRD applies to each hop in turn, applied consistently. Three hops from this plan's first draft fail it and are **dropped**:
 
 | Dropped hop | Already expressed by |
 |---|---|
@@ -152,12 +152,20 @@ What remains is exactly the set that crosses a Run Profile Execution Item or Act
 | Metaverse Object deletion to deprovisioning Pending Export (standalone fallback) | `SyncTaskProcessorBase.ReportDeletionCascadeExportsAsync` | The fallback builds a **separate** item when no `MvoDeleted` node can be found to parent onto, leaving the export with no recorded cause |
 | Grace-period deletion to its deprovisioning and recall | `Worker.PerformMetaverseObjectHousekeepingAsync` | Runs in a **different Activity** from the disconnect that scheduled it, so nothing links the two. Without this, grace-period deployments get no provenance at all |
 | Export execution to confirming import | `SyncImportTaskProcessor.ReconcilePendingExportsAsync` | Reconciliation correlates only by `ConnectedSystemObjectId`, and an object can cycle through export and import repeatedly, so an id-only join can pick the wrong cycle |
+| Synchronisation to export execution | `SyncTaskProcessorBase.EvaluateOutboundExportsAsync` (capture) and `SyncExportTaskProcessor.PersistBatchRpeisAsync` (write) | The export runs in a **different Activity**, often days later, holding only a queue of changes. The hop was assumed free via `PendingExportId`; that column is null on every `Exported` item, so an export had no cause at all |
 
-All four are implemented. The fourth cost more than the others, which is a reason to plan it, not to drop it: the hop is either reconstructable from what is already persisted or it is not, and it is not.
+All five are implemented. The fourth cost more than the others, which is a reason to plan it, not to drop it: the hop is either reconstructable from what is already persisted or it is not, and it is not.
 
 - It needed a **schema change**, because what distinguishes one export cycle from the next is the Pending Export and the edge had no column for one. `CausePendingExportId` is a snapshot scalar like the rest of the cause side, which suits it exactly: reconciliation deletes the confirmed Pending Export moments after writing the edge, so a foreign key was never an option. Storing the id also keeps the import hot path free of lookups; the read path resolves back to the export item, which carries the same id, best-effort like every other cause reference.
 - It needed a **fourth persistence path** wired. Confirming imports merge outcomes onto already-persisted items via `BulkUpdateRpeiOutcomesAsync`, which is neither of the two paths inside `BulkInsertRpeisAsync` nor the EF path.
 - No reason code: the effect outcome already distinguishes confirmed from failed, and cohorts are computed per effect, so a code would add nothing to group on.
+
+The fifth was the late one, added after Phase 1d shipped and an export item was found rendering no "Caused by" whatsoever. It is the plainest instance of the defect the whole feature exists to remove, and it was missed because the PRD asserted the link already existed rather than checking. Two lessons worth carrying: a "free" link is only free once someone has read the column's population, not its name; and the export path deserved the same scrutiny as the deletion cascade despite looking mundane, because it is by far the most common thing an administrator opens.
+
+- It needed a **schema change**, `PendingExport.QueuedByRunProfileExecutionItemId`, for the same reason `ProvisioningSyncRuleId` beside it exists: the fact is knowable exactly once, when the change is staged, and is needed much later by a different run. Unconstrained, like the cause side of an edge, because the staging Activity ages out long before the exports it explains.
+- The capture assigns the Run Profile Execution Item's id rather than reading it. The page flush writes Pending Exports **before** it persists the items, and it is the persistence that assigns ids, so reading would store `Guid.Empty` every time. Assigning early is safe; the flush only fills in an id where one is missing.
+- The staging paths that have no execution item in hand (the deletion cascade and grace-period housekeeping stage through `ExportEvaluationServer`, which is deliberately Activity-unaware) record no queueing item. Those exports still get an edge, naming the source Metaverse Object, so the chain reads and simply ends at the identity rather than walking on. Making export evaluation Activity-aware to close that gap was rejected: it is the export hot path, and synchronisation integrity outranks a diagnostic.
+- No reason code: the effect outcome already distinguishes an export from a deprovision.
 
 Phase 1d collapses confirming-import hops by default as low-signal, which governs how prominently the segment is *rendered*; it says nothing about whether the link should be recorded. An unrecorded hop cannot be expanded when someone does want it.
 

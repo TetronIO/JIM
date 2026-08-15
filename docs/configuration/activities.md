@@ -85,6 +85,17 @@ The chain always says why it ends, because the three reasons mean entirely diffe
 
 A cause that was recorded on a different execution item links to it, so a long chain can be walked one page at a time. A cause recorded on the item you are already looking at is shown without a link.
 
+#### Why an export happened
+
+An export run is the common case of a run whose reason lies elsewhere. It holds a queue of changes to make and nothing more; the synchronisation that decided on a given change ran in a different Activity, often days earlier. An export item therefore reads "A synchronisation of Project-AgileCore staged this change, and this run exported it", linking to the synchronisation that staged it, whose own causes continue above it. Follow that link and a deletion cascade, a scope change or an attribute flow is one more hop up the chain.
+
+This is the one link JIM cannot work out after the event, because a queued change is deleted the moment its export succeeds. It is therefore recorded as the change is staged, which has two consequences worth knowing:
+
+- Changes queued **before** you upgraded to a version carrying this carry no cause, and their export items say so. Once they have exported, every later export is covered.
+- A few staging paths have no execution item to name, notably a deletion cascade and grace-period housekeeping. Those exports name the Identity behind the change instead, and the chain ends at that Identity rather than walking on to a run. The Identity's own page carries the rest of the story.
+
+Deprovisioning exports read the same way, and an export staged by drift correction names the drift correction that staged it, so an export putting a value back reads as the enforcement it is rather than as an ordinary update.
+
 ## Scheduled Identity Deletion
 
 When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it, queues deletes for any accounts covered by an export Synchronisation Rule whose [Deprovisioning Action](synchronisation-rules.md#deprovisioning-action) is Delete, and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Scheduled Identity Deletion** activity, with an execution item per deleted Metaverse Object, per staged membership-removal Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. Deprovisioning deletes are reported on the deleted object's own item, nested beneath its **MVO Deleted** outcome, exactly as on a synchronisation run. A quiet housekeeping pass with nothing to delete records no activity.

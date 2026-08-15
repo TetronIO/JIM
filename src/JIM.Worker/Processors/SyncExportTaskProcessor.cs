@@ -407,6 +407,7 @@ public class SyncExportTaskProcessor
             }
 
             // Build sync outcome
+            ActivityRunProfileExecutionItemSyncOutcome? exportOutcome = null;
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
                 var outcomeType = exportItem.ChangeType switch
@@ -414,9 +415,14 @@ public class SyncExportTaskProcessor
                     PendingExportChangeType.Delete => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
                     _ => ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 };
-                SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
+                exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
             }
+
+            // Record why this export happened (#1223). An export run knows only that it had a queue of changes
+            // to make; the synchronisation that put this one in the queue ran in a different Activity, and the
+            // Pending Export carrying the link is deleted moments from now.
+            ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome, _connectedSystem);
 
             // Create CSO change record for export change history
             if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)
