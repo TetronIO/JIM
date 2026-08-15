@@ -18,6 +18,16 @@ internal interface ILdapOperationExecutor
     DirectoryResponse SendRequest(DirectoryRequest request);
 
     /// <summary>
+    /// Sends an LDAP request synchronously, giving up if the directory has not answered within the timeout.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="SendRequest(DirectoryRequest)"/>, which waits as long as the connection's own
+    /// timeout allows. Used where a slow directory must not be allowed to hold up something an administrator is
+    /// waiting on, such as the Container object counts folded into a hierarchy retrieval.
+    /// </remarks>
+    DirectoryResponse SendRequest(DirectoryRequest request, TimeSpan timeout);
+
+    /// <summary>
     /// Sends an LDAP request asynchronously using the APM pattern wrapper.
     /// Enables concurrent LDAP operations on the same connection via message-ID multiplexing.
     /// </summary>

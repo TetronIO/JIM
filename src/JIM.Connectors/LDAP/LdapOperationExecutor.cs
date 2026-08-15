@@ -21,6 +21,9 @@ internal class LdapOperationExecutor : ILdapOperationExecutor
     public DirectoryResponse SendRequest(DirectoryRequest request)
         => _connection.SendRequest(request);
 
+    public DirectoryResponse SendRequest(DirectoryRequest request, TimeSpan timeout)
+        => _connection.SendRequest(request, timeout);
+
     public Task<DirectoryResponse> SendRequestAsync(DirectoryRequest request)
         => _connection.SendRequestAsync(request);
 }
