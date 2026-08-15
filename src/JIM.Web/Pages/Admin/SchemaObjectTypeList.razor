@@ -439,12 +439,26 @@
         var filtered = headers.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(request.SearchText))
             filtered = filtered.Where(x => x.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
+        // Each filter's value is copied to a local before the lambda closes over it. Nullable flow analysis does
+        // not cross a lambda boundary, so CodeQL reads `_x.Value` inside one as an unguarded dereference however
+        // airtight the HasValue above it is (the rule is in src/CLAUDE.md). It is also the more correct shape:
+        // Where() defers, so a lambda closing over the field would read whatever the field holds at enumeration
+        // rather than what it held when the filter was chosen.
         if (_deletionRuleFilter.HasValue)
-            filtered = filtered.Where(x => x.DeletionRule == _deletionRuleFilter.Value);
+        {
+            var deletionRule = _deletionRuleFilter.Value;
+            filtered = filtered.Where(x => x.DeletionRule == deletionRule);
+        }
         if (_predefinedSearchesFilter.HasValue)
-            filtered = filtered.Where(x => x.HasPredefinedSearches == _predefinedSearchesFilter.Value);
+        {
+            var hasPredefinedSearches = _predefinedSearchesFilter.Value;
+            filtered = filtered.Where(x => x.HasPredefinedSearches == hasPredefinedSearches);
+        }
         if (_objectTypeBuiltInFilter.HasValue)
-            filtered = filtered.Where(x => x.BuiltIn == _objectTypeBuiltInFilter.Value);
+        {
+            var builtIn = _objectTypeBuiltInFilter.Value;
+            filtered = filtered.Where(x => x.BuiltIn == builtIn);
+        }
 
         Func<MetaverseObjectTypeHeader, object> sortKey = request.SortBy switch
         {
