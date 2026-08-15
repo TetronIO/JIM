@@ -176,18 +176,22 @@ public class PaletteTokenConventionTests
             if (lines[i].TrimStart().StartsWith("*", StringComparison.Ordinal) || lines[i].Contains("/*", StringComparison.Ordinal))
                 continue;
 
-            foreach (Match match in Regex.Matches(lines[i], @"var\(\s*(--mud-palette-[a-z0-9-]+)"))
+            // Hoisted out of the projection below because it is a property of the line, not of any one token on
+            // it: an exemption comment above a declaration exempts every token that declaration reads.
+            if (HasExemptionMarker(lines, i))
+                continue;
+
+            var lineNumber = i + 1;
+
+            // One pipeline rather than a foreach that maps its iteration variable and then guards the body: the
+            // two halves are flagged separately (Select and Where), and converting only one leaves the other.
+            foreach (var offender in Regex.Matches(lines[i], @"var\(\s*(--mud-palette-[a-z0-9-]+)")
+                         .Select(match => match.Groups[1].Value)
+                         .Select(token => (token, setters: themes.SettersByToken.TryGetValue(token, out var found) ? found.Count : 0))
+                         .Where(candidate => candidate.setters != themes.ThemeCount)
+                         .Select(candidate => new Offender(relativePath, lineNumber, candidate.token, candidate.setters)))
             {
-                var token = match.Groups[1].Value;
-                var setters = themes.SettersByToken.TryGetValue(token, out var found) ? found.Count : 0;
-
-                if (setters == themes.ThemeCount)
-                    continue;
-
-                if (HasExemptionMarker(lines, i))
-                    continue;
-
-                yield return new Offender(relativePath, i + 1, token, setters);
+                yield return offender;
             }
         }
     }
