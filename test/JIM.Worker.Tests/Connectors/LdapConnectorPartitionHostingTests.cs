@@ -83,8 +83,8 @@ public class LdapConnectorPartitionHostingTests
         var hostedPartition = new ConnectedSystemPartition { Name = "corp.example.com", ExternalId = "DC=corp,DC=example,DC=com" };
         var selectedPartitions = new List<ConnectedSystemPartition> { hostedPartition };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger), Throws.Nothing);
     }
 
     [Test]
@@ -100,8 +100,8 @@ public class LdapConnectorPartitionHostingTests
         var hostedPartition = new ConnectedSystemPartition { Name = "corp.example.com", ExternalId = "DC=corp,DC=example,DC=com" };
         var selectedPartitions = new List<ConnectedSystemPartition> { hostedPartition };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger), Throws.Nothing);
     }
 
     #endregion
@@ -123,8 +123,8 @@ public class LdapConnectorPartitionHostingTests
             new() { Name = "fabrikam.local", ExternalId = "DC=fabrikam,DC=local" }
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger), Throws.Nothing);
     }
 
     [Test]
@@ -142,8 +142,8 @@ public class LdapConnectorPartitionHostingTests
             new() { Name = "fabrikam.local", ExternalId = "DC=fabrikam,DC=local" }
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger), Throws.Nothing);
     }
 
     #endregion
@@ -165,8 +165,8 @@ public class LdapConnectorPartitionHostingTests
             new() { Name = "fabrikam.local", ExternalId = "DC=fabrikam,DC=local" }
         };
 
-        Assert.DoesNotThrow(() =>
-            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger));
+        Assert.That(() =>
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, selectedPartitions, Logger), Throws.Nothing);
     }
 
     #endregion

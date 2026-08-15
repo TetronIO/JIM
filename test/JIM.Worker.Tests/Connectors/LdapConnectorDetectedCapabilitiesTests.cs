@@ -113,7 +113,7 @@ public class LdapConnectorDetectedCapabilitiesTests
     {
         List<ConnectorCapability>? capabilities = null;
 
-        Assert.DoesNotThrow(() => capabilities = _connector.GetDetectedCapabilities("{not valid json", Logger));
+        Assert.That(() => capabilities = _connector.GetDetectedCapabilities("{not valid json", Logger), Throws.Nothing);
 
         Assert.That(capabilities, Is.Empty);
     }

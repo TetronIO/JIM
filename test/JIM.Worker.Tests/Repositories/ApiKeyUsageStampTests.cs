@@ -102,6 +102,6 @@ public class ApiKeyUsageStampTests
     [Test]
     public void RecordUsageAsync_UnknownKey_DoesNotThrow()
     {
-        Assert.DoesNotThrowAsync(async () => await _repository.ApiKeys.RecordUsageAsync(Guid.NewGuid(), "203.0.113.7"));
+        Assert.That(async () => await _repository.ApiKeys.RecordUsageAsync(Guid.NewGuid(), "203.0.113.7"), Throws.Nothing);
     }
 }

@@ -394,16 +394,17 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     /// The first import against a Connected System with no partitions yet must keep the containers it discovered.
     /// </summary>
     /// <remarks>
-    /// This goes through <see cref="ConnectedSystemServer.MergeHierarchy"/> rather than hand-building the graph, and
-    /// that is the whole point: the tests above construct a new partition and its containers directly, so they never
-    /// ran the merge's removal pass and stayed green while the real import path was broken. Containers are recorded
-    /// as matched while the merge walks each EXISTING partition, and a later pass deletes every container not in that
-    /// set so a container moved between parents survives; a NEW partition took a different branch and never recorded
-    /// its containers, so the removal pass deleted every one of them. The partitions saved, the containers vanished,
-    /// and the refresh still reported them as added.
+    /// The regression guard for #1369, which fixed the fault but shipped without one. It goes through
+    /// <see cref="ConnectedSystemServer.MergeHierarchy"/> rather than hand-building the graph, and that is the whole
+    /// point: the tests above construct a new partition and its containers directly, so they never ran the merge's
+    /// removal pass and stayed green while the real retrieval path was broken. Containers are recorded as matched
+    /// while the merge walks each EXISTING partition, and a later pass deletes every container not in that set so a
+    /// container moved between parents survives; a NEW partition took a different branch and never recorded its
+    /// containers, so the removal pass deleted every one of them. The partitions saved, the containers vanished, and
+    /// the refresh still reported them as added.
     ///
     /// What an administrator saw: add a Connected System, retrieve the hierarchy, and the partitions appear with no
-    /// containers to select. A second import populated them, because by then the partitions existed and the merge
+    /// containers to select. A second retrieval populated them, because by then the partitions existed and the merge
     /// took the matching branch instead.
     /// </remarks>
     [Test]

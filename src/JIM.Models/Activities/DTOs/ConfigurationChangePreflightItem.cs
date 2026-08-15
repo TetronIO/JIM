@@ -44,6 +44,18 @@ public class ConfigurationChangePreflightItem
     public bool IsCollectionItem { get; init; }
 
     /// <summary>
+    /// What a collection item's arrival or departure actually did, where "Added" and "Removed" would misdescribe it;
+    /// null everywhere else, leaving the plain reading to stand.
+    /// </summary>
+    /// <remarks>
+    /// A Connected System Container carved out of a selection is the case this exists for. Only the Containers an
+    /// administrator has said something about are captured, so excluding one puts it into the snapshot for the first
+    /// time and it arrives as an addition, identically to selecting one. Described from the arrival alone, the
+    /// confirmation reads "Added" over prose about objects coming into scope, at the moment they are leaving it.
+    /// </remarks>
+    public string? CollectionItemVerb { get; init; }
+
+    /// <summary>
     /// The value before the change, rendered for display. Null when the property is being added, or when the value
     /// is a secret (secrets are reported as changed and never by value).
     /// </summary>

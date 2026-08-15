@@ -57,7 +57,12 @@
                         }
                     </span>
 
-                    <MudCheckBox T="bool" Value="@container.Selected" Dense="true" Disabled="@container.Included"
+                    @* An excluded Container's tick box is disabled rather than hidden: ticking it would clear the
+                       exclusion too, by a second route meaning something different from Include beside it. One row
+                       states one thing, so it offers one action. A Container inside an exclusion keeps its tick box,
+                       because ticking that one is meaningful: it brings the branch back into scope. *@
+                    <MudCheckBox T="bool" Value="@container.Selected" Dense="true"
+                                 Disabled="@(container.Included || container.Excluded)"
                                  ValueChanged="@(_ => ToggleSelectedAsync(container))"
                                  aria-label="@($"Manage {container.Name}")" />
 
@@ -70,11 +75,48 @@
                         <span class="jim-picker-name">@ContainerDisplayName.RelativeTo(container.Name, Partition.Name)</span>
                     </MudTooltip>
 
-                    @* Scope only means anything on a selected Container, so the control only appears on one. Both
-                       states are visible rather than one being hidden behind a hover, because scope decides what
-                       the next import returns. *@
+                    @* One column, one offer: the scope control where the row is selected, and the single action that
+                       makes sense where the row has one. Keeping them in the same column is what stops the actions
+                       staggering down the tree, and means no row grows a column its neighbours do not have. *@
                     <span class="jim-picker-scope">
-                        @if (container.Selected)
+                        @if (container.Excluded)
+                        {
+                            @* Include hands the Container back to whatever its ancestors say, rather than selecting
+                               it. Visible at rest, unlike Exclude below: an exclusion is a deliberate configuration
+                               and undoing it should not require discovering a hover. *@
+                            <MudTooltip Arrow="true" Placement="Placement.Top">
+                                <TooltipContent>
+                                    <TooltipText Text="@($"Stop carving this Container out of {DecidingContainerName(container)}. Its objects are imported again, as are those in every Container beneath it.")" />
+                                </TooltipContent>
+                                <ChildContent>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Class="jim-picker-action"
+                                               data-testid="jim-picker-include"
+                                               OnClick="@(() => ToggleExcludedAsync(container))">
+                                        Include
+                                    </MudButton>
+                                </ChildContent>
+                            </MudTooltip>
+                        }
+                        else if (container.Included)
+                        {
+                            @* Exclusion is meaningful on exactly the rows a selection above already reaches, so this
+                               is the only state that offers it. It appears on hover and on keyboard focus (see
+                               .jim-picker-action in site.css): a directory whose selected branch covers two hundred
+                               OUs would otherwise carry two hundred buttons at rest. *@
+                            <MudTooltip Arrow="true" Placement="Placement.Top">
+                                <TooltipContent>
+                                    <TooltipText Text="@($"Carve this Container out of {DecidingContainerName(container)}. Its objects are left unimported, as are those in every Container beneath it.")" />
+                                </TooltipContent>
+                                <ChildContent>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Class="jim-picker-action"
+                                               data-testid="jim-picker-exclude"
+                                               OnClick="@(() => ToggleExcludedAsync(container))">
+                                        Exclude
+                                    </MudButton>
+                                </ChildContent>
+                            </MudTooltip>
+                        }
+                        else if (container.Selected)
                         {
                             <MudTooltip Arrow="true" Placement="Placement.Top">
                                 <TooltipContent>
@@ -98,12 +140,43 @@
                         }
                     </span>
 
-                    @* Why a Container cannot be ticked, rather than leaving it greyed out with no explanation *@
+                    @* How many objects are in there, which is what the selection decision actually turns on. Read
+                       from the Connected System during the hierarchy retrieval, so it is there before anything has
+                       been imported. Absent where the Connector cannot report counts; a zero is the Connector
+                       having looked and found nothing, which is a different and useful statement. *@
+                    @if (container.ObjectCount is { } directCount)
+                    {
+                        var subtreeCount = container.SubtreeObjectCount ?? directCount;
+                        var shownCount = isOneLevel ? directCount : subtreeCount;
+
+                        @* The figure follows the Scope control rather than sitting statically beside it: narrowing
+                           a Container to This level changes which number is the relevant one, and showing the
+                           subtree total next to a One Level statement would overstate what the row imports. *@
+                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                            <TooltipContent>
+                                <TooltipText Text="@CountExplanation(directCount, subtreeCount, isOneLevel)" />
+                            </TooltipContent>
+                            <ChildContent>
+                                <span class="jim-picker-objects" data-testid="jim-picker-objects">@shownCount.ToString("N0")</span>
+                            </ChildContent>
+                        </MudTooltip>
+                    }
+
+                    @* What has already been decided about this Container and by which of its ancestors, rather than
+                       leaving a row greyed out with no explanation. A Container inside an exclusion says so too:
+                       rendered plain it would read as "nothing has been decided here", when something has. *@
                     <span class="jim-picker-meta">
-                        @if (container.Included)
+                        @if (container.Excluded)
                         {
-                            var coveringName = CoveringContainerName(container);
-                            <span data-testid="jim-picker-covered">Covered by @coveringName</span>
+                            <span class="jim-picker-meta-excluded" data-testid="jim-picker-excluded">Excluded from @DecidingContainerName(container)</span>
+                        }
+                        else if (container.Included)
+                        {
+                            <span data-testid="jim-picker-covered">Covered by @DecidingContainerName(container)</span>
+                        }
+                        else if (container.ExcludedByAncestor)
+                        {
+                            <span data-testid="jim-picker-excluded-by-ancestor">Excluded by @DecidingContainerName(container)</span>
                         }
                         else if (container.ChildContainers.Count > 0)
                         {
@@ -154,6 +227,12 @@
     private async Task ToggleSelectedAsync(ConnectedSystemContainer container)
     {
         ContainerSelectionEditor.ToggleSelected(container);
+        await EditedAsync();
+    }
+
+    private async Task ToggleExcludedAsync(ConnectedSystemContainer container)
+    {
+        ContainerSelectionEditor.ToggleExcluded(container);
         await EditedAsync();
     }
 
@@ -260,17 +339,35 @@
     }
 
     /// <summary>
-    /// The nearest ancestor whose search already returns this Container's objects, for the row to name.
+    /// The ancestor whose statement decided this Container's state, for the row to name.
     /// </summary>
-    private static string CoveringContainerName(ConnectedSystemContainer container)
-    {
-        for (var ancestor = container.ParentContainer; ancestor != null; ancestor = ancestor.ParentContainer)
-        {
-            if (ancestor.Selected && ancestor.Scope == ConnectedSystemContainerScope.Subtree)
-                return ancestor.Name;
-        }
+    /// <remarks>
+    /// The walk itself is <see cref="ContainerSelectionEditor.DecidingAncestor"/>'s, so that the Container a row
+    /// names is the same one that set the row's state. The fallback covers an exclusion nothing reaches, which the
+    /// portal never offers but a hierarchy refresh or another surface can leave behind.
+    /// </remarks>
+    private static string DecidingContainerName(ConnectedSystemContainer container) =>
+        ContainerSelectionEditor.DecidingAncestor(container)?.Name ?? "a Container above";
 
-        return "a Container above";
+    /// <summary>
+    /// What the object count on a row means, said in terms of the Container Scope the row is currently set to.
+    /// </summary>
+    /// <remarks>
+    /// The figure alone is ambiguous on a Container with children: it could be what sits directly in it or what
+    /// its whole branch holds, and those differ by orders of magnitude on a real directory. The tooltip states
+    /// which one is on screen and what the other would be, so narrowing the Scope is an informed move rather than
+    /// one made to find out.
+    /// </remarks>
+    internal static string CountExplanation(int directCount, int subtreeCount, bool isOneLevel)
+    {
+        var objects = directCount == 1 ? "1 object" : $"{directCount:N0} objects";
+
+        if (directCount == subtreeCount)
+            return $"This Container holds {objects}, counted in the Connected System when the hierarchy was last retrieved.";
+
+        return isOneLevel
+            ? $"This Container holds {objects} directly, which is what This level imports. Its whole branch holds {subtreeCount:N0}."
+            : $"This Container and everything beneath it hold {subtreeCount:N0} objects, which is what This and below imports. {objects} sit directly in it.";
     }
 
     private static string RowClass(ConnectedSystemContainer container)
@@ -280,7 +377,11 @@
         if (container.Selected)
             classes += " jim-picker-row-selected";
 
-        if (container.Included)
+        if (container.Excluded)
+            classes += " jim-picker-row-excluded";
+
+        // Both say "an ancestor has already decided this", which is what the muted treatment marks.
+        if (container.Included || container.ExcludedByAncestor)
             classes += " jim-picker-row-covered";
 
         return classes;

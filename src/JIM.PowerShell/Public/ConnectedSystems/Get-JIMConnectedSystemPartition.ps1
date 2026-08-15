@@ -17,10 +17,33 @@ function Get-JIMConnectedSystemPartition {
     .OUTPUTS
         PSCustomObject representing the partitions with their containers.
 
+        Each partition carries: id, name, externalId, selected, connectedSystemId, containers.
+
+        Each container carries: id, name, externalId, description, hidden, selected, excluded,
+        scope, partitionId, connectedSystemId, childContainers, and the object counts read from
+        the Connected System when the hierarchy was last retrieved:
+
+          objectCount        How many objects sit directly in this Container.
+          subtreeObjectCount That count plus every descendant Container's, which is what a
+                             Subtree statement over the Container reaches.
+
+        Both are $null where the Connector cannot report counts, or the hierarchy has not been
+        retrieved since counting was introduced. Zero and $null mean different things: zero is a
+        Container that was searched and found empty, $null is one nobody has counted.
+
     .EXAMPLE
         Get-JIMConnectedSystemPartition -ConnectedSystemId 1
 
         Gets all partitions for Connected System 1.
+
+    .EXAMPLE
+        (Get-JIMConnectedSystemPartition -ConnectedSystemId 1).containers |
+            Where-Object { $_.objectCount -gt 0 } |
+            Select-Object name, objectCount, subtreeObjectCount |
+            Sort-Object subtreeObjectCount -Descending
+
+        Lists the Containers holding objects, largest branch first, to decide which are worth
+        managing before selecting any of them.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Name "Samba AD*" | ForEach-Object {

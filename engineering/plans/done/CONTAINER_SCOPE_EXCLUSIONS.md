@@ -1,10 +1,10 @@
 # Container Scope: Exclusions and Advanced Mode
 
-- **Status:** Doing (Phases 1-3 complete; portal next)
+- **Status:** Done (all phases complete)
 - **Issue**: [#1255](https://github.com/TetronIO/JIM/issues/1255)
 - **Related Issues**: [#351](https://github.com/TetronIO/JIM/issues/351) (Phase 1, OneLevel scope, landed), [#827](https://github.com/TetronIO/JIM/issues/827) (Configuration Change Preview), [#1250](https://github.com/TetronIO/JIM/issues/1250) (export managed scope), [#266](https://github.com/TetronIO/JIM/issues/266) (closed duplicate)
 - **Related Plans**: [`CONFIGURATION_CHANGE_PREVIEW.md`](CONFIGURATION_CHANGE_PREVIEW.md)
-- **Last Updated**: 2026-08-11
+- **Last Updated**: 2026-08-12 (Phase 7 completed)
 
 ## Overview
 
@@ -88,7 +88,10 @@ The picker already computes coverage and disables a Container that an ancestor's
 | Selected | (scope control) | Whole subtree / This level |
 | Covered by an ancestor | "Covered by *X*" | **Exclude** |
 | Excluded | "Excluded from *X*" | **Include** |
+| Excluded by an ancestor | "Excluded by *X*" | tick box |
 | Neither | (Container count) | tick box |
+
+*(The fourth row was added during Phase 4. Rendered plain, a Container inside a carve-out reads as "nothing has been decided here" when something has, and ticking it is meaningful where ticking a covered one is not: it brings the branch back into scope.)*
 
 An exclusion beneath a `OneLevel` parent is inert, and falls out of the design for free: such a row is not Covered, so it is never offered Exclude.
 
@@ -126,17 +129,36 @@ Connector-side honouring via the shared predicate (full import, delta paths, exp
 
 *Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone. `ou=Corp` selected as a subtree imported 4 objects; excluding `ou=Service Accounts` beneath it imported 2 and logged "Discarded 2 entries read from excluded Containers across 1 exclusion(s)" attributed to that Container; selecting `ou=App1` beneath the exclusion brought its service account back, importing 3 and discarding 1.*
 
-**Phase 4: Portal.**
+**Phase 4: Portal.** ✅
 The four row states above in `ScopedHierarchyPicker`, with the selection rules themselves in `ContainerSelectionEditor` where they stay unit-testable without rendering, plus bUnit coverage of the state transitions.
 
-**Phase 5: Surface parity.**
+*Landed, as **five** row states rather than four. The model's `ExcludedByAncestor` needed one of its own: a Container inside a carve-out rendered plain reads as "nothing has been decided here" when something has, and ticking it is meaningful (it brings the branch back), which is what separates it from a covered row. Both actions sit in the column the scope control already occupies, so no row grows a sixth column and the actions line up down the tree. **Exclude** appears on hover and on keyboard focus, because every Container beneath a selected branch is a candidate for it; **Include** stays at rest, because an exclusion is a deliberate configuration that should be reversible without discovering a hover. An excluded row's tick box is disabled: ticking it would clear the exclusion by a second route meaning something different from the Include beside it. `ContainerSelectionEditor.DecidingAncestor` names the Container that decided a row, walking the hierarchy the way `ApplyContainerInclusion` does so a row can never name one Container while another governs it, and the scope summary reports how many Containers are excluded where there are any.*
+
+**Phase 5: Surface parity.** ✅
 `Excluded` on `UpdateConnectedSystemContainerRequest` and the read DTOs; `Set-JIMConnectedSystemContainer -Excluded` with Pester coverage; docs for both.
 
-**Phase 6: Change classification, consequences and preview.**
+*Landed with Phase 4 rather than after it, per the surface-parity rule: portal-only editing would have left administrators unable to script the thing they most often script. Both surfaces refuse the contradiction with a 400, evaluated against the state the request would leave behind, so naming one half against a stored other is refused too and stating both halves is how a Container moves from a selection to an exclusion. This is the API-boundary rejection Phase 2 deferred to the phase that first exposes the field.*
+
+**Phase 6: Change classification, consequences and preview.** ✅
 An `"excluded"` key in `ConfigurationChangeConsequences` classified as a scope reduction (as the `"scope"` narrowing already is); the preview counts objects leaving scope through an exclusion; `SyncImportTaskProcessor`'s "Container Scope" unresolved-reference cause covers exclusions in its prose.
 
-**Phase 7: Advanced Mode.**
-Parser and canonical text projection, wildcard support, resolution against the hierarchy with hard errors on unresolvable paths, the itemised lossy-downgrade confirmation, and parity across all three surfaces.
+*The classification and consequences half landed with Phases 4 and 5, because shipping settable exclusions without it meant an administrator could carve out a branch and save in silence while narrowing a Container to One Level warned. It could not be done in isolation: the configuration snapshot captured selected Containers only, so an exclusion left no trace in the change history at all, and the same filter dropped any Container captured only as the route to a statement below it (losing a selection on a nested Container, and every re-inclusion inside an exclusion). Containers are now captured when they state something or hold something that does, with selection and exclusion both recorded by presence. A collection item can also carry a truer word than "Added" for what it did, because an exclusion arrives in the snapshot as a whole node exactly as a selection does, and the confirmation otherwise described a carve-out as an addition over prose about objects coming into scope.*
+
+*The remaining three landed together, all of them about an exclusion being visible rather than silent.*
+
+- ***The preview already counted objects leaving through an exclusion; nothing could ask it to.** `ConnectedSystemScope` has resolved exclusions since Phase 3, and the portal builds its proposal from the edited graph, so the portal could preview a carve-out from the day it could make one. The REST endpoint carried the stored exclusions forward with a comment saying Phase 5 would let callers propose them, and Phase 5 shipped the write surfaces without it. `ExcludedContainerIds` now exists on the request and on `New-JIMConfigurationChangePreview`, with the same omitted-means-unchanged and empty-means-lift semantics the selection lists carry, and a Container named in both lists is refused with a 400 rather than resolved. The adapter had one genuine gap the tests found: a proposal that brings scope in by **lifting** an exclusion moves no tick box, so `SelectsSomethingNew` read it as bringing nothing in and the "objects JIM has never imported cannot be counted" finding never fired.*
+- ***The Activity's discard count needed an informational channel, and the stat counter table was already one.** `(ActivityId, Dimension, Key, Count)` is the shape, and its incremental upsert is what makes a paged import's per-page reports add up; a new `ExcludedContainer` dimension carries them, and the counts travel from the Connector on `ConnectedSystemImportResult` so they are a Connector contract rather than an LDAP detail. Two consequences worth recording. Finalisation could no longer wipe an Activity's counters wholesale before recomputing them, because a discarded entry produced no Run Profile Execution Item to recompute from; `RunProfileExecutionStatsDimensions.RecomputedFromExecutionItems` now names what finalisation owns, stated positively rather than as an exception at the delete. And the key is the Container's **id**: the key column holds 200 characters and Distinguished Names do not, and a count is a historical record that has to survive the Container being renamed, so the portal resolves the name at read time through a new Summary-tier projection and says plainly when the Container has since gone.*
+- ***The unresolved-reference prose named one of the two ways an object leaves scope.** "Make sure Container Scope includes the location of the referenced object" is unhelpful advice when an exclusion is what took it out: the branch above the object is selected, so an administrator checks the tick box, finds it ticked, and has learnt nothing.*
+
+*Runtime-verified against OpenLDAP on the sandbox light stack, not by unit tests alone: `ou=Corp` selected as a subtree with `ou=Service Accounts` excluded and `ou=App1` re-included beneath it discarded exactly one entry, attributed to the excluded Container, surviving the Activity's completion (which is what the finalisation carve-out exists for) and read back through `Get-JIMActivityStats`.*
+
+**Phase 7: Advanced Mode.** ✅
+Parser and canonical text projection, resolution against the hierarchy with hard errors on unresolvable paths, and parity across all three surfaces.
+
+- ***The text is an editor for the Container rows, resolved at save; it is not a stored list of paths.** This plan rejects "an exclusion list of Distinguished Names" under Rejected Alternatives because such a list breaks on rename, and Advanced Mode is a list of Distinguished Names, so the same objection had to be answered rather than inherited. It is answered by where the text lives: `ContainerScopeText.Apply` resolves each path against the discovered hierarchy once and writes `Selected` / `Excluded` / `Scope` onto the rows, which are keyed on `StableId`. A rename in the directory therefore moves the selection with the Container exactly as the tree's does, and the next projection writes the new path out. Nothing in the scope engine, the import, the export or the preview knows Advanced Mode exists.*
+- ***Wildcards were deliberately not built, and that removed a whole phase's worth of machinery.** They were the only reason the two modes could express different things, so without them the projection round-trips exactly and the "itemised lossy-downgrade confirmation" this plan specified has nothing to itemise: switching to Simple simply applies the text. The plan's success criterion about a path resolving to nothing raising an error "on the run" likewise falls away, because an unresolvable path can no longer be saved to meet a run. What is lost is authoring a path for a Container the hierarchy has not discovered yet; that is a real capability, and the case for it should come from someone who wants it rather than from this plan.*
+- ***Applied all-or-nothing, and redundancy is an error rather than a normalisation.** Half an applied scope is objects silently leaving import scope, which is the failure this whole feature exists to remove, so a text with any problem changes nothing and reports every problem at once against its line. Restating what an ancestor already says is refused for a subtler reason: the canonical projection never writes such a line, so dropping it silently would hand back text differing from the text just saved, and honouring it would leave a Container selected *and* covered, a state the tree cannot reach.*
+- ***The portal's Advanced Mode edits the same in-memory graph the tree does, and saves through the same button.** That is what makes it inherit the confirmation dialog, the Configuration Change Preview link and the versioned snapshot without a line of its own; a second save path would have been a second place for the preview-to-save audit trail to be wrong.*
 
 ## Success Criteria
 

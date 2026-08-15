@@ -28,6 +28,7 @@ New-JIMConfigurationChangePreview -MetaverseObjectTypeId <int>
 
 New-JIMConfigurationChangePreview -ConnectedSystemId <int>
     [-SelectedPartitionIds <int[]>] [-SelectedContainerIds <int[]>]
+    [-ExcludedContainerIds <int[]>]
     [-FullDataSet] [-Wait] [-TimeoutSeconds <int>]
 ```
 
@@ -41,6 +42,7 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 | `ConnectedSystemId` | `int` | Yes | | The Connected System whose partition and container selection is being proposed. Accepts pipeline input by property name. |
 | `SelectedPartitionIds` | `int[]` | No | stored selection | The partitions that would be managed. |
 | `SelectedContainerIds` | `int[]` | No | stored selection | The containers that would be managed. Selecting a container selects its whole subtree, so a descendant does not need listing. |
+| `ExcludedContainerIds` | `int[]` | No | stored exclusions | The containers that would be carved out of the selection around them. A container is selected or excluded, never both; naming one in both lists is refused. |
 | `DeletionRule` | `string` | No | stored value | `Manual`, `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `TimeSpan` | No | stored value | The proposed grace period. `[TimeSpan]::Zero` previews no grace period. |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | stored value | The proposed authoritative sources. |
@@ -53,7 +55,7 @@ Which identifier you pass selects the surface: `-MetaverseObjectTypeId` previews
 
 An omitted deletion setting previews the stored value, exactly as [`Set-JIMMetaverseObjectType`](metaverse.md#set-jimmetaverseobjecttype) treats an omitted parameter. Pass the same parameters to both and the preview describes precisely what the change will do.
 
-An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container.
+An omitted selection list likewise previews the stored selection. Pass the whole selection rather than one flag, because what a deselection costs depends on the rest of it: an object leaves import scope only when nothing else still covers it. An **empty** list is a real proposal and is sent as one, so `-SelectedContainerIds @()` previews deselecting every container, and `-ExcludedContainerIds @()` previews lifting every exclusion, which brings those branches back into scope.
 
 ### Output
 
@@ -83,6 +85,13 @@ if (-not $preview.HasFailed -and $preview.ImpactCounts.Count -eq 0) {
 $current = Get-JIMConnectedSystemPartition -ConnectedSystemId 2
 $keep = $current.containers | Where-Object { $_.selected -and $_.name -ne 'Contractors' }
 $preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -SelectedContainerIds $keep.id -Wait
+$preview.ImpactCounts | Format-Table TransitionType, ObjectCount
+```
+
+```powershell title="Preview excluding a container"
+$current = Get-JIMConnectedSystemPartition -ConnectedSystemId 2
+$carveOut = $current.containers | Where-Object name -eq 'Service Accounts'
+$preview = New-JIMConfigurationChangePreview -ConnectedSystemId 2 -ExcludedContainerIds $carveOut.id -Wait
 $preview.ImpactCounts | Format-Table TransitionType, ObjectCount
 ```
 

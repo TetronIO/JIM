@@ -826,13 +826,13 @@ Set-JIMConnectedSystemPartition -ConnectedSystemId 3 -PartitionId 1 -Selected $f
 
 ## Set-JIMConnectedSystemContainer
 
-Updates the selection state and scope of a container within a partition.
+Updates the selection state, exclusion and scope of a container within a partition.
 
 ### Syntax
 
 ```powershell
 Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
-    [-Selected <bool>] [-Scope <string>] [-PassThru]
+    [-Selected <bool>] [-Excluded <bool>] [-Scope <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -842,6 +842,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId <int> -ContainerId <int>
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
 | `ContainerId` | `int` | Yes | | Container identifier. Alias: `Id`. Accepts pipeline input by property name. |
 | `Selected` | `bool` | No | | Whether this container is selected for synchronisation |
+| `Excluded` | `bool` | No | | Whether this container is carved out of a selection an ancestor made, leaving the objects within it deliberately unimported. Omit to leave the stored exclusion unchanged. |
 | `Scope` | `string` | No | | How far beneath the container objects are imported from: `Subtree` or `OneLevel`. Omit to leave the stored scope unchanged. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated container |
 
@@ -863,6 +864,18 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Selected $t
 Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Scope Subtree
 ```
 
+```powershell title="Exclude a container from the selection above it"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $true
+```
+
+```powershell title="Replace a selection with an exclusion"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Selected $false -Excluded $true
+```
+
+```powershell title="Hand an excluded container back into scope"
+Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $false
+```
+
 ```powershell title="Select multiple containers via pipeline"
 @(7, 8, 9) | ForEach-Object {
     Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId $_ -Selected $true
@@ -874,7 +887,120 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 7 -Scope Subtr
 - The parent partition must also be selected for container selection to take effect during import operations.
 - `Scope` defaults to `Subtree` on containers that have never had it set, which is how container selection behaved before the option existed.
 - Narrowing a container to `OneLevel` takes the objects beneath it out of scope, exactly as deselecting those containers would. The Connected System Objects already imported from them become obsolete on the next import.
+- `Selected` and `Excluded` are mutually exclusive: a container states one thing about itself. A request that would leave both set is rejected with a 400, whether it names both or names one against a stored other, so moving a container from a selection to an exclusion means setting both in the same call.
+- Excluding a container takes the objects within it, and within every container beneath it, out of scope. A container beneath an exclusion can be selected in its own right to bring that branch back, because whichever statement is nearest to an object decides its fate. See [Excluding a Container](../connectors/jim-ldap-connector.md#excluding-a-container).
 - Supports `ShouldProcess` (Medium impact).
+
+---
+
+## Get-JIMConnectedSystemContainerScopeText
+
+Reads a Connected System's Container Scope as text, one statement per line.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
+
+### Output
+
+A `string`: the Container Scope in canonical form, one statement per line, in hierarchy order. Empty where nothing is selected.
+
+Text read here can be passed straight back to `Set-JIMConnectedSystemContainerScopeText`, which leaves the scope exactly as it was.
+
+### Examples
+
+```powershell title="Read the Container Scope"
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3
+```
+
+```text
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+```
+
+```powershell title="Save the Container Scope to a file"
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 | Set-Content ./scope.txt
+```
+
+```powershell title="Copy the Container Scope to another Connected System"
+Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 |
+    Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 4
+```
+
+### Notes
+
+- Every path is the Container's identifier in the Connected System's own terms, which for a directory is its Distinguished Name.
+- Copying a scope between Connected Systems requires the target to have discovered the same Containers; a path naming one it has not is refused.
+
+---
+
+## Set-JIMConnectedSystemContainerScopeText
+
+States a Connected System's whole Container Scope as text.
+
+### Syntax
+
+```powershell
+Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId <int> -Text <string> [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
+| `Text` | `string` | Yes | | The Container Scope to apply. Accepts pipeline input. Empty text clears every selection and exclusion. |
+| `PassThru` | `switch` | No | `$false` | Returns the canonical text for the scope now in force |
+
+Each line is a directive, an optional `one-level`, then the Container's path:
+
+| Statement | Means |
+|---|---|
+| `include <path>` | Manage this Container and everything beneath it. `+` is accepted as shorthand. |
+| `include one-level <path>` | Manage the objects held directly in this Container, and no Container beneath it. |
+| `exclude <path>` | Carve this Container out of the selection an ancestor made. `-` is accepted as shorthand. |
+| `exclude one-level <path>` | Carve out the objects held directly in this Container only. |
+
+Blank lines and whole lines beginning with `#` are ignored.
+
+### Output
+
+When `-PassThru` is specified, returns the canonical Container Scope text as a `string`. Otherwise, no output.
+
+### Examples
+
+```powershell title="State a Container Scope with a carve-out and a re-inclusion"
+Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 -Text @"
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+"@
+```
+
+```powershell title="Apply a Container Scope held in a file"
+Get-Content ./scope.txt -Raw | Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3
+```
+
+```powershell title="Manage only the objects held directly in a container"
+Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 -Text 'include one-level OU=Corp,DC=example,DC=com' -PassThru
+```
+
+### Notes
+
+- The text states the whole of Container Scope rather than a change to it. A Container it does not name states nothing, so omitting a line is how a Container is deselected, and empty text clears the scope entirely.
+- Partition selection is left alone, except that naming a Container selects the partition holding it.
+- It is applied all-or-nothing. A path naming no Container, a Container named twice, and a statement an ancestor already makes are each refused with the line that caused them, and nothing is changed.
+- This is a synchronisation-affecting change: taking a Container out of scope obsoletes the objects imported through it on the next Full Import, and the synchronisation after that disconnects them. Preview it first with [`New-JIMConfigurationChangePreview`](previews.md).
+- Supports `ShouldProcess` (High impact), so it prompts before applying unless you pass `-Confirm:$false`.
 
 ---
 

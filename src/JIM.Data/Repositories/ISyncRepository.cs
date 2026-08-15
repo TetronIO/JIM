@@ -760,6 +760,20 @@ public interface ISyncRepository
     Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases);
 
     /// <summary>
+    /// Records how many entries an import read from the Connected System and discarded because an excluded
+    /// Container carved them out (#1255), keyed by that Container's id.
+    /// </summary>
+    /// <remarks>
+    /// Counts are added to whatever the Activity already holds, so a paged import can call this once per page or
+    /// once at the end and reach the same total. Callers pass only Containers that discarded something; a zero is
+    /// not worth a row, and every Activity would otherwise carry one per excluded Container.
+    ///
+    /// Reporting how a run was performed must never fail it, so callers treat a failure here as cosmetic, exactly
+    /// as they do for <see cref="SaveActivityPhasesAsync"/>.
+    /// </remarks>
+    Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId);
+
+    /// <summary>
     /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
     /// Returns true if raw SQL was used (RPEIs are outside EF tracking),
     /// false if the EF fallback was used (RPEIs remain tracked).

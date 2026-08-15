@@ -125,6 +125,16 @@ A Connected System manages one domain today. During Partition discovery on Activ
 
 If you select a Partition for a domain the connected domain controller does not host, the import fails fast with an error naming the Partition and the domain controller, rather than silently returning zero objects. To manage more than one domain, create a separate Connected System per domain, each with its Host setting pointing at that domain's own domain controllers.
 
+### Referrals
+
+**JIM does not follow LDAP referrals.** A referral is the directory's way of saying "the objects you asked for live on another server"; JIM ignores it and works only with what the connected server returns directly.
+
+This is deliberate. The platform LDAP client will follow a referral, but it does so on a new connection that carries none of the credentials JIM bound with, making the follow-up read anonymous. Active Directory refuses anonymous reads by default, so a chased referral fails, and it fails against the original search rather than against the referral. The result is an access-denied error on a connection that is authenticated and healthy, which is a considerably worse outcome than not following the referral at all.
+
+In practice this affects Partition discovery on Active Directory and Samba AD, where the search for the forest's domain list can return referrals alongside its results. JIM takes the results and discards the referrals.
+
+**What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects today; following referrals with JIM's own credentials, so that the follow-up read is authenticated and every server followed is recorded, is planned.
+
 ### Container Scope
 
 Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Partitions & Containers** tab:
@@ -147,6 +157,42 @@ Scope is also settable from the REST API (`PUT /api/v1/synchronisation/connected
 
 !!! note "Objects that reference something out of scope"
     A reference attribute pointing at an object outside the imported Containers cannot be resolved, and JIM reports it as an unresolved reference naming Container Scope as the likely cause. Narrowing a Container is a common way to create these; if a group's members live in a Container you have just excluded, either bring that Container back into scope or expect the membership to import incompletely.
+
+### Excluding a Container
+
+Service Account, mailbox-archive and staging OUs sitting inside an otherwise wholly-managed branch are the ordinary shape of a production directory. **Exclude** carves one of those out of a selection made above it: select `OU=Corp` as a whole subtree, then exclude `OU=Service Accounts,OU=Corp`, and JIM imports everything in `OU=Corp` except that branch.
+
+The action appears on a Container's row in the tree wherever a selection above already reaches it, which is exactly where an exclusion means anything. An excluded Container reads **Excluded from *X***, naming the selection it was carved out of, and offers **Include** to hand it back. Containers beneath it read **Excluded by *X*** and are left unimported too.
+
+**Whichever statement is nearest to an object decides its fate.** That is what makes re-inclusion work: tick a Container inside an excluded branch and it comes back into scope, along with everything beneath it, while the rest of the exclusion stands. Exclusions and re-inclusions nest to any depth.
+
+Excluding is not the same as selecting the siblings you want. Ticking eleven of twelve sibling OUs looks equivalent, and is silently wrong over time: an OU created under the parent afterwards is not in the enumerated set, so its objects are never imported and nothing says so. An exclusion has the opposite and safer failure mode, because the parent is what was selected: a new OU beneath it is imported.
+
+!!! warning "Excluding a Container takes objects out of scope"
+    Objects already imported from an excluded branch become obsolete on the next Import Run Profile, and whatever they are joined to is deprovisioned on the next synchronisation, exactly as narrowing a Container does. Preview the change before saving.
+
+An exclusion is honoured everywhere the selection is: on Full Import, on the delta paths, and on export, where a write into an excluded branch is refused for the same reason it is refused outside the selected Containers entirely.
+
+It is enforced as entries arrive rather than by searching around the branch, so an exclusion inside a selected branch costs a transfer that produces nothing. **That cost is reported rather than hidden.** An import that discarded entries carries an **Entries Discarded by Container Scope** panel on its Activity, breaking the figure down per excluded Container, and the same counts are in the run's log. A branch of 500,000 objects carved out of a 510,000-object parent then shows up as a number you can act on, by moving the excluded branch outside the selected one, rather than as an unexplained slow import.
+
+!!! note "Why not just search around the excluded branch?"
+    JIM could replace one subtree search with a search per sibling and skip the excluded one, and it deliberately does not. The set of siblings comes from the last **Retrieve Hierarchy**, so a Container created since would be missing from it: its objects would never be searched, never imported, and marked obsolete on the next Full Import. Import scope must not depend on how recently the hierarchy was refreshed, so the transfer cost is accepted and reported instead.
+
+An exclusion survives a rename or a move of the Container, because it is keyed on the directory's own immutable identifier (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP) rather than on the Distinguished Name.
+
+A Container can be selected or excluded, never both. An exclusion beneath a **This level** selection is inert, since such a selection reaches no Container beneath it, and the tree therefore never offers one there.
+
+Exclusions are settable from the REST API (`PUT /api/v1/synchronisation/connected-systems/{id}/containers/{containerId}` with `excluded`) and from PowerShell with [`Set-JIMConnectedSystemContainer -Excluded`](../powershell/connected-systems.md#set-jimconnectedsystemcontainer), and previewable before they are made with `excludedContainerIds` on the scope-selection preview endpoint or [`New-JIMConfigurationChangePreview -ExcludedContainerIds`](../powershell/previews.md#new-jimconfigurationchangepreview).
+
+A whole scope of selections and exclusions can also be stated at once as text, which is how a directory with hundreds of Containers is practically managed:
+
+```text
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+```
+
+See [Stating Container Scope as text](../configuration/connected-systems.md#stating-container-scope-as-text-advanced-mode) for the full syntax, the portal's **Advanced** mode, and the [`Get-`](../powershell/connected-systems.md#get-jimconnectedsystemcontainerscopetext) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md#set-jimconnectedsystemcontainerscopetext) cmdlets.
 
 ### Credentials
 

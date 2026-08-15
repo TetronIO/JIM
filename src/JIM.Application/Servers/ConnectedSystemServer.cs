@@ -368,7 +368,18 @@ public class ConnectedSystemServer
 
     public async Task<ConnectedSystem?> GetConnectedSystemAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(id, withChangeTracking);
+        if (connectedSystem == null)
+            return null;
+
+        // Each Container's own object count is stored; its subtree total is derived, so it has to be rebuilt on
+        // load (#1276). Doing it here rather than at each call site is what stops the portal, the REST API and
+        // PowerShell disagreeing about what a Subtree Container holds; a surface that forgot would silently report
+        // the Container's own count and understate its branch.
+        foreach (var partition in connectedSystem.Partitions ?? [])
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return connectedSystem;
     }
 
     /// <summary>
@@ -529,8 +540,7 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
@@ -565,8 +575,7 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
 
@@ -608,8 +617,7 @@ public class ConnectedSystemServer
         // caller sent, which closes any route that sets Selected outside the validated per-attribute endpoints.
         QuarantineCredentialAttributes(connectedSystem);
 
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
 
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
@@ -638,8 +646,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -652,8 +659,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -666,8 +672,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
@@ -679,8 +684,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
@@ -692,8 +696,7 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task PersistConnectedSystemSchemaUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
@@ -1343,6 +1346,30 @@ public class ConnectedSystemServer
     /// Checks that all setting values are valid, according to business rules.
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    /// <summary>
+    /// Whether a Connected System's settings are complete and well-formed: every required setting has a value, and
+    /// every required-group and required-when constraint declared in the setting metadata is satisfied. Asked of the
+    /// values alone, and never of the target system.
+    /// </summary>
+    /// <remarks>
+    /// This is what <see cref="ConnectedSystem.SettingValuesValid"/> carries, and it is deliberately narrower than
+    /// <see cref="ValidateConnectedSystemSettings"/>. That method also asks the Connector, whose own validation is a
+    /// live probe: the LDAP Connector binds to the directory, the File Connector looks for the file. Persisting the
+    /// answer to a live probe as a property of the configuration means an unreachable target marks stored settings
+    /// invalid, and the portal gates the Schema, Partitions &amp; Containers and Matching tabs on this flag, so saving
+    /// anything at all during a directory outage locked an administrator out of three tabs until somebody re-saved
+    /// the Settings tab. It also put a network round trip on the path of every unrelated save.
+    ///
+    /// Whether the target answers is still reported, where it is actionable: the Settings tab and the settings-writing
+    /// REST endpoint both call <see cref="ValidateConnectedSystemSettings"/> and surface what it finds.
+    /// </remarks>
+    public static bool AreSettingValuesComplete(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        return ConnectorSettingValidator.Validate(connectedSystem.SettingValues).All(r => r.IsValid);
+    }
+
     public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
     {
         ValidateConnectedSystemParameter(connectedSystem);
@@ -2848,12 +2875,14 @@ public class ConnectedSystemServer
                     ItemType = HierarchyItemType.Partition
                 });
 
-                // A new partition's containers are matched by construction: they were built from what the directory
-                // just reported, so nothing else in this refresh will claim them. Recording them is what keeps them,
-                // because the removal pass below runs over EVERY partition and deletes any container it does not find
-                // in this set. Without this a first import silently discarded every container it had just discovered:
-                // the partitions saved, the containers did not, and the refresh still reported them as added.
-                MarkContainersMatchedRecursive(newPartition.Containers, matchedContainers);
+                // Record every container in the new partition as matched, for the same reason a new container
+                // under an existing partition is (see MatchContainersRecursive): the removal pass below walks
+                // every partition, this one included, and deletes anything it does not find in matchedContainers.
+                // A container the directory has just reported is matched by definition. Without this, the first
+                // retrieval on a Connected System discovered the whole hierarchy, reported it as added, and then
+                // threw it away before the save, so nothing appeared until the button was pressed again (#1369).
+                foreach (var newContainer in newPartition.Containers)
+                    MarkContainerTreeMatched(newContainer, matchedContainers);
 
                 // Count all new containers within the new partition
                 CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
@@ -3262,23 +3291,6 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Records a container and its whole subtree as matched, so the removal pass that follows a hierarchy merge
-    /// keeps them. Used for the containers of a newly discovered partition, which are matched by construction:
-    /// they were built from what the Connected System just reported.
-    /// </summary>
-    private static void MarkContainersMatchedRecursive(IEnumerable<ConnectedSystemContainer>? containers, HashSet<ConnectedSystemContainer> matchedContainers)
-    {
-        if (containers == null)
-            return;
-
-        foreach (var container in containers)
-        {
-            matchedContainers.Add(container);
-            MarkContainersMatchedRecursive(container.ChildContainers, matchedContainers);
-        }
-    }
-
-    /// <summary>
     /// Counts the total number of containers across all partitions.
     /// </summary>
     private static int CountAllContainers(IEnumerable<ConnectedSystemPartition>? partitions)
@@ -3320,6 +3332,11 @@ public class ConnectedSystemServer
     private static async Task<HierarchyRefreshResult> RetrieveAndMergeHierarchyAsync(ConnectedSystem connectedSystem, IConnectorPartitions partitionsConnector, Activity activity)
     {
         var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+
+        // Counted against the same directory state that produced the hierarchy, and before the merge, because the
+        // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
+        // exist to hang the figures on.
+        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, activity);
         if (partitions.Count == 0)
         {
             // Zero partitions almost always means the connector could not enumerate them (connection,
@@ -3330,6 +3347,8 @@ public class ConnectedSystemServer
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);
+
+        ApplyContainerObjectCounts(connectedSystem, objectCounts);
 
         // Log the changes
         if (result.HasChanges)
@@ -3346,6 +3365,82 @@ public class ConnectedSystemServer
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Asks the Connector how many objects each Container holds, one partition at a time (#1276).
+    /// </summary>
+    /// <remarks>
+    /// Folded into the hierarchy retrieval rather than offered as a second action, so the Containers and their
+    /// figures always describe the same moment. A Connector that cannot answer returns nothing and the tab simply
+    /// shows no counts.
+    ///
+    /// A failure here must not fail the refresh. The hierarchy is what an administrator asked for and it has
+    /// already been retrieved; losing it because a supplementary count timed out would be a poor trade. The
+    /// Activity carries the warning instead.
+    /// </remarks>
+    /// <returns>Direct counts per Container identifier, keyed by partition external id. Empty when nothing counted.</returns>
+    private static async Task<Dictionary<string, ConnectorContainerObjectCountResult>> CountContainerObjectsAsync(
+        ConnectedSystem connectedSystem,
+        IConnectorPartitions partitionsConnector,
+        List<ConnectorPartition> partitions,
+        Activity activity)
+    {
+        var countsByPartition = new Dictionary<string, ConnectorContainerObjectCountResult>(StringComparer.OrdinalIgnoreCase);
+        if (partitionsConnector is not IConnectorContainerObjectCounts countingConnector)
+            return countsByPartition;
+
+        // A count across Object Types JIM will never import is not a number anyone can act on, so nothing is
+        // counted until the administrator has said what they are managing. The Schema tab sits before Partitions
+        // and Containers, so by the time anyone is choosing Containers this is normally already answered.
+        var objectTypeNames = (connectedSystem.ObjectTypes ?? [])
+            .Where(objectType => objectType.Selected)
+            .Select(objectType => objectType.Name)
+            .ToList();
+
+        if (objectTypeNames.Count == 0)
+            return countsByPartition;
+
+        foreach (var partition in partitions)
+        {
+            try
+            {
+                countsByPartition[partition.Id] = await countingConnector.GetContainerObjectCountsAsync(
+                    connectedSystem.SettingValues, partition, objectTypeNames, Log.Logger, CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warning(ex, "CountContainerObjectsAsync: could not count objects in partition {Partition} of {ConnectedSystem}",
+                    LogSanitiser.Sanitise(partition.Name), connectedSystem.Id);
+
+                activity.WarningMessage = "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+            }
+        }
+
+        return countsByPartition;
+    }
+
+    /// <summary>
+    /// Hangs the Connector's direct counts on JIM's own Containers, and rolls up each one's subtree total.
+    /// </summary>
+    /// <remarks>
+    /// A partition the Connector reported no counts for is left uncounted rather than zeroed: "not counted" and
+    /// "counted, and empty" are different statements, and only one of them says a Container holds nothing. An
+    /// incomplete count is discarded entirely for the same reason, because figures short of the truth read as whole
+    /// and understate what deselecting a Container costs.
+    /// </remarks>
+    private static void ApplyContainerObjectCounts(
+        ConnectedSystem connectedSystem,
+        Dictionary<string, ConnectorContainerObjectCountResult> countsByPartition)
+    {
+        foreach (var partition in connectedSystem.Partitions ?? [])
+        {
+            var counted = countsByPartition.TryGetValue(partition.ExternalId, out var result) && result.Complete
+                ? result.DirectCountsByContainerIdentifier
+                : null;
+
+            ContainerObjectCounts.Apply(partition, counted);
+        }
     }
     #endregion
 
@@ -4909,12 +5004,21 @@ public class ConnectedSystemServer
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+        var partitions = await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
+
+        foreach (var partition in partitions)
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return partitions;
     }
 
     public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id, bool withChangeTracking = false)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
+        var partition = await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
+        if (partition != null)
+            ContainerObjectCounts.RecalculateSubtreeTotals(partition);
+
+        return partition;
     }
 
     /// <summary>
@@ -4998,6 +5102,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Names the given Containers, for a surface holding their ids and needing to render them. Ids that no longer
+    /// resolve are absent from the result rather than faked, so a caller can say plainly that a Container has
+    /// gone rather than inventing a name for it.
+    /// </summary>
+    public async Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds)
+    {
+        ArgumentNullException.ThrowIfNull(containerIds);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerSummariesAsync(containerIds);
+    }
+
+    /// <summary>
     /// Updates a Connected System Container (e.g. its import-scope selection), recording the change with an Activity
     /// and a versioned configuration snapshot of the owning Connected System.
     /// </summary>
@@ -5027,6 +5142,70 @@ public class ConnectedSystemServer
             $"Update container: {container.Name}",
             () => Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container),
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// A Connected System's Container Scope as canonical Advanced Mode text, or null where the Connected System
+    /// does not exist.
+    /// </summary>
+    public async Task<string?> GetContainerScopeTextAsync(int connectedSystemId)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+
+        return connectedSystem == null
+            ? null
+            : ContainerScopeText.Project(connectedSystem.Partitions ?? []);
+    }
+
+    /// <summary>
+    /// Replaces a Connected System's whole Container Scope with the statements in a piece of text, recording the
+    /// change with an Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <remarks>
+    /// The whole scope is one configuration change and is saved as one, exactly as the portal's tree is: an
+    /// administrator restating a hierarchy has made a single decision about what JIM manages, and recording it as
+    /// a Container's worth of separate changes would leave a change history nobody can read a decision out of.
+    /// </remarks>
+    /// <returns>Null where the Connected System does not exist.</returns>
+    public async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        MetaverseObject? initiatedBy) =>
+        await ApplyContainerScopeTextAsync(connectedSystemId, text,
+            connectedSystem => UpdateConnectedSystemAsync(connectedSystem, initiatedBy));
+
+    /// <summary>
+    /// Replaces a Connected System's whole Container Scope with the statements in a piece of text (initiated by API
+    /// key), recording the change with an Activity and a versioned configuration snapshot.
+    /// </summary>
+    /// <returns>Null where the Connected System does not exist.</returns>
+    public async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        ApiKey initiatedByApiKey) =>
+        await ApplyContainerScopeTextAsync(connectedSystemId, text,
+            connectedSystem => UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey));
+
+    private async Task<ContainerScopeTextApplyResult?> ApplyContainerScopeTextAsync(
+        int connectedSystemId,
+        string? text,
+        Func<ConnectedSystem, Task> persistAsync)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(
+            connectedSystemId, withChangeTracking: true);
+
+        if (connectedSystem == null)
+            return null;
+
+        var partitions = connectedSystem.Partitions ?? [];
+        var errors = ContainerScopeText.Apply(text, partitions);
+
+        if (errors.Count > 0)
+            return new ContainerScopeTextApplyResult { Errors = errors, Text = ContainerScopeText.Project(partitions) };
+
+        await persistAsync(connectedSystem);
+
+        return new ContainerScopeTextApplyResult { Errors = [], Text = ContainerScopeText.Project(partitions) };
     }
 
     /// <summary>

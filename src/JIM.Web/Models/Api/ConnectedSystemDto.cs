@@ -403,9 +403,33 @@ public class ConnectedSystemContainerDto
     public bool Selected { get; set; }
 
     /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported.
+    /// </summary>
+    public bool Excluded { get; set; }
+
+    /// <summary>
     /// How far beneath this Container objects are imported from, when it is selected.
     /// </summary>
     public ConnectedSystemContainerScope Scope { get; set; }
+
+    /// <summary>
+    /// How many objects sit directly in this Container in the Connected System, as at the last hierarchy
+    /// retrieval. Null where the Connector cannot report counts, or the hierarchy has not been retrieved since
+    /// counting was introduced.
+    /// </summary>
+    /// <remarks>
+    /// Zero and null mean different things: zero is a Container the Connector searched and found nothing in, null
+    /// is one nobody has counted. Counts what a Full Import would return for the selected Object Types, and is
+    /// deliberately blind to Container selections and exclusions.
+    /// </remarks>
+    public int? ObjectCount { get; set; }
+
+    /// <summary>
+    /// <see cref="ObjectCount"/> plus every descendant Container's, which is what a Subtree statement over this
+    /// Container reaches. Null where this Container has not been counted.
+    /// </summary>
+    public int? SubtreeObjectCount { get; set; }
 
     public int? PartitionId { get; set; }
     public int? ConnectedSystemId { get; set; }
@@ -421,7 +445,10 @@ public class ConnectedSystemContainerDto
             Description = entity.Description,
             Hidden = entity.Hidden,
             Selected = entity.Selected,
+            Excluded = entity.Excluded,
             Scope = entity.Scope,
+            ObjectCount = entity.ObjectCount,
+            SubtreeObjectCount = entity.SubtreeObjectCount,
             PartitionId = entity.Partition?.Id,
             ConnectedSystemId = entity.ConnectedSystem?.Id,
             ChildContainers = entity.ChildContainers

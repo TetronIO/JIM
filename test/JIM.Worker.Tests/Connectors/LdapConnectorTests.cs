@@ -406,7 +406,7 @@ public class LdapConnectorTests
         var certificateAwareConnector = (IConnectorCertificateAware)_connector;
 
         // Should not throw
-        Assert.DoesNotThrow(() => certificateAwareConnector.SetCertificateProvider(null));
+        Assert.That(() => certificateAwareConnector.SetCertificateProvider(null), Throws.Nothing);
     }
 
     [Test]
@@ -419,7 +419,7 @@ public class LdapConnectorTests
         var certificateAwareConnector = (IConnectorCertificateAware)_connector;
 
         // Should not throw
-        Assert.DoesNotThrow(() => certificateAwareConnector.SetCertificateProvider(mockProvider.Object));
+        Assert.That(() => certificateAwareConnector.SetCertificateProvider(mockProvider.Object), Throws.Nothing);
     }
 
     [Test]
@@ -431,12 +431,12 @@ public class LdapConnectorTests
         var certificateAwareConnector = (IConnectorCertificateAware)_connector;
 
         // Should not throw when called multiple times
-        Assert.DoesNotThrow(() =>
+        Assert.That(() =>
         {
             certificateAwareConnector.SetCertificateProvider(mockProvider1.Object);
             certificateAwareConnector.SetCertificateProvider(mockProvider2.Object);
             certificateAwareConnector.SetCertificateProvider(null);
-        });
+        }, Throws.Nothing);
     }
 
     #endregion

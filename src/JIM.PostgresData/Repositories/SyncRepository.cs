@@ -343,6 +343,21 @@ public partial class SyncRepository : ISyncRepository
         await _context.Database.ExecuteSqlRawAsync(sql, parameters);
     }
 
+    public async Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
+    {
+        ArgumentNullException.ThrowIfNull(entriesDiscardedByContainerId);
+
+        if (entriesDiscardedByContainerId.Count == 0)
+            return;
+
+        // The same incremental upsert every other counter uses, which is what makes calling this once per page
+        // and once at the end of a run interchangeable.
+        await ActivityStatCounterWriter.UpsertDeltasAsync(_context, entriesDiscardedByContainerId.ToDictionary(
+            entry => new ActivityStatCounterKey(activityId, ActivityStatDimension.ExcludedContainer,
+                entry.Key.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            entry => entry.Value));
+    }
+
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
         => _repo.Activity.GetActivityRpeiErrorCountsAsync(activityId);
 

@@ -218,7 +218,7 @@ public class LdapConnectorResetRightsTests
             .ThrowsAsync(new DirectoryOperationException("Insufficient access rights."));
 
         IReadOnlyList<ResetRightsFinding> findings = [];
-        Assert.DoesNotThrowAsync(async () => findings = await CheckAsync(StaffOu));
+        Assert.That(async () => findings = await CheckAsync(StaffOu), Throws.Nothing);
 
         Assert.That(findings[0].Outcome, Is.EqualTo(ResetRightsOutcome.CouldNotDetermine));
     }

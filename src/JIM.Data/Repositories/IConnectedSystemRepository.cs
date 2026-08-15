@@ -158,6 +158,13 @@ public interface IConnectedSystemRepository
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Names the given Containers, for a surface holding their ids and needing to render them. Ids that no longer
+    /// resolve are simply absent, which is the honest answer for a Container removed since whatever recorded the
+    /// id happened.
+    /// </summary>
+    Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds);
+
+    /// <summary>
     /// Retrieves all the Pending Exports for a given Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
