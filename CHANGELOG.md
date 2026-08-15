@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Outlined and text buttons in the primary colour are now legible on the light themes. Their labels took the theme's accent straight, which on a pale page left the darkest of them at 2.8:1 and three of the six light themes below the 4.5:1 an accessible reading needs; they now use a darkened shade, measured at 5.3:1 or better on every one. The dark themes already lightened their labels for the same reason and are unchanged. Affects **Black Light**, **Blended Nav Light**, **Future Minimal Light** and **Navy Light (O5)**.
+
 - 🐛 The **Created** and **Updated** chips on a Connected System no longer turn near-white, and unreadable, when the pointer passes over them on any of the dark themes. Their hover state asked for a colour none of JIM's themes set, so it came back as a fixed light grey whatever theme was in use, leaving pale text on a pale background: 1.2:1, against the 4.5:1 an accessible reading needs. The hover now lifts the chip away from its own surface, so it reads on every theme.
 
 - 🐛 Selections now show in the colour of the theme in use. The tint marking a selected Container in **Partitions & Containers**, an excluded Container beneath it, the Attribute Flow being edited in a Synchronisation Rule's priority list, and the row being dragged there, were all painted in one fixed violet rather than the theme's own accent, which on the dark themes was faint to the point of being hard to see at all, and on a theme whose accent is a different colour entirely simply looked wrong.
