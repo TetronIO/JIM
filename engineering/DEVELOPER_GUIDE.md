@@ -463,7 +463,18 @@ If signing is not successfully configured at container creation, the setup scrip
 
 SSH agent forwarding only works if the host machine has an SSH agent running with your key loaded. This is per-OS:
 
-- **macOS**: the Keychain-integrated SSH agent is usually running at login. Add your key once with `ssh-add --apple-use-keychain ~/.ssh/id_ed25519`; it persists across reboots. Verify with `ssh-add -l`.
+- **macOS**: the agent runs at login but is launchd-managed and **starts empty after every reboot**. `ssh-add --apple-use-keychain ~/.ssh/id_ed25519` on its own only loads the key for the current session; what makes it survive a restart is storing the passphrase in the login Keychain *and* telling ssh to reload from it. Do both, once:
+  ```bash
+  ssh-add --apple-use-keychain ~/.ssh/id_ed25519    # stores the passphrase in the Keychain
+  ```
+  ```
+  # ~/.ssh/config
+  Host *
+    AddKeysToAgent yes
+    UseKeychain yes
+    IdentityFile ~/.ssh/id_ed25519
+  ```
+  **Caveat:** `UseKeychain` stores the key's *passphrase*, so a key with no passphrase leaves the Keychain nothing to hold and the agent is empty again after the next reboot. Either give the key a passphrase (`ssh-keygen -p -f ~/.ssh/id_ed25519`) or add a LaunchAgent that runs `ssh-add` at login. Verify with `ssh-add -l`.
 - **Linux**: start an agent in your login shell and add your key. A common pattern in `~/.bashrc` or `~/.zshrc`:
   ```bash
   if ! pgrep -u "$USER" ssh-agent >/dev/null; then
@@ -471,9 +482,19 @@ SSH agent forwarding only works if the host machine has an SSH agent running wit
   fi
   ssh-add -l >/dev/null 2>&1 || ssh-add ~/.ssh/id_ed25519
   ```
-- **Windows 11**: the built-in "OpenSSH Authentication Agent" service is present but **disabled by default**. Open `services.msc`, set the service to "Automatic", and start it. Then in PowerShell: `ssh-add $env:USERPROFILE\.ssh\id_ed25519`. Verify with `ssh-add -l`. This persists across reboots.
+  This re-adds the key per login shell, so a passphrase-protected key prompts every time. For unattended persistence use the desktop's own agent (GNOME Keyring and KDE Wallet both unlock at login and hold the passphrase) or the `keychain` package, which reuses one agent across sessions.
+- **Windows 11**: the built-in "OpenSSH Authentication Agent" service is present but **disabled by default**. Open `services.msc`, set the service to "Automatic", and start it. Then in PowerShell: `ssh-add $env:USERPROFILE\.ssh\id_ed25519`. Verify with `ssh-add -l`. This genuinely persists across reboots without further configuration: the service stores added keys per-user, encrypted, and reloads them itself, so it needs no Keychain equivalent.
 
-After loading the key on the host, **rebuild the devcontainer** (Command Palette: *Dev Containers: Rebuild Container*). This is essential; the devcontainer connects to the agent at startup and will not pick up a key added later unless rebuilt.
+**Whether you need to rebuild the devcontainer depends on which of the two failures you have, and they look identical from inside.** The container is forwarded a *socket*, not the keys, so it reads whatever the host agent holds at the moment it is asked:
+
+```bash
+# inside the devcontainer
+echo "$SSH_AUTH_SOCK"      # empty, or the path to the forwarded socket
+ssh-add -l                 # lists keys, or "The agent has no identities"
+```
+
+- **Socket path is empty or the file does not exist**: forwarding itself is not set up, which is decided when the container starts. Load the key on the host, then **rebuild the devcontainer** (Command Palette: *Dev Containers: Rebuild Container*).
+- **Socket exists but reports "The agent has no identities"**: forwarding is working and the host agent is simply empty, which is the normal state after a host reboot on macOS and Linux. Run `ssh-add` on the **host** and commit again straight away. **No rebuild is needed**, and rebuilding to fix this wastes several minutes: the running container reads the same socket and sees the key the instant it is added.
 
 Verify after rebuild with `jim-signing-status`. A healthy state shows:
 ```
@@ -1515,9 +1536,9 @@ Invoke-JIMApi -Method DELETE -Endpoint "/api/v1/connected-systems/$id"
 
 **Commit Signing Issues**:
 - **"Commit signing is not enabled" when committing**: the pre-commit hook detected that `commit.gpgsign` is false. Run `jim-setup-signing` to reconfigure, or see [Commit Signing](#6-commit-signing-mandatory) for manual setup.
-- **"SSH agent not available or has no keys" when committing**: your host machine's SSH agent is not forwarding a key into the devcontainer. Follow the host-side prerequisites in the [Commit Signing](#6-commit-signing-mandatory) section for your OS, then rebuild the devcontainer. The hook will not run cleanly until the agent is fully configured.
+- **"SSH agent not available or has no keys" when committing**: the hook covers two different failures and cannot tell them apart, so check which you have before reaching for a rebuild. `echo "$SSH_AUTH_SOCK"` inside the container: no socket means forwarding is not set up and a rebuild is needed; a socket that exists while `ssh-add -l` says "The agent has no identities" means the host agent is merely empty, so `ssh-add` on the host fixes it immediately with no rebuild. See the host-side prerequisites in [Commit Signing](#6-commit-signing-mandatory) for your OS, including how to stop the host agent emptying itself at every reboot.
 - **Commits show as "Unverified" on GitHub**: your SSH key is signing commits correctly but has not been registered as a *Signing Key* on GitHub. Visit https://github.com/settings/keys and add your public key a second time with type "Signing Key" (this is separate from the authentication key registration). See [Commit Signing](#6-commit-signing-mandatory) for details.
-- **Signing worked yesterday, fails today**: the host SSH agent may have been restarted or lost its keys. Run `ssh-add -l` on the host to check, add the key back if missing, then either rebuild the devcontainer or run `jim-setup-signing` inside the container to re-verify.
+- **Signing worked yesterday, fails today**: almost always a host reboot emptying the agent, which macOS and Linux do by default. Run `ssh-add -l` on the host; if it is empty, `ssh-add` the key and commit again, with no rebuild and nothing to re-run inside the container. To stop it recurring, set the agent up to reload the key at login per your OS in [Commit Signing](#6-commit-signing-mandatory).
 - **"Current user GPG signing disabled" in a Codespace**: `gh-gpgsign` signs via the GitHub API, which is refusing because GPG verification is not enabled for your account. Enable it at github.com/settings/codespaces (*GPG verification*, then allow this repository or all repositories), then restart the Codespace (Stop then Start, or rebuild) so a fresh token carries the capability; the running token will not pick it up until then. See [Commit Signing](#6-commit-signing-mandatory).
 - **"403 | Author is invalid" in a Codespace**: `gh-gpgsign` refused because the commit *author* email is not one GitHub will attribute to your account (typically a personal address blocked by your *Keep my email address private* setting). The setup script normally forces your `@users.noreply.github.com` address to avoid this; if you still hit it, run `jim-setup-signing` to reconfigure, and check `git config user.email` resolves to an `@users.noreply.github.com` address. See [Commit Signing](#6-commit-signing-mandatory).
 
