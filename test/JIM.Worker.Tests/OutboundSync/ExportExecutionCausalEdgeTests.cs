@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
-using JIM.Models.Staging;
 using JIM.Models.Enums;
 using JIM.Models.Transactional;
 using JIM.Worker.Processors;
@@ -23,7 +22,6 @@ namespace JIM.Worker.Tests.OutboundSync;
 [TestFixture]
 public class ExportExecutionCausalEdgeTests
 {
-    private const int TargetSystemId = 4;
     private static readonly Guid QueueingItemId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid PendingExportId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid SourceMvoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -41,7 +39,7 @@ public class ExportExecutionCausalEdgeTests
             OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Exported
         };
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), outcome, TargetSystem());
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), outcome);
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         var edge = executionItem.CausalEdges[0];
@@ -51,8 +49,8 @@ public class ExportExecutionCausalEdgeTests
             Assert.That(edge.CauseRunProfileExecutionItemId, Is.EqualTo(QueueingItemId));
             Assert.That(edge.CausePendingExportId, Is.EqualTo(PendingExportId));
             Assert.That(edge.CauseMetaverseObjectId, Is.EqualTo(SourceMvoId));
-            Assert.That(edge.ConnectedSystemId, Is.EqualTo(TargetSystemId));
-            Assert.That(edge.ConnectedSystemName, Is.EqualTo("Glitterband EMEA"));
+            Assert.That(edge.ConnectedSystemId, Is.Null,
+                "an item covers one object on one system, so naming it here only renders a chip for the system the page is already about");
             Assert.That(edge.EffectSyncOutcome, Is.SameAs(outcome),
                 "the edge must name the outcome it explains, or an item carrying several outcomes groups its causes under the wrong one");
         });
@@ -71,7 +69,7 @@ public class ExportExecutionCausalEdgeTests
             DisplayNameSnapshot = "Project-AgileCore"
         };
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), null, TargetSystem());
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, ExportItem(), null);
 
         Assert.That(executionItem.CausalEdges[0].CauseDisplayName, Is.EqualTo("Project-AgileCore"));
     }
@@ -88,7 +86,7 @@ public class ExportExecutionCausalEdgeTests
         var exportItem = ExportItem();
         exportItem.QueuedByRunProfileExecutionItemId = null;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         Assert.Multiple(() =>
@@ -111,7 +109,7 @@ public class ExportExecutionCausalEdgeTests
         exportItem.QueuedByRunProfileExecutionItemId = null;
         exportItem.SourceMetaverseObjectId = null;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
 
         Assert.That(executionItem.CausalEdges, Is.Empty);
     }
@@ -127,7 +125,7 @@ public class ExportExecutionCausalEdgeTests
         var exportItem = ExportItem();
         exportItem.Succeeded = false;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
 
         Assert.That(executionItem.CausalEdges, Is.Empty);
     }
@@ -143,7 +141,7 @@ public class ExportExecutionCausalEdgeTests
         var exportItem = ExportItem();
         exportItem.ChangeType = PendingExportChangeType.Delete;
 
-        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null, TargetSystem());
+        ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, null);
 
         Assert.That(executionItem.CausalEdges, Has.Count.EqualTo(1));
         Assert.That(executionItem.CausalEdges[0].EdgeType,
@@ -158,6 +156,4 @@ public class ExportExecutionCausalEdgeTests
         SourceMetaverseObjectId = SourceMvoId,
         QueuedByRunProfileExecutionItemId = QueueingItemId
     };
-
-    private static ConnectedSystem TargetSystem() => new() { Id = TargetSystemId, Name = "Glitterband EMEA" };
 }

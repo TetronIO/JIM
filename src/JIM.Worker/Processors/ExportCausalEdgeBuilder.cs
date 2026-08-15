@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
-using JIM.Models.Staging;
 using JIM.Models.Transactional;
 
 namespace JIM.Worker.Processors;
@@ -32,17 +31,13 @@ public static class ExportCausalEdgeBuilder
     /// Export before it was deleted.</param>
     /// <param name="effectOutcome">The Exported / Deprovisioned outcome the cause explains, where outcome
     /// tracking recorded one. Null leaves the edge attached to the item as a whole.</param>
-    /// <param name="connectedSystem">The system exported to, snapshotted onto the edge so the chain still
-    /// reads after a rename or a deletion.</param>
     public static void RecordQueueingCause(
         ActivityRunProfileExecutionItem executionItem,
         ProcessedExportItem exportItem,
-        ActivityRunProfileExecutionItemSyncOutcome? effectOutcome,
-        ConnectedSystem connectedSystem)
+        ActivityRunProfileExecutionItemSyncOutcome? effectOutcome)
     {
         ArgumentNullException.ThrowIfNull(executionItem);
         ArgumentNullException.ThrowIfNull(exportItem);
-        ArgumentNullException.ThrowIfNull(connectedSystem);
 
         // A failed export changed nothing on the Connected System, so there is no effect for a cause to
         // explain; the item's story is its error message.
@@ -64,11 +59,13 @@ public static class ExportCausalEdgeBuilder
             PendingExportId = exportItem.PendingExportId,
             // Named from the exported object, because the Pending Export is deleted moments from now and the
             // Metaverse Object may be too (this seam carries deprovisions as well as updates).
-            DisplayName = executionItem.DisplayNameSnapshot,
-            ConnectedSystemId = connectedSystem.Id,
-            ConnectedSystemName = connectedSystem.Name
-            // No reason code: the effect outcome already distinguishes an export from a deprovision, and
-            // cohorts are computed per effect, so a code here would add nothing to group on.
+            DisplayName = executionItem.DisplayNameSnapshot
+            // No Connected System, and no reason code. Both are attribution, and neither has anything to
+            // attribute here: an execution item covers one object on one system, so this seam's cohorts are
+            // always of one and there is nothing to group. The system would render as a chip naming the very
+            // system the page is already about, with no stated role beside it, which is the unattributed-token
+            // shape the attribution row was rewritten to remove. The effect outcome already distinguishes an
+            // export from a deprovision.
         }.ToEdge(CausalEdgeType.PendingExportQueueingCausedExportExecution, effectOutcome));
     }
 }

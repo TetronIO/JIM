@@ -262,8 +262,6 @@ public class CausalityCauseWordingTests
         return new CausalChainCohort
         {
             EdgeType = CausalEdgeType.PendingExportQueueingCausedExportExecution,
-            ConnectedSystemId = 4,
-            ConnectedSystemName = "Glitterband EMEA",
             Members = [new CausalChainMember { DisplayName = displayName }]
         };
     }

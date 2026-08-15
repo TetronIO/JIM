@@ -422,7 +422,7 @@ public class SyncExportTaskProcessor
             // Record why this export happened (#1223). An export run knows only that it had a queue of changes
             // to make; the synchronisation that put this one in the queue ran in a different Activity, and the
             // Pending Export carrying the link is deleted moments from now.
-            ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome, _connectedSystem);
+            ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome);
 
             // Create CSO change record for export change history
             if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)
