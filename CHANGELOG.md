@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-
 - 🐛 The first **Retrieve Hierarchy** on a newly created Connected System now keeps the Containers it discovers. It found the whole hierarchy, reported every Container as added, and then deleted every one of them before saving, so only the Partitions persisted and the tab offered nothing to select; pressing the button a second time worked, because by then the Partitions existed and took a different path. The refresh reported success either way, so there was nothing to say the first press had achieved nothing. A Connected System whose Partitions were all new lost its entire discovered Container hierarchy for that pass. (#1369)
 
 - 🐛 Partition discovery against Active Directory and Samba AD no longer fails with an access denial on a connection that is authenticated and working. A directory can return a referral to another server alongside a search's results, and the platform LDAP client was following it on a new connection carrying none of the credentials JIM bound with. Any directory that refuses anonymous reads, which Active Directory does by default, then refused that read, and the refusal surfaced against the original search rather than against the referral, so the error named the wrong thing. JIM now declines referrals outright, and the LDAP Connector documentation says so. Following them properly, on connections JIM authenticates and reports, is tracked as its own feature. (#1352)
