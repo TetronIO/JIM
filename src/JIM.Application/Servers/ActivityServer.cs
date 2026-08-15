@@ -404,6 +404,28 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets a window of one Activity's direct child Activities addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) child-Activity grid. Ordered by creation date ascending, and shares its
+    /// query core with <see cref="GetChildActivitiesAsync"/>. Pass <paramref name="includeTotalCount"/> as false
+    /// to skip counting the whole match set when the caller already knows the total; the returned total is then
+    /// null rather than zero.
+    /// </summary>
+    /// <param name="parentActivityId">The parent Activity whose direct children are wanted.</param>
+    /// <param name="offset">The zero-based index of the first child wanted; negative values read as zero.</param>
+    /// <param name="count">How many children are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public async Task<RangeResultSet<Activity>> GetChildActivitiesRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Activity.GetChildActivitiesRangeAsync(
+            parentActivityId, offset, count, searchQuery, includeTotalCount);
+    }
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>
@@ -564,6 +586,42 @@ public class ActivityServer
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(
             activityId, page, pageSize, searchQuery, sortBy, sortDescending, objectTypeFilter, errorTypeFilter, outcomeTypeFilter);
+    }
+
+    /// <summary>
+    /// Retrieves a window of one Activity's Run Profile Execution Item headers addressed by absolute offset and
+    /// count, for the virtualised (infinite-scroll) execution-item grid. Takes the same search, sort and filters
+    /// as <see cref="GetActivityRunProfileExecutionItemHeadersAsync"/> and shares its query core. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="activityId">The Activity whose execution items are wanted.</param>
+    /// <param name="offset">The zero-based index of the first item wanted; negative values read as zero.</param>
+    /// <param name="count">How many items are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchQuery">Optional case-insensitive search over the display name and external ID.</param>
+    /// <param name="sortBy">Optional sort key: "externalid", "displayname"/"name", "type"/"objecttype",
+    /// "errortype", or the item's id (the default).</param>
+    /// <param name="sortDescending">Whether the sort is descending.</param>
+    /// <param name="objectTypeFilter">Optional filter for Connected System Object Type names (additive/OR).</param>
+    /// <param name="errorTypeFilter">Optional filter for error types (additive/OR).</param>
+    /// <param name="outcomeTypeFilter">Optional filter for sync outcome types (additive/OR).</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersRangeAsync(
+            activityId, offset, count, searchQuery, sortBy, sortDescending,
+            objectTypeFilter, errorTypeFilter, outcomeTypeFilter, includeTotalCount);
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)

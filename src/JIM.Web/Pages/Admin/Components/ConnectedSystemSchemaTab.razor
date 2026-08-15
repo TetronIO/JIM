@@ -4,11 +4,10 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
 @using Serilog
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject IUserPreferenceService PreferenceService
 @inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -229,7 +228,7 @@
             DropShadow="false"
             Variant="Variant.Filled"
             Color="Color.Primary"
-            OnClick="HandleEditAttributeDataTypeButtonClick"
+            OnClick="HandleEditAttributeDataTypeButtonClickAsync"
             Class="ma-4">Confirm Change</MudButton>
     </DialogActions>
 </MudDialog>
@@ -366,6 +365,10 @@
                     <MudText Typo="Typo.h5"><span>Object Type:</span> <span class="mud-primary-text">@objectType.Name</span></MudText>
                     @if (_selectedObjectType != null)
                     {
+        @* Captured inside the guard so the markup below never dereferences the nullable field directly (see the
+           nullable-dereference rule in JIM.Web/CLAUDE.md). *@
+        var selectedObjectType = _selectedObjectType;
+
         @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
         {
             <MudPaper Outlined="true" Class="pa-4 mt-5">
@@ -378,7 +381,7 @@
                     Required="true"
                     RequiredError="You must select an attribute as the External ID."
                     Value="_selectedObjectType.Attributes.SingleOrDefault(q => q.IsExternalId)"
-                    ValueChanged="HandleMakeExternalId">
+                    ValueChanged="HandleMakeExternalIdAsync">
                     @foreach (var objectTypeAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
                     {
                         <MudSelectItem Value="@objectTypeAttribute">@(objectTypeAttribute.Name)</MudSelectItem>
@@ -407,24 +410,18 @@
                 Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.
             </MudText>
 
+            @* Filtering by name is the grid's own search box, not a second one here: two boxes narrowing the same
+               table is exactly the confusion the shared search convention exists to prevent. *@
             <MudGrid Class="mt-3">
-                <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
-                    <SearchField @bind-Value="_schemaSearchString"
-                                 Label="Filter by name"
-                                 HelperText="Show only attributes where the name contains a specific value"
-                                 IconSize="Size.Small"
-                                 Margin="Margin.None"
-                                 Autocomplete="schema_search_string" />
-                </MudItem>
-
                 @if (_selectedObjectTypeHasClasses)
                 {
-                    <MudItem xs="4">
+                    <MudItem xs="6">
                         <MudSelect
                             T="string"
                             Label="Filter by class"
                             MultiSelection="true"
                             @bind-SelectedValues="AttributeClassFilterSelectedValues"
+                            @bind-SelectedValues:after="OnSchemaClassFilterChangedAsync"
                             Variant="Variant.Outlined"
                             HelperText="Show only attributes with a particular class"
                             Adornment="Adornment.Start"
@@ -438,7 +435,7 @@
                     </MudItem>
                 }
 
-                <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
+                <MudItem xs="@(_selectedObjectTypeHasClasses ? 6 : 12)">
                     <MudTextField
                         T="string"
                         Label="Select attributes via CSV"
@@ -447,7 +444,7 @@
                         InputType="InputType.Text"
                         Adornment="Adornment.End"
                         AdornmentIcon="@Icons.Material.Filled.Check"
-                        OnAdornmentClick="HandleAttributeCsvSubmit"
+                        OnAdornmentClick="HandleAttributeCsvSubmitAsync"
                         IconSize="Size.Small"
                         Variant="Variant.Outlined" />
                 </MudItem>
@@ -459,7 +456,7 @@
                     <MudChipSet T="AttributeDataType"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedSchemaTypes"
-                                SelectedValuesChanged="OnSchemaTypeFilterChanged">
+                                SelectedValuesChanged="OnSchemaTypeFilterChangedAsync">
                         @foreach (var type in GetAvailableSchemaTypes())
                         {
                             <MudChip Value="@type.Key"
@@ -476,7 +473,7 @@
                     <MudChipSet T="AttributePlurality"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedSchemaPluralites"
-                                SelectedValuesChanged="OnSchemaPluralityFilterChanged">
+                                SelectedValuesChanged="OnSchemaPluralityFilterChangedAsync">
                         @foreach (var plurality in GetAvailableSchemaPluralites())
                         {
                             <MudChip Value="@plurality.Key"
@@ -495,7 +492,7 @@
                         <MudChipSet T="AttributeWritability"
                                     SelectionMode="SelectionMode.MultiSelection"
                                     SelectedValues="_selectedSchemaWritabilities"
-                                    SelectedValuesChanged="OnSchemaWritabilityFilterChanged">
+                                    SelectedValuesChanged="OnSchemaWritabilityFilterChangedAsync">
                             @foreach (var writability in GetAvailableSchemaWritabilities())
                             {
                                 <MudChip Value="@writability.Key"
@@ -516,7 +513,7 @@
                     <MudChipSet T="bool"
                                 SelectionMode="SelectionMode.SingleSelection"
                                 SelectedValue="_attributeSelectedFilter"
-                                SelectedValueChanged="@((bool val) => _attributeSelectedFilter = val)">
+                                SelectedValueChanged="OnAttributeSelectedFilterChangedAsync">
                         <MudChip Value="false"
                                  Color="Color.Default"
                                  Variant="@(!_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
@@ -532,142 +529,191 @@
             </MudStack>
         </MudPaper>
 
-        <MudTable
-            Items="@_selectedObjectType.Attributes"
-            Hover="true"
-            Dense="true"
-            Breakpoint="Breakpoint.Sm"
-            SortLabel="Sort By"
-            Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
-            Class="mt-5"
-            Outlined="true"
-            Elevation="0"
-            RowsPerPage="@_schemaRowsPerPage"
-            RowsPerPageChanged="OnSchemaRowsPerPageChanged">
-            <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)"><MudText Typo="Typo.button">Selected</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)"><MudText Typo="Typo.button">External ID</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-                @if (_selectedObjectTypeHasClasses)
-                {
-                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName!)"><MudText Typo="Typo.button">Class</MudText></MudTableSortLabel></MudTh>
-                }
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
-                @if (_selectedObjectTypeHasConstrainedAttributes)
-                {
-                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Writability)"><MudText Typo="Typo.button">Writability</MudText></MudTableSortLabel></MudTh>
-                }
-                @if (_selectedObjectTypeHasDescriptions)
-                {
-                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description!)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
-                }
-                @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
-                {
-                    <MudTh><MudText Typo="Typo.button">Action</MudText></MudTh>
-                }
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Selected">
-                    @if (CredentialAttributes.IsCredentialAttribute(context.Name))
-                    {
-                        <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
-                            <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
-                        </MudTooltip>
-                    }
-                    else if (context.IsExternalId || context.IsSecondaryExternalId)
-                    {
-                        <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
-                            <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
-                        </MudTooltip>
-                    }
-                    else
-                    {
-                        <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary" />
-                    }
-                </MudTd>
-                <MudTd DataLabel="External ID">
-                    @if (context.IsExternalId)
-                    {
-                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                    }
-                    else if (context.IsSecondaryExternalId)
-                    {
-                        <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                    }
-                    else
-                    {
-                        <span>-</span>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Name">@context.Name</MudTd>
-                @if (_selectedObjectTypeHasClasses)
-                {
-                    <MudTd DataLabel="Class">
-                        @context.ClassName
-                    </MudTd>
-                }
-                <MudTd DataLabel="Type">
-                    <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
-                        @context.Type.ToString().SplitOnCapitalLetters()
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Plurality">
-                    <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
-                        @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
-                    </MudChip>
-                </MudTd>
-                @if (_selectedObjectTypeHasConstrainedAttributes)
-                {
-                    <MudTd DataLabel="Writability">
-                        <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Writability)" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string"
-                                     Color="@Helpers.GetAttributeWritabilityChipColour(context.Writability)"
-                                     Variant="Variant.Outlined">
-                                @Helpers.GetAttributeWritabilityLabel(context.Writability)
-                            </MudChip>
-                        </MudTooltip>
-                    </MudTd>
-                }
-                @if (_selectedObjectTypeHasDescriptions)
-                {
-                    <MudTd DataLabel="Description">
-                        @if (string.IsNullOrEmpty(context.Description))
+        @* An Active Directory object type runs to several hundred attributes, which is what the infinite-scroll
+           grid is for. The rows are the object type's own attribute objects, sliced in memory, so the selection
+           switches still write straight through to what Save Changes persists. The chip filters above are the
+           page's own, so changing one re-counts the match set (see RefreshAttributeGridAsync). *@
+        <VirtualisedDataGrid @ref="_attributeGrid" T="ConnectedSystemObjectTypeAttribute"
+                             ContainerId="@($"schema-attributes-{selectedObjectType.Id}")"
+                             UrlParameterPrefix="@($"attr{selectedObjectType.Id}-")"
+                             StateKey="@selectedObjectType.Id.ToString()"
+                             DefaultSortBy="name"
+                             LoadWindow="LoadAttributeWindowAsync"
+                             SingularName="Attribute"
+                             PluralName="Attributes"
+                             SearchPlaceholder="Search by name">
+            <Columns>
+                <TemplateColumn Title="Selected" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Selected" Name="selected" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (CredentialAttributes.IsCredentialAttribute(context.Item.Name))
                         {
-                            <EmptyValue />
+                            <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
+                                <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
+                            </MudTooltip>
+                        }
+                        else if (context.Item.IsExternalId || context.Item.IsSecondaryExternalId)
+                        {
+                            <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
+                                <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Disabled="true" />
+                            </MudTooltip>
                         }
                         else
                         {
-                            @((MarkupString)Helpers.LinkifyRfcReferences(context.Description))
+                            <MudSwitch @bind-Value="@context.Item.Selected" @bind-Value:after="OnAttributeSelectedChangedAsync" Color="@Color.Primary" />
                         }
-                    </MudTd>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="External ID" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="External ID" Name="externalid" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.IsExternalId)
+                        {
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                        }
+                        else if (context.Item.IsSecondaryExternalId)
+                        {
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Name" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Name" Name="name" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.Name
+                    </CellTemplate>
+                </TemplateColumn>
+                @if (_selectedObjectTypeHasClasses)
+                {
+                    <TemplateColumn Title="Class" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Class" Name="class" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @context.Item.ClassName
+                        </CellTemplate>
+                    </TemplateColumn>
+                }
+                <TemplateColumn Title="Type" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Type" Name="type" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
+                            @context.Item.Type.ToString().SplitOnCapitalLetters()
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Plurality" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.Item.AttributePlurality)" Variant="Variant.Text">
+                            @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                @if (_selectedObjectTypeHasConstrainedAttributes)
+                {
+                    <TemplateColumn Title="Writability" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Writability" Name="writability" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Item.Writability)" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string"
+                                         Color="@Helpers.GetAttributeWritabilityChipColour(context.Item.Writability)"
+                                         Variant="Variant.Outlined">
+                                    @Helpers.GetAttributeWritabilityLabel(context.Item.Writability)
+                                </MudChip>
+                            </MudTooltip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                }
+                @if (_selectedObjectTypeHasDescriptions)
+                {
+                    <TemplateColumn Title="Description" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Description" Name="description" />
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            @* Raw imported LDAP/SCIM text, so its length is the directory's business, not JIM's:
+                               a row in a virtualised grid is one line, so it is clipped rather than wrapped, and
+                               the whole description is on the cell's title. The class is used directly here
+                               rather than through <OneLineText /> because the linkified RFC references are
+                               markup. *@
+                            @if (string.IsNullOrEmpty(context.Item.Description))
+                            {
+                                <EmptyValue />
+                            }
+                            else
+                            {
+                                var description = context.Item.Description;
+                                <span class="jim-one-line" title="@description">@((MarkupString)Helpers.LinkifyRfcReferences(description))</span>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
                 }
                 @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                 {
-                    <MudTd>
-                        <MudButton
-                            DropShadow="false"
-                            Color="Color.Primary"
-                            Variant="Variant.Outlined"
-                            Size="Size.Small"
-                            OnClick="() => HandleShowEditAttributeDialogAsync(context)"
-                            StartIcon="@Icons.Material.Filled.Edit">
-                            Edit
-                        </MudButton>
-                    </MudTd>
+                    <TemplateColumn Title="Action" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Action</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate>
+                            <MudButton
+                                DropShadow="false"
+                                Color="Color.Primary"
+                                Variant="Variant.Outlined"
+                                Size="Size.Small"
+                                OnClick="() => HandleShowEditAttributeDialogAsync(context.Item)"
+                                StartIcon="@Icons.Material.Filled.Edit">
+                                Edit
+                            </MudButton>
+                        </CellTemplate>
+                    </TemplateColumn>
                 }
-            </RowTemplate>
-            <NoRecordsContent>
-                @if (_attributeSelectedFilter) {
-                    <MudText>There are no selected attributes for this object type.</MudText>
-                } else {
-                    <MudText>There are no attributes to show.</MudText>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
                 }
-            </NoRecordsContent>
-            <PagerContent>
-                <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
-            </PagerContent>
-        </MudTable>
+                else if (_attributeSelectedFilter)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                     PrimaryText="No attributes are selected for this object type"
+                                     SecondaryText="Choose All above to see everything the Connected System reported, then select the attributes JIM should manage." />
+                }
+                else if (AnySchemaFilterIsActive)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                     PrimaryText="No attributes match these filters"
+                                     SecondaryText="Clear a class, type, plurality or writability filter above to widen the list." />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                     PrimaryText="No attributes were discovered for this object type"
+                                     SecondaryText="Retrieve the schema again once the Connected System reports attributes for it." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
                     }
                 </MudTabPanel>
             }
@@ -713,8 +759,11 @@
     private string? _attributeSelectionCsv;
     private IReadOnlyCollection<AttributeDataType> _selectedSchemaTypes = new List<AttributeDataType>();
     private IReadOnlyCollection<AttributePlurality> _selectedSchemaPluralites = new List<AttributePlurality>();
-    private int _schemaRowsPerPage = 10;
-    private bool _schemaPreferencesLoaded;
+    private VirtualisedDataGrid<ConnectedSystemObjectTypeAttribute>? _attributeGrid;
+
+    // Set when the active object type has been rebound onto a freshly loaded Connected System graph; consumed in
+    // OnAfterRenderAsync, because the reload must run against the grid the new render produced.
+    private bool _attributeGridReloadPending;
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
     private bool _editSchemaAttributeDialogVisible;
@@ -731,9 +780,16 @@
         // so a previously-resolved _selectedObjectType can become a stale, detached instance. Rebind it to the
         // matching type in the fresh collection (by Id, to preserve the active selection), then fall back to the
         // first selected type (which is how a single auto-selected type surfaces after import).
+        var previousObjectType = _selectedObjectType;
         if (_selectedObjectType != null)
             _selectedObjectType = ConnectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == _selectedObjectType.Id);
         _selectedObjectType ??= ConnectedSystem.ObjectTypes?.FirstOrDefault(q => q.Selected);
+
+        // The object type's id is unchanged across that rebind, so the grid has no way of knowing its rows now
+        // point at attribute objects from a graph that has been thrown away; toggling a switch on one of them
+        // would write to an instance nothing saves. Reload once the new render is in the DOM.
+        if (!ReferenceEquals(previousObjectType, _selectedObjectType))
+            _attributeGridReloadPending = true;
 
         // Deep-link support: "?t=schema&ot=jimPerson" selects that object type's sub-tab on first load. Applied
         // once only, so it never overrides the admin's own subsequent tab clicks after a schema refresh or save
@@ -797,26 +853,85 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!_schemaPreferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _schemaRowsPerPage = preferredSize;
-                _schemaPreferencesLoaded = true;
-                StateHasChanged();
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
+        if (!_attributeGridReloadPending)
+            return;
+
+        _attributeGridReloadPending = false;
+        await RefreshAttributeGridAsync();
     }
 
-    private async Task OnSchemaRowsPerPageChanged(int newSize)
+    /// <summary>
+    /// Slices one window of the active object type's attributes, applying the page's chip filters, the grid's
+    /// search (attribute name, which is what the tab's own name filter used to do) and its sort. The attributes
+    /// belong to the Connected System the page already loaded, so there is no database range read: the switches in
+    /// the Selected column write straight through to the objects Save Changes persists.
+    /// </summary>
+    private Task<VirtualisedWindow<ConnectedSystemObjectTypeAttribute>> LoadAttributeWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        _schemaRowsPerPage = newSize;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
+        // The chip counts beside the filters are contextual: they describe the attributes remaining under every
+        // other filter, search included. The search now lives in the grid, so its text is mirrored back here and
+        // the tab re-rendered, or the counts would describe a wider set than the rows underneath them.
+        var searchText = request.SearchText ?? string.Empty;
+        var searchChanged = !string.Equals(_schemaSearchString, searchText, StringComparison.Ordinal);
+        _schemaSearchString = searchText;
+
+        var attributes = (_selectedObjectType?.Attributes ?? new List<ConnectedSystemObjectTypeAttribute>())
+            .Where(SchemaFilterFuncHandler);
+
+        IOrderedEnumerable<ConnectedSystemObjectTypeAttribute> Order<TKey>(Func<ConnectedSystemObjectTypeAttribute, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? attributes.OrderByDescending(key, comparer) : attributes.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "selected" => Order(a => a.Selected),
+            "externalid" => Order(a => a.IsExternalId),
+            "class" => Order(a => a.ClassName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "type" => Order(a => a.Type),
+            "plurality" => Order(a => a.AttributePlurality),
+            "writability" => Order(a => a.Writability),
+            "description" => Order(a => a.Description ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            _ => Order(a => a.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        var window = sorted.ToWindow(request);
+
+        if (searchChanged)
+            StateHasChanged();
+
+        return Task.FromResult(window);
+    }
+
+    /// <summary>
+    /// Whether any of the page's own chip filters is narrowing the attribute list, so the empty state can tell
+    /// "nothing matches what you chose" apart from "this object type has no attributes".
+    /// </summary>
+    private bool AnySchemaFilterIsActive =>
+        AttributeClassFilterSelectedValues.Count > 0 || _selectedSchemaTypes.Count > 0 ||
+        _selectedSchemaPluralites.Count > 0 || _selectedSchemaWritabilities.Count > 0;
+
+    /// <summary>
+    /// Reloads the attribute grid after the page's own filters, or the attributes themselves, have changed. The
+    /// totals are invalidated because the match set is a different one, and the reader is returned to the top
+    /// because the position they held described rows that may no longer be there.
+    /// </summary>
+    private async Task RefreshAttributeGridAsync()
+    {
+        if (_attributeGrid == null)
+            return;
+
+        await _attributeGrid.ResetScrollAsync();
+        await _attributeGrid.RefreshAsync(invalidateTotals: true);
+    }
+
+    /// <summary>
+    /// Handles a selection switch being toggled. Selecting changes which rows match only while the Selected Only
+    /// filter is on, which is the one case that needs the window re-fetching; otherwise the row simply re-renders
+    /// where it is, and reloading would throw the reader's scroll position away for nothing.
+    /// </summary>
+    private async Task OnAttributeSelectedChangedAsync()
+    {
+        if (_attributeSelectedFilter)
+            await RefreshAttributeGridAsync();
     }
 
     private async Task HandleImportSchemaAsync()
@@ -1016,11 +1131,11 @@
         return confirmed == true;
     }
 
-    private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
+    private async Task HandleMakeExternalIdAsync(ConnectedSystemObjectTypeAttribute selectedAttribute)
     {
         if (_selectedObjectType == null)
         {
-            Log.Error($"Schema Tab > HandleMakeExternalId: {nameof(_selectedObjectType)} is null!");
+            Log.Error($"Schema Tab > HandleMakeExternalIdAsync: {nameof(_selectedObjectType)} is null!");
             return;
         }
 
@@ -1031,7 +1146,11 @@
         // mark the intended attribute as the external id, and select it
         selectedAttribute.IsExternalId = true;
         selectedAttribute.Selected = true;
-        Log.Verbose($"Schema Tab > HandleMakeExternalId: Set attribute id {selectedAttribute} as the external id.");
+        Log.Verbose($"Schema Tab > HandleMakeExternalIdAsync: Set attribute id {selectedAttribute} as the external id.");
+
+        // two rows changed (the old External ID lost the marker, the new one gained it and became selected), and
+        // either can be outside the window on screen, so the grid re-reads rather than being left partly stale.
+        await RefreshAttributeGridAsync();
     }
 
     private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
@@ -1095,14 +1214,27 @@
         return true;
     }
 
-    private void OnSchemaTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    private async Task OnSchemaTypeFilterChangedAsync(IReadOnlyCollection<AttributeDataType> selectedTypes)
     {
         _selectedSchemaTypes = selectedTypes;
+        await RefreshAttributeGridAsync();
     }
 
-    private void OnSchemaPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralites)
+    private async Task OnSchemaPluralityFilterChangedAsync(IReadOnlyCollection<AttributePlurality> selectedPluralites)
     {
         _selectedSchemaPluralites = selectedPluralites;
+        await RefreshAttributeGridAsync();
+    }
+
+    private async Task OnSchemaClassFilterChangedAsync()
+    {
+        await RefreshAttributeGridAsync();
+    }
+
+    private async Task OnAttributeSelectedFilterChangedAsync(bool selectedOnly)
+    {
+        _attributeSelectedFilter = selectedOnly;
+        await RefreshAttributeGridAsync();
     }
 
     private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableSchemaTypes()
@@ -1153,9 +1285,10 @@
             .OrderBy(x => x.Key);
     }
 
-    private void OnSchemaWritabilityFilterChanged(IReadOnlyCollection<AttributeWritability> selectedWritabilities)
+    private async Task OnSchemaWritabilityFilterChangedAsync(IReadOnlyCollection<AttributeWritability> selectedWritabilities)
     {
         _selectedSchemaWritabilities = selectedWritabilities;
+        await RefreshAttributeGridAsync();
     }
 
     private (int allCount, int selectedCount) GetSchemaSelectionCounts()
@@ -1172,23 +1305,25 @@
         return (filteredAttributes.Count, filteredAttributes.Count(a => a.Selected));
     }
 
-    private void HandleAttributeCsvSubmit()
+    private async Task HandleAttributeCsvSubmitAsync()
     {
         if (_selectedObjectType == null)
         {
-            Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: connectedSystem was null");
+            Console.WriteLine($"{nameof(HandleAttributeCsvSubmitAsync)}: connectedSystem was null");
             return;
         }
 
         if (string.IsNullOrEmpty(_attributeSelectionCsv))
         {
-            Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: attributeSelectionCsv is null or empty");
+            Console.WriteLine($"{nameof(HandleAttributeCsvSubmitAsync)}: attributeSelectionCsv is null or empty");
             return;
         }
 
-        // clear the other search boxes
-        _schemaSearchString = string.Empty;
+        // clear the other filters, so the attributes just selected are all visible. The name search belongs to the
+        // grid now, so it is cleared through the grid (which also reloads the window).
         ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
+        if (_attributeGrid != null)
+            await _attributeGrid.ClearSearchAsync();
 
         // convert the csv to a list, trim the entries, and resolve each to an attribute on the object type
         var matchedAttributes = _attributeSelectionCsv.Split(',')
@@ -1211,6 +1346,8 @@
 
         // clear the attribute csv text box
         _attributeSelectionCsv = null;
+
+        await RefreshAttributeGridAsync();
 
         // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
@@ -1257,7 +1394,7 @@
         _editSchemaAttributeDialogVisible = true;
     }
 
-    private void HandleEditAttributeDataTypeButtonClick()
+    private async Task HandleEditAttributeDataTypeButtonClickAsync()
     {
         if (_objectTypeAttributeBeingEdited == null)
             return;
@@ -1267,6 +1404,10 @@
 
         _objectTypeAttributeBeingEdited.Type = (AttributeDataType)Enum.Parse(typeof(AttributeDataType), _objectTypeAttributeBeingEditedText);
         _editSchemaAttributeDialogVisible = false;
+
+        // the Type chip filters are contextual and the row may no longer match the chosen ones, so the window is
+        // re-read rather than left showing an attribute under a type it no longer has.
+        await RefreshAttributeGridAsync();
 
         // all done, let the user know
         Snackbar.Add("Attribute data type updated.", Severity.Success);

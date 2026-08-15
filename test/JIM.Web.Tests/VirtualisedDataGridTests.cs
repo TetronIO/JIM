@@ -146,6 +146,120 @@ public class VirtualisedDataGridTests : JimComponentTestContext
     }
 
     [Test]
+    public void VirtualisedDataGrid_Embedded_DropsTheDensityToggleAndKeepsItsSearchBox()
+    {
+        // An embedded grid is one of many on its page (a value table per attribute, one per event in a
+        // timeline). Row density is one saved preference for the whole portal, so a toggle per instance is the
+        // same switch drawn a dozen times; the search box is per table by nature and stays.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "embedded-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Values")
+            .Add(c => c.Embedded, true));
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.HasComponent<TableDensityToggle>(), Is.False, "an embedded grid must not repeat the density toggle");
+                Assert.That(cut.HasComponent<SearchField>(), Is.True, "each embedded table still narrows itself");
+                Assert.That(cut.HasComponent<TableObjectCount>(), Is.True, "the count still says how many values there are");
+            }
+        });
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_Embedded_WritesNoUrlState()
+    {
+        // Several embedded grids share one address bar, and which one is "first" is a rendering accident, so
+        // an embedded grid keeps its search, sort and position to itself rather than writing parameters that
+        // collide with its siblings and cannot be restored to the right instance.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "embedded-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.Embedded, true));
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("embedded-grid")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimInterop.replaceQueryString"), Is.False,
+                "an embedded grid must not write its state to the shared address bar");
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.observe"), Is.False,
+                "with no URL state to keep current, an embedded grid has no reason to watch its own scrolling");
+        }
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_MaxHeightGiven_TakesItRatherThanMeasuringTheFooter()
+    {
+        // A grid inside a dialog or a table cell has no relationship with the page footer: measuring against it
+        // yields a height belonging to the page behind, so a caller in a constrained container states the cap.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "capped-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.MaxHeight, "400px"));
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("400px")));
+
+        Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.fit"), Is.False,
+            "a grid told its own ceiling must not also measure the page footer");
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_ShowSearchFalse_RendersNoSearchBoxButKeepsTheCount()
+    {
+        // A list that is small by construction (the queued steps of one Schedule Execution) says nothing more for
+        // being searchable, and a box per group is clutter; the count still says how many there are.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 3)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "small-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.PluralName, "Steps")
+            .Add(c => c.ShowSearch, false));
+
+        cut.WaitForAssertion(() =>
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(cut.HasComponent<SearchField>(), Is.False);
+                Assert.That(cut.HasComponent<TableObjectCount>(), Is.True);
+            }
+        });
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_GridClassGiven_ReplacesTheStandingTopMargin()
+    {
+        // The default margin is the gap between a grid and the page chrome above it. A grid joined to the block
+        // directly above it (a Schedule Execution's header in the Operations queue) has no such gap to leave, and
+        // must be able to say so: keeping the margin as well would draw the header and its own rows as two boxes.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "joined-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.GridClass, "jim-queue-grid"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var grid = cut.FindComponent<MudBlazor.MudDataGrid<string>>().Instance;
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(grid.Class, Is.EqualTo("jim-queue-grid"));
+                Assert.That(grid.Class, Does.Not.Contain("mt-5"), "the caller's classes replace the default margin rather than adding to it");
+            }
+        });
+    }
+
+    [Test]
     public async Task VirtualisedDataGrid_WhenDisposed_ReleasesItsViewportFit()
     {
         var cut = RenderGrid();

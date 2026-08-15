@@ -79,15 +79,32 @@ window.jimVirtualList = {
         var entry = { element: element, timer: null };
         entry.apply = function () {
             var footer = document.querySelector('.jim-page-footer');
+            // A dialog is its own window onto the page: it is positioned against the viewport, scrolls its own
+            // body, and the page footer behind it describes geometry the dialog has no relationship with. A grid
+            // in one takes a readable share of the viewport instead of measuring anything.
+            var inDialog = !!element.closest('.mud-dialog');
+            // A grid that starts below the fold cannot be sized against a viewport it is not in: the measurement
+            // below goes to nothing and the grid collapses to its floor. Such a grid takes the same readable
+            // share, which is what the reader sees once they scroll to it.
+            var readableShare = Math.min(480, Math.round(window.innerHeight * 0.6));
             // A couple of passes, because changing the ceiling can re-wrap content and move the measurements.
             for (var i = 0; i < 3; i++) {
                 var gap = footer ? parseFloat(window.getComputedStyle(footer).marginTop) || 20 : 20;
                 var rect = element.getBoundingClientRect();
-                // Everything between the container's bottom edge and the footer's bottom edge moves with the
-                // container, so their distance is the same however tall the container is; the ceiling is what
-                // remains of the viewport after the chrome above the container and that fixed tail below it.
-                var below = footer ? footer.getBoundingClientRect().bottom - rect.bottom : 0;
-                var ceiling = Math.max(240, Math.round(window.innerHeight - (rect.top + window.scrollY) - below - gap));
+                var ceiling;
+                if (inDialog) {
+                    ceiling = readableShare;
+                } else {
+                    // Everything between the container's bottom edge and the footer's bottom edge moves with the
+                    // container, so their distance is the same however tall the container is; the ceiling is what
+                    // remains of the viewport after the chrome above the container and that fixed tail below it.
+                    // Measured in viewport coordinates throughout: getBoundingClientRect is already viewport
+                    // relative, so adding the page's scroll offset (as this once did) shrank every grid on a page
+                    // long enough to scroll, which is every page holding a grid among other content.
+                    var below = footer ? footer.getBoundingClientRect().bottom - rect.bottom : 0;
+                    ceiling = Math.round(window.innerHeight - Math.max(0, rect.top) - below - gap);
+                    if (ceiling < 240) ceiling = readableShare;
+                }
                 var current = parseFloat(element.style.maxHeight) || 0;
                 if (Math.abs(ceiling - current) < 1) break;
                 element.style.maxHeight = ceiling + 'px';
@@ -120,9 +137,24 @@ window.jimVirtualList = {
         if (entry.observer) entry.observer.disconnect();
         delete window.jimVirtualList._fitted[selector];
     },
+    // The height a rendered row actually occupies, which is what an index has to be derived from. The grid tells
+    // the virtualiser an ItemSize, but that is an estimate: padding, a chip, a two-line cell and the theme's own
+    // spacing all land on top of it, and a row set out at 50 renders at 56. Deriving an index from the estimate
+    // put every deep link and every restored position out by the difference (a twelfth of the list, and growing
+    // with how far down it was). Measured off a real row, falling back to the estimate before any row exists.
+    measuredRowHeight: function (element, estimate) {
+        var rows = element.querySelectorAll('tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var height = rows[i].getBoundingClientRect().height;
+            // A virtualiser brackets its rows with spacer rows sized to the scroll area, so anything absurdly
+            // tall is the spacer rather than a row; anything at zero is not laid out yet.
+            if (height > 8 && height < 400) return height;
+        }
+        return estimate;
+    },
     // Reports the index of the first visible row back to .NET as the reader scrolls, debounced so a flick
-    // through a long list produces one call rather than hundreds. Row height is fixed by the grid's ItemSize,
-    // which is what makes an index derivable from scrollTop at all.
+    // through a long list produces one call rather than hundreds. Every row is the same height, which is what
+    // makes an index derivable from scrollTop at all; see measuredRowHeight for where that height comes from.
     observe: function (selector, dotNetRef, rowHeight, debounceMs) {
         window.jimVirtualList.stop(selector);
         var element = document.querySelector(selector);
@@ -132,7 +164,7 @@ window.jimVirtualList = {
         entry.handler = function () {
             if (entry.timer) window.clearTimeout(entry.timer);
             entry.timer = window.setTimeout(function () {
-                var row = Math.max(0, Math.round(element.scrollTop / rowHeight));
+                var row = Math.max(0, Math.round(element.scrollTop / window.jimVirtualList.measuredRowHeight(element, rowHeight)));
                 // The circuit can go away between the scroll and the timer firing; there is nothing to recover
                 // from that, and throwing here would surface in the browser console for no one's benefit.
                 dotNetRef.invokeMethodAsync('OnFirstVisibleRowChanged', row).catch(function () { });
@@ -157,11 +189,13 @@ window.jimVirtualList = {
     scrollToRow: async function (selector, row, rowHeight, timeoutMs) {
         if (!rowHeight) return false;
 
-        var target = row * rowHeight;
         var deadline = Date.now() + (timeoutMs || 5000);
 
         for (;;) {
             var element = document.querySelector(selector);
+            // Measured per attempt, not once: the first attempts run before any row is laid out, when there is
+            // nothing to measure and the estimate is all there is.
+            var target = element ? row * window.jimVirtualList.measuredRowHeight(element, rowHeight) : 0;
             if (element && target <= element.scrollHeight - element.clientHeight) {
                 element.scrollTop = target;
                 return true;

@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Bunit;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
@@ -17,6 +19,14 @@ namespace JIM.Web.Tests;
 [TestFixture]
 public class CausalityTimelineViewTests
 {
+    /// <summary>
+    /// How many attribute rows a rendered detail table is actually showing. The rows live in a virtualised grid,
+    /// which brackets them with two empty spacer rows (that is how a virtualiser reserves the height of what it
+    /// has not rendered), so counting every row in the body counts two that carry nothing.
+    /// </summary>
+    private static int AttributeRowCount(IReadOnlyList<IElement> rows) =>
+        rows.Count(row => row.Children.Length > 0);
+
     private static IRenderedComponent<CausalityTimelineView> RenderTimeline(
         BunitContext context,
         CausalityModel model,
@@ -164,7 +174,7 @@ public class CausalityTimelineViewTests
         cut.Find(".tl-expander").Click();
 
         Assert.That(cut.FindAll(".tl-inline-detail"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".tl-inline-detail tbody tr"), Has.Count.EqualTo(3));
+        Assert.That(AttributeRowCount(cut.FindAll(".tl-inline-detail tbody tr")), Is.EqualTo(3));
         Assert.That(cut.Find(".tl-expander").ClassList, Does.Contain("open"));
 
         cut.Find(".tl-expander").Click();

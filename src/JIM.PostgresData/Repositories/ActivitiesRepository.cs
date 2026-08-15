@@ -227,8 +227,8 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
-    /// The largest window <see cref="GetActivitiesRangeAsync"/> will return, bounding the latency of a single
-    /// read. It is deliberately five times the paged reader's page-size cap, because the two caps protect against
+    /// The largest window any of this repository's range reads will return, bounding the latency of a single
+    /// read. It is deliberately five times the paged readers' page-size cap, because the two caps protect against
     /// different things: a page size is a number a person picked from a fixed list and never approaches 100,
     /// whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach
     /// truncates the window silently, rendering the shortfall as blank rows rather than raising anything.
@@ -449,7 +449,7 @@ public class ActivityRepository : IActivityRepository
         }
 
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        var ordered = sortBy?.ToLower() switch
         {
             "targetcontext" or "connectedsystem" => sortDescending
                 ? query.OrderByDescending(a => a.TargetContext)
@@ -477,7 +477,11 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(a => a.Created) // Default: sort by Created
         };
 
-        return query;
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every sort key
+        // above can tie (a Schedule that fans several Run Profiles out at once stamps them all with the same
+        // created time). Without it, PostgreSQL may order tied rows differently per window, repeating some
+        // Activities and skipping others as the reader scrolls.
+        return ordered.ThenBy(a => a.Id);
     }
 
     public async Task<Activity?> GetActivityAsync(Guid id)
@@ -502,19 +506,16 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        var query = Repository.Database.Activities
-            .Where(a => a.ParentActivityId == parentActivityId)
-            .OrderBy(a => a.Created);
-
-        // Get total count for pagination
-        var grossCount = await query.CountAsync();
         var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+        var (results, grossCount) = await QueryChildActivitiesByRangeAsync(
+            parentActivityId, offset, pageSize, searchQuery: null, includeTotalCount: true);
 
         var pagedResultSet = new PagedResultSet<Activity>
         {
             PageSize = pageSize,
-            TotalResults = grossCount,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged child Activity read asked for the total match count and did not receive one."),
             CurrentPage = page,
             Results = results
         };
@@ -529,6 +530,78 @@ public class ActivityRepository : IActivityRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<Activity>> GetChildActivitiesRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxActivityWindowSize)
+            count = MaxActivityWindowSize;
+
+        var (results, grossCount) = await QueryChildActivitiesByRangeAsync(
+            parentActivityId, offset, count, searchQuery, includeTotalCount);
+
+        return new RangeResultSet<Activity>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range child Activity reads: the direct children of one Activity,
+    /// oldest first, windowed by absolute <paramref name="offset"/> and <paramref name="count"/>, alongside the
+    /// total child count (or null for that total when <paramref name="includeTotalCount"/> is false). Shared so
+    /// the two reads can never disagree on which Activities are children; callers own input validation.
+    /// </summary>
+    private async Task<(List<Activity> Results, int? TotalResults)> QueryChildActivitiesByRangeAsync(
+        Guid parentActivityId,
+        int offset,
+        int count,
+        string? searchQuery,
+        bool includeTotalCount)
+    {
+        var children = Repository.Database.Activities
+            .Where(a => a.ParentActivityId == parentActivityId);
+
+        // Case-insensitive search over what the table shows for a child: what it acted on, and what it said.
+        // ToLower/Contains rather than ILike so the shared core stays executable on the in-memory provider the
+        // unit tier uses.
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            children = children.Where(a =>
+                (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
+                (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)) ||
+                (a.Message != null && a.Message.ToLower().Contains(searchLower)));
+        }
+
+        var query = children
+            .OrderBy(a => a.Created)
+            // Deterministic tie-break: Skip/Take windows are only stable under a total order, and a run that
+            // spawns its children in one batch gives them all the same created time. Without it, PostgreSQL may
+            // order tied rows differently per window, repeating some children and skipping others.
+            .ThenBy(a => a.Id);
+
+        // Counting scans every child rather than a window of them, so it is skipped entirely when the caller
+        // already holds the total. Ordering cannot change how many children there are.
+        int? grossCount = null;
+        if (includeTotalCount)
+            grossCount = await query.CountAsync();
+
+        var results = await query.Skip(offset).Take(count).ToListAsync();
+        return (results, grossCount);
     }
 
     public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
@@ -918,6 +991,86 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, totalCount) = await QueryActivityRunProfileExecutionItemHeadersByRangeAsync(
+            activityId, offset, pageSize, searchQuery, sortBy, sortDescending,
+            objectTypeFilter, errorTypeFilter, outcomeTypeFilter, includeTotalCount: true);
+
+        // Build paged result set
+        var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged execution item header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxActivityWindowSize)
+            count = MaxActivityWindowSize;
+
+        var (results, totalCount) = await QueryActivityRunProfileExecutionItemHeadersByRangeAsync(
+            activityId, offset, count, searchQuery, sortBy, sortDescending,
+            objectTypeFilter, errorTypeFilter, outcomeTypeFilter, includeTotalCount);
+
+        return new RangeResultSet<ActivityRunProfileExecutionItemHeader>
+        {
+            Results = results,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Run Profile Execution Item header reads: applies every filter and the
+    /// sort to one Activity's execution items, windows them by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, and projects the window to header DTOs, alongside the total match count (or
+    /// null for that total when <paramref name="includeTotalCount"/> is false). Shared so the two reads can
+    /// never disagree on which items match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<ActivityRunProfileExecutionItemHeader> Results, int? TotalResults)> QueryActivityRunProfileExecutionItemHeadersByRangeAsync(
+        Guid activityId,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        IEnumerable<string>? objectTypeFilter,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter,
+        bool includeTotalCount)
+    {
         // Execution items can reference Connected System Objects in any system, so name candidates are
         // matched by attribute name rather than by pre-resolved ids. Lowered here so the comparison
         // translates to a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
@@ -1012,7 +1165,7 @@ public class ActivityRepository : IActivityRepository
         }
 
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        var ordered = sortBy?.ToLower() switch
         {
             // Sorts on the rendered external id, so the sort key matches what the External Id column
             // shows for every anchor type rather than only for a Text one (#1286).
@@ -1061,18 +1214,28 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(item => item.Id)
         };
 
-        // Get total count before pagination
-        var totalCount = await query.CountAsync();
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every named sort
+        // key above can tie (a run over one object type gives every item the same type; a clean run gives every
+        // item the same null error type). Without it, PostgreSQL may order tied rows differently per window,
+        // repeating some items and skipping others as the reader scrolls. The default sort is already by id, so
+        // the tie-break is a no-op there rather than a second key that could disagree with the first.
+        query = ordered.ThenBy(item => item.Id);
 
-        // Apply pagination, then project in SQL to only the columns the header needs. The live
+        // Count query. It scans every matching item rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total. Sorting
+        // cannot change how many items match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        // Apply the window, then project in SQL to only the columns the header needs. The live
         // display name and external-id value are pulled with correlated subqueries against the CSO's
         // AttributeValues (no full-collection materialisation), falling back to the RPEI snapshot
         // columns when the CSO is gone or the value is absent. External-id formatting mirrors
-        // ConnectedSystemObjectAttributeValue.ToStringNoName and runs in memory over the <= pageSize
+        // ConnectedSystemObjectAttributeValue.ToStringNoName and runs in memory over the <= count
         // projected rows.
-        var offset = (page - 1) * pageSize;
         var projected = await query
-            .Skip(offset).Take(pageSize)
+            .Skip(offset).Take(count)
             .Select(i => new
             {
                 i.Id,
@@ -1113,25 +1276,7 @@ public class ActivityRepository : IActivityRepository
             OutcomeSummary = p.OutcomeSummary
         }).ToList();
 
-        // Build paged result set
-        var pagedResultSet = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return (results, totalCount);
     }
 
     /// <summary>

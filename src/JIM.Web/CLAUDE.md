@@ -30,6 +30,8 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
+| `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
+| `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
 
 ## Choosing Containers
 
@@ -146,6 +148,23 @@ A page supplies:
 - **`StateKey`** (the route parameter) so a component instance reused across SPA navigations re-reads the URL and re-attaches its scroll tracking.
 
 Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTotals: true)` after changing what matches, plus `ResetScrollAsync()`; the old total describes a match set that no longer exists. Sorting deliberately does not invalidate the total.
+
+## One line per row
+
+**Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (50px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it.
+
+Three shapes break it, and each has one answer:
+
+| Shape | Answer |
+|-------|--------|
+| A chip (or anything) per item from a `@foreach` | `<OverflowList>`: first item inline, "+n more" opens the whole set in a dialog |
+| Two stacked block elements (`MudText` renders a `<p>`) | `<OneLineText Text Secondary>`: the secondary text reads inline after the value, low-lighted |
+| Unbounded free text | `<OneLineText Text>`, or the `.jim-one-line` class where the content is markup |
+
+- **Nothing may become unreachable.** What is clipped stays available on the element's `title`, in the `<OverflowList>` dialog, or on the detail page/panel the row already opens (the service log's Message column relies on all three: clipped, hoverable, and complete and copyable in the entry panel behind a row click).
+- **`.jim-one-line` and `.jim-one-line-list` are the primitives** (`site.css`), and are used directly where a cell's content is markup rather than a string: a linkified description, an icon beside a name, a target chip followed by modifier chips. On `.jim-one-line-list`, only the child carrying `.jim-one-line-list-value` gives way; everything else on the row holds its size, so an affordance or a modifier chip can never be what a long value pushes out.
+- **`<OneLineText>` uses the element's `title`, not a `MudTooltip`, and that is deliberate** rather than an oversight of the Tooltips rule below: a `MudTooltip` wraps its child in an inline-flex box of its own, which is exactly the box the ellipsis needs to be the block container, so the wrapper silently defeats the clipping it was added to explain. Do not "fix" it by migrating it.
+- **Do not solve a too-tall row by raising `ItemSize`, turning virtualisation off, or dropping data.** The height is shared by every grid in the portal, and a cell's content is not the thing that should decide it.
 
 ## Object counts in table toolbars
 

@@ -1,0 +1,51 @@
+@typeparam TItem
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Every item of a cell that could only show its first, drawn with the call site's own template so chips stay
+   chips and links stay clickable. The list states its own height ceiling (its container is the dialog, not the
+   page) and scrolls within it, so a long set is reachable without the dialog growing past the viewport. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
+            @Items.Count.ToString("N0") @Title
+        </MudText>
+        <div class="jim-attr-expanded jim-overflow-list-dialog">
+            @foreach (var item in Items)
+            {
+                <div class="jim-attr-expanded-item">@ItemTemplate(item)</div>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// Every item the cell holds, including the one already shown in the row: the dialog is the whole set, not
+    /// the remainder, so a reader is never left assembling it from two places.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<TItem> Items { get; set; } = [];
+
+    /// <summary>
+    /// How one item is drawn; the same template the row used, so the dialog cannot disagree with it.
+    /// </summary>
+    [Parameter]
+    public RenderFragment<TItem> ItemTemplate { get; set; } = default!;
+
+    /// <summary>
+    /// What the items are, as a plural noun; counted above the list ("3 Roles").
+    /// </summary>
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    private void Close() => MudDialog.Close();
+}

@@ -2,6 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Bunit;
+using JIM.Web.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MudBlazor.Services;
 
 namespace JIM.Web.Tests;
@@ -34,6 +37,11 @@ public abstract class JimComponentTestContext : BunitContext
     protected JimComponentTestContext()
     {
         ConfigureAdditionalServices();
+
+        // Any component holding a table now renders a VirtualisedDataGrid, which reads the saved row density,
+        // so a preference service is part of the baseline rather than something each fixture remembers. TryAdd,
+        // so a fixture that registered its own (to assert on what was written) keeps it.
+        Services.TryAddSingleton<IUserPreferenceService, FakeUserPreferenceService>();
         Services.AddMudServices();
         JSInterop.Mode = JSRuntimeMode.Loose;
         DefaultWaitTimeout = WaitTimeout;

@@ -904,34 +904,6 @@
     margin: 0 0 12px;
 }
 
-.causality-panel .attr-search {
-    flex: 0 1 240px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    background: var(--cz-inner);
-    border: 1px solid var(--cz-line-soft);
-    border-radius: 8px;
-    padding: 5px 10px;
-}
-
-.causality-panel .attr-search input {
-    border: none;
-    background: transparent;
-    color: var(--cz-text);
-    font-size: 0.875rem;
-    outline: none;
-    width: 100%;
-    font-family: inherit;
-}
-
-.causality-panel .attr-search .mud-icon-root {
-    width: 15px;
-    height: 15px;
-    font-size: 15px;
-    color: var(--cz-text-faint);
-    flex: none;
-}
 
 .causality-panel .filter-chips {
     display: flex;
@@ -956,15 +928,9 @@
     border-color: transparent;
 }
 
-.causality-panel .attr-meta-count {
-    margin-left: auto;
-    font-size: 0.875rem;
-    color: var(--cz-text-faint);
-}
 
-/* The attribute rows themselves are a standard MudTable (see CausalityAttributeDetail), so they need
-   no bespoke row, cell or operation-badge styling; only the superseded-value affordance has no
-   MudBlazor equivalent. */
+/* The attribute rows themselves are the shared virtualised grid (see CausalityAttributeDetail), which brings its
+   own row, cell and toolbar styling; only the superseded-value affordance has no MudBlazor equivalent. */
 .causality-panel .attr-previous-value {
     text-decoration: line-through;
     margin-right: 8px;

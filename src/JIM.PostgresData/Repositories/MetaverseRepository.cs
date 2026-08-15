@@ -3327,6 +3327,66 @@ public class MetaverseRepository : IMetaverseRepository
         int pageSize,
         string? searchText = null)
     {
+        var (values, totalCount) = await QueryAttributeValuesByRangeAsync(
+            metaverseObjectId, attributeName, (page - 1) * pageSize, pageSize, searchText, includeTotalCount: true);
+
+        return new PagedResultSet<MetaverseObjectAttributeValue>
+        {
+            Results = values,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged attribute value read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment for
+        // how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (values, totalCount) = await QueryAttributeValuesByRangeAsync(
+            metaverseObjectId, attributeName, offset, count, searchText, includeTotalCount);
+
+        return new RangeResultSet<MetaverseObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Metaverse Object attribute value reads: one object's values for one
+    /// attribute, optionally narrowed by a case-insensitive search over the stored value and the referenced
+    /// object's own values, ordered by id and windowed by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, alongside the total match count (or null for that total when
+    /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
+    /// values match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<MetaverseObjectAttributeValue> Results, int? TotalResults)> QueryAttributeValuesByRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.Set<MetaverseObjectAttributeValue>()
             .Where(av => av.MetaverseObject.Id == metaverseObjectId
                          && av.Attribute.Name == attributeName);
@@ -3341,15 +3401,21 @@ public class MetaverseRepository : IMetaverseRepository
             );
         }
 
-        var totalCount = await query.CountAsync();
+        // Counting scans every matching value rather than a window of them, so it is skipped entirely when the
+        // caller already holds the total. Ordering cannot change how many values match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
         // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var values = await query
             .AsTracking()
             .AsSplitQuery()
+            // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
+            // second key that could tie.
             .OrderBy(av => av.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(offset)
+            .Take(count)
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
@@ -3358,13 +3424,7 @@ public class MetaverseRepository : IMetaverseRepository
             .ThenInclude(rvav => rvav.Attribute)
             .ToListAsync();
 
-        return new PagedResultSet<MetaverseObjectAttributeValue>
-        {
-            Results = values,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            PageSize = pageSize
-        };
+        return (values, totalCount);
     }
 
     public async Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc)

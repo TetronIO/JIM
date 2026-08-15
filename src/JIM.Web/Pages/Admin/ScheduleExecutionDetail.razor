@@ -4,10 +4,10 @@
 @using JIM.Models.Scheduling
 @using JIM.Models.Scheduling.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IUserPreferenceService PreferenceService
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -144,107 +144,142 @@
     }
 
     @* ─── Steps ─── *@
-    @* MudTable keys each row on its item internally, so the loop's own @key moves with the rows. *@
-    <MudTable Items="@_detail.Steps" T="ScheduleExecutionStepState"
-              Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm"
-              Class="mt-6"
-              Outlined="true" Elevation="0">
-        <ToolBarContent>
-            <TableDensityToggle @bind-Dense="_dense" />
-            <MudText Class="mx-2 mud-text-disabled">|</MudText>
-            <MudText Typo="Typo.h6">Steps</MudText>
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh><MudText Typo="Typo.button">Step</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Duration</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Activity</MudText></MudTh>
-        </HeaderContent>
-        <RowTemplate Context="step">
-            <MudTd DataLabel="Step">
-                @* Steps sharing a step index run in parallel. The first of a group is Sequential and
-                   only its siblings are ParallelWithPrevious, so the group is detected by counting
-                   the steps at the index, never by testing one step's execution mode. *@
-                @if (IsParallelStep(step))
-                {
-                    <MudTooltip Text="Parallel step; runs concurrently with the other steps at this position" Arrow="true" Placement="Placement.Top">
-                        <div class="d-flex align-center gap-1">
-                            <span>@(step.StepIndex + 1)</span>
-                            <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Parallel</MudText>
-                        </div>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <span>@(step.StepIndex + 1)</span>
-                }
-            </MudTd>
-            <MudTd DataLabel="Name">
-                <span>@GetStepName(step)</span>
-                @if (!string.IsNullOrWhiteSpace(step.ErrorMessage))
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Error" Style="white-space: pre-wrap; word-break: break-word;">
-                        @step.ErrorMessage
-                    </MudText>
-                }
-            </MudTd>
-            <MudTd DataLabel="Connected System">
-                @if (step.ConnectedSystemId.HasValue && !string.IsNullOrEmpty(step.ConnectedSystemName))
-                {
-                    var connectedSystemId = step.ConnectedSystemId.Value;
-                    <MudLink Href="@($"/admin/connected-systems/{connectedSystemId}/")">@step.ConnectedSystemName</MudLink>
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </MudTd>
-            <MudTd DataLabel="Status">
-                <div class="d-flex align-center">
-                    <MudChip T="string" Variant="Variant.Text" Class="ml-0"
-                             Color="Helpers.GetScheduleExecutionStepMudBlazorColorForStatus(step.Status)">
-                        @step.Status.ToDisplayString()
-                    </MudChip>
-                    @if (step.ContinueOnFailure && IsFailedStep(step.Status))
+    @* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+       and the toolbar count) lives in the shared grid; this page holds the execution's steps already, so windows
+       are sliced from them in memory rather than read from the database. The count carries the nouns, so the
+       toolbar needs no title of its own. *@
+    <VirtualisedDataGrid @ref="_stepsGrid" T="ScheduleExecutionStepState"
+                         ContainerId="schedule-execution-steps"
+                         StateKey="@Id.ToString()"
+                         DefaultSortBy="step"
+                         LoadWindow="LoadStepWindowAsync"
+                         SingularName="Step"
+                         PluralName="Steps"
+                         SearchPlaceholder="Search steps">
+        <Columns>
+            <TemplateColumn T="ScheduleExecutionStepState" Title="Step" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Step" Name="step" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @* Steps sharing a step index run in parallel. The first of a group is Sequential and
+                       only its siblings are ParallelWithPrevious, so the group is detected by counting
+                       the steps at the index, never by testing one step's execution mode. *@
+                    @if (IsParallelStep(context.Item))
                     {
-                        <MudTooltip Text="This step was configured to let the execution continue after a failure" Arrow="true" Placement="Placement.Top">
-                            <MudIcon Icon="@Icons.Material.Filled.SkipNext" Class="mud-text-secondary" />
+                        <MudTooltip Text="Parallel step; runs concurrently with the other steps at this position" Arrow="true" Placement="Placement.Top">
+                            <div class="d-flex align-center gap-1">
+                                <span>@(context.Item.StepIndex + 1)</span>
+                                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Parallel</MudText>
+                            </div>
                         </MudTooltip>
                     }
-                </div>
-            </MudTd>
-            <MudTd DataLabel="Duration">
-                @if (step.Duration.HasValue)
-                {
-                    var stepDuration = step.Duration.Value;
-                    <span>@stepDuration.ToAbbreviatedString(int.MaxValue)</span>
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </MudTd>
-            <MudTd DataLabel="Activity">
-                @if (step.ActivityId.HasValue)
-                {
-                    var activityId = step.ActivityId.Value;
-                    <MudLink Href="@($"/activity/{activityId}")">View Activity</MudLink>
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            <MudText Typo="Typo.body1">
-                This execution has no steps to show. Its Schedule has been deleted, so the step definitions are no longer available.
-            </MudText>
-        </NoRecordsContent>
-    </MudTable>
+                    else
+                    {
+                        <span>@(context.Item.StepIndex + 1)</span>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ScheduleExecutionStepState" Title="Name" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Name" Name="name" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <span>@GetStepName(context.Item)</span>
+                    @if (!string.IsNullOrWhiteSpace(context.Item.ErrorMessage))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error" Style="white-space: pre-wrap; word-break: break-word;">
+                            @context.Item.ErrorMessage
+                        </MudText>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ScheduleExecutionStepState" Title="Connected System" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ConnectedSystemId.HasValue && !string.IsNullOrEmpty(context.Item.ConnectedSystemName))
+                    {
+                        var connectedSystemId = context.Item.ConnectedSystemId.Value;
+                        <MudLink Href="@($"/admin/connected-systems/{connectedSystemId}/")">@context.Item.ConnectedSystemName</MudLink>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ScheduleExecutionStepState" Title="Status" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Status" Name="status" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    <div class="d-flex align-center">
+                        <MudChip T="string" Variant="Variant.Text" Class="ml-0"
+                                 Color="Helpers.GetScheduleExecutionStepMudBlazorColorForStatus(context.Item.Status)">
+                            @context.Item.Status.ToDisplayString()
+                        </MudChip>
+                        @if (context.Item.ContinueOnFailure && IsFailedStep(context.Item.Status))
+                        {
+                            <MudTooltip Text="This step was configured to let the execution continue after a failure" Arrow="true" Placement="Placement.Top">
+                                <MudIcon Icon="@Icons.Material.Filled.SkipNext" Class="mud-text-secondary" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ScheduleExecutionStepState" Title="Duration" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Duration" Name="duration" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.Duration.HasValue)
+                    {
+                        var stepDuration = context.Item.Duration.Value;
+                        <span>@stepDuration.ToAbbreviatedString(int.MaxValue)</span>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn T="ScheduleExecutionStepState" Title="Activity" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Activity</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (context.Item.ActivityId.HasValue)
+                    {
+                        var activityId = context.Item.ActivityId.Value;
+                        <MudLink Href="@($"/activity/{activityId}")">View Activity</MudLink>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No steps match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Outlined.Schedule"
+                                 PrimaryText="This execution has no steps to show"
+                                 SecondaryText="Its Schedule has been deleted, so the step definitions are no longer available." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 else if (_notFound)
 {
@@ -266,7 +301,7 @@ else
     // The page's own generated class is also named ScheduleExecutionDetail, so the DTO needs qualifying here.
     private JIM.Models.Scheduling.DTOs.ScheduleExecutionDetail? _detail;
     private bool _notFound;
-    private bool _dense;
+    private VirtualisedDataGrid<ScheduleExecutionStepState>? _stepsGrid;
     private List<BreadcrumbItem> _breadcrumbs = BuildBreadcrumbs("Schedule Execution");
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -290,7 +325,7 @@ else
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3), token);
                     await LoadAsync();
-                    await InvokeAsync(StateHasChanged);
+                    await InvokeAsync(RefreshStepsAsync);
 
                     if (_detail == null || !IsInFlight(_detail.Execution.Status))
                         break;
@@ -305,19 +340,6 @@ else
                 }
             }
         }, token);
-    }
-
-    /// <summary>
-    /// Loads the saved row-density preference on first render so the Steps table paints at the user's chosen
-    /// density immediately. GetTableDenseAsync swallows the "JS interop not ready" case internally.
-    /// </summary>
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
     }
 
     void IDisposable.Dispose()
@@ -346,6 +368,51 @@ else
         {
             _refreshLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Repaints the page and re-reads the Steps grid's windows after a load. The grid caches the windows the
+    /// virtualiser has already fetched, so a repaint alone would leave a running execution's steps frozen at the
+    /// statuses they had when the page opened. The totals are invalidated too, because a step can appear as the
+    /// execution advances through a Schedule whose later steps were not yet materialised.
+    /// </summary>
+    private async Task RefreshStepsAsync()
+    {
+        StateHasChanged();
+        if (_stepsGrid != null)
+            await _stepsGrid.RefreshAsync(invalidateTotals: true);
+    }
+
+    /// <summary>
+    /// Slices one window of this execution's steps, applying the grid's search (step name and Connected System
+    /// name) and sort. The page already holds every step, so there is no repository range read: an execution has
+    /// as many steps as its Schedule has, which is a configuration-sized number.
+    /// </summary>
+    private Task<VirtualisedWindow<ScheduleExecutionStepState>> LoadStepWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<ScheduleExecutionStepState> steps = _detail?.Steps ?? Enumerable.Empty<ScheduleExecutionStepState>();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            steps = steps.Where(s =>
+                GetStepName(s).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (s.ConnectedSystemName != null && s.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        IOrderedEnumerable<ScheduleExecutionStepState> Order<TKey>(Func<ScheduleExecutionStepState, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? steps.OrderByDescending(key, comparer) : steps.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "name" => Order(GetStepName, StringComparer.OrdinalIgnoreCase),
+            "connectedsystem" => Order(s => s.ConnectedSystemName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "status" => Order(s => s.Status),
+            "duration" => Order(s => s.Duration ?? TimeSpan.Zero),
+            _ => Order(s => s.StepIndex)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
     private static List<BreadcrumbItem> BuildBreadcrumbs(string executionName) =>
@@ -381,6 +448,7 @@ else
         }
 
         await LoadAsync();
+        await RefreshStepsAsync();
     }
 
     /// <summary>

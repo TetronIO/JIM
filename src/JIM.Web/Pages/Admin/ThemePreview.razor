@@ -1,5 +1,6 @@
 @page "/admin/theme-preview"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -383,42 +384,84 @@
 @* ─── Tables ─── *@
 <MudText Typo="Typo.h5" Class="mt-8 mb-4">Tables</MudText>
 
-<MudText Typo="Typo.h6" Class="mb-3">MudTable</MudText>
-<MudTable Items="@_sampleData" Hover="true" Outlined="true" Elevation="0" Dense="false" Class="mb-5"
-    Filter="new Func<SampleRow, bool>(TableFilterFunc)">
-    <ToolBarContent>
-        <MudText Typo="Typo.h6">Sample Data</MudText>
-        <MudSpacer />
-        <SearchField @bind-Value="_tableSearchString" Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<SampleRow, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SampleRow, object>(x => x.Department)"><MudText Typo="Typo.button">Department</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SampleRow, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-        <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
-    </HeaderContent>
-    <RowTemplate Context="row">
-        <MudTd DataLabel="Name">
-            <MudLink Href="#">@row.Name</MudLink>
-        </MudTd>
-        <MudTd DataLabel="Department">@row.Department</MudTd>
-        <MudTd DataLabel="Status">
-            <MudChip T="string" Variant="Variant.Text"
-                Color="@(row.Status == "Active" ? Color.Success : row.Status == "Pending" ? Color.Warning : Color.Error)">
-                @row.Status
-            </MudChip>
-        </MudTd>
-        <MudTd DataLabel="Created">@row.Created.ToString("dd MMM yyyy")</MudTd>
-        <MudTd DataLabel="Actions" Style="text-align: right;">
-            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" />
-            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" />
-        </MudTd>
-    </RowTemplate>
-    <PagerContent>
-        <MudTablePager />
-    </PagerContent>
-</MudTable>
+@* This specimen shows the virtualised grid rather than a paged MudTable because that is what every list in the
+   product now is; a specimen advertising a pager would teach the one pattern the portal has just removed. *@
+<MudText Typo="Typo.h6" Class="mb-3">Virtualised Data Grid</MudText>
+<VirtualisedDataGrid T="SampleRow"
+                     ContainerId="theme-preview-sample-list"
+                     UrlParameterPrefix="sd-"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadSampleWindowAsync"
+                     SingularName="Row"
+                     PluralName="Rows">
+    <ToolBarExtras>
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled" DropShadow="false">New Row</MudButton>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate Context="row">
+                <MudLink Href="#">@row.Item.Name</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Department" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Department" Name="department" />
+            </HeaderTemplate>
+            <CellTemplate Context="row">
+                @row.Item.Department
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Status</MudText>
+            </HeaderTemplate>
+            <CellTemplate Context="row">
+                <MudChip T="string" Variant="Variant.Text"
+                    Color="@(row.Item.Status == "Active" ? Color.Success : row.Item.Status == "Pending" ? Color.Warning : Color.Error)">
+                    @row.Item.Status
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Created" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Created" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate Context="row">
+                @row.Item.Created.ToFriendlyDate()
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate Context="row">
+                <div class="d-flex justify-end">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" Class="ml-2" />
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No rows match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.TableRows"
+                             PrimaryText="No rows yet"
+                             SecondaryText="This is the empty state a list shows before anything has been created in it." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 <MudText Typo="Typo.h6" Class="mb-3">Simple Table</MudText>
 <MudSimpleTable Outlined="true" Hover="true">
@@ -482,27 +525,57 @@
         <MudText Typo="Typo.h6" Class="mb-3">Nested Table</MudText>
         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
             <MudText Class="mb-3">Tables inside a paper — header uses jim-inner-surface, data rows use paper surface.</MudText>
-            <MudText Typo="Typo.subtitle2" Class="mb-2">MudTable (with toolbar)</MudText>
-            <MudTable Items="@_nestedTableData" Hover="true" Outlined="true" Elevation="0" Dense="true">
-                <ToolBarContent>
-                    <MudText Typo="Typo.subtitle2">Attributes</MudText>
-                    <MudSpacer />
-                    <SearchField Placeholder="Search..." />
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh>Attribute</MudTh>
-                    <MudTh>Type</MudTh>
-                    <MudTh>Value</MudTh>
-                </HeaderContent>
-                <RowTemplate Context="row">
-                    <MudTd DataLabel="Attribute">@row.Name</MudTd>
-                    <MudTd DataLabel="Type">@row.Type</MudTd>
-                    <MudTd DataLabel="Value">@row.Value</MudTd>
-                </RowTemplate>
-                <PagerContent>
-                    <MudTablePager />
-                </PagerContent>
-            </MudTable>
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Virtualised Data Grid (nested)</MudText>
+            <VirtualisedDataGrid T="NestedTableRow"
+                                 ContainerId="theme-preview-nested-list"
+                                 UrlParameterPrefix="nt-"
+                                 DefaultSortBy="attribute"
+                                 LoadWindow="LoadNestedWindowAsync"
+                                 SingularName="Attribute"
+                                 PluralName="Attributes">
+                <Columns>
+                    <TemplateColumn Title="Attribute" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                        </HeaderTemplate>
+                        <CellTemplate Context="row">
+                            @row.Item.Name
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Type" Sortable="false">
+                        <HeaderTemplate>
+                            <VirtualisedSortHeader Title="Type" Name="type" />
+                        </HeaderTemplate>
+                        <CellTemplate Context="row">
+                            @row.Item.Type
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Value" Sortable="false">
+                        <HeaderTemplate>
+                            <MudText Typo="Typo.button">Value</MudText>
+                        </HeaderTemplate>
+                        <CellTemplate Context="row">
+                            @row.Item.Value
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <EmptyContent Context="grid">
+                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                         PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
+                                         SecondaryText="Try a different search term, or clear the search."
+                                         ActionText="Clear Search"
+                                         OnAction="@(() => grid.ClearSearchAsync())" />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                         PrimaryText="No attributes yet"
+                                         SecondaryText="This is how an empty nested grid reads inside a paper." />
+                    }
+                </EmptyContent>
+            </VirtualisedDataGrid>
             <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">MudSimpleTable</MudText>
             <MudSimpleTable Outlined="true" Hover="true">
                 <thead>
@@ -889,7 +962,6 @@
     private string _textFieldValue = "Sample text";
     private string _selectValue = "Option 1";
     private DateTime? _datePickerValue = DateTime.UtcNow;
-    private string _tableSearchString = "";
 
     // Sample table data
     private readonly List<SampleRow> _sampleData = new()
@@ -901,11 +973,57 @@
         new("Eve Davis", "Operations", "Active", DateTime.UtcNow.AddDays(-60)),
     };
 
-    private bool TableFilterFunc(SampleRow row) =>
-        string.IsNullOrWhiteSpace(_tableSearchString) ||
-        row.Name.Contains(_tableSearchString, StringComparison.OrdinalIgnoreCase) ||
-        row.Department.Contains(_tableSearchString, StringComparison.OrdinalIgnoreCase) ||
-        row.Status.Contains(_tableSearchString, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Windows the sample rows for the grid specimen. Sliced in memory, exactly as a configuration-sized list is
+    /// on a real page, so the specimen exercises the same code path the product does.
+    /// </summary>
+    private Task<VirtualisedWindow<SampleRow>> LoadSampleWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<SampleRow> rows = _sampleData;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            rows = rows.Where(r =>
+                r.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                r.Department.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                r.Status.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        IOrderedEnumerable<SampleRow> Order<TKey>(Func<SampleRow, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? rows.OrderByDescending(key, comparer) : rows.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "department" => Order(r => r.Department, StringComparer.OrdinalIgnoreCase),
+            "created" => Order(r => r.Created),
+            _ => Order(r => r.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>Windows the nested-grid specimen's rows, so a grid inside a paper is shown doing what a real one does.</summary>
+    private Task<VirtualisedWindow<NestedTableRow>> LoadNestedWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<NestedTableRow> rows = _nestedTableData;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            rows = rows.Where(r =>
+                r.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                r.Type.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                r.Value.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var key = request.SortBy == "type" ? (Func<NestedTableRow, string>)(r => r.Type) : r => r.Name;
+        var sorted = request.SortDescending
+            ? rows.OrderByDescending(key, StringComparer.OrdinalIgnoreCase)
+            : rows.OrderBy(key, StringComparer.OrdinalIgnoreCase);
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
 
     private record SampleRow(string Name, string Department, string Status, DateTime Created);
 

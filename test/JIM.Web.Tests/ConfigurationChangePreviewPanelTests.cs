@@ -285,7 +285,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             Group(1_650, attributeName: "Email", oldValue: "@contoso.co.uk", newValue: "@fabrikam.co.uk"));
 
         var panel = RenderPanel();
-        panel.FindAll("tbody tr").Last().Click();
+        OpenSummaryRowContaining(panel, "@contoso.co.uk");
 
         var heading = panel.Find("[data-testid='jim-preview-drilldown-heading']").TextContent;
         using (Assert.EnterMultipleScope())
@@ -308,10 +308,51 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             Delta("bsmith", "svc-bsmith", PreviewPatternKeys.PrefixAdded));
 
         var panel = RenderPanel();
-        panel.FindAll("tbody tr").First().Click();
+        OpenSummaryRowContaining(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("Prefix added"), TimeSpan.FromSeconds(2));
 
         Assert.That(panel.Markup, Does.Contain("Email or UPN domain changed"));
+    }
+
+    [Test]
+    public void Panel_DrillDown_ReadsTheStoredDeltasFromTheFirstPageNotPageZero()
+    {
+        // The object-level rows are stored behind a page-based read while the grid asks for arbitrary windows, so the
+        // panel serves a window from the whole pages that cover it. That conversion is 1-based on the way out: a
+        // page zero is silently accepted by the repository and comes back holding the wrong rows, which is a defect
+        // no rendering assertion would catch, because the panel would still show a full and plausible list.
+        GivenPreview(Complete);
+        GivenGroups(Group(2, attributeName: "Email"));
+        GivenDeltas(Delta("bob@contoso.com", "bob@fabrikam.com", PreviewPatternKeys.EmailDomainChanged));
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("bob@fabrikam.com"), TimeSpan.FromSeconds(2));
+
+        _previewRepository.Verify(
+            r => r.GetPreviewDeltasAsync(ActivityId, It.IsAny<Guid?>(), It.Is<int>(page => page >= 1), It.IsAny<int>(), It.IsAny<string?>()),
+            Times.AtLeastOnce);
+        _previewRepository.Verify(
+            r => r.GetPreviewDeltasAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.Is<int>(page => page < 1), It.IsAny<int>(), It.IsAny<string?>()),
+            Times.Never, "the stored read is 1-based; a page below one reads the wrong rows without failing");
+    }
+
+    [Test]
+    public void Panel_DrillDownWithNoStoredDetail_SaysDetailWasNotKeptRatherThanBlamingASearch()
+    {
+        // The two reasons a drill-down is empty mean opposite things: a search that matched nothing is the reader's
+        // to undo, while a preview that kept no object-level detail is a property of how the preview was run and has
+        // no way out. Showing the search message when nothing was searched sends the reader looking for a filter.
+        GivenPreview(Complete);
+        GivenGroups(Group(2, attributeName: "Email"));
+        GivenDeltas();
+
+        var panel = RenderPanel();
+        OpenSummaryRowContaining(panel, "Email");
+        panel.WaitForState(() => panel.Markup.Contains("No object-level detail was kept"), TimeSpan.FromSeconds(2));
+
+        Assert.That(panel.Markup, Does.Not.Contain("match that search"),
+            "nothing was searched, so the empty state must not offer clearing a search as the way out");
     }
 
     [Test]
@@ -491,6 +532,22 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     private int ReadCount() => _previewRepository.Invocations.Count(i => i.Method.Name == nameof(IConfigurationChangePreviewRepository.GetPreviewAsync));
+
+    /// <summary>
+    /// Opens the drill-down for the summary row whose text contains <paramref name="text"/>.
+    /// <para>
+    /// Rows are picked by what they say rather than by position, because the summary is a virtualised grid: its
+    /// tbody carries the virtualiser's two zero-height spacer rows around the real ones, and those have no click
+    /// handler, so the first and last positions are not rows at all. Clicking a cell is enough; the row's own
+    /// handler catches the bubbled event.
+    /// </para>
+    /// </summary>
+    private static void OpenSummaryRowContaining(IRenderedComponent<ConfigurationChangePreviewPanel> panel, string text)
+    {
+        var cell = panel.FindAll("tbody td").FirstOrDefault(td => td.TextContent.Contains(text, StringComparison.Ordinal));
+        Assert.That(cell, Is.Not.Null, $"no summary row containing \"{text}\" was rendered");
+        cell!.Click();
+    }
 
     private static void Complete(ConfigurationChangePreview preview)
     {

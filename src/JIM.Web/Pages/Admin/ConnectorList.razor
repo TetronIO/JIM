@@ -42,14 +42,9 @@
                 <VirtualisedSortHeader Title="Description" Name="description" />
             </HeaderTemplate>
             <CellTemplate>
-                @if (string.IsNullOrEmpty(context.Item.Description))
-                {
-                    <EmptyValue />
-                }
-                else
-                {
-                    @context.Item.Description
-                }
+                @* A row in a virtualised grid is one line, so a long description is clipped rather than wrapped;
+                   it is available in full on hover, and on the Connector's own page. *@
+                <OneLineText Text="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Built-in?" Sortable="false" HeaderClass="jim-nowrap">

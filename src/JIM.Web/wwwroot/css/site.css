@@ -354,31 +354,57 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     background-color: var(--mud-palette-surface);
 }
 
-/* Operations Queue: hide task rows when their schedule group is collapsed */
-.jim-queue-collapsed-row {
-    display: none !important;
+/* ─── Operations Queue: one block per Schedule Execution ───
+   The queue is a grid per group rather than one grouped table (MudBlazor cannot group and virtualise at once),
+   so each Schedule Execution's header is an ordinary block that has to join the grid beneath it into one box:
+   it carries the top corners and leaves its bottom edge to the grid's own top border. */
+.jim-queue-group-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom: none;
+    border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0;
 }
 
-/* Operations Queue: collapse empty group header rows for standalone tasks */
-.jim-queue-standalone-group {
-    padding: 0 !important;
-    height: 0 !important;
-    border: none !important;
-    line-height: 0 !important;
-    font-size: 0 !important;
+/* The block leading the queue sits under the worker status bar, which already draws the box's top edge. */
+.jim-queue-group-header--joined {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
-/* Operations Queue: visible separator before standalone tasks to delineate from schedule groups */
-.jim-queue-standalone-separator {
-    height: 3px !important;
-    background-color: var(--mud-palette-lines-default);
+/* Collapsed, the header is the whole box: it closes itself off rather than opening onto nothing. */
+.jim-queue-group-header--collapsed {
+    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom-left-radius: var(--jim-container-radius);
+    border-bottom-right-radius: var(--jim-container-radius);
 }
 
-/* Operations Queue: remove top border radius when worker activity bar connects */
-.jim-queue-table-active.mud-table-outlined {
-    border-top-left-radius: 0 !important;
-    border-top-right-radius: 0 !important;
-    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+/* The Schedule's name and position, which is also what collapses the group. */
+.jim-queue-group-toggle {
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+
+/* Pushed right so the Schedule's actions land over the Actions column of the rows beneath. */
+.jim-queue-group-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* Every cell hangs from the top of its row, so the progress rails line up across the grid rather than floating
+   at a height that shifts with each cell's contents. Scoped to the queue's own grids. */
+.jim-queue-grid td {
+    vertical-align: top;
+}
+
+/* Joined to the block directly above it (its Schedule Execution's header, or the worker status bar), so the two
+   read as one box. Qualified past MudBlazor's own outlined-table rule, which loads after this sheet. */
+html[lang] .jim-queue-grid--joined.mud-table-outlined {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
 /* Worker activity indicator bar — shown above queue table when tasks are processing */
@@ -594,42 +620,6 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 /* Allow long unbroken strings (DNs, GUIDs, URLs) to wrap mid-word */
 .jim-text-break {
     word-break: break-all;
-}
-
-/* Only the two side blocks' headings are held on one line. Applying this to every heading widened the long
-   columns enough to squeeze the Connected System name into three lines per row, which costs far more height than
-   it saves: a wrapped heading is paid once, a wrapped cell is paid on every row. */
-.jim-dataflow-header .jim-side-heading {
-    white-space: nowrap;
-}
-
-/* Data Flow header band (#1199). The table's columns form two groups, one per side of the Metaverse, and a
-   single header row cannot say so: "Object Type" alone does not tell you which side it belongs to. The band spans
-   each group and names it, which is what lets the column headings below stay short and symmetrical. Quieter than
-   the column headings themselves, because it labels a group rather than a sortable column. */
-.jim-header-band .mud-table-cell {
-    text-align: center;
-    font-weight: 600;
-    letter-spacing: .01em;
-    padding-top: 8px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--mud-palette-table-lines);
-}
-
-.jim-header-band .jim-band-cs {
-    background-color: var(--mud-palette-background-grey);
-}
-
-.jim-header-band .jim-band-mv {
-    background-color: var(--mud-palette-primary-hover);
-    color: var(--mud-palette-primary-text-hover, var(--mud-palette-primary));
-}
-
-/* The trailing columns belong to neither side. Deliberately unlabelled: naming that group would assert a
-   structure JIM does not have. */
-.jim-header-band .jim-band-none {
-    background-color: transparent;
-    border-bottom-color: transparent;
 }
 
 /* Inline code styling - similar to markdown code blocks */
@@ -1727,6 +1717,70 @@ html[lang] .jim-schema-change-table td {
     align-self: flex-start;
 }
 
+/* ─── One-line cells (every virtualised row is exactly one line) ───
+   The virtualiser positions every row arithmetically from one fixed ItemSize, so a cell that wraps, or that
+   stacks two block elements, puts every row below it at an offset nothing else on the page agrees with: the
+   scroll position, the row index written to the URL and the reserved scroll space all drift from what is on
+   screen. These two primitives are how a cell is kept to one line without losing anything.
+
+   .jim-one-line is the clamp: a block box whose content is truncated with an ellipsis rather than wrapped. It
+   is used directly wherever the cell's content is markup (a linkified description, an icon beside a name), and
+   through <OneLineText /> wherever it is a string. Whatever is clipped stays available in the element's title,
+   in a dialog, or on the detail page the row links to; nothing is ever only visible when it happens to fit. */
+.jim-one-line {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* An icon sharing the line with text sits on the text's baseline by default, which drops it below the line it
+   belongs to; centre it against the text instead. */
+.jim-one-line .mud-icon-root {
+    vertical-align: middle;
+}
+
+/* Secondary text that used to sit on a second line, now inline after the value it qualifies. The colour and
+   opacity are set here rather than borrowing .mud-text-secondary, because site.css gives that class an extra
+   opacity of its own and the two routes render as two different greys (see JIM.Web/CLAUDE.md). */
+.jim-one-line-secondary {
+    margin-left: 8px;
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.8;
+}
+
+/* .jim-one-line-list is the clamp for a cell holding a LIST: the first item is shown, clipped rather than
+   wrapped, and the "+n more" affordance beside it opens the whole set in a dialog (<OverflowList />). Also used
+   directly where a cell holds a small fixed set of elements that must not wrap. */
+.jim-one-line-list {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+/* Everything on the row holds its size; only the designated value gives way, so the affordance (or a modifier
+   chip) can never be the thing that disappears when the value beside it is long. */
+.jim-one-line-list > * {
+    flex-shrink: 0;
+}
+
+.jim-one-line-list > .jim-one-line-list-value {
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* The shared affordance button is authored for the old stacked layout, where it sat under the values and so
+   aligned to the start of a column. On this one-line row it has to sit beside the value. */
+.jim-one-line-list .jim-attr-expand-btn {
+    align-self: center;
+}
+
 .jim-attr-expanded {
     display: flex;
     flex-direction: column;
@@ -1735,6 +1789,14 @@ html[lang] .jim-schema-change-table td {
 
 .jim-attr-expanded-item {
     padding: 2px 0;
+}
+
+/* The whole set, inside <OverflowListDialog />. The ceiling is stated rather than measured, because the dialog's
+   container is not the page; it matches the figure the Connected System Object's and Pending Export's own value
+   dialogs state, so the three read as the same kind of thing. */
+.jim-overflow-list-dialog {
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 /* MVA rows: top-align cells so attribute name stays at top when values stack vertically */
@@ -2766,13 +2828,6 @@ html[lang] .jim-schema-change-table td {
     font-variant-numeric: tabular-nums;
 }
 
-/* Every cell hangs from the top of the row, so the rails line up across the table rather than
-   floating at a height that shifts with each cell's contents. Scoped to the queue's own table so
-   no other table's vertical centring is disturbed. */
-.jim-queue-table-active td {
-    vertical-align: top;
-}
-
 /* ─── A Schedule Execution's steps in a queue group header (#1162) ───
    One marker per step group, joined by legs, with the step names underneath. The unit here is honest
    in a way the per-task rail's is not: one segment is one whole Run Profile execution, and there is
@@ -3595,8 +3650,11 @@ html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell
    written as an inline style, which wins over this rule. It is a maximum, not a height: a short list
    collapses to its content like an ordinary table. The fallback exists so the virtualiser never sees an
    unconstrained container while that first measurement is in flight. */
+/* First-paint ceiling, before jimVirtualList.fit measures where the page footer lands. A grid whose container is
+   not the page (a dialog, a cell) states its own ceiling instead, as the custom property, and skips the
+   measurement; the property's fallback is what every ordinary list uses. */
 .jim-virtualised-list .mud-table-container {
-    max-height: calc(100vh - 320px);
+    max-height: var(--jim-virtualised-list-max-height, calc(100vh - 320px));
     overflow-y: auto;
 }
 
