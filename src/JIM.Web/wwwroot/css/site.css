@@ -1660,6 +1660,17 @@ html[lang] .jim-schema-change-table td {
     white-space: nowrap;
 }
 
+/* The attribute name column carries its own background so it reads as a row header, and that
+   background paints over the row-hover colour MudBlazor sets on the <tr>, leaving the first
+   column conspicuously unhighlighted while the rest of the row lights up. Layer the hover colour
+   over the column's own background rather than replacing it, so the whole row highlights and the
+   column keeps its distinction (a theme whose hover colour is opaque simply flattens to it, which
+   still highlights uniformly). Scoped to .mud-table-hover so tables with hover disabled, such as
+   the Theme Preview sample, are unaffected. */
+.jim-attribute-table.mud-table-hover tbody tr:hover .jim-attr-name {
+    background-image: linear-gradient(var(--mud-palette-table-hover), var(--mud-palette-table-hover));
+}
+
 .jim-attr-type {
     white-space: nowrap;
 }
