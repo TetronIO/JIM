@@ -18,9 +18,7 @@
         </MudLink>
         @if (Value.ReferenceValue.SecondaryExternalIdAttributeValue != null)
         {
-            <span class="mud-text-secondary ml-1">
-                (@Value.ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName())
-            </span>
+            <span class="mud-text-secondary jim-text-code ml-1">- @Value.ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName()</span>
         }
     </span>
 }
