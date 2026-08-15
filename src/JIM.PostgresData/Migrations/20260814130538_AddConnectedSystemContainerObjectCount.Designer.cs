@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260814130538_AddConnectedSystemContainerObjectCount")]
+    partial class AddConnectedSystemContainerObjectCount
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3405,6 +3408,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIConnector")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ImplementsIContainers")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIExportUsingCalls")

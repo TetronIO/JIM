@@ -1342,11 +1342,6 @@ html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
     box-shadow: none !important;
 }
 
-/* Centre-align alert icon and close button vertically */
-html[lang] .mud-alert-position {
-    align-items: center;
-}
-
 /* Schema refresh results alert - position close icon in top right */
 .jim-alert-schema-refresh {
     position: relative;
@@ -3149,16 +3144,6 @@ html[lang] .jim-password-guidance.mud-alert {
         var(--jim-dialog-inner-surface, var(--mud-palette-surface))) !important;
 }
 
-/* The icon belongs beside the headline, not halfway down the advice. JIM centres alert icons app-wide (see
-   "Centre-align alert icon and close button vertically" above), which is right for the one-line alerts that
-   rule was written for and leaves the icon adrift beside the third bullet of a panel this tall. Opting out
-   here rather than changing the global rule, and qualified with html[lang] to match that rule's specificity:
-   the alert root's own align-items does not reach the icon, and an equal-specificity selector loses to it. */
-html[lang] .jim-password-guidance .mud-alert-position {
-    align-items: flex-start;
-    padding-top: 0.125rem;
-}
-
 /* The alert supplies the tint, the rule and the icon; the layout of the advice inside it stays here. */
 .jim-password-guidance .mud-alert-message {
     display: flex;
@@ -3436,6 +3421,19 @@ html[lang] .jim-password-guidance .mud-alert-position {
     text-align: right;
 }
 
+/* How many objects a Container holds (#1276). Right-aligned and tabular so a column of them can be compared down
+   the tree, which is the whole point of putting the figure on the row; the Container names beside them are
+   indented by depth and cannot be. Weighted a step above the meta text beside it because the number is what the
+   selection decision turns on, not a footnote to it. */
+.jim-picker-objects {
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 4.5rem;
+    text-align: right;
+    color: var(--mud-palette-text-primary);
+}
+
 .jim-picker-scope {
     display: inline-flex;
     align-items: center;
@@ -3600,4 +3598,34 @@ html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell
 .jim-virtualised-list .mud-table-container {
     max-height: calc(100vh - 320px);
     overflow-y: auto;
+}
+
+/* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */
+.jim-scope-mode {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* The scope is a list of Distinguished Names, so it is read column-by-column: a proportional face makes two
+   near-identical paths hard to tell apart, which is the one thing an administrator is doing here. */
+/* The scope is a column of Distinguished Names read one against another, so it is set in the same monospace face
+   as every other code-like value in the portal (.jim-text-code). Qualified with html[lang] and !important for the
+   reason that class documents: MudBlazor's stylesheet loads after this one and its own input typography
+   (.mud-input-root and friends) otherwise wins the tie, leaving the field silently proportional. */
+html[lang] .jim-scope-text .mud-input-slot {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace !important;
+    font-size: 0.875rem !important;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.jim-scope-text-error-list {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+}
+
+.jim-scope-text-error-list li + li {
+    margin-top: 0.25rem;
 }

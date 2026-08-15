@@ -15,7 +15,7 @@ namespace JIM.Models.Interfaces;
 /// it is a Distinguished Name suffix for a directory, a path prefix elsewhere, and JIM has no business guessing
 /// which.
 ///
-/// A Connector implementing <see cref="IConnectorContainers"/> should implement this too. One that does not is not
+/// A Connector that reports Containers through <see cref="IConnectorPartitions"/> should implement this too. One that does not is not
 /// broken; it simply cannot be asked, and a preview says so plainly rather than reporting a zero that reads as
 /// "this change would affect nothing".
 ///

@@ -1129,6 +1129,98 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Read a Connected System's Container Scope as text (Advanced Mode)
+    /// </summary>
+    /// <remarks>
+    /// One statement per line, in hierarchy order: <c>include</c> or <c>exclude</c>, an optional <c>one-level</c>,
+    /// then the Container's path. This is the canonical form, so text read here and sent straight back to
+    /// <c>PUT connected-systems/{id}/container-scope-text</c> leaves the scope exactly as it was.
+    ///
+    /// A Connected System with nothing selected returns empty text rather than nothing at all.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The Container Scope, as text.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/container-scope-text", Name = "GetConnectedSystemContainerScopeText")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerScopeTextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemContainerScopeTextAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested Container Scope text for Connected System: {Id}", connectedSystemId);
+
+        var text = await _application.ConnectedSystems.GetContainerScopeTextAsync(connectedSystemId);
+        if (text == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        return Ok(new ConnectedSystemContainerScopeTextDto { Text = text });
+    }
+
+    /// <summary>
+    /// State a Connected System's Container Scope as text (Advanced Mode)
+    /// </summary>
+    /// <remarks>
+    /// Replaces the whole of Container Scope with what the text states, which is what makes it usable on a
+    /// hierarchy too large to click through: a Container the text does not name states nothing, so empty text
+    /// clears every selection and exclusion. Partition selection is left alone, except that naming a Container
+    /// selects the partition holding it.
+    ///
+    /// Applied all-or-nothing, because a scope applied halfway takes objects out of import scope without anyone
+    /// asking for it. A path naming no Container, a Container named twice, and a statement an ancestor already
+    /// makes are each refused with the line that caused them, and nothing is changed. The response reports the
+    /// canonical text now in force.
+    ///
+    /// The change is recorded as one Activity and one versioned configuration snapshot, exactly as saving the tree
+    /// in the portal is. Preview what it would cost first with
+    /// <c>POST connected-systems/{id}/scope-selection/preview</c>.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The Container Scope to apply.</param>
+    /// <response code="200">The Container Scope was applied. The response carries the canonical text.</response>
+    /// <response code="400">The text could not be applied. Nothing was changed.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/container-scope-text", Name = "UpdateConnectedSystemContainerScopeText")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerScopeTextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemContainerScopeTextAsync(int connectedSystemId,
+        [FromBody] UpdateConnectedSystemContainerScopeTextRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        _logger.LogInformation("Applying Container Scope text to Connected System {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for Container Scope text update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.ApplyContainerScopeTextAsync(connectedSystemId, request.Text, apiKey)
+            : await _application.ConnectedSystems.ApplyContainerScopeTextAsync(connectedSystemId, request.Text, initiatedBy);
+
+        if (result == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (!result.Applied)
+        {
+            // Every problem at once, each tied to its line: an administrator correcting a scope of any size one
+            // round trip at a time is how a half-corrected text gets saved.
+            var detail = string.Join(" ", result.Errors.Select(e => $"line {e.LineNumber}: {e.Message}"));
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The Container Scope text could not be applied, so nothing was changed. {detail}"));
+        }
+
+        return Ok(new ConnectedSystemContainerScopeTextDto { Text = result.Text });
+    }
+
+    /// <summary>
     /// Preview a change to a Connected System's partition and container selection
     /// </summary>
     /// <remarks>

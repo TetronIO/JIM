@@ -19,8 +19,6 @@ public class ConnectorDefinitionFile
 
     public bool ImplementsISettings { get; set; }
 
-    public bool ImplementsIContainers { get; set; }
-
     public bool ImplementsIExportUsingCalls { get; set; }
 
     public bool ImplementsIExportUsingFiles { get; set; }
