@@ -1,6 +1,7 @@
-﻿@page "/admin/example-data"
+@page "/admin/example-data"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.ExampleData.DTOs
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -16,29 +17,68 @@
 </MudButtonGroup>
 
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-5">
-    You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
+    You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fully
     configure JIM with Connected Systems, Synchronisation Rules and wait for data to be imported and synchronised etc.
 </MudText>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     Templates define example data to be created in JIM. They consist of one or more object types, with data sets being used to generate values for the object attributes.
 </MudText>
 
-<MudTable Items="@_templates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
-    <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name"><MudLink Href="@("admin/example-data/templates/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-    </RowTemplate>
-</MudTable>
+@* ─── Templates ─── *@
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count) lives in the
+   shared grid; this page loads the small configuration list once and windows it in memory. The page header
+   already names the list, so there is no toolbar title and the count carries the nouns. *@
+<VirtualisedDataGrid T="ExampleDataTemplateHeader"
+                     ContainerId="example-data-template-list"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadWindowAsync"
+                     SingularName="Example Data Template"
+                     PluralName="Example Data Templates">
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudLink Href="@("/admin/example-data/templates/" + context.Item.Id)">@context.Item.Name</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Built-in?" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @(context.Item.BuiltIn ? "Yes" : "No")
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Created" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Created" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Item.Created.ToLocalTime().ToRelativeTime()
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Example Data Templates match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.Science"
+                             PrimaryText="No Example Data Templates yet"
+                             SecondaryText="Templates define the example data that can be created in JIM." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     private List<ExampleDataTemplateHeader>? _templates;
@@ -54,5 +94,30 @@
     {
         using var jim = JimFactory.Create();
         _templates = await jim.ExampleData.GetTemplateHeadersAsync();
+    }
+
+    /// <summary>
+    /// Windows the in-memory list for the grid: this is a small configuration list loaded whole on
+    /// initialisation, so filtering and sorting happen here and the shared extension slices the window.
+    /// </summary>
+    private Task<VirtualisedWindow<ExampleDataTemplateHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        IEnumerable<ExampleDataTemplateHeader> templates = _templates ?? [];
+
+        // The old table had no search box, so the grid's search is honoured against the obvious display
+        // field: the name.
+        var searchText = request.SearchText;
+        if (!string.IsNullOrWhiteSpace(searchText))
+            templates = templates.Where(t => t.Name?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true);
+
+        Func<ExampleDataTemplateHeader, object> sortKey = request.SortBy switch
+        {
+            "builtin" => t => t.BuiltIn,
+            "created" => t => t.Created,
+            _ => t => t.Name ?? string.Empty
+        };
+        templates = request.SortDescending ? templates.OrderByDescending(sortKey) : templates.OrderBy(sortKey);
+
+        return Task.FromResult(templates.ToWindow(request));
     }
 }

@@ -4081,7 +4081,38 @@ public class ConnectedSystemServer
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
     }
-    
+
+    /// <summary>
+    /// Gets a window of Connected System Object headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to
+    /// skip counting the whole match set when the caller already knows the total; the returned total is then null
+    /// rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeadersRange")
+            .SetTag("connectedSystemId", connectedSystemId)
+            .SetTag("offset", offset)
+            .SetTag("count", count)
+            .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
+            .SetTag("sortBy", sortBy ?? "default")
+            .SetTag("includeTotalCount", includeTotalCount);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+            connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
+            objectTypeFilter, joinTypeFilter, includeTotalCount);
+    }
+
     /// <summary>
     /// Retrieves a page's worth of Connected System Objects for a specific system.
     /// </summary>
@@ -6467,6 +6498,27 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets a window of Pending Export headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetPendingExportHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to skip
+    /// counting the whole match set when the caller already knows the total; the returned total is then null
+    /// rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
     /// Retrieves a single Pending Export by ID with all related data.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
@@ -6618,6 +6670,26 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
             connectedSystemId, fromDate, toDate, externalIdSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets a window of deleted Connected System Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters with
+    /// <see cref="GetDeletedCsoChangesAsync"/>, ordered by deletion time newest first. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesRangeAsync(
+            offset, count, connectedSystemId, fromDate, toDate, externalIdSearch, includeTotalCount);
     }
 
     /// <summary>

@@ -1,14 +1,11 @@
-﻿@page "/admin/connected-systems"
+@page "/admin/connected-systems"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Activities.DTOs
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional.DTOs
-@using JIM.Utilities;
-@using JIM.Web.Services
-@using System;
-@using System.Linq;
+@using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -42,88 +39,127 @@
     </MudAlert>
 }
 
-<MudTable Items="@_connectedSystemHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
-    <ToolBarContent>
-        <TableDensityToggle @bind-Dense="_dense" />
-        <MudSpacer />
-        <SearchField @bind-Value="_searchString" Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Description ?? string.Empty)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudText Typo="Typo.button">Stats</MudText></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)"><MudText Typo="Typo.button">Connector</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-        <MudTh Style="text-align: center"><MudText Typo="Typo.button">Action</MudText></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name"><MudLink Href="@(Utilities.GetConnectedSystemHref(context))">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Description">
-            @if (string.IsNullOrEmpty(context.Description))
-            {
-                <EmptyValue />
-            }
-            else
-            {
-                @context.Description
-            }
-        </MudTd>
-        <MudTd DataLabel="Stats">
-            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                <MudTooltip Text="Objects" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
-                             Icon="@Icons.Material.Filled.Storage" Class="jim-stat-chip">
-                        @context.ObjectCount.ToString("N0")
-                    </MudChip>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, the search box)
+   lives in the shared grid; this page loads the small configuration list once and windows it in memory. *@
+<VirtualisedDataGrid T="ConnectedSystemHeader"
+                     ContainerId="connected-system-list"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadWindowAsync"
+                     SingularName="Connected System"
+                     PluralName="Connected Systems">
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudLink Href="@(Utilities.GetConnectedSystemHref(context.Item))">@context.Item.Name</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Description" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Description" Name="description" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (string.IsNullOrEmpty(context.Item.Description))
+                {
+                    <EmptyValue />
+                }
+                else
+                {
+                    @context.Item.Description
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Stats" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Stats</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudTooltip Text="Objects" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
+                                 Icon="@Icons.Material.Filled.Storage" Class="jim-stat-chip">
+                            @context.Item.ObjectCount.ToString("N0")
+                        </MudChip>
+                    </MudTooltip>
+                    @if (context.Item.ConnectorsCount > 0)
+                    {
+                        <MudTooltip Text="@($"Connected Objects ({GetPercentage(context.Item.ObjectCount, context.Item.ConnectorsCount)}%)")" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Filled.Link" Class="jim-stat-chip">
+                                @context.Item.ConnectorsCount.ToString("N0")
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Item.PendingExportObjectsCount > 0)
+                    {
+                        <MudTooltip Text="@($"Pending Exports ({GetPercentage(context.Item.ObjectCount, context.Item.PendingExportObjectsCount)}%)")" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Filled.Upload" Class="jim-stat-chip">
+                                @context.Item.PendingExportObjectsCount.ToString("N0")
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    <ConfigurationDriftIndicator Status="@GetDrift(context.Item.Id)" ConnectedSystemName="@context.Item.Name" />
+                    <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Item.Id)"
+                                                       SubjectName="@context.Item.Name" IsConnectedSystem="true" />
+                </MudStack>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Connector" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connector" Name="connector" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.ConnectorName
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Created" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Created" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Item.Created.ToLocalTime().ToRelativeTime()
                 </MudTooltip>
-                @if (context.ConnectorsCount > 0)
-                {
-                    <MudTooltip Text="@($"Connected Objects ({GetPercentage(context.ObjectCount, context.ConnectorsCount)}%)")" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Filled.Link" Class="jim-stat-chip">
-                            @context.ConnectorsCount.ToString("N0")
-                        </MudChip>
-                    </MudTooltip>
-                }
-                @if (context.PendingExportObjectsCount > 0)
-                {
-                    <MudTooltip Text="@($"Pending Exports ({GetPercentage(context.ObjectCount, context.PendingExportObjectsCount)}%)")" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                 Icon="@Icons.Material.Filled.Upload" Class="jim-stat-chip">
-                            @context.PendingExportObjectsCount.ToString("N0")
-                        </MudChip>
-                    </MudTooltip>
-                }
-                <ConfigurationDriftIndicator Status="@GetDrift(context.Id)" ConnectedSystemName="@context.Name" />
-                <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Id)"
-                                                   SubjectName="@context.Name" IsConnectedSystem="true" />
-            </MudStack>
-        </MudTd>
-        <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-            <MudTd DataLabel="Action" Style="text-align: center">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Action" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Action</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
                 <MudTooltip Text="View Objects" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
+                    <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context.Item)"
                                    Icon="@Icons.Material.Filled.List"
                                    Variant="Variant.Filled" />
                 </MudTooltip>
-            </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        There are no Connected Systems
-    </NoRecordsContent>
-</MudTable>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Connected Systems match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.Cable"
+                             PrimaryText="No Connected Systems yet"
+                             SecondaryText="Use the Create Connected System button to get going." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
     private Dictionary<int, ConfigurationDriftStatus>? _drift;
     private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
-    private string _searchString = "";
-    private bool _dense;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
@@ -134,6 +170,18 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await EnsureLoadedAsync();
+    }
+
+    /// <summary>
+    /// Loads the Connected System list and its per-row indicator data once. The grid's window loader also calls
+    /// this because the grid can request its first window before this page's initialisation has completed.
+    /// </summary>
+    private async Task EnsureLoadedAsync()
+    {
+        if (_connectedSystemHeaders != null)
+            return;
+
         using var jim = JimFactory.Create();
         _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
@@ -149,20 +197,42 @@
         }
     }
 
+    /// <summary>
+    /// Windows the in-memory list for the grid: a small configuration list is loaded whole, then searched, sorted
+    /// and sliced here rather than growing a database range read.
+    /// </summary>
+    private async Task<VirtualisedWindow<ConnectedSystemHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        await EnsureLoadedAsync();
+
+        IEnumerable<ConnectedSystemHeader> filtered = _connectedSystemHeaders!;
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+            filtered = filtered.Where(cs => cs.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
+
+        filtered = request.SortBy switch
+        {
+            "description" => request.SortDescending
+                ? filtered.OrderByDescending(cs => cs.Description ?? string.Empty)
+                : filtered.OrderBy(cs => cs.Description ?? string.Empty),
+            "connector" => request.SortDescending
+                ? filtered.OrderByDescending(cs => cs.ConnectorName)
+                : filtered.OrderBy(cs => cs.ConnectorName),
+            "created" => request.SortDescending
+                ? filtered.OrderByDescending(cs => cs.Created)
+                : filtered.OrderBy(cs => cs.Created),
+            _ => request.SortDescending
+                ? filtered.OrderByDescending(cs => cs.Name)
+                : filtered.OrderBy(cs => cs.Name)
+        };
+
+        return filtered.ToWindow(request);
+    }
+
     private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>
         _drift != null && _drift.TryGetValue(connectedSystemId, out var status) ? status : null;
 
     private InitialPasswordAttention? GetInitialPasswordAttention(int connectedSystemId) =>
         _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(connectedSystemId, out var attention) ? attention : null;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
-    }
 
     private static int GetPercentage(int total, int part)
     {
@@ -170,18 +240,5 @@
             return 0;
 
         return (int)Math.Round((double)part / total * 100);
-    }
-
-    private bool FilterFunc1(ConnectedSystemHeader element) => FilterFunc(element, _searchString);
-
-    private static bool FilterFunc(ConnectedSystemHeader element, string searchString)
-    {
-        if (string.IsNullOrWhiteSpace(searchString))
-            return true;
-
-        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return false;
     }
 }

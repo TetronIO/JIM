@@ -223,7 +223,9 @@
                     <ToolBarContent>
                         <TableDensityToggle @bind-Dense="_dense" />
                         <MudText Class="mx-2 mud-text-disabled">|</MudText>
-                        <MudText Typo="Typo.h6">Attribute Changes (@_attributeChangeTotalCounts.Values.Sum().ToString("N0"))</MudText>
+                        <MudText Typo="Typo.h6">Attribute Changes</MudText>
+                        @* Bare number: the title beside it already names the objects (JIM.Web/CLAUDE.md convention). *@
+                        <TableObjectCount Count="@_attributeChangeTotalCounts.Values.Sum()" Class="ml-2" />
                         <MudSpacer />
                         <SearchField @bind-Value="_searchString"
                                      Placeholder="Search attribute name or value"

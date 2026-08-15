@@ -8,6 +8,7 @@ using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data;
+using JIM.Web.Authentication;
 using JIM.Web.Models;
 using JIM.Web.Services;
 using JIM.Models.Activities;
@@ -343,6 +344,17 @@ try
             options.Events.OnRemoteFailure = ctx =>
             {
                 RecordFailedSignInEvent(ctx.HttpContext, CategoriseOidcFailure(ctx.Failure));
+
+                // Failures a fresh attempt recovers completely (a replayed callback whose single-use code is
+                // already spent, a lost correlation cookie) restart the sign-in instead of surfacing an
+                // exception page; the audit record above still captures every occurrence. Everything else
+                // still throws, keeping genuine provider and configuration errors loud and diagnosable.
+                if (OidcSignInRecovery.ShouldRestartSignIn(ctx.Failure))
+                {
+                    ctx.Response.Redirect(OidcSignInRecovery.GetSafeReturnPath(ctx.Properties?.RedirectUri));
+                    ctx.HandleResponse();
+                }
+
                 return Task.CompletedTask;
             };
 

@@ -1384,11 +1384,6 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-text-disabled);
 }
 
-/* Hide page footer on pages that need maximum vertical space */
-.jim-hide-footer .jim-page-footer {
-    display: none;
-}
-
 /* Log detail slide-out panel */
 .jim-log-panel {
     position: fixed;
@@ -3550,6 +3545,59 @@ html[lang] .jim-picker-seg .jim-picker-seg-off {
 
 .jim-scope-pending-clean {
     color: var(--mud-palette-text-secondary);
+}
+
+/* ─── Table empty state (see <TableEmptyState>) ───
+   Rendered inside a table or data grid's no-rows fragment. The min-height gives the message room in an
+   ordinary (non-virtualised) table so it sits near the visual centre rather than pinned under the header,
+   while staying shallow enough not to stretch a small table; virtualised grids collapse instead, below. */
+.jim-table-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 3rem 1.5rem;
+    min-height: 40vh;
+}
+
+/* A virtualised grid's fitted height is a ceiling, not a floor, so an empty grid collapses to its content
+   like an ordinary table and needs no artificial stretch to centre the message in leftover space; it just
+   carries a healthy block of padding so the message does not sit cramped under the header. */
+.jim-virtualised-list .jim-table-empty-state {
+    min-height: 0;
+    padding: 4rem 1.5rem;
+}
+
+/* Qualified with .mud-icon-root because MudBlazor's own size rule loads after site.css and wins ties. */
+.jim-table-empty-state-icon.mud-icon-root {
+    font-size: 3rem;
+    width: 3rem;
+    height: 3rem;
+    opacity: 0.4;
+}
+
+/* ─── Virtualised list (see <VirtualisedDataGrid>) ───
+   The grid's outer paper rounds and clips its own corners, while MudBlazor also gives the first and last
+   sticky header cells a 4px corner radius of their own. Sticky cells paint above the rows scrolling beneath
+   them, so that radius opens a small transparent arc at the table's top corners through which a row's cell
+   styling (the Logs severity stripe) peeks as a curved sliver once the list is scrolled. Square the inner
+   cells off; rounding the outside is the paper's job. The selector chain matters: MudBlazor's own rule
+   (.mud-table-sticky-header * .mud-table-root .mud-table-head * .mud-table-cell:first-child) weighs in at
+   five class-level selectors, so this one carries .mud-table-root plus the html[lang] qualifier to outrank
+   it; anything shorter loses the cascade and the radius silently survives. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-head .mud-table-cell {
+    border-radius: 0;
+}
+
+/* First-paint approximation only. The real ceiling is measured by jimVirtualList.fit the moment the grid is
+   in the DOM (sized so a long list ends with the page footer at the bottom of the viewport) and is then
+   written as an inline style, which wins over this rule. It is a maximum, not a height: a short list
+   collapses to its content like an ordinary table. The fallback exists so the virtualiser never sees an
+   unconstrained container while that first measurement is in flight. */
+.jim-virtualised-list .mud-table-container {
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
 }
 
 /* Container Scope: Simple / Advanced mode switch and the text editor behind it (#1255) */

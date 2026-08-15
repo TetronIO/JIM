@@ -1,11 +1,10 @@
-﻿@page "/admin/sync-rules"
+@page "/admin/sync-rules"
 @attribute [Authorize(Roles = "Administrator")]
-@using JIM.Models.Logic;
+@using JIM.Models.Logic
 @using JIM.Models.Logic.DTOs
 @using JIM.Models.Transactional.DTOs
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -73,63 +72,35 @@
     </MudStack>
 }
 
-    <MudTable Items="@_syncRuleHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
-              Filter="new Func<SyncRuleHeader, bool>(_filter.Matches)" Outlined="true" Elevation="0">
-        <ToolBarContent>
-            <TableDensityToggle @bind-Dense="_dense" />
-            <MudText Class="mx-2 mud-text-disabled">|</MudText>
-            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/sync-rules/new"
-                       Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">Create Synchronisation Rule
-            </MudButton>
-            <MudSpacer />
-            <SearchField @bind-Value="SearchString" Class="mt-0" />
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Name)">
-                    <MudText Typo="Typo.button">Name</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction)">
-                    <MudText Typo="Typo.button">Direction</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)">
-                    <MudText Typo="Typo.button">Connected System</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction == SyncRuleDirection.Import ? x.ConnectedSystemObjectTypeName : x.MetaverseObjectTypeName)">
-                    <MudText Typo="Typo.button">Object Mapping</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => SyncRuleFilter.GetActionType(x))">
-                    <MudText Typo="Typo.button">Actions</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudText Typo="Typo.button">Attention</MudText>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">
-                    <MudText Typo="Typo.button">Status</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)">
-                    <MudText Typo="Typo.button">Created</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Name">
-                <MudLink Href="@("/admin/sync-rules/" + context.Id)">@context.Name</MudLink>
-            </MudTd>
-            <MudTd DataLabel="Direction">
-                @if (context.Direction == SyncRuleDirection.Import)
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, the search box)
+   lives in the shared grid; this page loads the small configuration list once and windows it in memory. The
+   facet selects above are page-owned filters, so their handlers refresh the grid and reset its scroll. *@
+<VirtualisedDataGrid @ref="_grid" T="SyncRuleHeader"
+                     ContainerId="sync-rule-list"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadWindowAsync"
+                     SingularName="Synchronisation Rule"
+                     PluralName="Synchronisation Rules">
+    <ToolBarExtras>
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/sync-rules/new"
+                   Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">Create Synchronisation Rule
+        </MudButton>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudLink Href="@("/admin/sync-rules/" + context.Item.Id)">@context.Item.Name</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Direction" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Direction" Name="direction" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.Direction == SyncRuleDirection.Import)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Inbound</MudChip>
                 }
@@ -137,11 +108,23 @@
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Outbound</MudChip>
                 }
-            </MudTd>
-            <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
-            <MudTd DataLabel="Object Mapping">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Connected System" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.ConnectedSystemName
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Object Mapping" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Object Mapping" Name="objectmapping" />
+            </HeaderTemplate>
+            <CellTemplate>
                 <div class="d-flex align-center flex-wrap" style="gap: 2px;">
-                    @if (context.Direction == SyncRuleDirection.Import)
+                    @if (context.Item.Direction == SyncRuleDirection.Import)
                     {
                         @* Inbound: CS -> MV *@
                         <MudChip T="string" Size="Size.Medium">
@@ -150,7 +133,7 @@
                                     <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                 </MudTooltip>
                             </AvatarContent>
-                            <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
+                            <ChildContent>@context.Item.ConnectedSystemObjectTypeName</ChildContent>
                         </MudChip>
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
                         <MudChip T="string" Size="Size.Medium">
@@ -159,7 +142,7 @@
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                 </MudTooltip>
                             </AvatarContent>
-                            <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
+                            <ChildContent>@context.Item.MetaverseObjectTypeName</ChildContent>
                         </MudChip>
                     }
                     else
@@ -171,7 +154,7 @@
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                 </MudTooltip>
                             </AvatarContent>
-                            <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
+                            <ChildContent>@context.Item.MetaverseObjectTypeName</ChildContent>
                         </MudChip>
                         <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
                         <MudChip T="string" Size="Size.Medium">
@@ -180,14 +163,19 @@
                                     <MudAvatar Color="Color.Secondary">CS</MudAvatar>
                                 </MudTooltip>
                             </AvatarContent>
-                            <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
+                            <ChildContent>@context.Item.ConnectedSystemObjectTypeName</ChildContent>
                         </MudChip>
                     }
                 </div>
-            </MudTd>
-            <MudTd DataLabel="Actions">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Actions" Name="actions" />
+            </HeaderTemplate>
+            <CellTemplate>
                 <div class="d-flex align-center gap-1 flex-wrap">
-                    @switch (SyncRuleFilter.GetActionType(context))
+                    @switch (SyncRuleFilter.GetActionType(context.Item))
                     {
                         case SyncRuleActionType.Projects:
                             <MudTooltip Text="Projects new objects to the Metaverse" Arrow="true" Placement="Placement.Top">
@@ -205,13 +193,23 @@
                             break;
                     }
                 </div>
-            </MudTd>
-            <MudTd DataLabel="Attention">
-                <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Id)"
-                                                   SubjectName="@context.Name" />
-            </MudTd>
-            <MudTd DataLabel="Status">
-                @if (context.Enabled)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Attention" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Attention</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                <InitialPasswordAttentionIndicator Attention="@GetInitialPasswordAttention(context.Item.Id)"
+                                                   SubjectName="@context.Item.Name" />
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.Enabled)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
                 }
@@ -219,33 +217,52 @@
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
                 }
-            </MudTd>
-            <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                    @context.Created.ToLocalTime().ToRelativeTime()
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Created" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Created" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Item.Created.ToLocalTime().ToRelativeTime()
                 </MudTooltip>
-            </MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            @if (_filter.IsEmpty)
-            {
-                <MudText>There are no Synchronisation Rules</MudText>
-            }
-            else
-            {
-                <MudText>No Synchronisation Rules match the current filters</MudText>
-            }
-        </NoRecordsContent>
-    </MudTable>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Synchronisation Rules match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else if (!_filter.IsEmpty)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No Synchronisation Rules match the current filters"
+                             SecondaryText="Adjust or clear the filters above to see more results." />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.Sync"
+                             PrimaryText="No Synchronisation Rules yet"
+                             SecondaryText="Use the Create Synchronisation Rule button to define your first flow." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
+    private VirtualisedDataGrid<SyncRuleHeader>? _grid;
     private IList<SyncRuleHeader>? _syncRuleHeaders;
     private Dictionary<int, InitialPasswordAttention>? _initialPasswordAttention;
     private bool _canCreateSyncRules;
-    private bool _dense;
 
     // The single holder of filter state. SyncRuleFilter.Matches is the same predicate the REST API
-    // filters through, so every surface narrows a Synchronisation Rule list identically.
+    // filters through, so every surface narrows a Synchronisation Rule list identically. The grid's
+    // search box feeds the Search facet via each window request; the selects above feed the rest.
     private readonly SyncRuleFilter _filter = new();
 
     private Dictionary<int, string> _connectedSystemNames = new();
@@ -258,17 +275,21 @@
         new("Synchronisation Rules", href: null, disabled: true)
     };
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
-    }
-
     protected override async Task OnInitializedAsync()
     {
+        await EnsureLoadedAsync();
+    }
+
+    /// <summary>
+    /// Loads the Synchronisation Rule list, its filter options and its per-row indicator data once. The grid's
+    /// window loader also calls this because the grid can request its first window before this page's
+    /// initialisation has completed.
+    /// </summary>
+    private async Task EnsureLoadedAsync()
+    {
+        if (_syncRuleHeaders != null)
+            return;
+
         using var jim = JimFactory.Create();
         _canCreateSyncRules = jim.ConnectedSystems.GetConnectedSystemCount() > 0;
         _syncRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync();
@@ -287,13 +308,69 @@
                 _syncRuleHeaders.Select(r => r.Id).ToList());
     }
 
+    /// <summary>
+    /// Windows the in-memory list for the grid: a small configuration list is loaded whole, then filtered,
+    /// sorted and sliced here rather than growing a database range read. The grid's search text is fed into the
+    /// shared filter's Search facet so all surfaces keep matching identically.
+    /// </summary>
+    private async Task<VirtualisedWindow<SyncRuleHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        await EnsureLoadedAsync();
+
+        _filter.Search = request.SearchText;
+        IEnumerable<SyncRuleHeader> filtered = _filter.IsEmpty
+            ? _syncRuleHeaders!
+            : _syncRuleHeaders!.Where(_filter.Matches);
+
+        filtered = request.SortBy switch
+        {
+            "direction" => request.SortDescending
+                ? filtered.OrderByDescending(r => r.Direction)
+                : filtered.OrderBy(r => r.Direction),
+            "connectedsystem" => request.SortDescending
+                ? filtered.OrderByDescending(r => r.ConnectedSystemName)
+                : filtered.OrderBy(r => r.ConnectedSystemName),
+            "objectmapping" => request.SortDescending
+                ? filtered.OrderByDescending(GetObjectMappingSortKey)
+                : filtered.OrderBy(GetObjectMappingSortKey),
+            "actions" => request.SortDescending
+                ? filtered.OrderByDescending(SyncRuleFilter.GetActionType)
+                : filtered.OrderBy(SyncRuleFilter.GetActionType),
+            "status" => request.SortDescending
+                ? filtered.OrderByDescending(r => r.Enabled)
+                : filtered.OrderBy(r => r.Enabled),
+            "created" => request.SortDescending
+                ? filtered.OrderByDescending(r => r.Created)
+                : filtered.OrderBy(r => r.Created),
+            _ => request.SortDescending
+                ? filtered.OrderByDescending(r => r.Name)
+                : filtered.OrderBy(r => r.Name)
+        };
+
+        return filtered.ToWindow(request);
+    }
+
+    /// <summary>
+    /// The Object Mapping column leads with the source side of the flow, so it sorts by it too: the Connected
+    /// System Object Type for inbound rules and the Metaverse Object Type for outbound ones.
+    /// </summary>
+    private static string GetObjectMappingSortKey(SyncRuleHeader header) =>
+        header.Direction == SyncRuleDirection.Import ? header.ConnectedSystemObjectTypeName : header.MetaverseObjectTypeName;
+
     private InitialPasswordAttention? GetInitialPasswordAttention(int syncRuleId) =>
         _initialPasswordAttention != null && _initialPasswordAttention.TryGetValue(syncRuleId, out var attention) ? attention : null;
 
-    private string SearchString
+    /// <summary>
+    /// The facet selects are page-owned filters, so a change refreshes the grid with the totals invalidated (the
+    /// old total describes a match set that no longer exists) and resets its scroll position.
+    /// </summary>
+    private async Task OnPageFilterChangedAsync()
     {
-        get => _filter.Search ?? string.Empty;
-        set => _filter.Search = value;
+        if (_grid == null)
+            return;
+
+        await _grid.ResetScrollAsync();
+        await _grid.RefreshAsync(invalidateTotals: true);
     }
 
     private IReadOnlyCollection<int> SelectedConnectedSystemIds => _filter.ConnectedSystemIds ?? [];
@@ -304,13 +381,29 @@
 
     private IReadOnlyCollection<SyncRuleStatus> SelectedStatuses => _filter.Statuses ?? [];
 
-    private void OnConnectedSystemFilterChanged(IReadOnlyCollection<int> selected) => _filter.ConnectedSystemIds = selected;
+    private async Task OnConnectedSystemFilterChanged(IReadOnlyCollection<int> selected)
+    {
+        _filter.ConnectedSystemIds = selected;
+        await OnPageFilterChangedAsync();
+    }
 
-    private void OnDirectionFilterChanged(IReadOnlyCollection<SyncRuleDirection> selected) => _filter.Directions = selected;
+    private async Task OnDirectionFilterChanged(IReadOnlyCollection<SyncRuleDirection> selected)
+    {
+        _filter.Directions = selected;
+        await OnPageFilterChangedAsync();
+    }
 
-    private void OnActionTypeFilterChanged(IReadOnlyCollection<SyncRuleActionType> selected) => _filter.ActionTypes = selected;
+    private async Task OnActionTypeFilterChanged(IReadOnlyCollection<SyncRuleActionType> selected)
+    {
+        _filter.ActionTypes = selected;
+        await OnPageFilterChangedAsync();
+    }
 
-    private void OnStatusFilterChanged(IReadOnlyCollection<SyncRuleStatus> selected) => _filter.Statuses = selected;
+    private async Task OnStatusFilterChanged(IReadOnlyCollection<SyncRuleStatus> selected)
+    {
+        _filter.Statuses = selected;
+        await OnPageFilterChangedAsync();
+    }
 
     private string GetConnectedSystemFilterText(IReadOnlyList<string> selectedValues)
     {

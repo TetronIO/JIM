@@ -71,6 +71,36 @@ public interface IActivityRepository
         IEnumerable<Guid>? scheduleFilter = null);
 
     /// <summary>
+    /// Retrieves a window of top-level Activities addressed by absolute <paramref name="startIndex"/> and
+    /// <paramref name="count"/>, for virtualised (infinite-scroll) list views. Takes the same filters as
+    /// <see cref="GetActivitiesAsync"/> and shares its query core, so the two reads can never disagree on
+    /// which Activities match. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole
+    /// match set when the caller already holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).
+    /// </summary>
+    public Task<RangeResultSet<Activity>> GetActivitiesRangeAsync(
+        int startIndex,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        string? initiatedByFilter = null,
+        bool? initiatedBySchedule = null,
+        IEnumerable<Guid>? scheduleFilter = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// The distinct Connected Systems, Run Profiles and Schedules present in the Worker Task Activity
     /// history, for the Operations > History filter drop-downs.
     /// </summary>

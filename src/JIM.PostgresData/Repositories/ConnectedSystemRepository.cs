@@ -937,6 +937,102 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
+            connectedSystemId, offset, pageSize, searchQuery, sortBy, sortDescending,
+            statusFilter, objectTypeFilter, joinTypeFilter, includeTotalCount: true);
+
+        // Build paged result set
+        var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging derives TotalPages from it and
+            // cannot work without it. Stated as an invariant rather than dereferenced, so the compiler and CodeQL
+            // both see a non-nullable value.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window the range header reads in this repository will return, bounding the latency of a single
+    /// read. It is deliberately five times the paged readers' page-size cap, because the two caps protect against
+    /// different things: a page size is a number a person picked from a fixed list and never approaches 100, whereas
+    /// a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach truncates the
+    /// window silently, rendering the shortfall as blank rows rather than raising anything.
+    ///
+    /// 500 puts it out of reach: the virtualised list grids are 100vh minus 320px at 36px per dense row plus the
+    /// virtualiser's overscan, which peaks at roughly 474 rows at Chrome's minimum 25% zoom on a 4320px-tall
+    /// display (the arithmetic lives with MetaverseRepository.MaxHeaderWindowSize, whose value this mirrors). If
+    /// either the grid's height expression or its row height changes, redo that arithmetic rather than assuming
+    /// this still holds.
+    /// </summary>
+    private const int MaxHeaderWindowSize = 500;
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (results, grossCount) = await QueryConnectedSystemObjectHeadersByRangeAsync(
+            connectedSystemId, offset, count, searchQuery, sortBy, sortDescending,
+            statusFilter, objectTypeFilter, joinTypeFilter, includeTotalCount);
+
+        return new RangeResultSet<ConnectedSystemObjectHeader>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Connected System Object header reads: builds the projected, filtered
+    /// and sorted header window for an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it
+    /// alongside the total match count, or null for that total when <paramref name="includeTotalCount"/> is false.
+    /// Callers own input validation and clamping; this method assumes sane values.
+    /// </summary>
+    private async Task<(List<ConnectedSystemObjectHeader> Results, int? TotalResults)> QueryConnectedSystemObjectHeadersByRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter,
+        IEnumerable<int>? objectTypeFilter,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter,
+        bool includeTotalCount)
+    {
         // Pre-resolve the name-candidate attribute IDs for this Connected System, one list per tier of
         // ObjectNaming.ConnectedSystemNameAttributes, to avoid repeated ILike string comparisons in the
         // sort and projection clauses. Each object type in the Connected System may define its own copy
@@ -1078,17 +1174,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 : query.OrderBy(cso => cso.Created)
         };
 
-        // Get total count before pagination
-        int totalCount;
-        using (var countSpan = ActivitySource.StartActivity("Cso.Headers.Count"))
+        // Count query. It scans every matching object rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total. Sorting cannot
+        // change how many objects match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
         {
+            using var countSpan = ActivitySource.StartActivity("Cso.Headers.Count");
             totalCount = await query.CountAsync();
             countSpan?.SetTag("totalCount", totalCount);
         }
 
-        // Apply pagination
-        var offset = (page - 1) * pageSize;
-        var pagedObjects = query.Skip(offset).Take(pageSize);
+        // Apply the window
+        var pagedObjects = query.Skip(offset).Take(count);
 
         // Project to header DTO using scalar correlated subqueries throughout. The previous shape
         // used a from-from-Include left join over PendingExports plus two SingleOrDefault calls
@@ -1176,25 +1274,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             pageSpan?.SetTag("returned", results.Count);
         }
 
-        // Build paged result set
-        var pagedResultSet = new PagedResultSet<ConnectedSystemObjectHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return (results, totalCount);
     }
 
     /// <summary>
@@ -3719,6 +3799,71 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
+            connectedSystemId, offset, pageSize, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount: true);
+
+        return new PagedResultSet<PendingExportHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging derives TotalPages from it and
+            // cannot work without it. Stated as an invariant rather than dereferenced, so the compiler and CodeQL
+            // both see a non-nullable value.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = headers
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the Connected System Object header range read; see the constant's own comment
+        // for how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (headers, grossCount) = await QueryPendingExportHeadersByRangeAsync(
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+
+        return new RangeResultSet<PendingExportHeader>
+        {
+            Results = headers,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Pending Export header reads: builds the filtered and sorted header
+    /// window for an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it alongside the total
+    /// match count, or null for that total when <paramref name="includeTotalCount"/> is false.
+    /// Callers own input validation and clamping; this method assumes sane values.
+    /// </summary>
+    private async Task<(List<PendingExportHeader> Results, int? TotalResults)> QueryPendingExportHeadersByRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.PendingExports
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -3800,9 +3945,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 : query.OrderBy(pe => pe.CreatedAt) // Default: sort by Created
         };
 
-        var totalCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var pagedItems = await query.Skip(offset).Take(pageSize).ToListAsync();
+        // Count query. It scans every matching Pending Export rather than a window of them, so it is the expensive
+        // half of this method at scale and is skipped entirely when the caller already holds the total. Sorting
+        // cannot change how many objects match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        var pagedItems = await query.Skip(offset).Take(count).ToListAsync();
 
         // Convert to headers
         var headers = pagedItems.Select(pe =>
@@ -3816,13 +3966,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
         }).ToList();
 
-        return new PagedResultSet<PendingExportHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = headers
-        };
+        return (headers, totalCount);
     }
 
     /// <summary>
@@ -4949,35 +5093,112 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int page = 1,
         int pageSize = 50)
     {
+        if (page < 1)
+            page = 1;
+
+        var offset = (page - 1) * pageSize;
+        var (items, totalCount) = await QueryDeletedCsoChangesByRangeAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, offset, pageSize, includeTotalCount: true);
+
+        // The count was requested above, so it is always present here; paging cannot work without it. Stated as
+        // an invariant rather than dereferenced, so the compiler and CodeQL both see a non-nullable value.
+        return (items, totalCount ?? throw new InvalidOperationException(
+            "The paged deleted Connected System Object change read asked for the total match count and did not receive one."));
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment for
+        // how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (items, totalCount) = await QueryDeletedCsoChangesByRangeAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, offset, count, includeTotalCount);
+
+        return new RangeResultSet<ConnectedSystemObjectChange>
+        {
+            Results = items,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range deleted Connected System Object change reads: builds the filtered
+    /// window of deletion records for an absolute <paramref name="offset"/>/<paramref name="count"/>, ordered by
+    /// deletion time newest first, and returns it alongside the total match count, or null for that total when
+    /// <paramref name="includeTotalCount"/> is false. Callers own input validation and clamping; this method
+    /// assumes sane values.
+    /// </summary>
+    private async Task<(List<ConnectedSystemObjectChange> Items, int? TotalCount)> QueryDeletedCsoChangesByRangeAsync(
+        int? connectedSystemId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        string? externalIdSearch,
+        int offset,
+        int count,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.ConnectedSystemObjectChanges
             .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.ConnectedSystemObject == null);
 
         // Apply filters
         if (connectedSystemId.HasValue)
-            query = query.Where(c => c.ConnectedSystemId == connectedSystemId.Value);
-
-        if (fromDate.HasValue)
-            query = query.Where(c => c.ChangeTime >= fromDate.Value);
-
-        if (toDate.HasValue)
-            query = query.Where(c => c.ChangeTime <= toDate.Value);
-
-        if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
-            query = query.Where(c =>
-                c.DeletedObjectExternalIdAttributeValue != null &&
-                c.DeletedObjectExternalIdAttributeValue.StringValue != null &&
-                c.DeletedObjectExternalIdAttributeValue.StringValue.Contains(externalIdSearch));
+            var connectedSystemIdValue = connectedSystemId.Value;
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemIdValue);
         }
 
-        // Get total count before pagination
-        var totalCount = await query.CountAsync();
+        if (fromDate.HasValue)
+        {
+            var fromDateValue = fromDate.Value;
+            query = query.Where(c => c.ChangeTime >= fromDateValue);
+        }
 
-        // Apply ordering and pagination
+        if (toDate.HasValue)
+        {
+            var toDateValue = toDate.Value;
+            query = query.Where(c => c.ChangeTime <= toDateValue);
+        }
+
+        // Search the preserved DeletedObjectExternalId string, which is what the Deleted Objects page renders.
+        // The DeletedObjectExternalIdAttributeValue navigation this used to match is cascade deleted with the
+        // Connected System Object, so it is null for the very records this browser exists to show, and the old
+        // predicate silently matched nothing. Case-insensitive for user convenience, matching the other list
+        // searches.
+        if (!string.IsNullOrWhiteSpace(externalIdSearch))
+        {
+            var searchPattern = $"%{externalIdSearch}%";
+            query = query.Where(c =>
+                c.DeletedObjectExternalId != null &&
+                EF.Functions.ILike(c.DeletedObjectExternalId, searchPattern));
+        }
+
+        // Count query. It scans every matching record rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        // Apply the fixed newest-first ordering and the window
         var items = await query
             .OrderByDescending(c => c.ChangeTime)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(offset)
+            .Take(count)
             .Include(c => c.DeletedObjectType)
             .Include(c => c.DeletedObjectExternalIdAttributeValue)
             .ThenInclude(av => av!.Attribute)

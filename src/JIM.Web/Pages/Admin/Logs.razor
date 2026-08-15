@@ -2,13 +2,11 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
 @using JIM.Models.Utility
-@using JIM.Web.Models.Api
-@using JIM.Web.Services
+@using JIM.Web.Models
 @using System.Text.Json
 @inject LogReaderService LogReader
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
-@inject IUserPreferenceService PreferenceService
 @implements IAsyncDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -23,7 +21,7 @@
 
 <MudPaper Elevation="0" Class="pa-4 mt-4" Outlined="true">
     <MudGrid>
-        <MudItem xs="12" sm="6" md="3">
+        <MudItem xs="12" sm="6" md="4">
             <MudSelect T="string" @bind-Value="_selectedService" Label="Service" Variant="Variant.Outlined"
                 Dense="true" Clearable="true" Placeholder="All Services">
                 <MudSelectItem T="string" Value="@("web")">Web</MudSelectItem>
@@ -32,11 +30,11 @@
                 <MudSelectItem T="string" Value="@("database")">Database</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" sm="6" md="3">
+        <MudItem xs="12" sm="6" md="4">
             <MudDatePicker @bind-Date="_selectedDate" Label="Date" Variant="Variant.Outlined"
                 MaxDate="DateTime.Today" Clearable="true" Placeholder="Today" />
         </MudItem>
-        <MudItem xs="12" sm="6" md="3">
+        <MudItem xs="12" sm="6" md="4">
             <MudSelect T="string" @bind-SelectedValues="_selectedLevels" Label="Level(s)" Variant="Variant.Outlined"
                 Dense="true" Clearable="true" Placeholder="All Levels" MultiSelection="true"
                 MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetSelectedLevelsText))">
@@ -48,110 +46,97 @@
                 <MudSelectItem T="string" Value="@("Fatal")">Fatal</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            @* search-convention: exempt - a criterion in the log query form, applied by Refresh alongside the level and date filters; it does not filter as you type. *@
-            <MudTextField T="string" @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined"
-                Clearable="true" Placeholder="Filter by message..."
-                Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
-        </MudItem>
     </MudGrid>
     <div class="d-flex align-center gap-3 mt-4">
-        <MudButton OnClick="LoadLogsAsync" StartIcon="@(_loading ? Icons.Material.Filled.HourglassEmpty : Icons.Material.Filled.Refresh)" Variant="Variant.Filled"
-            Color="Color.Primary" DropShadow="false" Disabled="@_loading">
-            @(_loading ? "Loading" : "Refresh")
+        <MudButton OnClick="RefreshAsync" StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Filled"
+            Color="Color.Primary" DropShadow="false">
+            Refresh
         </MudButton>
         <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="Auto-refresh (5s)" />
-        <MudSpacer />
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            @if (_logEntries != null)
-            {
-                @($"{_logEntries.Count} entries")
-                @if (_logEntries.Count >= 500)
-                {
-                    @(" (limit reached)")
-                }
-            }
-        </MudText>
     </div>
 </MudPaper>
 
-<MudTable Items="@_pagedLogEntries" Hover="true" Breakpoint="Breakpoint.None" Class="mt-5 mb-5"
-    FixedHeader="true" Height="calc(100vh - 500px)" Outlined="true" Elevation="0" Loading="@_loading"
-    OnRowClick="@OnRowClick" T="LogEntry" RowStyle="cursor: pointer;">
-    <HeaderContent>
-        <MudTh Style="width: 100px;">
-            <MudText Typo="Typo.button">Time</MudText>
-        </MudTh>
-        <MudTh Style="width: 70px;">
-            <MudText Typo="Typo.button">Level</MudText>
-        </MudTh>
-        <MudTh Style="width: 80px;">
-            <MudText Typo="Typo.button">Service</MudText>
-        </MudTh>
-        <MudTh>
-            <MudText Typo="Typo.button">Message</MudText>
-        </MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Time" Style="@GetRowStyle(context)">
-            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true" Placement="Placement.Top">
-                <span class="jim-text-code">@context.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
-            </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Level" Style="@GetRowStyle(context)">
-            <MudChip T="string" Variant="Variant.Text" Color="@GetLevelColor(context.Level)"
-                Class="ma-0" Style="min-width: 50px; justify-content: center;">
-                @context.LevelShort
-            </MudChip>
-        </MudTd>
-        <MudTd DataLabel="Service" Style="@GetRowStyle(context)">
-            <span class="jim-text-code">@context.Service</span>
-        </MudTd>
-        <MudTd DataLabel="Message" Style="@GetRowStyle(context)">
-            <div class="d-flex align-center gap-2">
-                <span style="word-break: break-word; flex: 1;">@TruncateMessage(context.Message, 150)</span>
-                @if (!string.IsNullOrEmpty(context.Exception))
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
-                        Title="Has exception" />
-                }
-                @if (context.Properties != null && context.Properties.Count > 0)
-                {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
-                        Class="ma-0" Style="font-size: 0.7rem;">
-                        @context.Properties.Count props
-                    </MudChip>
-                }
-            </div>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No log entries found for the selected criteria.</MudText>
-    </NoRecordsContent>
-    <LoadingContent>
-        <MudText>Loading logs...</MudText>
-    </LoadingContent>
-</MudTable>
-
-<div class="d-flex justify-center align-center gap-4 mb-5">
-    <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Disabled="@(_currentPage == 0 || _loading)"
-        OnClick="@(() => GoToPage(0))" />
-    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Disabled="@(_currentPage == 0 || _loading)"
-        OnClick="@(() => GoToPage(_currentPage - 1))" />
-    <MudText Typo="Typo.body2">
-        Page @(_currentPage + 1) of @TotalPages
-    </MudText>
-    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Disabled="@(_currentPage >= TotalPages - 1 || _loading)"
-        OnClick="@(() => GoToPage(_currentPage + 1))" />
-    <MudIconButton Icon="@Icons.Material.Filled.LastPage" Disabled="@(_currentPage >= TotalPages - 1 || _loading)"
-        OnClick="@(() => GoToPage(TotalPages - 1))" />
-    <MudSelect T="int" Value="_pageSize" ValueChanged="OnPageSizeChanged" Label="Per page" Variant="Variant.Outlined"
-        Dense="true" Style="width: 100px;" Margin="Margin.Dense">
-        <MudSelectItem T="int" Value="25">25</MudSelectItem>
-        <MudSelectItem T="int" Value="50">50</MudSelectItem>
-        <MudSelectItem T="int" Value="100">100</MudSelectItem>
-    </MudSelect>
-</div>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, the live search
+   box) lives in the shared grid; this page supplies the columns, the window loader honouring the applied filter
+   snapshot above, and the empty states. Free-text search is the grid's own box, filtering as the reader types;
+   the service, date and level filters stay form-owned and apply on Refresh. *@
+<VirtualisedDataGrid @ref="_grid" T="LogEntry"
+                     ContainerId="log-entry-list"
+                     DefaultSortBy="Timestamp"
+                     LoadWindow="LoadWindowAsync"
+                     RowClicked="HandleRowClicked"
+                     SingularName="log entry"
+                     PluralName="log entries"
+                     SearchPlaceholder="Search messages...">
+    <Columns>
+        <TemplateColumn T="LogEntry" Title="Time" Sortable="false" HeaderStyle="width: 100px;" CellStyleFunc="@GetRowStyle">
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true" Placement="Placement.Top">
+                    <span class="jim-text-code">@context.Item.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="LogEntry" Title="Level" Sortable="false" HeaderStyle="width: 70px;" CellStyleFunc="@GetRowStyle">
+            <CellTemplate>
+                <MudChip T="string" Variant="Variant.Text" Color="@GetLevelColor(context.Item.Level)"
+                    Class="ma-0" Style="min-width: 50px; justify-content: center;">
+                    @context.Item.LevelShort
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="LogEntry" Title="Service" Sortable="false" HeaderStyle="width: 80px;" CellStyleFunc="@GetRowStyle">
+            <CellTemplate>
+                <span class="jim-text-code">@context.Item.Service</span>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="LogEntry" Title="Message" Sortable="false" CellStyleFunc="@GetRowStyle">
+            <CellTemplate>
+                <div class="d-flex align-center gap-2">
+                    <span style="word-break: break-word; flex: 1;">@TruncateMessage(context.Item.Message, 150)</span>
+                    @if (!string.IsNullOrEmpty(context.Item.Exception))
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
+                            Title="Has exception" />
+                    }
+                    @if (context.Item.Properties != null && context.Item.Properties.Count > 0)
+                    {
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
+                            Class="ma-0" Style="font-size: 0.7rem;">
+                            @context.Item.Properties.Count props
+                        </MudChip>
+                    }
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @* An empty list means one of three things, and the message says which: the grid's live search matched
+           nothing, the form filters applied by the last Refresh matched nothing, or there are simply no log
+           entries to show. The filter state is the applied snapshot, because the form only applies on Refresh. *@
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No log entries match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else if (AppliedFiltersActive)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No log entries match your filters"
+                             SecondaryText="Adjust the filters above and select Refresh, or clear them to view the latest log entries."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Custom.FileFormats.FileDocument"
+                             PrimaryText="No log entries found"
+                             SecondaryText="Log entries appear here as JIM services write to their logs." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @* Log Entry Detail Panel with Overlay *@
 <MudOverlay @bind-Visible="_drawerOpen" DarkBackground="true" AutoClose="true" ZIndex="1250" />
@@ -251,17 +236,22 @@
 </div>
 
 @code {
-    private List<LogEntry>? _logEntries;
+    private VirtualisedDataGrid<LogEntry>? _grid;
+
+    // The filter form's live values, which only take effect when Refresh applies them into the snapshot below.
     private string? _selectedService;
     private DateTime? _selectedDate;
     private IReadOnlyCollection<string> _selectedLevels = [];
-    private string? _searchText;
-    private bool _loading = true;
+
+    // The applied filter snapshot the window loader reads. Held separately from the form fields so a filter the
+    // user has changed but not yet applied via Refresh cannot leak into windows loaded mid-scroll, which would
+    // mix two different match sets in one list.
+    private string? _appliedService;
+    private DateTime? _appliedDate;
+    private List<string> _appliedLevels = [];
+
     private bool _autoRefresh;
     private System.Threading.Timer? _refreshTimer;
-    private int _currentPage;
-    private int _pageSize = 50;
-    private bool _preferencesLoaded;
     private bool _drawerOpen;
     private LogEntry? _selectedEntry;
 
@@ -271,13 +261,6 @@
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    private IEnumerable<LogEntry> _pagedLogEntries =>
-        _logEntries?.Skip(_currentPage * _pageSize).Take(_pageSize) ?? [];
-
-    private int TotalPages => _logEntries == null || _logEntries.Count == 0
-        ? 1
-        : (int)Math.Ceiling((double)_logEntries.Count / _pageSize);
-
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -285,55 +268,58 @@
         new("Logs", href: null, disabled: true)
     ];
 
-    protected override async Task OnInitializedAsync()
+    private bool AppliedFiltersActive =>
+        !string.IsNullOrEmpty(_appliedService) ||
+        _appliedDate.HasValue ||
+        _appliedLevels.Count > 0;
+
+    private async Task<VirtualisedWindow<LogEntry>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        await LoadLogsAsync();
+        try
+        {
+            var result = await LogReader.GetLogEntriesRangeAsync(
+                service: _appliedService,
+                date: _appliedDate,
+                levels: _appliedLevels,
+                search: request.SearchText,
+                startIndex: request.StartIndex,
+                count: request.Count,
+                includeTotalCount: request.IncludeTotalCount);
+
+            return new VirtualisedWindow<LogEntry>(result.Results, result.TotalResults);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // The log directory became unreadable (permissions, storage failure); surface it rather than leaving
+            // the grid spinning, and report an empty window. Zero is only claimed when a count was asked for.
+            Snackbar.Add($"Failed to load logs: {ex.Message}", Severity.Error);
+            return new VirtualisedWindow<LogEntry>([], request.IncludeTotalCount ? 0 : null);
+        }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    /// <summary>
+    /// Applies the filter form into the snapshot the window loader reads, then reloads the list from the top with
+    /// a fresh total: the match set may have changed, so the old count and scroll position no longer describe it.
+    /// </summary>
+    private async Task RefreshAsync()
     {
-        if (firstRender)
-        {
-            try
-            {
-                // Hide the page footer to maximise viewing area for logs
-                await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", true);
-            }
-            catch (JSDisconnectedException)
-            {
-                // Ignore - circuit is disconnected and being disposed
-            }
-        }
+        _appliedService = _selectedService;
+        _appliedDate = _selectedDate;
+        _appliedLevels = _selectedLevels.ToList();
 
-        if (!_preferencesLoaded)
+        if (_grid != null)
         {
-            try
-            {
-                // Load the user's preferred page size and map to valid options for this page
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                // Map to closest valid option (25, 50, 100) for this page
-                var mappedSize = preferredSize switch
-                {
-                    <= 25 => 25,
-                    <= 50 => 50,
-                    _ => 100
-                };
-                if (mappedSize != _pageSize)
-                {
-                    _pageSize = mappedSize;
-                    _preferencesLoaded = true;
-                    StateHasChanged();
-                }
-                else
-                {
-                    _preferencesLoaded = true;
-                }
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
         }
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _selectedService = null;
+        _selectedDate = null;
+        _selectedLevels = [];
+        await RefreshAsync();
     }
 
     private void OnAutoRefreshChanged(bool value)
@@ -353,50 +339,21 @@
             {
                 await InvokeAsync(async () =>
                 {
-                    await LoadLogsAsync();
+                    // Re-run the current query (applied filters and search unchanged) so new entries appear. The
+                    // scroll position is deliberately kept: yanking the reader to the top every five seconds would
+                    // make the list unreadable while following an investigation.
+                    if (_grid != null)
+                        await _grid.RefreshAsync(invalidateTotals: true);
                     StateHasChanged();
                 });
             }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         }
     }
 
-    private async Task LoadLogsAsync()
+    private void HandleRowClicked(LogEntry item)
     {
-        _loading = true;
-        _currentPage = 0;
-        StateHasChanged();
-
-        try
-        {
-            _logEntries = await LogReader.GetLogEntriesAsync(
-                service: _selectedService,
-                date: _selectedDate,
-                levels: _selectedLevels,
-                search: _searchText,
-                limit: 500,
-                offset: 0);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to load logs: {ex.Message}", Severity.Error);
-            _logEntries = [];
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private void GoToPage(int page)
-    {
-        _currentPage = Math.Max(0, Math.Min(page, TotalPages - 1));
-    }
-
-    private async Task OnPageSizeChanged(int newSize)
-    {
-        _pageSize = newSize;
-        _currentPage = 0;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
+        _selectedEntry = item;
+        _drawerOpen = true;
     }
 
     private static Color GetLevelColor(string level)
@@ -454,12 +411,6 @@
         // Replace newlines with spaces for table display
         var singleLine = message.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
         return TruncateValue(singleLine, maxLength);
-    }
-
-    private void OnRowClick(TableRowClickEventArgs<LogEntry> args)
-    {
-        _selectedEntry = args.Item;
-        _drawerOpen = true;
     }
 
     private static string FormatPropertyValue(object? value)
@@ -634,17 +585,9 @@
         Snackbar.Add("Copied to clipboard", Severity.Success);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _refreshTimer?.Dispose();
-        // Remove the footer-hiding class when leaving the page
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", false);
-        }
-        catch (JSDisconnectedException)
-        {
-            // Ignore - circuit is disconnected during navigation
-        }
+        return ValueTask.CompletedTask;
     }
 }

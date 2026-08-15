@@ -4,11 +4,8 @@
 @using JIM.Web
 @using JIM.Web.Middleware.Api
 @using JIM.Web.Models
-@using JIM.Web.Services
 @using Humanizer
 @inject IJimApplicationFactory JimFactory
-@inject IUserPreferenceService PreferenceService
-@inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IJSRuntime JSRuntime
@@ -24,141 +21,161 @@
     integration testing, and automation scripts.
 </MudText>
 
-<MudTable Items="@_apiKeys" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
-    Filter="new Func<ApiKey, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
-    <ToolBarContent>
-        <TableDensityToggle @bind-Dense="_dense" />
-        <MudText Class="mx-2 mud-text-disabled">|</MudText>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+   and the toolbar count) lives in the shared grid; this page loads the full list once (API keys are a small
+   configuration list) and slices windows from it in memory. *@
+<VirtualisedDataGrid @ref="_grid" T="ApiKey"
+                     ContainerId="api-key-list"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadApiKeyWindowAsync"
+                     SingularName="API Key"
+                     PluralName="API Keys">
+    <ToolBarExtras>
         <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
-            DropShadow="false">Create API Key</MudButton>
-        <MudSpacer />
-        <SearchField @bind-Value="_searchString" Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.Name)">
-                <MudText Typo="Typo.button">Name</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.KeyPrefix)">
-                <MudText Typo="Typo.button">Key Prefix</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudText Typo="Typo.button">Roles</MudText>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.LastUsedAt ?? DateTime.MinValue)">
-                <MudText Typo="Typo.button">Last Used</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.ExpiresAt ?? DateTime.MaxValue)">
-                <MudText Typo="Typo.button">Expires</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<ApiKey, object>(x => x.IsEnabled)">
-                <MudText Typo="Typo.button">Status</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh Style="text-align: right;">
-            <MudText Typo="Typo.button">Actions</MudText>
-        </MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name">
-            <div class="d-flex align-center gap-2">
-                <MudLink Href="@($"/admin/apikeys/{context.Id}")">@context.Name</MudLink>
-                @if (context.IsInfrastructureKey)
+                   DropShadow="false">Create API Key</MudButton>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <div class="d-flex align-center gap-2">
+                    <MudLink Href="@($"/admin/apikeys/{context.Item.Id}")">@context.Item.Name</MudLink>
+                    @if (context.Item.IsInfrastructureKey)
+                    {
+                        <MudTooltip Text="Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
+                        </MudTooltip>
+                    }
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Key Prefix" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Key Prefix" Name="prefix" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <span class="jim-text-code">@context.Item.KeyPrefix...</span>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Roles" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Roles</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @foreach (var role in context.Item.Roles)
                 {
-                    <MudTooltip Text="Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable." Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
-                    </MudTooltip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
                 }
-            </div>
-        </MudTd>
-        <MudTd DataLabel="Key Prefix">
-            <span class="jim-text-code">@context.KeyPrefix...</span>
-        </MudTd>
-        <MudTd DataLabel="Roles">
-            @foreach (var role in context.Roles)
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
-            }
-            @if (context.Roles.Count == 0)
-            {
-                <span class="mud-text-secondary">No roles</span>
-            }
-        </MudTd>
-        <MudTd DataLabel="Last Used">
-            @if (context.LastUsedAt.HasValue)
-            {
-                <MudTooltip Text="@($"{context.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()} from IP: {context.LastUsedFromIp ?? "Unknown"}")" Arrow="true" Placement="Placement.Top">
-                    @context.LastUsedAt.Value.ToLocalTime().ToRelativeTime()
-                </MudTooltip>
-            }
-            else
-            {
-                <span class="mud-text-secondary">Never</span>
-            }
-        </MudTd>
-        <MudTd DataLabel="Expires">
-            @if (context.ExpiresAt.HasValue)
-            {
-                @if (context.ExpiresAt.Value < DateTime.UtcNow)
+                @if (context.Item.Roles.Count == 0)
                 {
-                    <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
-                    </MudTooltip>
+                    <span class="mud-text-secondary">No roles</span>
                 }
-                else if (context.ExpiresAt.Value < DateTime.UtcNow.AddDays(7))
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Last Used" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Last Used" Name="lastused" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.LastUsedAt.HasValue)
                 {
-                    <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((context.ExpiresAt.Value - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.TimeUnit.Minute))</MudChip>
+                    var lastUsed = context.Item.LastUsedAt.Value.ToLocalTime();
+                    <MudTooltip Text="@($"{lastUsed.ToFriendlyDate()} from IP: {context.Item.LastUsedFromIp ?? "Unknown"}")" Arrow="true" Placement="Placement.Top">
+                        @lastUsed.ToRelativeTime()
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Top">
-                        @context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()
-                    </MudTooltip>
+                    <span class="mud-text-secondary">Never</span>
                 }
-            }
-            else
-            {
-                <span class="mud-text-secondary">Never</span>
-            }
-        </MudTd>
-        <MudTd DataLabel="Status">
-            @if (context.IsEnabled)
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
-            }
-        </MudTd>
-        <MudTd DataLabel="Actions">
-            <div class="d-flex justify-end gap-2">
-                <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context)" />
-                </MudTooltip>
-                <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context)" />
-                </MudTooltip>
-            </div>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No API keys have been created yet.</MudText>
-    </NoRecordsContent>
-</MudTable>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Expires" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Expires" Name="expires" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.ExpiresAt.HasValue)
+                {
+                    var expiresAt = context.Item.ExpiresAt.Value;
+                    @if (expiresAt < DateTime.UtcNow)
+                    {
+                        <MudTooltip Text="@expiresAt.ToLocalTime().ToFriendlyDate()"
+                            Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
+                        </MudTooltip>
+                    }
+                    else if (expiresAt < DateTime.UtcNow.AddDays(7))
+                    {
+                        <MudTooltip Text="@expiresAt.ToLocalTime().ToFriendlyDate()"
+                            Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((expiresAt - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.TimeUnit.Minute))</MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="@expiresAt.ToLocalTime().ToFriendlyDate()"
+                            Arrow="true" Placement="Placement.Top">
+                            @expiresAt.ToLocalTime().ToFriendlyDate()
+                        </MudTooltip>
+                    }
+                }
+                else
+                {
+                    <span class="mud-text-secondary">Never</span>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.IsEnabled)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Actions" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                <div class="d-flex justify-end gap-2">
+                    <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context.Item)" />
+                    </MudTooltip>
+                    <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context.Item)" />
+                    </MudTooltip>
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No API Keys match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.Api"
+                             PrimaryText="No API Keys have been created yet"
+                             SecondaryText="Use the Create API Key button to create one." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @* Create API Key Dialog *@
 <MudDialog @bind-Visible="_createDialogVisible" Options="_dialogOptions">
@@ -275,9 +292,7 @@
 
     private List<ApiKey>? _apiKeys;
     private List<Role> _availableRoles = new();
-    private string _searchString = "";
-    private bool _loading = true;
-    private bool _dense;
+    private VirtualisedDataGrid<ApiKey>? _grid;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
@@ -315,15 +330,6 @@
     private bool _editEnabled;
     private bool _saving;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
-    }
-
     protected override async Task OnInitializedAsync()
     {
         await LoadDataAsync();
@@ -332,27 +338,52 @@
     private async Task LoadDataAsync()
     {
         using var jim = JimFactory.Create();
-        _loading = true;
         _apiKeys = await jim.Security.GetApiKeysAsync();
         _availableRoles = await jim.Security.GetRolesAsync();
-        _loading = false;
     }
 
-    private bool FilterFunc(ApiKey element)
+    /// <summary>
+    /// Reloads the list from the database and refreshes the grid after any action that changes it (create, edit,
+    /// delete), so the rows and the toolbar count stay honest.
+    /// </summary>
+    private async Task ReloadListAsync()
     {
-        if (string.IsNullOrWhiteSpace(_searchString))
-            return true;
+        await LoadDataAsync();
+        if (_grid != null)
+            await _grid.RefreshAsync(invalidateTotals: true);
+    }
 
-        if (element.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+    /// <summary>
+    /// Slices one window of API keys from the in-memory list, applying the grid's search (name, key prefix,
+    /// description; the same fields the old table filtered) and sort. API keys are a small configuration list,
+    /// so there is no repository range read; the full list is loaded once and windowed here.
+    /// </summary>
+    private Task<VirtualisedWindow<ApiKey>> LoadApiKeyWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<ApiKey> keys = _apiKeys ?? Enumerable.Empty<ApiKey>();
 
-        if (element.KeyPrefix.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            keys = keys.Where(k =>
+                k.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                k.KeyPrefix.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                k.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
+        }
 
-        if (element.Description?.Contains(_searchString, StringComparison.OrdinalIgnoreCase) == true)
-            return true;
+        IOrderedEnumerable<ApiKey> Order<TKey>(Func<ApiKey, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? keys.OrderByDescending(key, comparer) : keys.OrderBy(key, comparer);
 
-        return false;
+        var sorted = request.SortBy switch
+        {
+            "prefix" => Order(k => k.KeyPrefix, StringComparer.OrdinalIgnoreCase),
+            "lastused" => Order(k => k.LastUsedAt ?? DateTime.MinValue),
+            "expires" => Order(k => k.ExpiresAt ?? DateTime.MaxValue),
+            "status" => Order(k => k.IsEnabled),
+            _ => Order(k => k.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
     private void ShowCreateDialog()
@@ -425,7 +456,7 @@
             _createdFullKey = fullKey;
             _createdKeyDialogVisible = true;
 
-            await LoadDataAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {
@@ -495,7 +526,7 @@
 
             Snackbar.Add("API key updated successfully.", Severity.Success);
             _editDialogVisible = false;
-            await LoadDataAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {
@@ -530,7 +561,7 @@
             await jim.Security.DeleteApiKeyAsync(apiKey.Id, user, changeReason);
 
             Snackbar.Add("API key deleted successfully.", Severity.Success);
-            await LoadDataAsync();
+            await ReloadListAsync();
         }
         catch (Exception ex)
         {
