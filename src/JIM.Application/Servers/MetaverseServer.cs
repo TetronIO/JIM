@@ -277,6 +277,30 @@ public class MetaverseServer
             page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
+    /// <summary>
+    /// Gets a window of Metaverse Attribute Headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its filtering, sorting and projection with the paged
+    /// <see cref="GetMetaverseAttributeHeadersAsync(int, int, string?, string?, bool)"/> read. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<MetaverseAttributeHeader>> GetMetaverseAttributeHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseAttributeHeadersRangeAsync(
+            offset, count, searchQuery, sortBy, sortDescending, typeFilter, pluralityFilter, builtInFilter,
+            objectTypeId, includeTotalCount);
+    }
+
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false)
     {
         return await Application.Repository.Metaverse.GetMetaverseAttributeAsync(id, withChangeTracking);
@@ -1499,6 +1523,26 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets a window of lightweight Metaverse Object headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query and projection with <see cref="GetMetaverseObjectHeadersPagedAsync"/>.
+    /// Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        int? hasAttributeId = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectHeadersRangeAsync(
+            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount);
+    }
+
+    /// <summary>
     /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
@@ -1576,6 +1620,33 @@ public class MetaverseServer
     {
         return await Application.Repository.Metaverse.GetAttributeValuesPagedAsync(
             metaverseObjectId, attributeName, page, pageSize, searchText);
+    }
+
+    /// <summary>
+    /// Gets a window of one attribute's values on a Metaverse Object addressed by absolute offset and count, for
+    /// a virtualised (infinite-scroll) multi-valued attribute on the object's detail page. Ordered by value id,
+    /// and shares its query core with <see cref="GetAttributeValuesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="metaverseObjectId">The Metaverse Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the referenced
+    /// object's own values.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetAttributeValuesRangeAsync(
+            metaverseObjectId, attributeName, offset, count, searchText, includeTotalCount);
     }
 
     /// <summary>
@@ -1736,6 +1807,27 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets a window of MVOs pending deletion addressed by absolute offset and count, for the virtualised
+    /// (infinite-scroll) Pending Deletions list. Shares its filter with
+    /// <see cref="GetMetaverseObjectsPendingDeletionAsync"/>; ordered soonest-scheduled first (by disconnection
+    /// date, ascending) unless <paramref name="sortBy"/> names another sort key ("displayname", "type",
+    /// "eligible" or "disconnected"). Pass <paramref name="includeTotalCount"/> as false to skip counting the
+    /// whole match set when the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        int? objectTypeId = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionRangeAsync(
+            offset, count, searchQuery, sortBy, sortDescending, objectTypeId, includeTotalCount);
+    }
+
+    /// <summary>
     /// Gets the count of MVOs that are pending deletion.
     /// </summary>
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>
@@ -1743,6 +1835,18 @@ public class MetaverseServer
     public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+    }
+
+    /// <summary>
+    /// How the MVOs pending deletion divide between deprovisioning, awaiting their grace period and ready for
+    /// deletion, counted across the whole match set rather than a window of it. Shares its filter with
+    /// <see cref="GetMetaverseObjectsPendingDeletionRangeAsync"/>, so the figures describe exactly the objects
+    /// that list holds.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    public async Task<PendingDeletionStateCounts> GetMetaverseObjectsPendingDeletionStateCountsAsync(int? objectTypeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionStateCountsAsync(objectTypeId);
     }
 
     /// <summary>
@@ -1810,6 +1914,26 @@ public class MetaverseServer
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangesAsync(
             objectTypeId, fromDate, toDate, displayNameSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets a window of deleted Metaverse Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters with
+    /// <see cref="GetDeletedMvoChangesAsync"/>, ordered by deletion time newest first. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<MetaverseObjectChange>> GetDeletedMvoChangesRangeAsync(
+        int offset,
+        int count,
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangesRangeAsync(
+            offset, count, objectTypeId, fromDate, toDate, displayNameSearch, includeTotalCount);
     }
 
     /// <summary>

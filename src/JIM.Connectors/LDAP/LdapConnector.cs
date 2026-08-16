@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -320,6 +320,44 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
             return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
+    #region IConnectorContainerObjectCounts members
+    /// <summary>
+    /// Counts the objects each Container in a partition holds, using one attribute-free paged subtree search.
+    /// </summary>
+    /// <remarks>
+    /// Opens its own connection, exactly as partition discovery does, because it runs from the portal rather than
+    /// inside a Run Profile execution and has no session to borrow.
+    /// </remarks>
+    public async Task<ConnectorContainerObjectCountResult> GetContainerObjectCountsAsync(
+        List<ConnectedSystemSettingValue> settingValues,
+        ConnectorPartition connectorPartition,
+        IReadOnlyList<string> objectTypeNames,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connectorPartition);
+        ArgumentNullException.ThrowIfNull(objectTypeNames);
+
+        OpenImportConnection(settingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to count Container objects with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var containerCounts = new LdapConnectorContainerCounts(
+                new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
+
+            return await containerCounts.CountAsync(connectorPartition, objectTypeNames, cancellationToken);
         }
         finally
         {

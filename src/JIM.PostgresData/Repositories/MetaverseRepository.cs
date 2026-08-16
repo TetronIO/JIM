@@ -278,6 +278,92 @@ public class MetaverseRepository : IMetaverseRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var query = BuildMetaverseAttributeHeaderQuery(searchQuery, sortBy, sortDescending);
+
+        var totalResults = await query.CountAsync();
+
+        var results = await ProjectMetaverseAttributeHeaders(query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize))
+            .ToListAsync();
+
+        return new PagedResultSet<MetaverseAttributeHeader>
+        {
+            Results = results,
+            TotalResults = totalResults,
+            PageSize = pageSize,
+            CurrentPage = page
+        };
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetMetaverseAttributeHeadersRangeAsync"/> will return, bounding the latency of
+    /// a single read. It matches the Metaverse Object header range cap (and is above the paged reader's page-size
+    /// cap of 100) for the same reason: a page size is a number a person picked from a fixed list, whereas a
+    /// virtualiser asks for however many rows the viewport needs, and a cap it can actually reach truncates the
+    /// window silently, rendering the shortfall as blank rows. 500 puts it out of reach of any realistic viewport;
+    /// see the arithmetic on the Metaverse Object cap in this file.
+    /// </summary>
+    private const int MaxAttributeHeaderWindowSize = 500;
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<MetaverseAttributeHeader>> GetMetaverseAttributeHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxAttributeHeaderWindowSize)
+            count = MaxAttributeHeaderWindowSize;
+
+        var query = BuildMetaverseAttributeHeaderQuery(
+            searchQuery, sortBy, sortDescending, typeFilter, pluralityFilter, builtInFilter, objectTypeId);
+
+        // Counting is the expensive half of a window read (it scans every matching attribute rather than a window
+        // of them), so it is skipped entirely when the caller already holds the total. Sorting cannot change how
+        // many attributes match, so a caller only has to re-count when the filters change.
+        int? totalResults = null;
+        if (includeTotalCount)
+            totalResults = await query.CountAsync();
+
+        var results = await ProjectMetaverseAttributeHeaders(query
+                .Skip(offset)
+                .Take(count))
+            .ToListAsync();
+
+        return new RangeResultSet<MetaverseAttributeHeader>
+        {
+            Results = results,
+            TotalResults = totalResults
+        };
+    }
+
+    /// <summary>
+    /// Shared query core for the paged and range attribute-header reads: applies the name search filter, the
+    /// optional type/plurality/built-in/Object Type filters, and the sort, so the two reads cannot drift apart.
+    /// Callers own input validation and window clamping.
+    /// </summary>
+    private IQueryable<MetaverseAttribute> BuildMetaverseAttributeHeaderQuery(
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null)
+    {
         var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
             .AsQueryable();
@@ -289,8 +375,32 @@ public class MetaverseRepository : IMetaverseRepository
             query = query.Where(a => EF.Functions.ILike(a.Name, searchPattern));
         }
 
+        if (typeFilter.HasValue)
+        {
+            var typeFilterValue = typeFilter.Value;
+            query = query.Where(a => a.Type == typeFilterValue);
+        }
+
+        if (pluralityFilter.HasValue)
+        {
+            var pluralityFilterValue = pluralityFilter.Value;
+            query = query.Where(a => a.AttributePlurality == pluralityFilterValue);
+        }
+
+        if (builtInFilter.HasValue)
+        {
+            var builtInFilterValue = builtInFilter.Value;
+            query = query.Where(a => a.BuiltIn == builtInFilterValue);
+        }
+
+        if (objectTypeId.HasValue)
+        {
+            var objectTypeIdValue = objectTypeId.Value;
+            query = query.Where(a => a.MetaverseObjectTypes.Any(t => t.Id == objectTypeIdValue));
+        }
+
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        return sortBy?.ToLower() switch
         {
             "name" => sortDescending
                 ? query.OrderByDescending(a => a.Name)
@@ -311,31 +421,23 @@ public class MetaverseRepository : IMetaverseRepository
                 ? query.OrderByDescending(a => a.Name)
                 : query.OrderBy(a => a.Name)
         };
+    }
 
-        var totalResults = await query.CountAsync();
-
-        var results = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(a => new MetaverseAttributeHeader
-            {
-                Id = a.Id,
-                Created = a.Created,
-                Name = a.Name,
-                BuiltIn = a.BuiltIn,
-                Type = a.Type,
-                AttributePlurality = a.AttributePlurality,
-                MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
-            })
-            .ToListAsync();
-
-        return new PagedResultSet<MetaverseAttributeHeader>
+    /// <summary>
+    /// Shared header projection for the paged and range attribute-header reads.
+    /// </summary>
+    private static IQueryable<MetaverseAttributeHeader> ProjectMetaverseAttributeHeaders(IQueryable<MetaverseAttribute> query)
+    {
+        return query.Select(a => new MetaverseAttributeHeader
         {
-            Results = results,
-            TotalResults = totalResults,
-            PageSize = pageSize,
-            CurrentPage = page
-        };
+            Id = a.Id,
+            Created = a.Created,
+            Name = a.Name,
+            BuiltIn = a.BuiltIn,
+            Type = a.Type,
+            AttributePlurality = a.AttributePlurality,
+            MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
+        });
     }
 
     public async Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false)
@@ -1850,6 +1952,94 @@ public class MetaverseRepository : IMetaverseRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
+            predefinedSearch, offset, pageSize, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount: true);
+
+        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging derives TotalPages from it and
+            // cannot work without it. Stated as an invariant rather than dereferenced, so the compiler and CodeQL
+            // both see a non-nullable value.
+            TotalResults = grossCount ?? throw new InvalidOperationException(
+                "The paged header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetMetaverseObjectHeadersRangeAsync"/> will return, bounding the latency of a
+    /// single read. It is deliberately five times the paged reader's page-size cap, because the two caps protect
+    /// against different things: a page size is a number a person picked from a fixed list and never approaches 100,
+    /// whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach truncates
+    /// the window silently, rendering the shortfall as blank rows rather than raising anything.
+    ///
+    /// 500 puts it out of reach. The list grid is 100vh minus 320px at 36px per dense row, so the rows it needs are
+    /// roughly (viewportHeight - 320) / 36, plus the virtualiser's overscan: about 51 on a 4K display, and about 474
+    /// at Chrome's minimum 25% zoom on a 4320px-tall one, which is as far as CSS pixels stretch. If either the grid's
+    /// height expression or its row height changes, redo that arithmetic rather than assuming this still holds.
+    /// </summary>
+    private const int MaxHeaderWindowSize = 500;
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        int? hasAttributeId = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
+            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId, includeTotalCount);
+
+        return new RangeResultSet<MetaverseObjectHeader>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range header reads: builds the projected, filtered and sorted header window for
+    /// an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it alongside the total match count,
+    /// or null for that total when <paramref name="includeTotalCount"/> is false.
+    /// Callers own input validation and clamping; this method assumes sane values.
+    /// </summary>
+    private async Task<(List<MetaverseObjectHeader> Results, int? TotalResults)> QueryMetaverseObjectHeadersByRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        int? hasAttributeId,
+        bool includeTotalCount)
+    {
         // Extract the attribute IDs to project from the PredefinedSearch
         var returnAttributeIds = predefinedSearch.Attributes
             .Select(a => a.MetaverseAttribute.Id)
@@ -1861,7 +2051,6 @@ public class MetaverseRepository : IMetaverseRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
 
         var typeId = predefinedSearch.MetaverseObjectType.Id;
-        var offset = (page - 1) * pageSize;
 
         // Build shared WHERE clause fragments and parameters for count + page queries
         var whereClause = """m."TypeId" = @typeId""";
@@ -1916,10 +2105,13 @@ public class MetaverseRepository : IMetaverseRepository
             whereClause += $" AND ({string.Join(" OR ", groupClauses)})";
         }
 
-        // Count query — lean, no joins
-        int grossCount;
-        await using (var countCmd = connection.CreateCommand())
+        // Count query - lean, no joins. It scans every matching object rather than a window of them, so it is the
+        // expensive half of this method at scale and is skipped entirely when the caller already holds the total.
+        // Sorting cannot change how many objects match, so a caller only has to re-count when the filters change.
+        int? grossCount = null;
+        if (includeTotalCount)
         {
+            await using var countCmd = connection.CreateCommand();
             countCmd.CommandText = $"""SELECT COUNT(*)::int FROM "MetaverseObjects" m WHERE {whereClause}""";
             foreach (var p in sharedParams)
                 countCmd.Parameters.Add(p.Clone());
@@ -1988,12 +2180,12 @@ public class MetaverseRepository : IMetaverseRepository
                 FROM "MetaverseObjects" m
                 WHERE {whereClause}
                 ORDER BY {orderClause}
-                OFFSET @offset LIMIT @pageSize
+                OFFSET @offset LIMIT @count
                 """;
             foreach (var p in sharedParams)
                 pageCmd.Parameters.Add(p.Clone());
             pageCmd.Parameters.Add(new NpgsqlParameter("offset", offset));
-            pageCmd.Parameters.Add(new NpgsqlParameter("pageSize", pageSize));
+            pageCmd.Parameters.Add(new NpgsqlParameter("count", count));
             if (sortParam != null) pageCmd.Parameters.Add(sortParam);
 
             await using var reader = await pageCmd.ExecuteReaderAsync();
@@ -2080,24 +2272,7 @@ public class MetaverseRepository : IMetaverseRepository
             .Select(id => headerMap[id])
             .ToList();
 
-        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return (results, grossCount);
     }
 
     /// <summary>
@@ -2677,52 +2852,130 @@ public class MetaverseRepository : IMetaverseRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // Build base query for MVOs pending deletion
-        var query = Repository.Database.MetaverseObjects
-            .AsSplitQuery()
-            .Include(mvo => mvo.Type)
-            .Include(mvo => mvo.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(mvo => mvo.ConnectedSystemObjects)
-            .Where(mvo =>
-                // Must have LastConnectorDisconnectedDate set (pending deletion)
-                mvo.LastConnectorDisconnectedDate != null &&
-                // Must be projected (not internal admin accounts)
-                mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
-                // (GetMetaverseObjectsEligibleForDeletionAsync): the page must show every MVO
-                // housekeeping will delete, including authoritative-source-scheduled MVOs that may
-                // retain target connectors during their grace period (#119)
-                mvo.Type != null &&
-                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
-                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
-
-        // Apply object type filter if specified
-        if (objectTypeId.HasValue)
-        {
-            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
-        }
-
-        // Order by deletion eligible date (soonest first)
-        query = query.OrderBy(mvo => mvo.LastConnectorDisconnectedDate);
-
-        // Get total count
-        var totalCount = await query.CountAsync();
-
-        // Apply pagination
         var offset = (page - 1) * pageSize;
-        var results = await query
-            .Skip(offset)
-            .Take(pageSize)
-            .ToListAsync();
+        var (results, totalCount) = await QueryMetaverseObjectsPendingDeletionByRangeAsync(
+            objectTypeId, searchQuery: null, sortBy: null, sortDescending: false, offset, pageSize, includeTotalCount: true);
 
         return new PagedResultSet<MetaverseObject>
         {
             PageSize = pageSize,
-            TotalResults = totalCount,
+            // The count was requested above, so it is always present here; paging cannot work without it. Stated
+            // as an invariant rather than dereferenced, so the compiler and CodeQL both see a non-nullable value.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged pending-deletion read asked for the total match count and did not receive one."),
             CurrentPage = page,
             Results = results
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        int? objectTypeId = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment for
+        // how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (results, totalCount) = await QueryMetaverseObjectsPendingDeletionByRangeAsync(
+            objectTypeId, searchQuery, sortBy, sortDescending, offset, count, includeTotalCount);
+
+        return new RangeResultSet<MetaverseObject>
+        {
+            Results = results,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range pending-deletion reads: builds the filtered, sorted window of
+    /// Metaverse Objects awaiting deletion for an absolute <paramref name="offset"/>/<paramref name="count"/>,
+    /// and returns it alongside the total match count, or null for that total when
+    /// <paramref name="includeTotalCount"/> is false. Callers own input validation and clamping; this method
+    /// assumes sane values.
+    /// </summary>
+    private async Task<(List<MetaverseObject> Results, int? TotalResults)> QueryMetaverseObjectsPendingDeletionByRangeAsync(
+        int? objectTypeId,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        int offset,
+        int count,
+        bool includeTotalCount)
+    {
+        // Build base query for MVOs pending deletion, sharing the filter with the count and summary reads so all
+        // three describe the same population (see FilterToPendingDeletion).
+        var query = FilterToPendingDeletion(
+            Repository.Database.MetaverseObjects
+                .AsSplitQuery()
+                .Include(mvo => mvo.Type)
+                .Include(mvo => mvo.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+                .Include(mvo => mvo.ConnectedSystemObjects),
+            objectTypeId);
+
+        // Case-insensitive search over the display name (via the denormalised cache, the same column the
+        // display-name sort uses, so a search can never match an object the sort would misplace) and the
+        // triggering Connected System's name. ToLower/Contains rather than ILike so the shared core stays
+        // executable on the in-memory provider the unit tier uses.
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            query = query.Where(mvo =>
+                (mvo.CachedDisplayName != null && mvo.CachedDisplayName.ToLower().Contains(searchLower)) ||
+                (mvo.DeletionTriggeredBySystemName != null && mvo.DeletionTriggeredBySystemName.ToLower().Contains(searchLower)));
+        }
+
+        // Apply sorting. "eligible" orders by when each object becomes deletable (disconnection date plus its
+        // type's grace period, translated to timestamp + interval); an absent grace period means eligible
+        // immediately, i.e. at the disconnection date itself. The default is the disconnection date ascending:
+        // soonest-scheduled first, matching the paged reader's historical order.
+        var ordered = sortBy?.ToLower() switch
+        {
+            "displayname" => sortDescending
+                ? query.OrderByDescending(mvo => mvo.CachedDisplayName)
+                : query.OrderBy(mvo => mvo.CachedDisplayName),
+            "type" => sortDescending
+                ? query.OrderByDescending(mvo => mvo.Type.Name)
+                : query.OrderBy(mvo => mvo.Type.Name),
+            "eligible" => sortDescending
+                ? query.OrderByDescending(mvo => mvo.LastConnectorDisconnectedDate + (mvo.Type.DeletionGracePeriod ?? TimeSpan.Zero))
+                : query.OrderBy(mvo => mvo.LastConnectorDisconnectedDate + (mvo.Type.DeletionGracePeriod ?? TimeSpan.Zero)),
+            _ => sortDescending
+                ? query.OrderByDescending(mvo => mvo.LastConnectorDisconnectedDate)
+                : query.OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
+        };
+
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every sort key
+        // above can tie (many objects disconnect in one run). Without it, PostgreSQL may order tied rows
+        // differently per window, repeating some objects and skipping others as the reader scrolls.
+        query = ordered.ThenBy(mvo => mvo.Id);
+
+        // Count query. It scans every matching object rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total. Sorting
+        // cannot change how many objects match, so a caller only has to re-count when the filters change.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        var results = await query
+            .Skip(offset)
+            .Take(count)
+            .ToListAsync();
+
+        return (results, totalCount);
     }
 
     /// <inheritdoc />
@@ -2764,25 +3017,70 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
     {
-        var query = Repository.Database.MetaverseObjects
-            .Where(mvo =>
-                // Must have LastConnectorDisconnectedDate set (pending deletion)
-                mvo.LastConnectorDisconnectedDate != null &&
-                // Must be projected (not internal admin accounts)
-                mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have an automatic deletion rule, matching the housekeeping eligibility rule set
-                // and the listing query above (#119)
-                mvo.Type != null &&
-                (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
-                 mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+        return await FilterToPendingDeletion(Repository.Database.MetaverseObjects, objectTypeId).CountAsync();
+    }
 
-        // Apply object type filter if specified
+    /// <inheritdoc />
+    public async Task<PendingDeletionStateCounts> GetMetaverseObjectsPendingDeletionStateCountsAsync(int? objectTypeId = null)
+    {
+        var pending = FilterToPendingDeletion(Repository.Database.MetaverseObjects, objectTypeId);
+
+        // One instant for all three counts: taking DateTime.UtcNow per query would let an object's grace period
+        // elapse between two of them, and the states would then no longer sum to the total.
+        var now = DateTime.UtcNow;
+
+        var total = await pending.CountAsync();
+
+        // Still connected to something: the object is being deprovisioned and cannot be deleted yet, whatever its
+        // grace period says.
+        var deprovisioning = await pending.CountAsync(mvo => mvo.ConnectedSystemObjects.Any());
+
+        // Disconnected, with a grace period that has not run out. Expressed as the stored disconnection date plus
+        // the type's interval (which is what MetaverseObject.DeletionEligibleDate computes in memory), because the
+        // eligible date is not a column; the same arithmetic backs the list's "eligible" sort.
+        var awaitingGracePeriod = await pending.CountAsync(mvo =>
+            !mvo.ConnectedSystemObjects.Any() &&
+            mvo.Type.DeletionGracePeriod != null &&
+            mvo.Type.DeletionGracePeriod > TimeSpan.Zero &&
+            mvo.LastConnectorDisconnectedDate + mvo.Type.DeletionGracePeriod > now);
+
+        return new PendingDeletionStateCounts
+        {
+            Total = total,
+            Deprovisioning = deprovisioning,
+            AwaitingGracePeriod = awaitingGracePeriod,
+            // The three states partition the match set, so the remainder is exactly the objects housekeeping will
+            // delete next pass: disconnected, and either past their grace period or given none. Derived rather
+            // than counted so the four figures on the page can never disagree with each other.
+            ReadyForDeletion = total - deprovisioning - awaitingGracePeriod
+        };
+    }
+
+    /// <summary>
+    /// Narrows a Metaverse Object query to those awaiting deletion, and to one Metaverse Object Type where asked.
+    /// Every pending-deletion read shares this filter, so the list, its total and its summary always describe the
+    /// same population; it matches the housekeeping eligibility rule set, including authoritative-source-scheduled
+    /// objects that may retain target connectors during their grace period (#119).
+    /// </summary>
+    private static IQueryable<MetaverseObject> FilterToPendingDeletion(IQueryable<MetaverseObject> source, int? objectTypeId)
+    {
+        var query = source.Where(mvo =>
+            // Must have LastConnectorDisconnectedDate set (pending deletion)
+            mvo.LastConnectorDisconnectedDate != null &&
+            // Must be projected (not internal admin accounts)
+            mvo.Origin == MetaverseObjectOrigin.Projected &&
+            // Must have an automatic deletion rule
+            mvo.Type != null &&
+            (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+             mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected));
+
         if (objectTypeId.HasValue)
         {
-            query = query.Where(mvo => mvo.Type.Id == objectTypeId.Value);
+            var objectTypeIdValue = objectTypeId.Value;
+            query = query.Where(mvo => mvo.Type.Id == objectTypeIdValue);
         }
 
-        return await query.CountAsync();
+        return query;
     }
 
     /// <inheritdoc />
@@ -2878,34 +3176,108 @@ public class MetaverseRepository : IMetaverseRepository
         int page = 1,
         int pageSize = 50)
     {
+        if (page < 1)
+            page = 1;
+
+        var offset = (page - 1) * pageSize;
+        var (items, totalCount) = await QueryDeletedMvoChangesByRangeAsync(
+            objectTypeId, fromDate, toDate, displayNameSearch, offset, pageSize, includeTotalCount: true);
+
+        // The count was requested above, so it is always present here; paging cannot work without it. Stated as
+        // an invariant rather than dereferenced, so the compiler and CodeQL both see a non-nullable value.
+        return (items, totalCount ?? throw new InvalidOperationException(
+            "The paged deleted Metaverse Object change read asked for the total match count and did not receive one."));
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<MetaverseObjectChange>> GetDeletedMvoChangesRangeAsync(
+        int offset,
+        int count,
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment for
+        // how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (items, totalCount) = await QueryDeletedMvoChangesByRangeAsync(
+            objectTypeId, fromDate, toDate, displayNameSearch, offset, count, includeTotalCount);
+
+        return new RangeResultSet<MetaverseObjectChange>
+        {
+            Results = items,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range deleted Metaverse Object change reads: builds the filtered window of
+    /// deletion records for an absolute <paramref name="offset"/>/<paramref name="count"/>, ordered by deletion
+    /// time newest first, and returns it alongside the total match count, or null for that total when
+    /// <paramref name="includeTotalCount"/> is false. Callers own input validation and clamping; this method
+    /// assumes sane values.
+    /// </summary>
+    private async Task<(List<MetaverseObjectChange> Items, int? TotalCount)> QueryDeletedMvoChangesByRangeAsync(
+        int? objectTypeId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        string? displayNameSearch,
+        int offset,
+        int count,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.MetaverseObjectChanges
             .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.MetaverseObject == null);
 
         // Apply filters
         if (objectTypeId.HasValue)
-            query = query.Where(c => c.DeletedObjectTypeId == objectTypeId.Value);
-
-        if (fromDate.HasValue)
-            query = query.Where(c => c.ChangeTime >= fromDate.Value);
-
-        if (toDate.HasValue)
-            query = query.Where(c => c.ChangeTime <= toDate.Value);
-
-        if (!string.IsNullOrWhiteSpace(displayNameSearch))
         {
-            query = query.Where(c =>
-                c.DeletedObjectDisplayName != null &&
-                c.DeletedObjectDisplayName.Contains(displayNameSearch));
+            var objectTypeIdValue = objectTypeId.Value;
+            query = query.Where(c => c.DeletedObjectTypeId == objectTypeIdValue);
         }
 
-        // Get total count before pagination
-        var totalCount = await query.CountAsync();
+        if (fromDate.HasValue)
+        {
+            var fromDateValue = fromDate.Value;
+            query = query.Where(c => c.ChangeTime >= fromDateValue);
+        }
 
-        // Apply ordering and pagination
+        if (toDate.HasValue)
+        {
+            var toDateValue = toDate.Value;
+            query = query.Where(c => c.ChangeTime <= toDateValue);
+        }
+
+        // Case-insensitive for user convenience, matching the other list searches.
+        if (!string.IsNullOrWhiteSpace(displayNameSearch))
+        {
+            var searchPattern = $"%{displayNameSearch}%";
+            query = query.Where(c =>
+                c.DeletedObjectDisplayName != null &&
+                EF.Functions.ILike(c.DeletedObjectDisplayName, searchPattern));
+        }
+
+        // Count query. It scans every matching record rather than a window of them, so it is the expensive half
+        // of this method at scale and is skipped entirely when the caller already holds the total.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
+
+        // Apply the fixed newest-first ordering and the window
         var items = await query
             .OrderByDescending(c => c.ChangeTime)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(offset)
+            .Take(count)
             .Include(c => c.DeletedObjectType)
             .ToListAsync();
 
@@ -2989,6 +3361,66 @@ public class MetaverseRepository : IMetaverseRepository
         int pageSize,
         string? searchText = null)
     {
+        var (values, totalCount) = await QueryAttributeValuesByRangeAsync(
+            metaverseObjectId, attributeName, (page - 1) * pageSize, pageSize, searchText, includeTotalCount: true);
+
+        return new PagedResultSet<MetaverseObjectAttributeValue>
+        {
+            Results = values,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged attribute value read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // The same window cap as the header range reads in this repository; see the constant's own comment for
+        // how 500 was derived.
+        if (count > MaxHeaderWindowSize)
+            count = MaxHeaderWindowSize;
+
+        var (values, totalCount) = await QueryAttributeValuesByRangeAsync(
+            metaverseObjectId, attributeName, offset, count, searchText, includeTotalCount);
+
+        return new RangeResultSet<MetaverseObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Metaverse Object attribute value reads: one object's values for one
+    /// attribute, optionally narrowed by a case-insensitive search over the stored value and the referenced
+    /// object's own values, ordered by id and windowed by absolute <paramref name="offset"/> and
+    /// <paramref name="count"/>, alongside the total match count (or null for that total when
+    /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
+    /// values match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<MetaverseObjectAttributeValue> Results, int? TotalResults)> QueryAttributeValuesByRangeAsync(
+        Guid metaverseObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.Set<MetaverseObjectAttributeValue>()
             .Where(av => av.MetaverseObject.Id == metaverseObjectId
                          && av.Attribute.Name == attributeName);
@@ -3003,15 +3435,21 @@ public class MetaverseRepository : IMetaverseRepository
             );
         }
 
-        var totalCount = await query.CountAsync();
+        // Counting scans every matching value rather than a window of them, so it is skipped entirely when the
+        // caller already holds the total. Ordering cannot change how many values match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
         // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var values = await query
             .AsTracking()
             .AsSplitQuery()
+            // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
+            // second key that could tie.
             .OrderBy(av => av.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(offset)
+            .Take(count)
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
@@ -3020,13 +3458,7 @@ public class MetaverseRepository : IMetaverseRepository
             .ThenInclude(rvav => rvav.Attribute)
             .ToListAsync();
 
-        return new PagedResultSet<MetaverseObjectAttributeValue>
-        {
-            Results = values,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            PageSize = pageSize
-        };
+        return (values, totalCount);
     }
 
     public async Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc)

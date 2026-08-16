@@ -1,5 +1,6 @@
-﻿@page "/claims"
+@page "/claims"
 @using System.Security.Claims
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -16,16 +17,53 @@
 
 @if (User != null)
 {
-    <MudTable Items="@User.Claims.OrderBy(q=> q.Type)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5" Outlined="true" Elevation="0">
-        <HeaderContent>
-            <MudTh><MudText Typo="Typo.button">Claim Type</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Claim Value</MudText></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Claim Type">@context.Type</MudTd>
-            <MudTd DataLabel="Claim Value">@context.Value</MudTd>
-        </RowTemplate>
-    </MudTable>
+    @* Both tables on this page are virtualised grids. The claims a session carries are a handful on most
+       identity providers and a few hundred on a group-heavy one, and neither list earns a database read: each
+       is already in memory, so the window is sliced from it. The two grids prefix their URL parameters
+       differently so their search, sort and scroll state cannot overwrite each other. *@
+    <VirtualisedDataGrid T="Claim"
+                         ContainerId="claims-list"
+                         UrlParameterPrefix="cl-"
+                         DefaultSortBy="type"
+                         LoadWindow="LoadClaimWindowAsync"
+                         SingularName="Claim"
+                         PluralName="Claims"
+                         SearchPlaceholder="Search claims">
+        <Columns>
+            <TemplateColumn Title="Claim Type" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Claim Type" Name="type" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.Type
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Claim Value" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Claim Value" Name="value" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.Value
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No claims match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.Badge"
+                                 PrimaryText="Your session carries no claims"
+                                 SecondaryText="Claims are asserted by your identity provider during sign-in; an empty list means it sent none." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 
     <MudText Typo="Typo.h4" Class="mt-8">Identity Provider</MudText>
     <MudText Typo="Typo.body1" Class="mt-2">
@@ -33,25 +71,56 @@
         about how your current session was authenticated. Secrets (client secret, tokens) are deliberately excluded.
     </MudText>
 
-    <MudTable Items="@_idpInfo" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5" Outlined="true" Elevation="0">
-        <HeaderContent>
-            <MudTh><MudText Typo="Typo.button">Setting</MudText></MudTh>
-            <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Setting">@context.Label</MudTd>
-            <MudTd DataLabel="Value">
-                @if (string.IsNullOrEmpty(context.Value))
-                {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary"><em>(not set)</em></MudText>
-                }
-                else
-                {
-                    @context.Value
-                }
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+    <VirtualisedDataGrid T="IdpInfoRow"
+                         ContainerId="idp-info-list"
+                         UrlParameterPrefix="idp-"
+                         DefaultSortBy="setting"
+                         LoadWindow="LoadIdpInfoWindowAsync"
+                         SingularName="Setting"
+                         PluralName="Settings"
+                         SearchPlaceholder="Search settings">
+        <Columns>
+            <TemplateColumn Title="Setting" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Setting" Name="setting" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.Label
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Value" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Value" Name="value" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @if (string.IsNullOrEmpty(context.Item.Value))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary"><em>(not set)</em></MudText>
+                    }
+                    else
+                    {
+                        @context.Item.Value
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No identity provider settings match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.Login"
+                                 PrimaryText="No identity provider details are available"
+                                 SecondaryText="Single Sign-On has not been configured yet; configure it under Service Settings." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 }
 
 @code {
@@ -87,6 +156,58 @@
             new IdpInfoRow("Role claim type", identity?.RoleClaimType),
         ];
     }
+
+    /// <summary>
+    /// Slices one window of the session's claims, applying the grid's search (type and value) and sort. The
+    /// claims are already on the ClaimsPrincipal, so there is nothing to read from anywhere.
+    /// </summary>
+    private Task<VirtualisedWindow<Claim>> LoadClaimWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<Claim> claims = User?.Claims ?? Enumerable.Empty<Claim>();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            claims = claims.Where(c =>
+                c.Type.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                c.Value.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var sorted = request.SortBy == "value"
+            ? Order(claims, c => c.Value, request.SortDescending)
+            : Order(claims, c => c.Type, request.SortDescending);
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// Slices one window of the identity provider rows, applying the grid's search and sort. A null value reads
+    /// as empty for both, so "(not set)" rows sort together rather than scattering.
+    /// </summary>
+    private Task<VirtualisedWindow<IdpInfoRow>> LoadIdpInfoWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        IEnumerable<IdpInfoRow> rows = _idpInfo;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            rows = rows.Where(r =>
+                r.Label.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (r.Value?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        var sorted = request.SortBy == "value"
+            ? Order(rows, r => r.Value ?? string.Empty, request.SortDescending)
+            : Order(rows, r => r.Label, request.SortDescending);
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>Orders a sequence by a string key, case-insensitively, in the direction the grid asked for.</summary>
+    private static IOrderedEnumerable<T> Order<T>(IEnumerable<T> source, Func<T, string> key, bool descending) =>
+        descending
+            ? source.OrderByDescending(key, StringComparer.OrdinalIgnoreCase)
+            : source.OrderBy(key, StringComparer.OrdinalIgnoreCase);
 
     private sealed record IdpInfoRow(string Label, string? Value);
 }

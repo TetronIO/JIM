@@ -99,6 +99,35 @@ public class ConnectedSystemContainer
     /// </summary>
     public HashSet<ConnectedSystemContainer> ChildContainers { get; } = new();
 
+    /// <summary>
+    /// How many objects sit directly in this Container in the Connected System, as at the last hierarchy
+    /// retrieval. Null where the Connector cannot report counts, or has not been asked yet.
+    /// </summary>
+    /// <remarks>
+    /// Read from the Connected System, not derived from the Connected System Objects JIM holds (#1276). The
+    /// question an administrator is asking while choosing Containers is "what is in there?", and they are usually
+    /// asking it before anything has been imported, when a figure derived from JIM's own data would read zero for
+    /// every Container.
+    ///
+    /// Zero and null mean different things and must stay distinguishable: zero is a Container the Connector
+    /// searched and found nothing in, null is one nobody has counted. Rendering them the same way would tell an
+    /// administrator a Container is empty when JIM has no idea either way.
+    ///
+    /// Counts what a Full Import would return for the currently selected Object Types, so the figure and the
+    /// import agree. It is deliberately blind to selections and exclusions: what JIM would actually take in once
+    /// those apply is the Configuration Change Preview's answer (#1251), and answering it in two places is how the
+    /// two come to disagree.
+    /// </remarks>
+    public int? ObjectCount { get; set; }
+
+    /// <summary>
+    /// <see cref="ObjectCount"/> plus every descendant Container's, which is what a
+    /// <see cref="ConnectedSystemContainerScope.Subtree"/> statement over this Container reaches. Null when this
+    /// Container has not been counted. Recalculated from the hierarchy; never stored.
+    /// </summary>
+    [NotMapped]
+    public int? SubtreeObjectCount { get; set; }
+
     #region For MudBlazor TreeView
     public ConnectedSystemContainer? ParentContainer { get; set; }
 

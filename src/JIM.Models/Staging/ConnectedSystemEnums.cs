@@ -266,3 +266,19 @@ public enum ConnectedSystemContainerScope
     /// </summary>
     OneLevel = 1
 }
+
+/// <summary>
+/// What a line of Advanced Mode Container Scope text says about the Container it names.
+/// </summary>
+public enum ContainerScopeStatementKind
+{
+    /// <summary>
+    /// Bring the Container into scope, as <see cref="ConnectedSystemContainer.Selected"/> does.
+    /// </summary>
+    Include = 0,
+
+    /// <summary>
+    /// Carve the Container out of the branch around it, as <see cref="ConnectedSystemContainer.Excluded"/> does.
+    /// </summary>
+    Exclude = 1
+}

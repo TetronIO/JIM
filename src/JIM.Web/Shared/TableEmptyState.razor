@@ -1,0 +1,47 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The empty state for a table or data grid's no-rows fragment. Say why the list is empty (a search that matched *@
+@* nothing is a different situation from a type with no objects yet) and, where the caller has one, offer the way *@
+@* out as the action. See JIM.Web/CLAUDE.md "Table empty states". *@
+
+<div class="jim-table-empty-state">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <MudIcon Icon="@Icon" Class="jim-table-empty-state-icon mb-3" />
+    }
+    <MudText Typo="Typo.h6" Class="mud-text-secondary">@PrimaryText</MudText>
+    @if (!string.IsNullOrEmpty(SecondaryText))
+    {
+        <MudText Class="mud-text-secondary mt-1">@SecondaryText</MudText>
+    }
+    @if (!string.IsNullOrEmpty(ActionText))
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-4" OnClick="OnAction">@ActionText</MudButton>
+    }
+</div>
+
+@code {
+    /// <summary>An optional icon rendered low-lighted above the message, e.g. Icons.Material.Filled.SearchOff.</summary>
+    [Parameter]
+    public string? Icon { get; set; }
+
+    /// <summary>The headline: what is empty and why, e.g. "No Service Principals match "tina"".</summary>
+    [Parameter, EditorRequired]
+    public string PrimaryText { get; set; } = string.Empty;
+
+    /// <summary>An optional hint underneath, pointing at the way out or at what would populate the list.</summary>
+    [Parameter]
+    public string? SecondaryText { get; set; }
+
+    /// <summary>
+    /// Optional action button text, e.g. "Clear Search". Only supply one when <see cref="OnAction"/> does
+    /// something; a button with nothing behind it is a dead affordance.
+    /// </summary>
+    [Parameter]
+    public string? ActionText { get; set; }
+
+    /// <summary>Raised when the action button is clicked.</summary>
+    [Parameter]
+    public EventCallback OnAction { get; set; }
+}

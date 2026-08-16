@@ -1,10 +1,9 @@
 @page "/admin/predefined-searches"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Search.DTOs
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -16,101 +15,115 @@
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Predefined Searches make it easy to find objects and control what attributes are returned.</MudText>
 
-<MudTable Items="@_predefinedSearchHeaders"
-          T="PredefinedSearchHeader"
-          Hover="true"
-          Dense="@_dense"
-          Breakpoint="Breakpoint.Sm"
-          Class="mt-5"
-          Outlined="true"
-          Elevation="0"
-          Filter="new Func<PredefinedSearchHeader, bool>(FilterFunc)"
-          OnRowClick="HandleRowClick"
-          RowClass="cursor-pointer"
-          RowStyleFunc="@(new Func<PredefinedSearchHeader, int, string>(RowStyleFunc))"
-          Loading="@_loading"
-          LoadingProgressColor="Color.Primary">
-    <ToolBarContent>
-        <TableDensityToggle @bind-Dense="_dense" />
-        <MudSpacer />
-        <SearchField @bind-Value="_searchString"
-                     Placeholder="Search by name or URI"
-                     Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.Name)">
-                <MudText Typo="Typo.button">Name</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.Uri)">
-                <MudText Typo="Typo.button">URI</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.MetaverseObjectTypeName)">
-                <MudText Typo="Typo.button">Object Type</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.IsDefaultForMetaverseObjectType)">
-                <MudText Typo="Typo.button">Default?</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.BuiltIn)">
-                <MudText Typo="Typo.button">Built-in?</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.IsEnabled)">
-                <MudText Typo="Typo.button">Enabled</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.MetaverseAttributeCount)">
-                <MudText Typo="Typo.button">Attributes</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortBy="new Func<PredefinedSearchHeader, object>(x => x.Created)" InitialDirection="SortDirection.Descending">
-                <MudText Typo="Typo.button">Created</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name">
-            <MudLink Href="@("/admin/predefined-searches/" + context.Uri)">@context.Name</MudLink>
-        </MudTd>
-        <MudTd DataLabel="URI">@context.Uri</MudTd>
-        <MudTd DataLabel="Object Type">@context.MetaverseObjectTypeName</MudTd>
-        <MudTd DataLabel="Default?">@(context.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Enabled" @onclick:stopPropagation="true">
-            <MudSwitch T="bool" Value="context.IsEnabled" Color="Color.Success"
-                       ValueChanged="async (bool val) => await ToggleEnabledAsync(context, val)" />
-        </MudTd>
-        <MudTd DataLabel="Attributes">@context.MetaverseAttributeCount</MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>There are no predefined searches.</MudText>
-    </NoRecordsContent>
-</MudTable>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+   and the toolbar count) lives in the shared grid; this page loads the whole list once (it is a small
+   configuration list) and windows it in memory. The page header already names the list, so there is no toolbar
+   title and the count carries the nouns. *@
+<VirtualisedDataGrid T="PredefinedSearchHeader"
+                     ContainerId="predefined-search-list"
+                     DefaultSortBy="created"
+                     DefaultSortDescending="true"
+                     LoadWindow="LoadWindowAsync"
+                     SingularName="Predefined Search"
+                     PluralName="Predefined Searches"
+                     SearchPlaceholder="Search by name or URI"
+                     RowClicked="HandleRowClicked"
+                     RowClassFunc="@((search, _) => search.IsEnabled ? null : "jim-readonly-row")">
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudLink Href="@("/admin/predefined-searches/" + context.Item.Uri)">@context.Item.Name</MudLink>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="URI" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="URI" Name="uri" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.Uri
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Object Type" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Object Type" Name="objecttype" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.MetaverseObjectTypeName
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Default?" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Default?" Name="default" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @(context.Item.IsDefaultForMetaverseObjectType ? "Yes" : "No")
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Built-in?" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @(context.Item.BuiltIn ? "Yes" : "No")
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Enabled" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Enabled" Name="enabled" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @* Stop the click reaching the row, which would navigate to the detail page mid-toggle. *@
+                <div @onclick:stopPropagation="true">
+                    <MudSwitch T="bool" Value="context.Item.IsEnabled" Color="Color.Success"
+                               ValueChanged="async (bool val) => await ToggleEnabledAsync(context.Item, val)" />
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Attributes" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Attributes" Name="attributes" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.MetaverseAttributeCount
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Created" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Created" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Item.Created.ToLocalTime().ToRelativeTime()
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Predefined Searches match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SavedSearch"
+                             PrimaryText="No Predefined Searches yet"
+                             SecondaryText="Built-in Predefined Searches are created when the service initialises." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private IList<PredefinedSearchHeader>? _predefinedSearchHeaders;
-    private string _searchString = "";
-    private bool _loading = true;
-    private bool _dense;
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -118,40 +131,50 @@
         new("Predefined Searches", href: null, disabled: true)
     };
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
-    }
-
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
         _predefinedSearchHeaders = await jim.Search.GetPredefinedSearchHeadersAsync();
-        _loading = false;
     }
 
-    private bool FilterFunc(PredefinedSearchHeader element)
+    /// <summary>
+    /// Windows the in-memory list for the grid: Predefined Searches are a small configuration list, loaded whole
+    /// once, so search and sort are applied here rather than each becoming a database range read.
+    /// </summary>
+    private Task<VirtualisedWindow<PredefinedSearchHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(_searchString))
-            return true;
+        var headers = _predefinedSearchHeaders ?? new List<PredefinedSearchHeader>();
 
-        if (element.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        var filtered = headers.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            filtered = filtered.Where(x =>
+                x.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase) ||
+                x.Uri.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
+        }
 
-        if (element.Uri.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        Func<PredefinedSearchHeader, object> sortKey = request.SortBy switch
+        {
+            "uri" => x => x.Uri,
+            "objecttype" => x => x.MetaverseObjectTypeName,
+            "default" => x => x.IsDefaultForMetaverseObjectType,
+            "builtin" => x => x.BuiltIn,
+            "enabled" => x => x.IsEnabled,
+            "attributes" => x => x.MetaverseAttributeCount,
+            "created" => x => x.Created,
+            _ => x => x.Name
+        };
 
-        return false;
+        var sorted = request.SortDescending
+            ? filtered.OrderByDescending(sortKey)
+            : filtered.OrderBy(sortKey);
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
 
-    private void HandleRowClick(TableRowClickEventArgs<PredefinedSearchHeader> args)
+    private void HandleRowClicked(PredefinedSearchHeader header)
     {
-        if (args.Item != null)
-            NavManager.NavigateTo($"/admin/predefined-searches/{args.Item.Uri}");
+        NavManager.NavigateTo($"/admin/predefined-searches/{header.Uri}");
     }
 
     private async Task ToggleEnabledAsync(PredefinedSearchHeader header, bool isEnabled)
@@ -181,10 +204,5 @@
         {
             Snackbar.Add($"Failed to update predefined search: {ex.Message}", Severity.Error);
         }
-    }
-
-    private static string RowStyleFunc(PredefinedSearchHeader header, int index)
-    {
-        return header.IsEnabled ? "" : "opacity: 0.5;";
     }
 }

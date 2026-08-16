@@ -1,9 +1,8 @@
-﻿@page "/admin/connected-systems/connectors"
+@page "/admin/connected-systems/connectors"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Models.Staging.DTOs
-@using JIM.Web.Services
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
-@inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -21,55 +20,85 @@
     <MudButton Variant="Variant.Filled" Color="Color.Primary">Connectors</MudButton>
 </MudButtonGroup>
 
-<MudTable Items="@_headers" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
-    <ToolBarContent>
-        <TableDensityToggle @bind-Dense="_dense" />
-        <MudText Class="mx-2 mud-text-disabled">|</MudText>
-        <MudText Typo="Typo.h6">Connectors</MudText>
-        <MudSpacer />
-        <SearchField @bind-Value="_searchString" Class="mt-0" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Description ?? string.Empty)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
-        <MudTh Class="jim-nowrap"><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh Class="jim-nowrap"><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)"><MudText Typo="Typo.button">In-use?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions ?? string.Empty)"><MudText Typo="Typo.button">Version(s)</MudText></MudTableSortLabel></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name" Class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Description">
-            @if (string.IsNullOrEmpty(context.Description))
-            {
-                <EmptyValue />
-            }
-            else
-            {
-                @context.Description
-            }
-        </MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Version(s)">
-            @if (string.IsNullOrEmpty(context.Versions))
-            {
-                <EmptyValue />
-            }
-            else
-            {
-                @context.Versions
-            }
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        There are no connectors
-    </NoRecordsContent>
-</MudTable>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the toolbar count, the search box)
+   lives in the shared grid; this page loads the small configuration list once and windows it in memory. *@
+<VirtualisedDataGrid T="ConnectorDefinitionHeader"
+                     ContainerId="connector-list"
+                     DefaultSortBy="name"
+                     LoadWindow="LoadWindowAsync"
+                     SingularName="Connector"
+                     PluralName="Connectors">
+    <Columns>
+        <TemplateColumn Title="Name" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Name" Name="name" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink></span>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Description" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Description" Name="description" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @* A row in a virtualised grid is one line, so a long description is clipped rather than wrapped;
+                   it is available in full on hover, and on the Connector's own page. *@
+                <OneLineText Text="@context.Item.Description" />
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Built-in?" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 90px;">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @(context.Item.BuiltIn ? "Yes" : "No")
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="In-use?" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 90px;">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="In-use?" Name="inuse" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @(context.Item.InUse ? "Yes" : "No")
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Version(s)" Sortable="false" HeaderStyle="width: 110px;">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Version(s)" Name="versions" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (string.IsNullOrEmpty(context.Item.Versions))
+                {
+                    <EmptyValue />
+                }
+                else
+                {
+                    @context.Item.Versions
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No Connectors match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.Power"
+                             PrimaryText="No Connectors installed"
+                             SecondaryText="Built-in Connectors appear here once JIM has initialised." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @code {
     private IList<ConnectorDefinitionHeader>? _headers;
-    private string _searchString = "";
-    private bool _dense;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -81,29 +110,53 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await EnsureLoadedAsync();
+    }
+
+    /// <summary>
+    /// Loads the Connector list once. The grid's window loader also calls this because the grid can request its
+    /// first window before this page's initialisation has completed.
+    /// </summary>
+    private async Task EnsureLoadedAsync()
+    {
+        if (_headers != null)
+            return;
+
         using var jim = JimFactory.Create();
         _headers = await jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    /// <summary>
+    /// Windows the in-memory list for the grid: a small configuration list is loaded whole, then searched, sorted
+    /// and sliced here rather than growing a database range read.
+    /// </summary>
+    private async Task<VirtualisedWindow<ConnectorDefinitionHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
     {
-        if (firstRender)
+        await EnsureLoadedAsync();
+
+        IEnumerable<ConnectorDefinitionHeader> filtered = _headers!;
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+            filtered = filtered.Where(c => c.Name.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase));
+
+        filtered = request.SortBy switch
         {
-            _dense = await PreferenceService.GetTableDenseAsync() == true;
-            StateHasChanged();
-        }
-    }
+            "description" => request.SortDescending
+                ? filtered.OrderByDescending(c => c.Description ?? string.Empty)
+                : filtered.OrderBy(c => c.Description ?? string.Empty),
+            "builtin" => request.SortDescending
+                ? filtered.OrderByDescending(c => c.BuiltIn)
+                : filtered.OrderBy(c => c.BuiltIn),
+            "inuse" => request.SortDescending
+                ? filtered.OrderByDescending(c => c.InUse)
+                : filtered.OrderBy(c => c.InUse),
+            "versions" => request.SortDescending
+                ? filtered.OrderByDescending(c => c.Versions ?? string.Empty)
+                : filtered.OrderBy(c => c.Versions ?? string.Empty),
+            _ => request.SortDescending
+                ? filtered.OrderByDescending(c => c.Name)
+                : filtered.OrderBy(c => c.Name)
+        };
 
-    private bool FilterFunc1(ConnectorDefinitionHeader element) => FilterFunc(element, _searchString);
-
-    private static bool FilterFunc(ConnectorDefinitionHeader element, string searchString)
-    {
-        if (string.IsNullOrWhiteSpace(searchString))
-            return true;
-
-        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return false;
+        return filtered.ToWindow(request);
     }
 }
