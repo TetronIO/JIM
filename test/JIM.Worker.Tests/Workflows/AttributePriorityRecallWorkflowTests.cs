@@ -155,6 +155,50 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Recall_HigherPriorityWithNullIsValueObsoleted_StillReElectsSurvivorAsync()
+    {
+        // "Null is a value" says what a contributor means when it is CONNECTED and holds no value: assert null
+        // rather than abstain. It says nothing about a contributor that is no longer connected at all, which has no
+        // opinion to assert; ReElectSurvivingContributorsAsync encodes that by excluding the leaver's own rule from
+        // the survivors it re-flows, and NotJoinedNoOpinion proves it for a rule with no joined CSO.
+        //
+        // So setting the flag on HR's mapping must not change what happens when HR's CSO is obsoleted: Description
+        // hands over to the surviving Training contributor exactly as it does without it. A deletion grace period is
+        // configured too, since the freeze and the flag are the two things that could each suppress a hand-over and
+        // this is the combination neither of the tests above covers.
+        //
+        // Written to check a suspicion that turned out to be unfounded (#1376, closed): a Scenario 14 step appeared
+        // to show the flag blocking re-election, and the real cause was the scenario's own Enforce State export
+        // having made both sources' values identical. It is kept because the semantics are worth pinning: nothing
+        // else asserts that a departed contributor's null assertion stays silent.
+        var ctx = await SetUpTwoContributorsToDescriptionAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2,
+            deletionGracePeriod: TimeSpan.FromHours(1), hrDescriptionNullIsValue: true);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(HrDescription),
+            "HR (priority 1) should win Description while joined, flag or no flag");
+
+        await MarkCsoObsoleteAsync(ctx.HrCso);
+        var deltaActivity = await RunDeltaSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(deltaActivity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "re-election must complete without unhandled errors");
+
+        mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var reElected = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(reElected, Is.Not.Null,
+            "a departed contributor asserts nothing, so Description must not be left blank or asserted null");
+        Assert.That(reElected!.StringValue, Is.EqualTo(TrainingDescription),
+            "Description must hand over to the surviving Training value, not stay on the departed HR value");
+        Assert.That(reElected.ContributedBySyncRuleId, Is.EqualTo(ctx.TrainingImportRuleId),
+            "the re-elected value must carry the surviving Training rule's provenance");
+    }
+
+    [Test]
     public async Task Recall_WithSurvivingContributor_StagesSurvivorValueExportAsync()
     {
         // A downstream target holds the HR Description value. When HR's CSO is obsoleted and the Description is
@@ -582,7 +626,8 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     /// </summary>
     private async Task<TwoContributorContext> SetUpTwoContributorsToDescriptionAsync(
         int hrDescriptionPriority, int trainingDescriptionPriority, TimeSpan? deletionGracePeriod = null,
-        string hrDescriptionValue = HrDescription, string trainingDescriptionValue = TrainingDescription)
+        string hrDescriptionValue = HrDescription, string trainingDescriptionValue = TrainingDescription,
+        bool hrDescriptionNullIsValue = false)
     {
         // --- HR source: primary, recall enabled ---
         var hrSystem = await CreateConnectedSystemAsync("HR Source");
@@ -626,7 +671,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
         hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDisplayNameAttr, hrDisplayNameAttr));
         hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvEmployeeIdAttr, hrEmployeeIdAttr));
-        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDescriptionAttr, hrDescriptionAttr, hrDescriptionPriority));
+        hrImportRule.AttributeFlowRules.Add(BuildDirectImportMapping(hrImportRule, mvDescriptionAttr, hrDescriptionAttr, hrDescriptionPriority, hrDescriptionNullIsValue));
         await DbContext.SaveChangesAsync();
 
         // --- Training import rule: Description@trainingDescriptionPriority, join on EmployeeId ---
@@ -884,13 +929,14 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         return activity;
     }
 
-    private static SyncRuleMapping BuildDirectImportMapping(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source, int priority = int.MaxValue)
+    private static SyncRuleMapping BuildDirectImportMapping(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source, int priority = int.MaxValue, bool nullIsValue = false)
     {
         return new SyncRuleMapping
         {
             SyncRule = rule,
             SyncRuleId = rule.Id,
             Priority = priority,
+            NullIsValue = nullIsValue,
             TargetMetaverseAttribute = target,
             TargetMetaverseAttributeId = target.Id,
             Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source, ConnectedSystemAttributeId = source.Id } }
