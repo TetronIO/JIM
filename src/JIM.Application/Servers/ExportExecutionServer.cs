@@ -188,6 +188,16 @@ public class ExportExecutionServer
                 connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount);
         }
 
+        // Only when it happened: a Connected System with no class membership would otherwise carry a zero on every
+        // export, and this points at a configuration gap rather than at a Connected System failure.
+        if (result.ClassMembershipRefusedCount > 0)
+        {
+            Log.Warning("ExecuteExportsAsync: Class membership summary for {SystemName}: {RefusedCount} export(s) refused because a class being added has " +
+                "required attributes with no value. Each names the attributes on its own Pending Export; add an Attribute Flow for them, or withdraw the " +
+                "auxiliary class selection that brought the class in.",
+                connectedSystem.Name, result.ClassMembershipRefusedCount);
+        }
+
         // Report completion
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
@@ -551,7 +561,8 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                exportResults = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
+                                (exportResults, var immediateRefused) = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
+                                result.ClassMembershipRefusedCount += immediateRefused;
                             }
 
                             // Process results
@@ -989,7 +1000,8 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                exportResults = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                (exportResults, var deferredRefused) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                result.ClassMembershipRefusedCount += deferredRefused;
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -1108,10 +1120,10 @@ public class ExportExecutionServer
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
                     // Execute batch via connector
-                    var exportResults = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
+                    var (exportResults, batchRefused) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
-                    var batchResult = new ExportExecutionResult();
+                    var batchResult = new ExportExecutionResult { ClassMembershipRefusedCount = batchRefused };
                     await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive);
 
                     // Capture created containers from this batch's connector
@@ -1135,6 +1147,7 @@ public class ExportExecutionServer
                         result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
                         result.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
                         result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
+                        result.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
                         if (batchCompletedCallback == null)
                             result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
@@ -1269,7 +1282,7 @@ public class ExportExecutionServer
     /// they can act on: "posixAccount requires gidNumber" rather than whichever error the directory chose to
     /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector.
     /// </remarks>
-    internal static async Task<List<ConnectedSystemExportResult>> ExportBatchAsync(
+    internal static async Task<(List<ConnectedSystemExportResult> Results, int Refused)> ExportBatchAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
         List<PendingExport> batch,
@@ -1289,7 +1302,7 @@ public class ExportExecutionServer
         }
 
         if (refusals.Count == 0)
-            return await connector.ExportAsync(batch, cancellationToken, connectorProgress);
+            return (await connector.ExportAsync(batch, cancellationToken, connectorProgress), 0);
 
         Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' because a class being added has required attributes with no value.",
             refusals.Count, batch.Count, connectedSystem.Name);
@@ -1309,7 +1322,7 @@ public class ExportExecutionServer
                 results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
         }
 
-        return results;
+        return (results, refusals.Count);
     }
 
     /// <summary>
