@@ -1554,10 +1554,9 @@ public class SyncRepository : ISyncRepository
         // Synchronisation Rules resolving to one Connected System Object staged two Pending Exports for it,
         // this double accepted both, and the entire unit suite passed while the sync run died on a raw 23505.
         var csoIdsInBatch = new HashSet<Guid>();
-        foreach (var pe in batch.Where(pe => pe.ConnectedSystemObjectId.HasValue))
+        foreach (var csoId in batch.Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                                   .Select(pe => pe.ConnectedSystemObjectId!.Value))
         {
-            var csoId = pe.ConnectedSystemObjectId!.Value;
-
             if (!csoIdsInBatch.Add(csoId))
                 throw new InvalidOperationException(
                     $"Two Pending Exports in the same batch target Connected System Object {csoId}. " +
