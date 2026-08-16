@@ -299,6 +299,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
+. "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -3288,8 +3289,12 @@ $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $st
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
-    & $scenarioScript @scenarioParams
-    $scenarioExitCode = $LASTEXITCODE
+    # Not `& $scenarioScript; $scenarioExitCode = $LASTEXITCODE`. PowerShell does not set
+    # $LASTEXITCODE for a .ps1 that returns rather than exits, so that read picked up
+    # whatever the last native command inside the scenario had left behind and the
+    # scenario's own verdict was never consulted. See Invoke-IntegrationScenario and #1382.
+    $scenarioOutcome = Invoke-IntegrationScenario -Path $scenarioScript -Parameters $scenarioParams
+    $scenarioExitCode = $scenarioOutcome.ExitCode
 }
 catch {
     $scenarioExitCode = 1
