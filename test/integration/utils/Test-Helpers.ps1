@@ -3095,6 +3095,52 @@ function Test-JimErrorWatcher {
     return ($info.Length -gt 0)
 }
 
+function Clear-JimErrorWatcher {
+    <#
+    .SYNOPSIS
+        Takes whatever the watcher has captured so far and empties the sentinel.
+
+    .DESCRIPTION
+        The sentinel accumulates for the whole run, and Start-JIMRunProfile -Wait aborts whenever it is
+        non-empty. That is right for a scenario that stops at its first failure, and wrong for one that
+        deliberately carries on: a single early error latches the sentinel, so every Run Profile wait
+        afterwards aborts and every remaining step reports a failure it never actually had. Scenario 16
+        lost nineteen Oracle rows and half of SQL Server that way, to four errors raised before any of
+        them ran.
+
+        Draining rather than merely truncating, so the caller can attribute the lines to the step that
+        produced them instead of losing them. A caller that wants the whole run's errors accumulates
+        what this returns.
+
+    .PARAMETER Handle
+        The handle returned by Start-JimErrorWatcher. Optional: a scenario script does not own the
+        watcher, so when this is omitted the sentinel is taken from the JIM_RUNPROFILE_ABORT_SENTINEL
+        environment variable the runner sets, which is the same file Start-JIMRunProfile aborts on.
+
+    .OUTPUTS
+        [string[]] The error lines captured since the last drain. Empty if there were none.
+    #>
+    param(
+        [Parameter(Mandatory=$false)]
+        [PSCustomObject]$Handle
+    )
+
+    $sentinelPath = if ($Handle) { $Handle.SentinelPath } else { $env:JIM_RUNPROFILE_ABORT_SENTINEL }
+
+    if ([string]::IsNullOrWhiteSpace($sentinelPath) -or -not (Test-Path $sentinelPath)) {
+        return @()
+    }
+
+    $lines = @(Get-Content -Path $sentinelPath -ErrorAction SilentlyContinue | Where-Object { $_ -ne '' })
+
+    # The tailing jobs append to this file continuously, so a line arriving between the read above and
+    # the truncation below is lost rather than double-counted. That is the right way round: a duplicate
+    # would fail a step that had already been reported, which is the very cascade this exists to stop.
+    Set-Content -Path $sentinelPath -Value '' -NoNewline -Encoding UTF8
+
+    return $lines
+}
+
 function Stop-JimErrorWatcher {
     <#
     .SYNOPSIS

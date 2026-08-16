@@ -436,7 +436,14 @@ function Get-S16ExportBlocker {
     $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -Count)
     if ($csoCount -gt 0) { return $null }
 
-    return "Not exercisable in this topology: JIM excludes the Connected System being synchronised from export evaluation (ExportEvaluationServer.BuildExportEvaluationCacheAsync filters target systems with 'id != sourceConnectedSystemId'), and this scenario imports from and provisions into one Connected System. The outbound rules were created and enabled, the Full Synchronisation completed and projected every Metaverse Object, and no Pending Export was raised. Splitting the export targets into a second Connected System against the same database would exercise the row."
+    # This used to report that the row was not exercisable at all: JIM excludes the Connected System
+    # being synchronised from export evaluation (ExportEvaluationServer.BuildExportEvaluationCacheAsync
+    # filters target systems with 'id != sourceConnectedSystemId'), and the scenario used to import from
+    # and provision into a single Connected System, so no Pending Export was ever raised. The remedy that
+    # note called for has since been made: the export Object Types live in their own Connected System
+    # against the same database. The guard stays because reaching it now means something is wrong rather
+    # than merely unsupported, so it says so.
+    return "No AppUser Connected System Objects exist after the export baseline, so nothing was provisioned to assert on. The scenario now provisions into a second Connected System precisely so export evaluation can see the outbound rules, which means this is a failure to diagnose rather than a topology JIM cannot serve. Check the Full Synchronisation's Activity for an Object Type conflict: all three outbound rules share the accounts system, so their scopes must stay disjoint (Engineering, Research, Finance), and an overlap leaves whichever rule ran second staging nothing."
 }
 
 function Initialize-S16ExportBaseline {
@@ -465,7 +472,7 @@ function Get-S16ExpectedCount {
     #>
     param(
         [Parameter(Mandatory=$true)][int]$RowCount,
-        [Parameter(Mandatory=$true)][ValidateSet('Enabled', 'Research', 'Finance')][string]$Scope
+        [Parameter(Mandatory=$true)][ValidateSet('Enabled', 'EngineeringEnabled', 'Research', 'Finance')][string]$Scope
     )
 
     switch ($Scope) {
@@ -474,6 +481,9 @@ function Get-S16ExpectedCount {
         # DEPARTMENT cycles Engineering, Finance, Operations, Research on n modulo 4.
         'Research' { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 3 }).Count }
         'Finance'  { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 1 }).Count }
+        # The AppUser rule's scope: both criteria, because the three outbound rules share a Connected
+        # System and so must claim disjoint populations. Engineering is n modulo 4 of zero.
+        'EngineeringEnabled' { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 0 -and ($_ % 7) -ne 0 }).Count }
     }
 }
 
@@ -523,11 +533,11 @@ function Test-S16ExportCreate {
     $blocker = Get-S16ExportBlocker -Context $Context
     if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
-    $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'Enabled'
+    $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'EngineeringEnabled'
     $actualRows = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS;")
 
     if ($actualRows -ne $expected) {
-        return @{ Status = 'fail'; Detail = "The outbound rule is scoped to enabled employees, so $expected row(s) should have been inserted into APP_USERS; the table holds $actualRows." }
+        return @{ Status = 'fail'; Detail = "The outbound rule is scoped to enabled Engineering employees, so $expected row(s) should have been inserted into APP_USERS; the table holds $actualRows." }
     }
 
     # Anchor-token agreement. The confirming Full Import in the pipeline re-read every row it had just

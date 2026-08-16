@@ -646,6 +646,14 @@ New-JIMSyncRuleMapping -SyncRuleId $appUserRule.id `
 # source row's IS_ACTIVE takes its Metaverse Object out of scope, and OutboundDeprovisionAction Delete
 # turns that into a delete export rather than a disconnect. The seeded data disables every seventh
 # employee, so both sides of the scope are populated from the first import.
+#
+# Narrowed to one department as well, and that second criterion is load-bearing. All three outbound
+# rules provision into the same Connected System, and a Metaverse Object can hold only one Connected
+# System Object per Connected System (#1331). Scoped on Account Enabled alone this rule claimed most of
+# the population, including the people the other two rules provision, so whichever rule ran second was
+# refused and staged nothing. The three scopes are therefore disjoint by department: Engineering here,
+# Research and Finance below. Operations is deliberately left to no rule at all, which is what proves
+# an out-of-scope person is not provisioned rather than merely assumed not to be.
 $appUserScope = New-JIMScopingCriteriaGroup -SyncRuleId $appUserRule.id -Type All -PassThru
 New-JIMScopingCriterion `
     -SyncRuleId $appUserRule.id `
@@ -653,8 +661,14 @@ New-JIMScopingCriterion `
     -MetaverseAttributeId (Get-MvAttributeId -Name 'Account Enabled') `
     -ComparisonType Equals `
     -BoolValue $true | Out-Null
+New-JIMScopingCriterion `
+    -SyncRuleId $appUserRule.id `
+    -GroupId $appUserScope.id `
+    -MetaverseAttributeId (Get-MvAttributeId -Name 'Department') `
+    -ComparisonType Equals `
+    -StringValue "Engineering" | Out-Null
 
-Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attribute Flows, scoped on Account Enabled)" -ForegroundColor Green
+Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attribute Flows, scoped on Account Enabled and Department = Engineering)" -ForegroundColor Green
 
 # ── NaturalKeyAccount: the key JIM authors ──
 #
