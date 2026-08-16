@@ -2478,17 +2478,16 @@ userPassword: Test@123!
             # freezes only what has no survivor; anything with one is still re-elected, which is what
             # makes the freeze safe rather than a blanket recall suppression.
             #
-            # Display Name is the attribute asserted on, NOT Job Title, and the difference is a finding
-            # rather than a convenience. Job Title carries "Null is a value" on its Primary mapping from
-            # AssertedNullOverridesSurvivor (Test 6) onwards, and with that flag set the disconnect stops
-            # handing the attribute over: Carol keeps Primary's stale "Analyst (Primary)" instead of
-            # Secondary's value. This step passes standalone (where the flag was never set) and fails under
-            # -Step All, which is what isolates the flag as the cause. A departed contributor should have no
-            # opinion at all, so that looks wrong, but it is engine behaviour outside this issue's scope and
-            # is raised separately rather than asserted here as though it were intended.
+            # Display Name is the attribute asserted on, NOT Job Title, because Job Title cannot show a
+            # hand-over by value under -Step All: Phase F's Enforce State export rewrites Secondary's Job
+            # Title for EVERY joined object to the Metaverse's value, so by the time Phase G runs, Secondary
+            # holds "Analyst (Primary)" too and re-electing it produces the same string Primary contributed.
+            # That is the "a future phase must establish its own Secondary-side values rather than assume the
+            # populate script's" warning in this file's Phase F notes, and the assertion has to respect it.
             #
-            # Both suffixes carry the same Display Name string, so the hand-over is visible in provenance
-            # rather than in the value, exactly as IdenticalValueHandOver (Test 3) proves for Description.
+            # Both suffixes carry the same Display Name string in either mode, so the hand-over is visible in
+            # provenance rather than in the value, exactly as IdenticalValueHandOver (Test 3) proves for
+            # Description, and the step reads identically standalone and under -Step All.
             Assert-MvoAttributeValue -MvoId $carolMvo.id -AttributeName "Display Name" `
                 -ExpectedValue "Carol Clarke (S14)" `
                 -ExpectedContributingSyncRuleName $secondaryImportRuleName `
