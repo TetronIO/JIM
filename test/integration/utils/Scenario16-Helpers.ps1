@@ -353,14 +353,22 @@ function Invoke-S16RunProfile {
         [Parameter(Mandatory=$true)][hashtable]$Context,
         [Parameter(Mandatory=$true)][string]$Name,
 
-        # Which of the scenario's two Connected Systems to run against. Import is the default because
-        # most rows drive the source of identity; Export is named explicitly where a row means the
-        # accounts system, so the choice is visible at the call site rather than inferred.
-        [Parameter(Mandatory=$false)][ValidateSet('Import', 'Export')][string]$System = 'Import'
+        # Which of the scenario's Connected Systems to run against. Import is the default because most
+        # rows drive the source of identity; the account systems are named explicitly where a row means
+        # one of them, so the choice is visible at the call site rather than inferred.
+        [Parameter(Mandatory=$false)][ValidateSet('Import', 'AppUsers', 'Accounts')][string]$System = 'Import'
     )
 
-    $systemId = if ($System -eq 'Export') { $Context.ExportConnectedSystemId } else { $Context.ConnectedSystemId }
-    $label    = if ($System -eq 'Export') { "$($Context.Provider) accounts" } else { $Context.Provider }
+    $systemId = switch ($System) {
+        'AppUsers' { $Context.AppUserConnectedSystemId }
+        'Accounts' { $Context.ExportConnectedSystemId }
+        default    { $Context.ConnectedSystemId }
+    }
+    $label = switch ($System) {
+        'AppUsers' { "$($Context.Provider) app users" }
+        'Accounts' { "$($Context.Provider) accounts" }
+        default    { $Context.Provider }
+    }
 
     $result = Start-JIMRunProfile -ConnectedSystemId $systemId -RunProfileName $Name -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
@@ -380,14 +388,16 @@ function Invoke-S16Pipeline {
     #>
     param([Parameter(Mandatory=$true)][hashtable]$Context)
 
-    # Import and synchronise the source of identity, then export and confirm on the accounts system.
+    # Import and synchronise the source of identity, then export and confirm on each account system.
     # The synchronisation runs on the identity system because that is where the Metaverse Objects come
     # from, and it stages Pending Exports for every outbound rule regardless of which system owns it;
-    # the accounts system's Export run profile is what then writes them.
+    # each account system's own Export run profile is what then writes them.
     Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
     Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
-    Invoke-S16RunProfile -Context $Context -Name "Export"               -System Export | Out-Null
-    Invoke-S16RunProfile -Context $Context -Name "Full Import"          -System Export | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Export"               -System AppUsers | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          -System AppUsers | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Export"               -System Accounts | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          -System Accounts | Out-Null
 
     # A pipeline satisfies the lighter baseline too, so a driver-shape row running after an export row
     # does not import and synchronise all over again for nothing.
@@ -443,7 +453,7 @@ function Get-S16ExportBlocker {
     # note called for has since been made: the export Object Types live in their own Connected System
     # against the same database. The guard stays because reaching it now means something is wrong rather
     # than merely unsupported, so it says so.
-    return "No AppUser Connected System Objects exist after the export baseline, so nothing was provisioned to assert on. The scenario now provisions into a second Connected System precisely so export evaluation can see the outbound rules, which means this is a failure to diagnose rather than a topology JIM cannot serve. Check the Full Synchronisation's Activity for an Object Type conflict: all three outbound rules share the accounts system, so their scopes must stay disjoint (Engineering, Research, Finance), and an overlap leaves whichever rule ran second staging nothing."
+    return "No AppUser Connected System Objects exist after the export baseline, so nothing was provisioned to assert on. The scenario provisions into separate Connected Systems precisely so export evaluation can see the outbound rules, which means this is a failure to diagnose rather than a topology JIM cannot serve. Check the Full Synchronisation's Activity: an Object Type conflict there means two outbound rules into one Connected System claimed the same person, which the split into an app users system and an accounts system is meant to make impossible."
 }
 
 function Initialize-S16ExportBaseline {
@@ -472,7 +482,7 @@ function Get-S16ExpectedCount {
     #>
     param(
         [Parameter(Mandatory=$true)][int]$RowCount,
-        [Parameter(Mandatory=$true)][ValidateSet('Enabled', 'EngineeringEnabled', 'Research', 'Finance')][string]$Scope
+        [Parameter(Mandatory=$true)][ValidateSet('Enabled', 'Research', 'Finance')][string]$Scope
     )
 
     switch ($Scope) {
@@ -481,9 +491,6 @@ function Get-S16ExpectedCount {
         # DEPARTMENT cycles Engineering, Finance, Operations, Research on n modulo 4.
         'Research' { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 3 }).Count }
         'Finance'  { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 1 }).Count }
-        # The AppUser rule's scope: both criteria, because the three outbound rules share a Connected
-        # System and so must claim disjoint populations. Engineering is n modulo 4 of zero.
-        'EngineeringEnabled' { return @(1..$RowCount | Where-Object { ($_ % 4) -eq 0 -and ($_ % 7) -ne 0 }).Count }
     }
 }
 
@@ -533,11 +540,11 @@ function Test-S16ExportCreate {
     $blocker = Get-S16ExportBlocker -Context $Context
     if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
-    $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'EngineeringEnabled'
+    $expected = Get-S16ExpectedCount -RowCount $Context.RowCount -Scope 'Enabled'
     $actualRows = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS;")
 
     if ($actualRows -ne $expected) {
-        return @{ Status = 'fail'; Detail = "The outbound rule is scoped to enabled Engineering employees, so $expected row(s) should have been inserted into APP_USERS; the table holds $actualRows." }
+        return @{ Status = 'fail'; Detail = "The outbound rule is scoped to enabled employees, so $expected row(s) should have been inserted into APP_USERS; the table holds $actualRows." }
     }
 
     # Anchor-token agreement. The confirming Full Import in the pipeline re-read every row it had just

@@ -73,6 +73,7 @@ $null = $Template
 
 $config = Get-DatabaseConfig -Provider $Provider
 $systemName = "SQL Matrix $($config.DisplayName)"
+$appUserSystemName = "SQL Matrix $($config.DisplayName) App Users"
 $exportSystemName = "SQL Matrix $($config.DisplayName) Accounts"
 
 Write-TestSection "Scenario 16 Setup: $($config.DisplayName)"
@@ -98,7 +99,7 @@ Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 Write-TestStep "Step 3" "Removing any Connected System left by a previous run"
 # Accounts first: it holds the Connected System Objects provisioned from the other one, so removing the
 # source of identity first would deprovision them on the way past rather than simply dropping them.
-foreach ($name in @($exportSystemName, $systemName)) {
+foreach ($name in @($exportSystemName, $appUserSystemName, $systemName)) {
     $existing = Get-JIMConnectedSystem -Name $name -ErrorAction SilentlyContinue
     foreach ($system in @($existing | Where-Object { $_ })) {
         Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
@@ -438,18 +439,31 @@ $importSystem = New-Scenario16ConnectedSystem -Name $systemName `
     -Purpose "The source of identity: employees and the view over them." `
     -SelectTypeNames @("Person", "PersonView")
 
-# The accounts provisioned from it. Same database, separate Connected System, for the reason above.
-$exportTypeNames = @("AppUser", "NaturalKeyAccount")
-if ($Provider -eq "Oracle") { $exportTypeNames += "GuidKeyedPerson" }
+# AppUser gets a Connected System to itself, and that is not symmetry for its own sake. Its MANAGER_ID
+# column is a self-reference: an AppUser's manager is another AppUser, so a manager can only be resolved
+# if the manager is also in this rule's scope. That forces the scope to stay broad (every enabled
+# employee), which in turn means it claims people the other two rules also want. Sharing a system with
+# them would put two Connected System Objects on one Metaverse Object, which #1331 refuses. Narrowing
+# this rule instead would be the wrong trade: scoped to one department only two of the ten referenced
+# managers would have an account, and the reference row would be measuring the scope rather than the
+# reference resolution it exists to test.
+$appUserSystem = New-Scenario16ConnectedSystem -Name $appUserSystemName `
+    -Purpose "Application accounts, whose manager column references another account in this same system." `
+    -SelectTypeNames @("AppUser")
+
+# The remaining account shapes. These two can share, because their scopes are already disjoint by
+# department (Research and Finance) and neither references the other.
+$otherAccountTypeNames = @("NaturalKeyAccount")
+if ($Provider -eq "Oracle") { $otherAccountTypeNames += "GuidKeyedPerson" }
 
 $exportSystem = New-Scenario16ConnectedSystem -Name $exportSystemName `
-    -Purpose "The accounts provisioned from that identity." `
-    -SelectTypeNames $exportTypeNames
+    -Purpose "Accounts keyed the two other ways the matrix covers." `
+    -SelectTypeNames $otherAccountTypeNames
 
 $system        = $importSystem.System
 $pageSize      = $importSystem.PageSize
 $selectedTypes = @{}
-foreach ($source in @($importSystem.SelectedTypes, $exportSystem.SelectedTypes)) {
+foreach ($source in @($importSystem.SelectedTypes, $appUserSystem.SelectedTypes, $exportSystem.SelectedTypes)) {
     foreach ($key in $source.Keys) { $selectedTypes[$key] = $source[$key] }
 }
 
@@ -607,7 +621,7 @@ Write-TestStep "Step 14" "Creating the outbound Synchronisation Rules"
 $appUserRule = New-JIMSyncRule `
     -Name "SQL Matrix AppUser Export ($($config.DisplayName))" `
     -Description "Scenario 16 outbound rule: provisions into APP_USERS, whose primary key the database generates." `
-    -ConnectedSystemId $exportSystem.System.id `
+    -ConnectedSystemId $appUserSystem.System.id `
     -ConnectedSystemObjectTypeId $selectedTypes['AppUser'].id `
     -MetaverseObjectTypeId $mvUserType.id `
     -Direction Export `
@@ -647,13 +661,10 @@ New-JIMSyncRuleMapping -SyncRuleId $appUserRule.id `
 # turns that into a delete export rather than a disconnect. The seeded data disables every seventh
 # employee, so both sides of the scope are populated from the first import.
 #
-# Narrowed to one department as well, and that second criterion is load-bearing. All three outbound
-# rules provision into the same Connected System, and a Metaverse Object can hold only one Connected
-# System Object per Connected System (#1331). Scoped on Account Enabled alone this rule claimed most of
-# the population, including the people the other two rules provision, so whichever rule ran second was
-# refused and staged nothing. The three scopes are therefore disjoint by department: Engineering here,
-# Research and Finance below. Operations is deliberately left to no rule at all, which is what proves
-# an out-of-scope person is not provisioned rather than merely assumed not to be.
+# Broad on purpose, and it has to stay broad: MANAGER_ID references another AppUser, so a manager can
+# only be resolved if the manager is provisioned by this same rule. That is why AppUser has a Connected
+# System to itself (see Step 6) rather than sharing one with the other account shapes, whose narrower
+# scopes it would otherwise overlap.
 $appUserScope = New-JIMScopingCriteriaGroup -SyncRuleId $appUserRule.id -Type All -PassThru
 New-JIMScopingCriterion `
     -SyncRuleId $appUserRule.id `
@@ -661,14 +672,8 @@ New-JIMScopingCriterion `
     -MetaverseAttributeId (Get-MvAttributeId -Name 'Account Enabled') `
     -ComparisonType Equals `
     -BoolValue $true | Out-Null
-New-JIMScopingCriterion `
-    -SyncRuleId $appUserRule.id `
-    -GroupId $appUserScope.id `
-    -MetaverseAttributeId (Get-MvAttributeId -Name 'Department') `
-    -ComparisonType Equals `
-    -StringValue "Engineering" | Out-Null
 
-Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attribute Flows, scoped on Account Enabled and Department = Engineering)" -ForegroundColor Green
+Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attribute Flows, scoped on Account Enabled)" -ForegroundColor Green
 
 # ── NaturalKeyAccount: the key JIM authors ──
 #
@@ -749,7 +754,8 @@ if ($Provider -eq "Oracle") {
 
 Write-TestSection "Scenario 16 Setup Complete: $($config.DisplayName)"
 Write-Host "  Identity source:    $systemName (ID: $($system.id)) - Person, PersonView" -ForegroundColor Cyan
-Write-Host "  Accounts:           $exportSystemName (ID: $($exportSystem.System.id)) - $($exportTypeNames -join ', ')" -ForegroundColor Cyan
+Write-Host "  App users:          $appUserSystemName (ID: $($appUserSystem.System.id)) - AppUser" -ForegroundColor Cyan
+Write-Host "  Accounts:           $exportSystemName (ID: $($exportSystem.System.id)) - $($otherAccountTypeNames -join ', ')" -ForegroundColor Cyan
 Write-Host "  Database Time Zone: $DatabaseTimeZone (deliberately not UTC)" -ForegroundColor Cyan
 Write-Host "  Page size:          $pageSize" -ForegroundColor Cyan
 Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 3 } else { 2 }) outbound" -ForegroundColor Cyan
@@ -758,9 +764,12 @@ return @{
     Provider           = $Provider
     ConnectedSystemId  = $system.id
 
-    # The accounts system. Every Object Type also carries its own connectedSystemId, so a row that reads
-    # Connected System Objects resolves the right system from the type rather than choosing between these.
-    ExportConnectedSystemId = $exportSystem.System.id
+    # The two account systems. Every Object Type also carries its own connectedSystemId, so a row that
+    # reads Connected System Objects resolves the right system from the type rather than choosing
+    # between these; these exist for the pipeline, which has to run each system's Export and confirming
+    # import.
+    AppUserConnectedSystemId = $appUserSystem.System.id
+    ExportConnectedSystemId  = $exportSystem.System.id
 
     SystemName         = $systemName
     ExportSystemName   = $exportSystemName
