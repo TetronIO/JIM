@@ -3,6 +3,7 @@
 
 using DynamicExpresso.Exceptions;
 using JIM.Application.Expressions;
+using JIM.Application.Staging;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
@@ -1354,6 +1355,90 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Adds the class membership values this export must write, where the Connected System has the concept.
+    /// </summary>
+    /// <remarks>
+    /// JIM owns this attribute rather than an administrator flowing it, because an object's classes follow from
+    /// which of its merged auxiliary classes' attributes actually have values, and that differs object by object.
+    /// See <see cref="ClassMembershipPlanner"/>.
+    /// <para>
+    /// Computed here rather than at export time so that what JIM will send is visible on the Pending Export before
+    /// it is sent, like every other value on it.
+    /// </para>
+    /// </remarks>
+    private void AddClassMembershipChanges(
+        SyncRule exportRule,
+        ConnectedSystemObject? existingCso,
+        PendingExportChangeType changeType,
+        List<PendingExportAttributeValueChange> attributeChanges)
+    {
+        var objectType = exportRule.ConnectedSystemObjectType;
+        if (objectType == null)
+            return;
+
+        var currentValues = existingCso?.AttributeValues ?? [];
+        var plan = ClassMembershipPlanner.Plan(
+            objectType,
+            currentClasses: ClassValuesOn(currentValues, objectType),
+            attributesBeingWritten: attributeChanges.Where(c => c.Attribute != null).Select(c => c.Attribute.Name),
+            isCreate: changeType == PendingExportChangeType.Create,
+            attributesAlreadyOnTheObject: currentValues.Where(v => v.Attribute != null).Select(v => v.Attribute.Name));
+
+        if (!plan.HasChanges)
+            return;
+
+        var classAttribute = objectType.Attributes?.FirstOrDefault(a =>
+            a.Name.Equals(plan.AttributeName, StringComparison.OrdinalIgnoreCase));
+
+        if (classAttribute == null)
+        {
+            // The Connected System says it has class membership but its schema does not carry the attribute. Nothing
+            // can be written, and going ahead would provision objects the Connected System will reject, so say so
+            // loudly rather than exporting something that cannot work.
+            Log.Error("AddClassMembershipChanges: Object Type '{ObjectType}' declares '{AttributeName}' as its class membership attribute, but no such attribute is in its schema. Class membership cannot be exported; refresh the schema.",
+                objectType.Name, plan.AttributeName);
+            return;
+        }
+
+        foreach (var className in plan.ClassesToWrite)
+        {
+            attributeChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                Attribute = classAttribute,
+                AttributeId = classAttribute.Id,
+                StringValue = className,
+
+                // Add rather than Update: class membership is multi-valued, and an update that restated the classes
+                // an object already carries is a change the Connected System has no reason to accept.
+                ChangeType = PendingExportAttributeChangeType.Add
+            });
+        }
+
+        Log.Debug("AddClassMembershipChanges: {ChangeType} export for Object Type '{ObjectType}' will write {AttributeName}: {Classes}",
+            changeType, objectType.Name, plan.AttributeName, string.Join(", ", plan.ClassesToWrite));
+    }
+
+    /// <summary>
+    /// The class names an object currently carries at the Connected System.
+    /// </summary>
+    private static List<string> ClassValuesOn(IList<ConnectedSystemObjectAttributeValue> values, ConnectedSystemObjectType objectType)
+    {
+        var attributeName = objectType.Tags
+            .FirstOrDefault(tag => tag.Key == ObjectTypeTags.Keys.ClassMembershipAttribute)?.Value;
+
+        if (string.IsNullOrEmpty(attributeName))
+            return [];
+
+        return values
+            .Where(value => value.Attribute != null && value.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+            .Select(value => value.StringValue)
+            .Where(value => !string.IsNullOrEmpty(value))
+            .Select(value => value!)
+            .ToList();
+    }
+
+    /// <summary>
     /// The full-evaluation recall fallback: referencing object types where a candidate reference
     /// attribute is sourced through an expression or multi-source chain keep the pre-#1003
     /// per-object evaluation (full object load, attribute flow recomputation with no-net-change),
@@ -1712,6 +1797,8 @@ public class ExportEvaluationServer
             await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
         }
 
+        AddClassMembershipChanges(exportRule, existingCso, changeType, attributeChanges);
+
         // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
         // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
         var pendingExport = new PendingExport
@@ -1826,6 +1913,8 @@ public class ExportEvaluationServer
         {
             await AddSecondaryExternalIdToCsoAsync(csoForExport, attributeChanges, exportRule);
         }
+
+        AddClassMembershipChanges(exportRule, existingCso, changeType, attributeChanges);
 
         var csoId = csoForExport?.Id;
         Log.Verbose("CreateOrUpdatePendingExportAsync: Creating Pending Export. csoForExport={CsoForExport}, csoId={CsoId}, changeType={ChangeType}",
