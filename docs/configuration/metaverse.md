@@ -65,6 +65,8 @@ Alongside JIM's built-in `User` and `Group` types, administrators can create the
 - **Rename and re-icon**<br /> Edit a custom type's name, plural name and icon from the Edit action on its row in the Object Types tab, or from the Edit button on its detail page.
 - **Built-in protection**<br /> The `User` and `Group` types cannot be renamed, re-iconed or deleted; their deletion rules remain editable.
 
+Above the list, filters narrow it by Deletion Rule, whether the type has Predefined Searches, and whether it is built-in; the Attributes tab carries the equivalent filters for Type, Plurality, Built-in status and bound Object Type.
+
 ### Deleting object types
 
 Deleting a custom object type has two hard blocks, because either would otherwise be silently destroyed with the type:

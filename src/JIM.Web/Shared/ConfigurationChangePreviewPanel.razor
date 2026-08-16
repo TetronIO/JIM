@@ -7,7 +7,6 @@
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IUiNotificationService UiNotifications
-@inject IUserPreferenceService PreferenceService
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -182,99 +181,145 @@
                     @* ─── Summary groups: the landing view ─── *@
                     @if (_groups.Count > 0)
                     {
-                        <div class="d-flex align-center mt-6">
-                            <MudText Typo="Typo.subtitle1">What would change</MudText>
-                            <MudSpacer />
-                            <TableDensityToggle @bind-Dense="_dense" />
-                        </div>
-                        <MudTable T="ConfigurationChangePreviewGroup" Items="@_groups" Dense="@_dense" Hover="true"
-                                  Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm" OnRowClick="OnGroupClicked"
-                                  RowClass="cursor-pointer" Class="mt-2">
-                            <HeaderContent>
-                                <MudTh><MudText Typo="Typo.button">Change</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Applies to</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                                <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Objects</MudText></MudTh>
-                                @* Unlabelled, and deliberately: the column holds the chevron that says a row opens. *@
-                                <MudTh Style="width: 1%;"></MudTh>
-                            </HeaderContent>
-                            <RowTemplate>
-                                <MudTd DataLabel="Change">
-                                    @* A dot, not a chip. The outlined pill was carrying five unrelated meanings on  *@
-                                    @* one panel (status, transition, sampling, scope), so it had stopped encoding  *@
-                                    @* anything; severity is the one thing worth reading at a glance here.          *@
-                                    <div class="d-flex align-center gap-2">
-                                        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small"
-                                                 Color="@Helpers.GetOutcomeTypeMudBlazorColor(context.TransitionType)" />
-                                        <span>@Helpers.GetOutcomeTypePlainName(context.TransitionType)</span>
-                                    </div>
-                                    @* The pattern is what turns a transition into a sentence: "38,900 would have Email
-                                       changed" reads very differently from "38,900 would have their email domain changed".
-                                       Absent where no detector recognised the change, or where the group's deltas did not
-                                       all agree on one, and nothing is shown in its place. *@
-                                    @if (PreviewPatternKeys.GetDisplayName(context.PatternKey) is { Length: > 0 } patternName)
-                                    {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@patternName</MudText>
-                                    }
-                                </MudTd>
-                                <MudTd DataLabel="Applies to">
-                                    @if (string.IsNullOrEmpty(context.MetaverseObjectTypeName))
-                                    {
-                                        <EmptyValue />
-                                    }
-                                    else
-                                    {
-                                        @* The object type is a schema identifier, so it takes the inline-code
-                                           treatment the rest of the portal gives one and is written exactly as its
-                                           system spells it. "objects" after it is what says the row covers a
-                                           population rather than one of them, without inflecting a name JIM does
-                                           not own; the system it belongs to is prose beside that. *@
-                                        <span class="jim-code-inline">@context.MetaverseObjectTypeName</span>
-                                        <span> objects</span>
-                                        @if (!string.IsNullOrEmpty(context.ConnectedSystemName))
-                                        {
-                                            <span> in @context.ConnectedSystemName</span>
+                        <MudText Typo="Typo.subtitle1" Class="mt-6">What would change</MudText>
+                        @* The summary groups are already in memory (they are read whole on every refresh), so the
+                           grid slices its windows from the list rather than reading a range. *@
+                        <VirtualisedDataGrid @ref="_groupsGrid" T="ConfigurationChangePreviewGroup"
+                                             ContainerId="preview-group-list"
+                                             UrlParameterPrefix="pg-"
+                                             DefaultSortBy="objects"
+                                             DefaultSortDescending="true"
+                                             LoadWindow="LoadGroupWindowAsync"
+                                             SingularName="Change"
+                                             PluralName="Changes"
+                                             SearchPlaceholder="Search changes"
+                                             RowClicked="OnGroupClicked">
+                            <Columns>
+                                <TemplateColumn Title="Change" Sortable="false">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Change" Name="change" />
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        @* A dot, not a chip. The outlined pill was carrying five unrelated meanings on  *@
+                                        @* one panel (status, transition, sampling, scope), so it had stopped encoding  *@
+                                        @* anything; severity is the one thing worth reading at a glance here.          *@
+                                        @* The pattern is what turns a transition into a sentence: "38,900 would have Email
+                                           changed" reads very differently from "38,900 would have their email domain changed".
+                                           Absent where no detector recognised the change, or where the group's deltas did not
+                                           all agree on one, and nothing is shown in its place. It sits inline after the
+                                           transition rather than under it, because a row in a virtualised grid is one line. *@
+                                        @{
+                                            var transitionName = Helpers.GetOutcomeTypePlainName(row.Item.TransitionType);
+                                            var patternName = PreviewPatternKeys.GetDisplayName(row.Item.PatternKey);
                                         }
-                                    }
-                                </MudTd>
-                                <MudTd DataLabel="Attribute">
-                                    @if (string.IsNullOrEmpty(context.AttributeName))
-                                    {
-                                        <EmptyValue />
-                                    }
-                                    else
-                                    {
-                                        @context.AttributeName
-                                        @if (!string.IsNullOrEmpty(context.OldValue) || !string.IsNullOrEmpty(context.NewValue))
+                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(patternName) ? transitionName : $"{transitionName} ({patternName})")">
+                                            <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Class="mr-2"
+                                                     Color="@Helpers.GetOutcomeTypeMudBlazorColor(row.Item.TransitionType)" />
+                                            @transitionName
+                                            @if (!string.IsNullOrEmpty(patternName))
+                                            {
+                                                <span class="jim-one-line-secondary">@patternName</span>
+                                            }
+                                        </span>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Applies to" Sortable="false">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Applies to" Name="appliesto" />
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        @if (string.IsNullOrEmpty(row.Item.MetaverseObjectTypeName))
                                         {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                                <TextValueDisplay Value="@context.OldValue" /> &rarr; <TextValueDisplay Value="@context.NewValue" />
-                                            </MudText>
+                                            <EmptyValue />
                                         }
-                                    }
-                                </MudTd>
+                                        else
+                                        {
+                                            @* The object type is a schema identifier, so it takes the inline-code
+                                               treatment the rest of the portal gives one and is written exactly as its
+                                               system spells it. "objects" after it is what says the row covers a
+                                               population rather than one of them, without inflecting a name JIM does
+                                               not own; the system it belongs to is prose beside that. *@
+                                            <span class="jim-code-inline">@row.Item.MetaverseObjectTypeName</span>
+                                            <span> objects</span>
+                                            @if (!string.IsNullOrEmpty(row.Item.ConnectedSystemName))
+                                            {
+                                                <span> in @row.Item.ConnectedSystemName</span>
+                                            }
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Attribute" Sortable="false">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        @* One line: the value transition reads inline after the attribute it
+                                           belongs to rather than as a paragraph under it. *@
+                                        @if (string.IsNullOrEmpty(row.Item.AttributeName))
+                                        {
+                                            <EmptyValue />
+                                        }
+                                        else
+                                        {
+                                            <span class="jim-one-line" title="@($"{row.Item.AttributeName}: {row.Item.OldValue} -> {row.Item.NewValue}")">
+                                                @row.Item.AttributeName
+                                                @if (!string.IsNullOrEmpty(row.Item.OldValue) || !string.IsNullOrEmpty(row.Item.NewValue))
+                                                {
+                                                    <span class="jim-one-line-secondary">
+                                                        <TextValueDisplay Value="@row.Item.OldValue" /> &rarr; <TextValueDisplay Value="@row.Item.NewValue" />
+                                                    </span>
+                                                }
+                                            </span>
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
                                 @* Right-aligned and tabular so the counts line up as a column of numbers rather than
                                    starting wherever the label beside them happened to end. *@
-                                <MudTd DataLabel="Objects" Class="jim-preview-count">
-                                    @if (context.DeltasSampled)
-                                    {
-                                        <MudTooltip Arrow="true" Placement="Placement.Top"
-                                                    Text="@($"This count is exact. Its object list below is a sample of {ConfigurationChangePreviewServer.MaximumDeltasPerGroup:N0} of them, not all of them.")">
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="mr-2">
-                                                List sampled
-                                            </MudChip>
-                                        </MudTooltip>
-                                    }
-                                    @context.ObjectCount.ToString("N0")
-                                </MudTd>
-                                @* Says the row opens. The drill-down is the most useful thing in the panel and its
-                                   only affordance was a pointer cursor, which nothing on a touch screen ever sees. *@
-                                <MudTd Class="jim-preview-open">
-                                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
-                                             Class="mud-text-secondary" />
-                                </MudTd>
-                            </RowTemplate>
-                        </MudTable>
+                                <TemplateColumn Title="Objects" Sortable="false" CellClass="jim-preview-count">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Objects" Name="objects" />
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        @if (row.Item.DeltasSampled)
+                                        {
+                                            <MudTooltip Arrow="true" Placement="Placement.Top"
+                                                        Text="@($"This count is exact. Its object list below is a sample of {ConfigurationChangePreviewServer.MaximumDeltasPerGroup:N0} of them, not all of them.")">
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="mr-2">
+                                                    List sampled
+                                                </MudChip>
+                                            </MudTooltip>
+                                        }
+                                        @row.Item.ObjectCount.ToString("N0")
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                @* Unlabelled, and deliberately: the column holds the chevron that says a row opens.
+                                   The drill-down is the most useful thing in the panel and its only other affordance
+                                   is a pointer cursor, which nothing on a touch screen ever sees. *@
+                                <TemplateColumn Sortable="false" CellClass="jim-preview-open">
+                                    <HeaderTemplate></HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                                                 Class="mud-text-secondary" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                            <EmptyContent Context="grid">
+                                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                                     PrimaryText="@($"No changes match \"{grid.SearchText}\"")"
+                                                     SecondaryText="Try a different search term, or clear the search."
+                                                     ActionText="Clear Search"
+                                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                                }
+                                else
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.CheckCircle"
+                                                     PrimaryText="Nothing would change"
+                                                     SecondaryText="No object moves through any transition as a result of this change." />
+                                }
+                            </EmptyContent>
+                        </VirtualisedDataGrid>
                     }
                     else if (NothingWouldChange)
                     {
@@ -317,46 +362,90 @@
                             </MudAlert>
                         }
 
-                        <MudTable @ref="_deltasTable" T="ConfigurationChangePreviewDelta" ServerData="LoadDeltasAsync"
-                                  Dense="@_dense" Hover="true" Outlined="true" Elevation="0" Breakpoint="Breakpoint.Sm"
-                                  RowsPerPage="25" Loading="@_deltasLoading" LoadingProgressColor="Color.Primary"
-                                  Class="mt-2 jim-preview-deltas">
-                            <ToolBarContent>
-                                <MudSpacer />
-                                <SearchField Value="@_search" ValueChanged="OnSearchChanged" DebounceInterval="500"
-                                             Placeholder="Search object, attribute or value" Class="mt-0" />
-                            </ToolBarContent>
-                            <HeaderContent>
-                                <MudTh><MudText Typo="Typo.button">Object</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Current value</MudText></MudTh>
-                                <MudTh><MudText Typo="Typo.button">Proposed value</MudText></MudTh>
-                            </HeaderContent>
-                            <RowTemplate>
-                                <MudTd DataLabel="Object"><TextValueDisplay Value="@context.ObjectDisplayName" /></MudTd>
-                                <MudTd DataLabel="Type"><TextValueDisplay Value="@context.ObjectTypeName" /></MudTd>
-                                <MudTd DataLabel="Attribute">
-                                    <TextValueDisplay Value="@context.AttributeName" />
-                                    @* Per row as well as per group: a group that collapsed back to the attribute level
-                                       holds rows of several kinds, and this is where an administrator sees which is which. *@
-                                    @if (PreviewPatternKeys.GetDisplayName(context.PatternKey) is { Length: > 0 } deltaPatternName)
-                                    {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@deltaPatternName</MudText>
-                                    }
-                                </MudTd>
-                                <MudTd DataLabel="Current value"><TextValueDisplay Value="@context.OldValue" /></MudTd>
-                                <MudTd DataLabel="Proposed value"><TextValueDisplay Value="@context.NewValue" /></MudTd>
-                            </RowTemplate>
-                            <NoRecordsContent>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    @(string.IsNullOrWhiteSpace(_search) ? "No object-level detail was kept for this group." : "No objects in this group match that search.")
-                                </MudText>
-                            </NoRecordsContent>
-                            <PagerContent>
-                                <MudTablePager />
-                            </PagerContent>
-                        </MudTable>
+                        @* StateKey is the open group, so switching group on a reused grid instance re-reads its URL
+                           state and reloads rather than keeping the previous group's rows. The column headers carry
+                           no sort affordance because the stored read offers no ordering to drive one; the rows
+                           arrive in the order the preview recorded them. *@
+                        <VirtualisedDataGrid @ref="_deltasGrid" T="ConfigurationChangePreviewDelta"
+                                             ContainerId="preview-delta-list"
+                                             UrlParameterPrefix="pd-"
+                                             StateKey="@selected.Id.ToString()"
+                                             DefaultSortBy="recorded"
+                                             LoadWindow="LoadDeltaWindowAsync"
+                                             SingularName="Object"
+                                             PluralName="Objects"
+                                             SearchPlaceholder="Search object, attribute or value">
+                            <Columns>
+                                <TemplateColumn Title="Object" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Object</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <TextValueDisplay Value="@row.Item.ObjectDisplayName" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Type" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Type</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <TextValueDisplay Value="@row.Item.ObjectTypeName" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Attribute" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Attribute</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        @* Per row as well as per group: a group that collapsed back to the attribute level
+                                           holds rows of several kinds, and this is where an administrator sees which is which.
+                                           Inline after the attribute, because a row in a virtualised grid is one line. *@
+                                        @{
+                                            var deltaPatternName = PreviewPatternKeys.GetDisplayName(row.Item.PatternKey);
+                                        }
+                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(deltaPatternName) ? row.Item.AttributeName : $"{row.Item.AttributeName} ({deltaPatternName})")">
+                                            <TextValueDisplay Value="@row.Item.AttributeName" />
+                                            @if (!string.IsNullOrEmpty(deltaPatternName))
+                                            {
+                                                <span class="jim-one-line-secondary">@deltaPatternName</span>
+                                            }
+                                        </span>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Current value" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Current value</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <TextValueDisplay Value="@row.Item.OldValue" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Proposed value" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Proposed value</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate Context="row">
+                                        <TextValueDisplay Value="@row.Item.NewValue" />
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                            <EmptyContent Context="grid">
+                                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                                     PrimaryText="No objects in this group match that search"
+                                                     SecondaryText="Try a different search term, or clear the search."
+                                                     ActionText="Clear Search"
+                                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                                }
+                                else
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.ManageSearch"
+                                                     PrimaryText="No object-level detail was kept for this group"
+                                                     SecondaryText="Object detail is recorded only when the preview was asked to keep it; the group's count above is still exact." />
+                                }
+                            </EmptyContent>
+                        </VirtualisedDataGrid>
                     }
                 }
             }
@@ -401,16 +490,21 @@
     private List<PreviewValidationFinding> _findings = [];
     private List<PreviewImpactCount> _impactCounts = [];
     private ConfigurationChangePreviewGroup? _selectedGroup;
-    private MudTable<ConfigurationChangePreviewDelta>? _deltasTable;
+    private VirtualisedDataGrid<ConfigurationChangePreviewGroup>? _groupsGrid;
+    private VirtualisedDataGrid<ConfigurationChangePreviewDelta>? _deltasGrid;
 
     /// <summary>The preview this panel has loaded, so a parent re-render does not re-read the one it already has.</summary>
     private Guid _loadedActivityId;
 
     private bool _loading = true;
-    private bool _deltasLoading;
     private bool _cancelling;
-    private bool _dense;
-    private string _search = string.Empty;
+
+    /// <summary>
+    /// How many object-level rows one read of the stored deltas fetches. The stored read is page-based while the
+    /// grid asks for arbitrary windows, so a window is served from whole pages of this size that cover it. A window
+    /// is at most a screenful plus its overscan, so this is one read, occasionally two.
+    /// </summary>
+    private const int DeltaPageSize = 200;
 
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private CancellationTokenSource? _pollCts;
@@ -475,19 +569,9 @@
         _loadedActivityId = ActivityId;
         _loading = true;
         _selectedGroup = null;
-        _search = string.Empty;
         await RefreshAsync();
         _loading = false;
         StartPollingIfRunning();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender)
-            return;
-
-        _dense = await PreferenceService.GetTableDenseAsync() == true;
-        StateHasChanged();
     }
 
     /// <summary>
@@ -557,55 +641,108 @@
             await OnPreviewChanged.InvokeAsync(_preview);
 
         StateHasChanged();
+
+        // The summary grid caches the rows it is holding, so a running preview that has just produced (or replaced)
+        // its groups needs the grid told, not just the panel re-rendered. The total is invalidated because the
+        // number of groups is exactly what changed.
+        if (_groupsGrid != null)
+            await _groupsGrid.RefreshAsync(invalidateTotals: true);
     });
 
-    private async Task<TableData<ConfigurationChangePreviewDelta>> LoadDeltasAsync(TableState state, CancellationToken token)
+    /// <summary>
+    /// Slices one window of the summary groups, applying the grid's search and sort. The groups are read whole on
+    /// every refresh (they are the panel's landing view), so there is nothing further to read here. Objects lead
+    /// the default sort, descending: the biggest population is the one an administrator has to answer for first.
+    /// </summary>
+    private Task<VirtualisedWindow<ConfigurationChangePreviewGroup>> LoadGroupWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        if (_selectedGroup == null)
-            return new TableData<ConfigurationChangePreviewDelta> { Items = [], TotalItems = 0 };
+        IEnumerable<ConfigurationChangePreviewGroup> groups = _groups;
 
-        _deltasLoading = true;
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            groups = groups.Where(g =>
+                Helpers.GetOutcomeTypePlainName(g.TransitionType).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                g.MetaverseObjectTypeName?.Contains(search, StringComparison.OrdinalIgnoreCase) == true ||
+                g.ConnectedSystemName?.Contains(search, StringComparison.OrdinalIgnoreCase) == true ||
+                g.AttributeName?.Contains(search, StringComparison.OrdinalIgnoreCase) == true ||
+                g.OldValue?.Contains(search, StringComparison.OrdinalIgnoreCase) == true ||
+                g.NewValue?.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        IOrderedEnumerable<ConfigurationChangePreviewGroup> Order<TKey>(Func<ConfigurationChangePreviewGroup, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? groups.OrderByDescending(key, comparer) : groups.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "change" => Order(g => Helpers.GetOutcomeTypePlainName(g.TransitionType), StringComparer.OrdinalIgnoreCase),
+            "appliesto" => Order(g => g.MetaverseObjectTypeName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "attribute" => Order(g => g.AttributeName ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            _ => Order(g => g.ObjectCount)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// Reads one window of the open group's object-level rows. The stored read is page-based, so the window is
+    /// served from the whole pages of <see cref="DeltaPageSize"/> that cover it, then sliced to exactly what was
+    /// asked for. A read failure returns an empty window rather than tearing the panel down; the next window, or
+    /// the reconciliation poll's refresh, retries.
+    /// </summary>
+    private async Task<VirtualisedWindow<ConfigurationChangePreviewDelta>> LoadDeltaWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        var group = _selectedGroup;
+        if (group == null)
+            return new VirtualisedWindow<ConfigurationChangePreviewDelta>([], request.IncludeTotalCount ? 0 : null);
+
         try
         {
             using var jim = JimFactory.Create();
-            var page = await jim.ConfigurationChangePreviews.GetPreviewDeltasAsync(
-                ActivityId, _selectedGroup.Id, state.Page + 1, state.PageSize,
-                string.IsNullOrWhiteSpace(_search) ? null : _search);
+            var search = string.IsNullOrWhiteSpace(request.SearchText) ? null : request.SearchText;
 
-            return new TableData<ConfigurationChangePreviewDelta> { Items = page.Results, TotalItems = page.TotalResults };
+            var firstPage = request.StartIndex / DeltaPageSize;
+            var lastPage = (request.StartIndex + request.Count - 1) / DeltaPageSize;
+            var fetched = new List<ConfigurationChangePreviewDelta>();
+            var total = 0;
+
+            for (var page = firstPage; page <= lastPage; page++)
+            {
+                var result = await jim.ConfigurationChangePreviews.GetPreviewDeltasAsync(
+                    ActivityId, group.Id, page + 1, DeltaPageSize, search);
+
+                total = result.TotalResults;
+                fetched.AddRange(result.Results);
+
+                // A short page is the last one; asking for the next would cost a read that can only come back empty.
+                if (result.Results.Count < DeltaPageSize)
+                    break;
+            }
+
+            var offsetIntoFirstPage = request.StartIndex - (firstPage * DeltaPageSize);
+            return new VirtualisedWindow<ConfigurationChangePreviewDelta>(
+                fetched.Skip(offsetIntoFirstPage).Take(request.Count).ToList(),
+                request.IncludeTotalCount ? total : null);
         }
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
         {
-            return new TableData<ConfigurationChangePreviewDelta> { Items = [], TotalItems = 0 };
-        }
-        finally
-        {
-            _deltasLoading = false;
+            Serilog.Log.Debug(ex, "ConfigurationChangePreviewPanel: reading object detail for preview {ActivityId} failed", ActivityId);
+            return new VirtualisedWindow<ConfigurationChangePreviewDelta>([], request.IncludeTotalCount ? 0 : null);
         }
     }
 
-    private async Task OnGroupClicked(TableRowClickEventArgs<ConfigurationChangePreviewGroup> args)
+    private async Task OnGroupClicked(ConfigurationChangePreviewGroup group)
     {
-        _selectedGroup = args.Item;
-        _search = string.Empty;
+        _selectedGroup = group;
         StateHasChanged();
 
-        if (_deltasTable != null)
-            await _deltasTable.ReloadServerData();
+        // The grid may not exist yet on the first drill-down (the section it lives in has only just been rendered);
+        // its StateKey carries the group id, so a reused instance reloads itself when the id changes.
+        if (_deltasGrid != null)
+            await _deltasGrid.RefreshAsync(invalidateTotals: true);
     }
 
-    private void CloseDrillDown()
-    {
-        _selectedGroup = null;
-        _search = string.Empty;
-    }
-
-    private async Task OnSearchChanged(string search)
-    {
-        _search = search;
-        if (_deltasTable != null)
-            await _deltasTable.ReloadServerData();
-    }
+    private void CloseDrillDown() => _selectedGroup = null;
 
     private async Task CancelAsync()
     {

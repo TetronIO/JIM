@@ -1,5 +1,6 @@
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -10,115 +11,134 @@
 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Run Profiles define what operations can be performed on a
     Connector, i.e. import, export and synchronisation, with any required settings.</MudAlert>
 
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-5" DropShadow="false"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="HandleShowNewRunProfileDialogAsync">
-        Create Run Profile
-    </MudButton>
-
-    <MudTable Items="@ConnectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By"
-              Outlined="true" Elevation="0">
-        <HeaderContent>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)">
-                    <MudText Typo="Typo.button">Name</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)">
-                    <MudText Typo="Typo.button">Run Type</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
-            {
-                <MudTh>
-                    <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition?.Name!)">
-                        <MudText Typo="Typo.button">Partition</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-            }
-            @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
-            {
-                <MudTh>
-                    <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">
-                        <MudText Typo="Typo.button">Page Size</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-            }
-            @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths)
-            {
-                <MudTh>
-                    <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)">
-                        <MudText Typo="Typo.button">File Path</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-            }
-            <MudTh Style="text-align: center">
-                <MudText Typo="Typo.button">Actions</MudText>
-            </MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Run Type">
-                @context.RunType.ToString().SplitOnCapitalLetters()
-                @if (context.VerifyImportContentHashes)
-                {
-                    <MudTooltip Text="Verification Mode is enabled: this Full Import performs no content-hash skips and diffs every object." Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Verification Mode</MudChip>
-                    </MudTooltip>
-                }
-            </MudTd>
-            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
-            {
-                <MudTd DataLabel="Partition">
-                    @if (context.Partition != null)
+    @* A Connected System's Run Profiles are a short configuration list held on the system already loaded by the
+       page, so the grid's windows are sliced from it in memory rather than from a database range read. *@
+    <VirtualisedDataGrid @ref="_grid" T="ConnectedSystemRunProfile"
+                         ContainerId="connected-system-run-profile-list"
+                         UrlParameterPrefix="rp-"
+                         DefaultSortBy="name"
+                         LoadWindow="LoadRunProfileWindowAsync"
+                         SingularName="Run Profile"
+                         PluralName="Run Profiles"
+                         SearchPlaceholder="Search Run Profiles">
+        <ToolBarExtras>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="HandleShowNewRunProfileDialogAsync">
+                Create Run Profile
+            </MudButton>
+        </ToolBarExtras>
+        <Columns>
+            <TemplateColumn Title="Name" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Name" Name="name" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.Name
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Run Type" Sortable="false">
+                <HeaderTemplate>
+                    <VirtualisedSortHeader Title="Run Type" Name="runtype" />
+                </HeaderTemplate>
+                <CellTemplate>
+                    @context.Item.RunType.ToString().SplitOnCapitalLetters()
+                    @if (context.Item.VerifyImportContentHashes)
                     {
-                        <span class="jim-code-inline">@context.Partition.Name</span>
-                        @if (context.TargetsADeselectedPartition())
+                        <MudTooltip Text="Verification Mode is enabled: this Full Import performs no content-hash skips and diffs every object." Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Verification Mode</MudChip>
+                        </MudTooltip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
+            {
+                <TemplateColumn Title="Partition" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Partition" Name="partition" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.Partition is { } partition)
                         {
-                            <MudTooltip Text="This partition is no longer selected, so it is not managed by JIM and this Run Profile cannot run. Select the partition again on the Partitions &amp; Containers tab, or point this Run Profile at a selected partition."
-                                        Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Not selected</MudChip>
-                            </MudTooltip>
+                            <span class="jim-code-inline">@partition.Name</span>
+                            @if (context.Item.TargetsADeselectedPartition())
+                            {
+                                <MudTooltip Text="This partition is no longer selected, so it is not managed by JIM and this Run Profile cannot run. Select the partition again on the Partitions &amp; Containers tab, or point this Run Profile at a selected partition."
+                                            Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Not selected</MudChip>
+                                </MudTooltip>
+                            }
                         }
-                    }
-                    else
-                    {
-                        <span>All selected</span>
-                    }
-                </MudTd>
+                        else
+                        {
+                            <span>All selected</span>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
             }
             @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
             {
-                <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
+                <TemplateColumn Title="Page Size" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Page Size" Name="pagesize" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @context.Item.PageSize
+                    </CellTemplate>
+                </TemplateColumn>
             }
             @if (ConnectedSystem.ConnectorDefinition.SupportsFilePaths)
             {
-                <MudTd DataLabel="File Path">
-                    @if (!string.IsNullOrEmpty(context.FilePath))
-                    {
-                        <span class="jim-code-inline">@context.FilePath</span>
-                    }
-                    else
-                    {
-                        <span>-</span>
-                    }
-                </MudTd>
+                <TemplateColumn Title="File Path" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="File Path" Name="filepath" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.FilePath))
+                        {
+                            <span class="jim-code-inline">@context.Item.FilePath</span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
             }
-            <MudTd DataLabel="Actions" Style="text-align: center">
-                <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Filled"
-                                   Size="Size.Small" OnClick="_ => HandleShowEditRunProfileDialogAsync(context)" Class="me-2" />
-                </MudTooltip>
-                <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Variant="Variant.Filled"
-                                   Size="Size.Small" OnClick="_ => HandleRunProfileDeleteAsync(context)" />
-                </MudTooltip>
-            </MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            There are no Run Profiles. Create your first.
-        </NoRecordsContent>
-    </MudTable>
+            <TemplateColumn Title="Actions" Sortable="false">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Actions</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <div class="d-flex justify-end">
+                        <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Variant="Variant.Filled"
+                                           Size="Size.Small" OnClick="_ => HandleShowEditRunProfileDialogAsync(context.Item)" Class="me-2" />
+                        </MudTooltip>
+                        <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Variant="Variant.Filled"
+                                           Size="Size.Small" OnClick="_ => HandleRunProfileDeleteAsync(context.Item)" />
+                        </MudTooltip>
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                 PrimaryText="@($"No Run Profiles match \"{grid.SearchText}\"")"
+                                 SecondaryText="Try a different search term, or clear the search."
+                                 ActionText="Clear Search"
+                                 OnAction="@(() => grid.ClearSearchAsync())" />
+            }
+            else
+            {
+                <TableEmptyState Icon="@Icons.Material.Filled.PlayCircleOutline"
+                                 PrimaryText="No Run Profiles yet"
+                                 SecondaryText="Use the Create Run Profile button to define what this Connected System can be asked to do." />
+            }
+        </EmptyContent>
+    </VirtualisedDataGrid>
 
     @* New Run Profile Dialog *@
     <MudDialog @bind-Visible="_newRunProfileDialogVisible" Options="_newRunProfileDialogOptions">
@@ -287,6 +307,8 @@
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    private VirtualisedDataGrid<ConnectedSystemRunProfile>? _grid;
+
     private bool IsNewRunProfileFormValid { get; set; }
     private ConnectedSystemRunProfile _newRunProfile = new() { RunType = ConnectedSystemRunType.NotSet };
     private readonly DialogOptions _newRunProfileDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
@@ -296,6 +318,49 @@
     private ConnectedSystemRunProfile _editRunProfile = new();
     private ConnectedSystemRunProfile? _editRunProfileOriginal;
     private bool _editRunProfileDialogVisible;
+
+    /// <summary>
+    /// Slices one window of Run Profiles from the collection held on the Connected System the page already loaded,
+    /// applying the grid's search (name, run type and file path) and sort. A Connected System has a handful of Run
+    /// Profiles, so this stays in memory rather than growing a database range read.
+    /// </summary>
+    private Task<VirtualisedWindow<ConnectedSystemRunProfile>> LoadRunProfileWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        IEnumerable<ConnectedSystemRunProfile> runProfiles = ConnectedSystem.RunProfiles ?? new List<ConnectedSystemRunProfile>();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            runProfiles = runProfiles.Where(rp =>
+                rp.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                rp.RunType.ToString().SplitOnCapitalLetters().Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (rp.FilePath != null && rp.FilePath.Contains(search, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        IOrderedEnumerable<ConnectedSystemRunProfile> Order<TKey>(Func<ConnectedSystemRunProfile, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? runProfiles.OrderByDescending(key, comparer) : runProfiles.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "runtype" => Order(rp => rp.RunType),
+            "partition" => Order(rp => rp.Partition?.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            "pagesize" => Order(rp => rp.PageSize),
+            "filepath" => Order(rp => rp.FilePath ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            _ => Order(rp => rp.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// Refreshes the grid over the Run Profile collection after it has been added to, edited or removed from. The
+    /// totals are invalidated because the change may have altered how many Run Profiles exist or match the search.
+    /// </summary>
+    private async Task RefreshGridAsync()
+    {
+        if (_grid != null)
+            await _grid.RefreshAsync(invalidateTotals: true);
+    }
 
     private static bool IsImportRunType(ConnectedSystemRunType runType) =>
         runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
@@ -351,6 +416,7 @@
             Snackbar.Add("New Run Profile added.", Severity.Success);
             _newRunProfileDialogVisible = false;
             _newRunProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.NotSet };
+            await RefreshGridAsync();
         }
         catch
         {
@@ -399,6 +465,7 @@
 
             Snackbar.Add("Run Profile updated.", Severity.Success);
             _editRunProfileDialogVisible = false;
+            await RefreshGridAsync();
         }
         catch
         {
@@ -427,5 +494,6 @@
         await jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile, user);
 
         Snackbar.Add("Run Profile removed.", Severity.Success);
+        await RefreshGridAsync();
     }
 }

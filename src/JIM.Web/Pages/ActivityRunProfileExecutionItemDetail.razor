@@ -10,6 +10,7 @@
 @using JIM.Models.Transactional
 @using JIM.Utilities;
 @using JIM.Web.Causality
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -757,67 +758,88 @@ else
                     && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted
                     && _activityRunProfileExecutionItem.SyncOutcomes.Count == 0)
                     {
-                        var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
-                        .Sum(c => c.ValueChanges.Count);
-
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-                            <MudText Typo="Typo.h6">
-                                Attribute Changes
-                            </MudText>
-                            <MudChip T="string" Color="Color.Primary">@changeCount.ToString("N0")</MudChip>
-                        </MudStack>
+                        <MudText Typo="Typo.h6" Class="mb-3">Attribute Changes</MudText>
 
                         <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
                             @GetAttributeChangesDescription()
                         </MudText>
 
-                        <MudTable Items="@GetFlattenedChanges()" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
-                            <HeaderContent>
-                                <MudTh Style="width: 1%; white-space: nowrap;">
-                                    <MudText Typo="Typo.button">Attribute</MudText>
-                                </MudTh>
-                                <MudTh Style="width: 1%; white-space: nowrap;">
-                                    <MudText Typo="Typo.button">Change</MudText>
-                                </MudTh>
-                                <MudTh>
-                                    <MudText Typo="Typo.button">Value</MudText>
-                                </MudTh>
-                            </HeaderContent>
-                            <RowTemplate>
-                                <MudTd DataLabel="Attribute">
-                                    <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
-                                </MudTd>
-                                <MudTd DataLabel="Change">
-                                    <MudChip T="string" Variant="Variant.Text"
-                                             Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)" Class="ml-0">
-                                        @context.ChangeType
-                                    </MudChip>
-                                </MudTd>
-                                <MudTd DataLabel="Value">
-                                    @if (context.ReferenceValue != null)
-                                    {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default">@context.ReferenceValue.Type.Name</MudChip>
-                                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                                                @context.ReferenceValue.NameOrId
-                                            </MudLink>
-                                            @if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
-                                            {
-                                                <MudText Class="mud-text-secondary">
-                                                    (@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</MudText>
+                        @* The change records travel with the execution item, so the window is sliced from memory
+                           rather than read back; the scrolling, the search box, the count and the density all
+                           belong to the shared grid. Its URL parameters carry the ac- prefix so the two grids on
+                           this page cannot overwrite each other's state. *@
+                        <VirtualisedDataGrid T="FlattenedChange"
+                                             ContainerId="rpei-attribute-changes"
+                                             UrlParameterPrefix="ac-"
+                                             StateKey="@Id.ToString()"
+                                             DefaultSortBy="attribute"
+                                             LoadWindow="LoadAttributeChangeWindowAsync"
+                                             SingularName="Attribute Change"
+                                             PluralName="Attribute Changes"
+                                             SearchPlaceholder="Search attribute or value">
+                            <Columns>
+                                <TemplateColumn T="FlattenedChange" Title="Attribute" Sortable="false" CellClass="jim-nowrap">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                                    </HeaderTemplate>
+                                    <CellTemplate>
+                                        <MudText Class="mud-text-secondary">@context.Item.AttributeName</MudText>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn T="FlattenedChange" Title="Change" Sortable="false" CellClass="jim-nowrap">
+                                    <HeaderTemplate>
+                                        <VirtualisedSortHeader Title="Change" Name="change" />
+                                    </HeaderTemplate>
+                                    <CellTemplate>
+                                        <MudChip T="string" Variant="Variant.Text"
+                                                 Color="@Helpers.GetMudBlazorColorForValueChangeType(context.Item.ChangeType)" Class="ml-0">
+                                            @context.Item.ChangeType
+                                        </MudChip>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn T="FlattenedChange" Title="Value" Sortable="false">
+                                    <HeaderTemplate>
+                                        <MudText Typo="Typo.button">Value</MudText>
+                                    </HeaderTemplate>
+                                    <CellTemplate>
+                                        @if (context.Item.ReferenceValue != null)
+                                        {
+                                            var referenceValue = context.Item.ReferenceValue;
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudChip T="string" Color="Color.Default">@referenceValue.Type.Name</MudChip>
+                                                <MudLink Href="@Utilities.GetConnectedSystemObjectHref(referenceValue)">
+                                                    @referenceValue.NameOrId
+                                                </MudLink>
+                                                @if (referenceValue.SecondaryExternalIdAttributeValue != null)
+                                                {
+                                                    <MudText Class="mud-text-secondary">(@referenceValue.SecondaryExternalIdAttributeValue.ToString())</MudText>
                                                 }
                                             </MudStack>
                                         }
-            else
+                                        else
                                         {
-                                            <MudText>@context.Value</MudText>
+                                            <MudText>@context.Item.Value</MudText>
                                         }
-                                    </MudTd>
-                                </RowTemplate>
-                                <NoRecordsContent>
-                                    <MudText Class="pa-4">No attribute changes recorded.</MudText>
-                                </NoRecordsContent>
-                            </MudTable>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                            <EmptyContent Context="grid">
+                                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                                     PrimaryText="@($"No Attribute Changes match \"{grid.SearchText}\"")"
+                                                     SecondaryText="Try a different search term, or clear the search."
+                                                     ActionText="Clear Search"
+                                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                                }
+                                else
+                                {
+                                    <TableEmptyState Icon="@Icons.Material.Filled.EditNote"
+                                                     PrimaryText="No Attribute Changes were recorded"
+                                                     SecondaryText="This operation changed no attribute values on the object." />
+                                }
+                            </EmptyContent>
+                        </VirtualisedDataGrid>
                         }
 else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
                         {
@@ -942,47 +964,76 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
                                         @if (_pendingExport.AttributeValueChanges.Count > 0)
                                         {
-                                            <MudText Typo="Typo.subtitle1" Class="mb-2">
-                                                Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count.ToString("N0"))
-                                            </MudText>
-                                            <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0"
-                                                      Class="mb-5">
-                                                <HeaderContent>
-                                                    <MudTh Style="width: 1%; white-space: nowrap;">
-                                                        <MudText Typo="Typo.button">Attribute</MudText>
-                                                    </MudTh>
-                                                    <MudTh Style="width: 1%; white-space: nowrap;">
-                                                        <MudText Typo="Typo.button">Change Type</MudText>
-                                                    </MudTh>
-                                                    <MudTh Style="width: 1%; white-space: nowrap;">
-                                                        <MudText Typo="Typo.button">Status</MudText>
-                                                    </MudTh>
-                                                    <MudTh>
-                                                        <MudText Typo="Typo.button">Value</MudText>
-                                                    </MudTh>
-                                                </HeaderContent>
-                                                <RowTemplate>
-                                                    <MudTd DataLabel="Attribute">
-                                                        <MudText Class="mud-text-secondary">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
-                                                    </MudTd>
-                                                    <MudTd DataLabel="Change Type">
-                                                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)"
-                                                                 Class="ml-0">
-                                                            @context.ChangeType
-                                                        </MudChip>
-                                                    </MudTd>
-                                                    <MudTd DataLabel="Status">
-                                                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)"
-                                                                 Class="ml-0">
-                                                            @context.Status.ToString().SplitOnCapitalLetters()
-                                                        </MudChip>
-                                                    </MudTd>
-                                                    <MudTd DataLabel="Value"><TextValueDisplay Value="@GetPendingExportAttributeValue(context)" /></MudTd>
-                                                </RowTemplate>
-                                                <NoRecordsContent>
-                                                    <MudText Class="pa-4">No attribute changes recorded.</MudText>
-                                                </NoRecordsContent>
-                                            </MudTable>
+                                            <MudText Typo="Typo.subtitle1" Class="mb-2">Pending Attribute Changes</MudText>
+                                            @* The Pending Export's staged changes are already loaded with it, so the
+                                               window is sliced from memory. Its URL parameters carry the pe- prefix,
+                                               distinct from the Attribute Changes grid above. *@
+                                            <VirtualisedDataGrid T="PendingExportAttributeValueChange"
+                                                                 ContainerId="rpei-pending-export-changes"
+                                                                 UrlParameterPrefix="pe-"
+                                                                 StateKey="@Id.ToString()"
+                                                                 DefaultSortBy="@PendingExportSourceOrderSort"
+                                                                 LoadWindow="LoadPendingExportChangeWindowAsync"
+                                                                 SingularName="Pending Attribute Change"
+                                                                 PluralName="Pending Attribute Changes"
+                                                                 SearchPlaceholder="Search attribute or value">
+                                                <Columns>
+                                                    <TemplateColumn T="PendingExportAttributeValueChange" Title="Attribute" Sortable="false" CellClass="jim-nowrap">
+                                                        <HeaderTemplate>
+                                                            <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                                                        </HeaderTemplate>
+                                                        <CellTemplate>
+                                                            <MudText Class="mud-text-secondary">@GetPendingExportAttributeName(context.Item)</MudText>
+                                                        </CellTemplate>
+                                                    </TemplateColumn>
+                                                    <TemplateColumn T="PendingExportAttributeValueChange" Title="Change Type" Sortable="false" CellClass="jim-nowrap">
+                                                        <HeaderTemplate>
+                                                            <VirtualisedSortHeader Title="Change Type" Name="changetype" />
+                                                        </HeaderTemplate>
+                                                        <CellTemplate>
+                                                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.Item.ChangeType)"
+                                                                     Class="ml-0">
+                                                                @context.Item.ChangeType
+                                                            </MudChip>
+                                                        </CellTemplate>
+                                                    </TemplateColumn>
+                                                    <TemplateColumn T="PendingExportAttributeValueChange" Title="Status" Sortable="false" CellClass="jim-nowrap">
+                                                        <HeaderTemplate>
+                                                            <VirtualisedSortHeader Title="Status" Name="status" />
+                                                        </HeaderTemplate>
+                                                        <CellTemplate>
+                                                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Item.Status)"
+                                                                     Class="ml-0">
+                                                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                                                            </MudChip>
+                                                        </CellTemplate>
+                                                    </TemplateColumn>
+                                                    <TemplateColumn T="PendingExportAttributeValueChange" Title="Value" Sortable="false">
+                                                        <HeaderTemplate>
+                                                            <MudText Typo="Typo.button">Value</MudText>
+                                                        </HeaderTemplate>
+                                                        <CellTemplate>
+                                                            <TextValueDisplay Value="@GetPendingExportAttributeValue(context.Item)" />
+                                                        </CellTemplate>
+                                                    </TemplateColumn>
+                                                </Columns>
+                                                <EmptyContent Context="grid">
+                                                    @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                                                    {
+                                                        <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                                                         PrimaryText="@($"No Pending Attribute Changes match \"{grid.SearchText}\"")"
+                                                                         SecondaryText="Try a different search term, or clear the search."
+                                                                         ActionText="Clear Search"
+                                                                         OnAction="@(() => grid.ClearSearchAsync())" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <TableEmptyState Icon="@Icons.Material.Filled.Upload"
+                                                                         PrimaryText="This Pending Export stages no attribute changes"
+                                                                         SecondaryText="A delete staged against the Connected System carries no attribute values of its own." />
+                                                    }
+                                                </EmptyContent>
+                                            </VirtualisedDataGrid>
                                         }
 
                                         @* Link to full Pending Export details *@
@@ -1101,6 +1152,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// Maximum number of values to show for a multi-valued attribute before truncation.
     /// </summary>
     private const int MaxMultiValuePreview = 5;
+
+    /// <summary>
+    /// The sort key standing for "the order the Pending Export staged them in". No column claims it, so the grid
+    /// shows no sort arrow over an order the reader did not choose.
+    /// </summary>
+    private const string PendingExportSourceOrderSort = "order";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -1618,6 +1675,87 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         vc.ReferenceValue
         )));
     }
+
+    /// <summary>
+    /// Slices one window out of this item's attribute changes. They travel with the execution item that is
+    /// already loaded, so the page filters and sorts them itself and hands the result to the shared windowing
+    /// helper, which honours the request's skip-the-count contract.
+    /// </summary>
+    private Task<VirtualisedWindow<FlattenedChange>> LoadAttributeChangeWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        var changes = GetFlattenedChanges();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            changes = changes.Where(change =>
+                ContainsText(change.AttributeName, search)
+                || ContainsText(change.ChangeType.ToString(), search)
+                || ContainsText(change.Value, search)
+                || ContainsText(change.ReferenceValue?.NameOrId, search)
+                || ContainsText(change.ReferenceValue?.Type.Name, search));
+        }
+
+        var sorted = request.SortBy switch
+        {
+            "change" => request.SortDescending
+                ? changes.OrderByDescending(change => change.ChangeType)
+                : changes.OrderBy(change => change.ChangeType),
+            _ => request.SortDescending
+                ? changes.OrderByDescending(change => change.AttributeName, StringComparer.OrdinalIgnoreCase)
+                : changes.OrderBy(change => change.AttributeName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// Slices one window out of the Pending Export's staged attribute changes, which are loaded with the Pending
+    /// Export itself. The default sort names the order they were staged in rather than reordering them.
+    /// </summary>
+    private Task<VirtualisedWindow<PendingExportAttributeValueChange>> LoadPendingExportChangeWindowAsync(
+        VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        IEnumerable<PendingExportAttributeValueChange> changes =
+            _pendingExport?.AttributeValueChanges ?? new List<PendingExportAttributeValueChange>();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            changes = changes.Where(change =>
+                ContainsText(GetPendingExportAttributeName(change), search)
+                || ContainsText(change.ChangeType.ToString(), search)
+                || ContainsText(change.Status.ToString().SplitOnCapitalLetters(), search)
+                || ContainsText(GetPendingExportAttributeValue(change), search));
+        }
+
+        var sorted = request.SortBy switch
+        {
+            "attribute" => request.SortDescending
+                ? changes.OrderByDescending(GetPendingExportAttributeName, StringComparer.OrdinalIgnoreCase)
+                : changes.OrderBy(GetPendingExportAttributeName, StringComparer.OrdinalIgnoreCase),
+            "changetype" => request.SortDescending
+                ? changes.OrderByDescending(change => change.ChangeType)
+                : changes.OrderBy(change => change.ChangeType),
+            "status" => request.SortDescending
+                ? changes.OrderByDescending(change => change.Status)
+                : changes.OrderBy(change => change.Status),
+            // The staged order, which is what the list arrives in; no column claims this key.
+            _ => changes
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// The attribute's name, or a stand-in naming its id when the attribute could not be resolved.
+    /// </summary>
+    private static string GetPendingExportAttributeName(PendingExportAttributeValueChange change) =>
+        change.Attribute?.Name ?? $"Attribute {change.AttributeId}";
+
+    private static bool ContainsText(string? value, string searchText) =>
+        value != null && value.Contains(searchText, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Returns the appropriate description for the attribute changes section based on operation type.

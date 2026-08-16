@@ -51,14 +51,14 @@ internal class LdapConnectorContainerCounts
     /// </remarks>
     internal static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(60);
 
-    private readonly LdapConnection _connection;
+    private readonly ILdapOperationExecutor _executor;
     private readonly ILogger _logger;
     private readonly bool _supportsPaging;
     private readonly TimeSpan _budget;
 
-    internal LdapConnectorContainerCounts(LdapConnection ldapConnection, ILogger logger, bool supportsPaging, TimeSpan? budget = null)
+    internal LdapConnectorContainerCounts(ILdapOperationExecutor executor, ILogger logger, bool supportsPaging, TimeSpan? budget = null)
     {
-        _connection = ldapConnection;
+        _executor = executor;
         _logger = logger;
         _supportsPaging = supportsPaging;
         _budget = budget ?? DefaultBudget;
@@ -88,7 +88,12 @@ internal class LdapConnectorContainerCounts
             return result;
         }
 
-        return await Task.Run(() => Count(connectorPartition, objectTypeNames, result, cancellationToken), cancellationToken);
+        // Deliberately not handing the token to Task.Run. Doing so makes an already-cancelled token throw before the
+        // body runs, which contradicts what this method promises: a count reports being cut short through
+        // ConnectorContainerObjectCountResult, and the caller treats a throw as a failed count rather than a
+        // truncated one. Cancellation is observed inside the loop instead, so early and mid-flight cancellation
+        // both come back the same way.
+        return await Task.Run(() => Count(connectorPartition, objectTypeNames, result, cancellationToken), CancellationToken.None);
     }
 
     private ConnectorContainerObjectCountResult Count(
@@ -113,7 +118,7 @@ internal class LdapConnectorContainerCounts
                     LogSanitiser.Sanitise(connectorPartition.Name), stopwatch.Elapsed, counted);
 
                 return Incomplete(result,
-                    $"Counting stopped after {_budget.TotalSeconds:N0} seconds so that the hierarchy was not held up, so these counts are lower than the true figures.");
+                    $"Counting stopped after {_budget.TotalSeconds:N0} seconds so that the hierarchy was not held up. Narrowing the selected Object Types is the usual fix.");
             }
 
             var searchRequest = new SearchRequest(connectorPartition.Name, filter, SearchScope.Subtree, NoAttributes);
@@ -129,7 +134,7 @@ internal class LdapConnectorContainerCounts
             SearchResponse response;
             try
             {
-                response = (SearchResponse)_connection.SendRequest(searchRequest, PageTimeout);
+                response = (SearchResponse)_executor.SendRequest(searchRequest, PageTimeout);
             }
             catch (DirectoryOperationException ex) when (IsLimitExceeded(ex))
             {
@@ -139,7 +144,7 @@ internal class LdapConnectorContainerCounts
                     LogSanitiser.Sanitise(connectorPartition.Name), counted, LogSanitiser.Sanitise(ex.Message));
 
                 return Incomplete(result,
-                    "The directory stopped the search at its own size or time limit, so these counts are lower than the true figures.");
+                    "The directory stopped the search at its own size or time limit. Raising that limit, or narrowing the selected Object Types, is the usual fix.");
             }
             catch (DirectoryOperationException ex) when (cookie is { Length: > 0 } &&
                 ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))

@@ -3333,17 +3333,34 @@ public class ConnectedSystemServer
     {
         var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
 
+        // Each of the things below that can go partly right writes a warning here rather than straight onto the
+        // Activity, which only has room for one message: a hierarchy that both failed to enumerate and failed to
+        // count used to report whichever happened to run last.
+        var warnings = new List<string>();
+
         // Counted against the same directory state that produced the hierarchy, and before the merge, because the
         // Connector answers in terms of its own partitions. Applied after the merge, when JIM's own Containers
         // exist to hang the figures on.
-        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, activity);
+        var objectCounts = await CountContainerObjectsAsync(connectedSystem, partitionsConnector, partitions, warnings);
         if (partitions.Count == 0)
         {
             // Zero partitions almost always means the connector could not enumerate them (connection,
             // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
             // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+            warnings.Add("The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.");
         }
+
+        // A partition whose count was cut short has its figures discarded, so say so. Blank counts otherwise look
+        // exactly like a Connected System that cannot count at all, and only one of those is worth acting on.
+        var incompleteCounts = ContainerObjectCounts.DescribeIncompleteCounts(partitions
+            .Where(partition => objectCounts.ContainsKey(partition.Id))
+            .Select(partition => (partition.Name, objectCounts[partition.Id])));
+
+        if (incompleteCounts != null)
+            warnings.Add(incompleteCounts);
+
+        if (warnings.Count > 0)
+            activity.WarningMessage = string.Join(" ", warnings);
 
         // Merge discovered partitions with existing ones, preserving user selections
         var result = MergeHierarchy(connectedSystem, partitions);
@@ -3368,6 +3385,13 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// What an administrator is told when the count threw rather than merely stopping short. Held as a constant so
+    /// that a Connected System whose every partition fails says it once instead of once per partition.
+    /// </summary>
+    private const string CountFailedWarning =
+        "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+
+    /// <summary>
     /// Asks the Connector how many objects each Container holds, one partition at a time (#1276).
     /// </summary>
     /// <remarks>
@@ -3384,7 +3408,7 @@ public class ConnectedSystemServer
         ConnectedSystem connectedSystem,
         IConnectorPartitions partitionsConnector,
         List<ConnectorPartition> partitions,
-        Activity activity)
+        List<string> warnings)
     {
         var countsByPartition = new Dictionary<string, ConnectorContainerObjectCountResult>(StringComparer.OrdinalIgnoreCase);
         if (partitionsConnector is not IConnectorContainerObjectCounts countingConnector)
@@ -3413,7 +3437,8 @@ public class ConnectedSystemServer
                 Log.Warning(ex, "CountContainerObjectsAsync: could not count objects in partition {Partition} of {ConnectedSystem}",
                     LogSanitiser.Sanitise(partition.Name), connectedSystem.Id);
 
-                activity.WarningMessage = "The hierarchy was retrieved, but the objects in each Container could not be counted. The Containers are correct; their object counts are not shown.";
+                if (!warnings.Contains(CountFailedWarning))
+                    warnings.Add(CountFailedWarning);
             }
         }
 
@@ -4032,6 +4057,33 @@ public class ConnectedSystemServer
             connectedSystemObjectId, attributeName, page, pageSize, searchText);
     }
 
+    /// <summary>
+    /// Gets a window of one attribute's values on a Connected System Object addressed by absolute offset and
+    /// count, for a virtualised (infinite-scroll) multi-valued attribute on the object's detail page. Ordered by
+    /// value id, and shares its query core with <see cref="GetAttributeValuesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value, the unresolved
+    /// reference and the referenced object's own values.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeValuesRangeAsync(
+            connectedSystemObjectId, attributeName, offset, count, searchText, includeTotalCount);
+    }
+
     public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page = 1,
@@ -4056,7 +4108,38 @@ public class ConnectedSystemServer
             connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
             objectTypeFilter, joinTypeFilter);
     }
-    
+
+    /// <summary>
+    /// Gets a window of Connected System Object headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to
+    /// skip counting the whole match set when the caller already knows the total; the returned total is then null
+    /// rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("Cso.GetHeadersRange")
+            .SetTag("connectedSystemId", connectedSystemId)
+            .SetTag("offset", offset)
+            .SetTag("count", count)
+            .SetTag("hasSearch", !string.IsNullOrWhiteSpace(searchQuery))
+            .SetTag("sortBy", sortBy ?? "default")
+            .SetTag("includeTotalCount", includeTotalCount);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+            connectedSystemId, offset, count, searchQuery, sortBy, sortDescending, statusFilter,
+            objectTypeFilter, joinTypeFilter, includeTotalCount);
+    }
+
     /// <summary>
     /// Retrieves a page's worth of Connected System Objects for a specific system.
     /// </summary>
@@ -6442,6 +6525,27 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets a window of Pending Export headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetPendingExportHeadersAsync"/>. Pass <paramref name="includeTotalCount"/> as false to skip
+    /// counting the whole match set when the caller already knows the total; the returned total is then null
+    /// rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportHeadersRangeAsync(
+            connectedSystemId, offset, count, statusFilters, searchQuery, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>
     /// Retrieves a single Pending Export by ID with all related data.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
@@ -6495,6 +6599,33 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets a window of one attribute's changes on a Pending Export addressed by absolute offset and count, for
+    /// a virtualised (infinite-scroll) multi-valued attribute. Ordered by change id, and shares its query core
+    /// with <see cref="GetPendingExportAttributeChangesPagedAsync"/>. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller
+    /// already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the unresolved
+    /// reference.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportAttributeChangesRangeAsync(
+            pendingExportId, attributeName, offset, count, searchText, includeTotalCount);
+    }
+
+    /// <summary>
     /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
     /// Used by the CSO detail page for server-side pagination of the Pending Exports table.
     /// </summary>
@@ -6511,6 +6642,31 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetAllPendingExportChangesPagedAsync(
             pendingExportId, page, pageSize, searchText);
+    }
+
+    /// <summary>
+    /// Gets a window of a Pending Export's attribute value changes addressed by absolute offset and count, for
+    /// the virtualised (infinite-scroll) Pending Export grid on the Connected System Object detail page. Ordered
+    /// by attribute name, and shares its query core with
+    /// <see cref="GetAllPendingExportChangesPagedAsync"/>. Pass <paramref name="includeTotalCount"/> as false to
+    /// skip counting the whole match set when the caller already knows the total; the returned total is then
+    /// null rather than zero.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional search text to filter changes by value or attribute name.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window; counting is the
+    /// expensive half of a window read, so callers that already hold the total pass false and receive a null total.</param>
+    public async Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetAllPendingExportChangesRangeAsync(
+            pendingExportId, offset, count, searchText, includeTotalCount);
     }
 
     /// <summary>
@@ -6593,6 +6749,26 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
             connectedSystemId, fromDate, toDate, externalIdSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets a window of deleted Connected System Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters with
+    /// <see cref="GetDeletedCsoChangesAsync"/>, ordered by deletion time newest first. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    public async Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesRangeAsync(
+            offset, count, connectedSystemId, fromDate, toDate, externalIdSearch, includeTotalCount);
     }
 
     /// <summary>

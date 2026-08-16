@@ -27,6 +27,11 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<ActivityScheduleContext ScheduleExecutionId="@x" ScheduleStepIndex="@y" />` | Saying that a Schedule produced an Activity, and linking back to its Schedule Execution | "Activity Schedule context" below |
 | `<ScopedHierarchyPicker Partition="@p" OnChanged="@h" />` | Choosing which Containers in a partition JIM manages, and each one's Container Scope | "Choosing Containers" below |
 | `<AttributeChip Kind="@k" Name="@n" />` | Any attribute shown as belonging to a side of the Metaverse: the `CS` / `MV` / `Ex` avatar chip | "Attribute chips" below |
+| `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
+| `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
+| `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
+| `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
+| `<OverflowList TItem="X" Items="@xs" ItemTemplate="..." Title="Roles" />` | A cell holding a list: the first item, then "+n more" | "One line per row" below |
 
 ## Choosing Containers
 
@@ -125,6 +130,74 @@ All data tables should let users switch between normal and compact row spacing, 
   Inject `IUserPreferenceService PreferenceService`. No `try`/`catch` is needed here: `GetTableDenseAsync` swallows the "JS interop not ready" `InvalidOperationException` internally. Pages that gate their whole render on a `_preferencesLoaded` flag should load `_dense` alongside their other preferences inside that same gate (so there is no flash of normal-then-dense).
 - `<TableDensityToggle>` owns the toolbar button and persists the toggle; do **not** add an `OnToggleDense` method or build the tooltip/icon button by hand.
 - Default to normal spacing (`_dense = false`).
+
+## Virtualised lists
+
+**An infinite-scroll list is a `<VirtualisedDataGrid T="X">`; never hand-roll one around `MudDataGrid`'s `VirtualizeServerData`.** The component owns everything every virtualised list must get right and got wrong at least once while the pattern lived in a page: the URL round trip for search, sort and scroll position (`q`/`sort`/`desc`/`row`, written in place via `history.replaceState`, never `NavigationManager`); counting the match set once per filter change rather than once per scroll window; restoring a scroll position the virtualiser cannot reach yet; re-attaching the scroll listener when SPA navigation reuses the component; the density-dependent row height; the toolbar count; and the guarded empty-state slot. `Types/Index.razor` is the worked example.
+
+**The grid sizes its own height; there is no height to pass.** `jimVirtualList.fit` measures where the page footer lands and gives the scroll container a height CEILING: a long list fills until the footer sits at the bottom of the viewport with the same breathing room below it as above it, on every list page, while a list of a few rows (or an empty one) collapses to its content like an ordinary table, the footer following it up the page. It re-applies on window resize and as late-loading content moves the footer, and a `site.css` fallback covers the first paint. Never reintroduce a per-page `Height="calc(100vh - Npx)"`: those constants were hand-tuned per page, went stale the moment the chrome above a grid changed, and are exactly what the measurement replaced.
+
+A page supplies:
+
+- **`LoadWindow`**: a `Func<VirtualisedWindowRequest, CancellationToken, Task<VirtualisedWindow<T>>>`. Two tiers, chosen by what the list can grow to:
+  - **Unbounded data lists** (objects, activities, changes, pending deletions) call a repository **range read** (`offset`/`count`, not page/pageSize) that MUST honour `IncludeTotalCount` by skipping its count query and returning a null total when false; counting is the expensive half of a window read at scale. Null means "not counted", never zero. Pattern: `GetMetaverseObjectHeadersRangeAsync`.
+  - **Configuration-sized lists** (Connectors, API Keys, Predefined Searches and friends) load the full list once, then filter and sort in the page and finish with `filtered.ToWindow(request)` (`VirtualisedWindowExtensions`); do not grow a database range read for a list that stays in the dozens. Pattern: `ConnectorList.razor`.
+- **`Columns`**: `TemplateColumn`s, with `<VirtualisedSortHeader Title="..." />` in the `HeaderTemplate` for server-side sortable columns (the grid cascades itself as `IVirtualisedSortable`).
+- **`EmptyContent`**: the context-aware empty states ("Table empty states" below); the fragment's context is the grid, so branch on `context.SearchText` and wire the action to `context.ClearSearchAsync()`.
+- **`ContainerId`** (unique per grid) and, when two grids share one page, a **`UrlParameterPrefix`** each so their URL state cannot collide.
+- **`StateKey`** (the route parameter) so a component instance reused across SPA navigations re-reads the URL and re-attaches its scroll tracking.
+
+Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTotals: true)` after changing what matches, plus `ResetScrollAsync()`; the old total describes a match set that no longer exists. Sorting deliberately does not invalidate the total.
+
+**A conditional column is `Hidden`, never wrapped in an `@if`.** `MudDataGrid` orders its columns by the order they *register* with it (each `Column` adds itself on initialisation), not by their position in the markup. A column inside an `@if` whose condition is false on first render therefore registers after every column below it and appears at the far right when the condition later becomes true, however the markup reads. This is not hypothetical: the Connector Space's Secondary External Id column (derived from the first loaded window) and three of the Schema tab's attribute columns (derived from the selected Object Type, which changes under the reader) all rendered last. Write `Hidden="@(!_condition)"` on the column instead, so it registers in markup position and only its visibility changes. An `@if` remains correct where the condition is fixed for the component's lifetime (a Connector capability flag), because every column still registers on the first render.
+
+## One line per row
+
+**Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (50px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it.
+
+Three shapes break it, and each has one answer:
+
+| Shape | Answer |
+|-------|--------|
+| A chip (or anything) per item from a `@foreach` | `<OverflowList>`: first item inline, "+n more" opens the whole set in a dialog |
+| Two stacked block elements (`MudText` renders a `<p>`) | `<OneLineText Text Secondary>`: the secondary text reads inline after the value, low-lighted |
+| Unbounded free text | `<OneLineText Text>`, or the `.jim-one-line` class where the content is markup |
+
+- **Nothing may become unreachable.** What is clipped stays available on the element's `title`, in the `<OverflowList>` dialog, or on the detail page/panel the row already opens (the service log's Message column relies on all three: clipped, hoverable, and complete and copyable in the entry panel behind a row click).
+- **`.jim-one-line` and `.jim-one-line-list` are the primitives** (`site.css`), and are used directly where a cell's content is markup rather than a string: a linkified description, an icon beside a name, a target chip followed by modifier chips. On `.jim-one-line-list`, only the child carrying `.jim-one-line-list-value` gives way; everything else on the row holds its size, so an affordance or a modifier chip can never be what a long value pushes out.
+- **`<OneLineText>` uses the element's `title`, not a `MudTooltip`, and that is deliberate** rather than an oversight of the Tooltips rule below: a `MudTooltip` wraps its child in an inline-flex box of its own, which is exactly the box the ellipsis needs to be the block container, so the wrapper silently defeats the clipping it was added to explain. Do not "fix" it by migrating it.
+- **Do not solve a too-tall row by raising `ItemSize`, turning virtualisation off, or dropping data.** The height is shared by every grid in the portal, and a cell's content is not the thing that should decide it.
+
+## Object counts in table toolbars
+
+A table toolbar has two anchored ends and nothing loose in between: **left** is how the table is displayed (the density toggle) followed by the page's own actions; **right** is the count followed by the search box. The count is always a `<TableObjectCount />`; the convention exists because two hand-rolled treatments had already diverged (a count baked into a title's parentheses on `PendingExportDetail`, a right-aligned "Showing x of y" on `PendingDeletionList`) before it was extracted.
+
+The count is on the **right, immediately left of the search box**, for two reasons: "12 of 3,868" is feedback from that box, so it answers where the reader just typed; and the left slot then belongs to the primary action, which is what a page's Create button wants. It was briefly in the left slot instead, which pushed the action into the middle of the toolbar, where the loudest thing on the page was also the only one floating in open space. Where a table has a **title** and no search box (the child tables on detail pages), the count follows the title instead, since there is nothing on the right for it to answer to.
+
+```razor
+@* In a toolbar with a search box (every VirtualisedDataGrid): right side, nouns and all *@
+<MudSpacer />
+<TableObjectCount Count="@_totalItems" Total="@_unfilteredTotalItems"
+                  SingularName="@type?.Name" PluralName="@type?.PluralName" Class="mr-3" />
+<SearchField ... />
+
+@* Beside a title: bare number, because the title already names the objects *@
+<MudText Typo="Typo.h6">Attribute Changes</MudText>
+<TableObjectCount Count="@_changeCount" Class="ml-2" />
+```
+
+- Pass the nouns **only when there is no title**; beside one, the bare number avoids restating it.
+- Pass `Total` when the caller holds an unfiltered baseline; the text becomes "12 of 3,868 ..." while a filter narrows the list and collapses to the plain count when nothing is filtered.
+- A null `Count` renders nothing (including its optional `ShowSeparator` separator, which the component owns so it cannot dangle): null is "not counted yet", and a zero in its place would read as an empty list.
+- `<VirtualisedDataGrid>` builds this whole toolbar itself; a page only supplies its actions via `ToolBarExtras` (the grid adds the `|` separator after the density toggle when it has any) and never places the count or the search box by hand.
+
+## Table empty states
+
+A table's no-rows fragment renders a `<TableEmptyState />`, never a bare "No results" string: the message must say **why** the list is empty, because the situations mean different things and have different ways out. The Metaverse Object list (`Types/Index.razor`) is the worked example, distinguishing a search that matched nothing (with a "Clear Search" action button), a presence filter nothing satisfies, and a type with no objects at all.
+
+- Only pass `ActionText` when the caller wires `OnAction`; a button with nothing behind it is a dead affordance.
+- Inside a virtualised `MudDataGrid`, guard the fragment on a known-empty total (see the `NoRecordsContent` comment in `Types/Index.razor`): the grid renders the fragment between windows too, and an unguarded empty state flashes over data in flight.
+- The block's centring and icon treatment live in `site.css` (`jim-table-empty-state`, `jim-table-empty-state-icon`); do not restyle per call site.
 
 ## Empty values
 

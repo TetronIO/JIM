@@ -69,6 +69,55 @@ public static class ContainerObjectCounts
     }
 
     /// <summary>
+    /// Describes, for an administrator, which partitions have no object counts because counting was cut short.
+    /// </summary>
+    /// <param name="countsByPartition">Each partition's name paired with what the Connector reported for it.</param>
+    /// <returns>A warning to put on the Activity, or null when every partition counted in full.</returns>
+    /// <remarks>
+    /// An incomplete count is discarded rather than displayed (see <see cref="Apply"/>), which is right: figures
+    /// short of the truth read as whole and understate what deselecting a Container costs. Discarding them quietly
+    /// is not right, though. The tab then looks identical to a Connected System whose Connector cannot count at
+    /// all, so an administrator reading blank counts cannot tell "there is nothing to show you" from "we gave up",
+    /// and the second of those is worth acting on: raising the directory's size limit, or narrowing the Object
+    /// Types, makes the figures appear.
+    ///
+    /// Partitions stopped for the same reason are named together. A directory large enough to exhaust the budget
+    /// exhausts it everywhere, so repeating one sentence per partition would bury the list it applies to.
+    /// </remarks>
+    public static string? DescribeIncompleteCounts(
+        IEnumerable<(string PartitionName, ConnectorContainerObjectCountResult Result)> countsByPartition)
+    {
+        ArgumentNullException.ThrowIfNull(countsByPartition);
+
+        var incomplete = countsByPartition.Where(partition => !partition.Result.Complete).ToList();
+        if (incomplete.Count == 0)
+            return null;
+
+        // Grouped on the reason rather than sorted, so the partitions stay in the order they were counted and the
+        // message reads in the same order as the tab lists them.
+        var groups = incomplete
+            .GroupBy(partition => Reason(partition.Result), StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var names = group.Select(partition => $"'{partition.PartitionName}'").ToList();
+                var noun = names.Count == 1 ? "Partition" : "Partitions";
+
+                return $"Object counts are not shown for {noun} {string.Join(", ", names)}. {group.Key}";
+            });
+
+        return string.Join(" ", groups);
+    }
+
+    /// <summary>
+    /// The Connector's explanation, or a plain statement of the outcome where it offered none. A Connector is not
+    /// obliged to explain itself, and the absence of an explanation must not become the absence of a warning.
+    /// </summary>
+    private static string Reason(ConnectorContainerObjectCountResult result) =>
+        string.IsNullOrWhiteSpace(result.IncompleteReason)
+            ? "Counting did not finish."
+            : result.IncompleteReason.Trim();
+
+    /// <summary>
     /// Rebuilds every Container's subtree total from the direct counts already on them.
     /// </summary>
     /// <remarks>

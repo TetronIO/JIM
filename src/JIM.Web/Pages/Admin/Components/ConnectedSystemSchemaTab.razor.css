@@ -10,12 +10,23 @@
 }
 
 /* Object type discovery cards. Subtle affordance on the outlined paper, with selected cards
-   tinted in the primary colour so the current selection stands out as the grid is filtered. */
-.schema-type-card {
+   tinted in the primary colour so the current selection stands out as the grid is filtered.
+
+   Reached through ::deep from the plain <div class="schema-tabs"> that wraps them, as the tab rule
+   above is. The class sits on a MudPaper, and CSS isolation stamps its scope attribute only on
+   elements this component renders itself, never on the markup a child component produces; an
+   unqualified .schema-type-card-selected therefore compiles to
+   ".schema-type-card-selected[b-kz6qaheo85]" and matches nothing at all, so these cards have never
+   carried either the transition or the selected tint. Confirmed against the rendered page: the
+   MudPaper element carries only class and style, no scope attribute. */
+.schema-tabs ::deep .schema-type-card {
     transition: border-color .15s ease, background-color .15s ease;
 }
 
-.schema-type-card-selected {
-    border-color: var(--mud-palette-primary);
-    background-color: var(--mud-palette-primary-hover);
+/* border-color needs !important, the background does not: site.css paints every outlined paper with
+   "html[lang] .mud-paper-outlined { border: ... !important }", which no amount of specificity beats.
+   The selector is specific enough to win once both are !important. */
+.schema-tabs ::deep .schema-type-card-selected {
+    border-color: var(--mud-palette-primary) !important;
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
 }
