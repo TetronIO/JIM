@@ -216,9 +216,10 @@ internal static class SqlTypeMapper
         if (normalisedTypeName == "NUMBER")
         {
             var isSingleDigitInteger = columnType.Precision == 1 && (columnType.Scale ?? 0) == 0;
-            return options.TreatSingleDigitNumberAsBoolean && isSingleDigitInteger
-                ? AttributeDataType.Boolean
-                : AttributeDataType.Decimal;
+            if (options.TreatSingleDigitNumberAsBoolean && isSingleDigitInteger)
+                return AttributeDataType.Boolean;
+
+            return MapOracleNumberWidth(columnType);
         }
 
         // RAW(16) is just as commonly a digest as a GUID, so this is opt-in on the same reasoning.
@@ -231,6 +232,74 @@ internal static class SqlTypeMapper
 
         return null;
     }
+
+    /// <summary>
+    /// Chooses the narrowest JIM type that is guaranteed to hold every value an Oracle
+    /// <c>NUMBER</c> column can contain, from its declared precision and scale.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Oracle has a single numeric type, so the declaration is the only statement available about
+    /// whether a column holds whole numbers and how wide they are. Mapping the whole family to
+    /// <see cref="AttributeDataType.Decimal"/> discarded that, which put every built-in numeric
+    /// Metaverse Attribute out of reach of an Oracle Connected System: the mapping validator requires
+    /// the source and target types to match, and no built-in is a Decimal.
+    /// </para>
+    /// <para>
+    /// The boundaries are chosen so that the <b>widest value the declaration permits</b> fits, not so
+    /// that the values presently in the table fit. Nine digits is the widest that always fits a 32-bit
+    /// whole number (999,999,999), and eighteen the widest that always fits a 64-bit one. Ten digits
+    /// already exceeds <see cref="int.MaxValue"/>, which is why the ordinary Oracle
+    /// <c>NUMBER(10)</c> primary key is a LongNumber rather than a Number, and nineteen straddles
+    /// <see cref="long.MaxValue"/> rather than clearing it, so it is not treated as safe.
+    /// </para>
+    /// <para>
+    /// Three shapes decline to narrow at all. An absent precision is a floating <c>NUMBER</c>, which
+    /// permits up to 38 digits. A positive scale is genuinely fractional. A negative scale (
+    /// <c>NUMBER(10,-2)</c> rounds to hundreds) widens the range beyond the declared precision, so the
+    /// arithmetic above does not hold; it is refused rather than reasoned about.
+    /// </para>
+    /// <para>
+    /// This is Oracle's alone. SQL Server's catalogue reports a numeric precision for its integer
+    /// types too, but its named types state the width exactly, so they are mapped by name and never
+    /// reach here. An author who writes <c>numeric(5,0)</c> there rather than <c>int</c> has chosen an
+    /// exact numeric, and JIM does not overrule a definitive name.
+    /// </para>
+    /// <para>
+    /// Where the inference is not what the estate meant, the administrator overrides it per attribute
+    /// on the Schema tab; the SQL Connector declares
+    /// <see cref="JIM.Models.Interfaces.IConnectorCapabilities.SupportsUserSelectedAttributeTypes"/>
+    /// for exactly that reason.
+    /// </para>
+    /// </remarks>
+    private static AttributeDataType MapOracleNumberWidth(SqlColumnType columnType)
+    {
+        if (columnType.Precision is not { } precision)
+            return AttributeDataType.Decimal;
+
+        var scale = columnType.Scale ?? 0;
+        if (scale != 0)
+            return AttributeDataType.Decimal;
+
+        return precision switch
+        {
+            <= MaxPrecisionForInt => AttributeDataType.Number,
+            <= MaxPrecisionForLong => AttributeDataType.LongNumber,
+            _ => AttributeDataType.Decimal
+        };
+    }
+
+    /// <summary>
+    /// The widest decimal precision every value of which fits a 32-bit whole number: 999,999,999 is
+    /// below <see cref="int.MaxValue"/>, whereas ten digits reach 9,999,999,999 and do not.
+    /// </summary>
+    private const int MaxPrecisionForInt = 9;
+
+    /// <summary>
+    /// The widest decimal precision every value of which fits a 64-bit whole number. Nineteen digits
+    /// reach 9,999,999,999,999,999,999, which exceeds <see cref="long.MaxValue"/>.
+    /// </summary>
+    private const int MaxPrecisionForLong = 18;
 
     /// <summary>
     /// Reduces a catalogue's type name to its family: upper case, with any parenthesised size or
