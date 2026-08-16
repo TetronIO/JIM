@@ -1,4 +1,4 @@
-# Copyright (c) Tetron Limited. All rights reserved.
+﻿# Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 <#
@@ -328,14 +328,42 @@ function Test-S16DeltaChangeLog {
 
 # ─── Shared machinery for the synchronisation and export rows ──────────────────
 
-function Invoke-S16RunProfile {
+function Get-S16SystemIdForType {
+    <#
+    .SYNOPSIS
+        Which Connected System holds a given Object Type.
+    .DESCRIPTION
+        The scenario spans two Connected Systems over one database: the source of identity, and the
+        accounts provisioned from it. A row asks for the Object Type it cares about and gets the system
+        that holds it, rather than having to know how the two were divided.
+    #>
     param(
         [Parameter(Mandatory=$true)][hashtable]$Context,
         [Parameter(Mandatory=$true)][string]$Name
     )
 
-    $result = Start-JIMRunProfile -ConnectedSystemId $Context.ConnectedSystemId -RunProfileName $Name -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($($Context.Provider))"
+    if (-not $Context.ObjectTypes.ContainsKey($Name)) {
+        throw "Object Type '$Name' was not selected by Setup-Scenario16.ps1."
+    }
+    return $Context.ObjectTypes[$Name].connectedSystemId
+}
+
+function Invoke-S16RunProfile {
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][string]$Name,
+
+        # Which of the scenario's two Connected Systems to run against. Import is the default because
+        # most rows drive the source of identity; Export is named explicitly where a row means the
+        # accounts system, so the choice is visible at the call site rather than inferred.
+        [Parameter(Mandatory=$false)][ValidateSet('Import', 'Export')][string]$System = 'Import'
+    )
+
+    $systemId = if ($System -eq 'Export') { $Context.ExportConnectedSystemId } else { $Context.ConnectedSystemId }
+    $label    = if ($System -eq 'Export') { "$($Context.Provider) accounts" } else { $Context.Provider }
+
+    $result = Start-JIMRunProfile -ConnectedSystemId $systemId -RunProfileName $Name -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
     return $result
 }
 
@@ -352,10 +380,14 @@ function Invoke-S16Pipeline {
     #>
     param([Parameter(Mandatory=$true)][hashtable]$Context)
 
+    # Import and synchronise the source of identity, then export and confirm on the accounts system.
+    # The synchronisation runs on the identity system because that is where the Metaverse Objects come
+    # from, and it stages Pending Exports for every outbound rule regardless of which system owns it;
+    # the accounts system's Export run profile is what then writes them.
     Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
     Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
-    Invoke-S16RunProfile -Context $Context -Name "Export"               | Out-Null
-    Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Export"               -System Export | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          -System Export | Out-Null
 
     # A pipeline satisfies the lighter baseline too, so a driver-shape row running after an export row
     # does not import and synchronise all over again for nothing.
@@ -400,7 +432,8 @@ function Get-S16ExportBlocker {
     param([Parameter(Mandatory=$true)][hashtable]$Context)
 
     $appUserTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'AppUser'
-    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -Count)
+    $appUserSystemId = Get-S16SystemIdForType -Context $Context -Name 'AppUser'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -Count)
     if ($csoCount -gt 0) { return $null }
 
     return "Not exercisable in this topology: JIM excludes the Connected System being synchronised from export evaluation (ExportEvaluationServer.BuildExportEvaluationCacheAsync filters target systems with 'id != sourceConnectedSystemId'), and this scenario imports from and provisions into one Connected System. The outbound rules were created and enabled, the Full Synchronisation completed and projected every Metaverse Object, and no Pending Export was raised. Splitting the export targets into a second Connected System against the same database would exercise the row."
@@ -501,7 +534,8 @@ function Test-S16ExportCreate {
     # written; if the external ID it composed from the row differed from the one the insert returned, the
     # import would have created a second Connected System Object for each and the count would be doubled.
     $appUserTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'AppUser'
-    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -Count)
+    $appUserSystemId = Get-S16SystemIdForType -Context $Context -Name 'AppUser'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -Count)
 
     if ($csoCount -ne $expected) {
         return @{ Status = 'fail'; Detail = "APP_USERS holds $actualRows row(s) but JIM holds $csoCount Connected System Object(s) for the type. A mismatch here means the external ID composed on export does not equal the one composed on import, so the confirming import did not recognise the objects it had just created." }
@@ -509,7 +543,7 @@ function Test-S16ExportCreate {
 
     # A generated key is only proof of anything if it actually came from the database: the seeded table is
     # empty before this row runs, so every identifier present was returned by an insert.
-    $anchors = @(Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -All -Force |
+    $anchors = @(Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -All -Force |
                  ForEach-Object { $_.externalIdValue })
     $unusable = @($anchors | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -notmatch '^\d+$' })
     if ($unusable.Count -gt 0) {
@@ -619,7 +653,8 @@ function Test-S16ExportNaturalKey {
     }
 
     $naturalTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'NaturalKeyAccount'
-    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $naturalTypeId -Count)
+    $naturalSystemId = Get-S16SystemIdForType -Context $Context -Name 'NaturalKeyAccount'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $naturalSystemId -ObjectTypeId $naturalTypeId -Count)
     if ($csoCount -ne $expected) {
         return @{ Status = 'fail'; Detail = "APP_ACCOUNTS_NATURAL holds $actualRows row(s) but JIM holds $csoCount Connected System Object(s), so the anchor JIM authored on export is not the one it composed on import." }
     }
@@ -995,7 +1030,8 @@ function Test-S16Raw16Anchor {
     if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
     $guidTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'GuidKeyedPerson'
-    $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -Count
+    $guidSystemId = Get-S16SystemIdForType -Context $Context -Name 'GuidKeyedPerson'
+    $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $guidSystemId -ObjectTypeId $guidTypeId -Count
     $expected = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).GUID_KEYED_PEOPLE;")
 
     if ([int]$imported -ne $expected) {
@@ -1010,7 +1046,7 @@ function Test-S16Raw16Anchor {
         return @{ Status = 'fail'; Detail = "The rule is scoped to Department = Finance, so $expectedProvisioned row(s) should have been provisioned on top of the three seeded ones; GUID_KEYED_PEOPLE holds $expected row(s) in total." }
     }
 
-    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -All -Force
+    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $guidSystemId -ObjectTypeId $guidTypeId -All -Force
     $anchors = @($objects | ForEach-Object { $_.externalIdValue })
     $malformed = @($anchors | Where-Object { $_ -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' })
 

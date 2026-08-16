@@ -1,4 +1,4 @@
-# Copyright (c) Tetron Limited. All rights reserved.
+﻿# Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 <#
@@ -73,6 +73,7 @@ $null = $Template
 
 $config = Get-DatabaseConfig -Provider $Provider
 $systemName = "SQL Matrix $($config.DisplayName)"
+$exportSystemName = "SQL Matrix $($config.DisplayName) Accounts"
 
 Write-TestSection "Scenario 16 Setup: $($config.DisplayName)"
 Write-Host "  Host:              $($config.Host):$($config.Port)" -ForegroundColor Gray
@@ -95,10 +96,14 @@ Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 # ─── Step 3: Clean up any prior run ────────────────────────────────────────────
 
 Write-TestStep "Step 3" "Removing any Connected System left by a previous run"
-$existing = Get-JIMConnectedSystem -Name $systemName -ErrorAction SilentlyContinue
-foreach ($system in @($existing | Where-Object { $_ })) {
-    Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
-    Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
+# Accounts first: it holds the Connected System Objects provisioned from the other one, so removing the
+# source of identity first would deprovision them on the way past rather than simply dropping them.
+foreach ($name in @($exportSystemName, $systemName)) {
+    $existing = Get-JIMConnectedSystem -Name $name -ErrorAction SilentlyContinue
+    foreach ($system in @($existing | Where-Object { $_ })) {
+        Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
+        Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
+    }
 }
 
 # ─── Step 4: Resolve the connector definition and its settings ─────────────────
@@ -261,11 +266,26 @@ $objectTypesJson = @"
 }
 "@
 
-# ─── Step 6: Create and configure the Connected System ─────────────────────────
+# ─── Step 6: Create and configure the Connected Systems ────────────────────────
 
-Write-TestStep "Step 6" "Creating the Connected System '$systemName'"
-$system = New-JIMConnectedSystem -Name $systemName `
-    -Description "Scenario 16: JIM SQL Connector matrix against $($config.DisplayName)" `
+# Two Connected Systems over the same database, and this is not an arbitrary split. A Metaverse Object
+# can hold only one Connected System Object per Connected System, which is a deliberate, index-backed
+# invariant (#1331). The Person import projects a Metaverse Object and takes that one slot, so a rule
+# in the SAME system that provisions an AppUser for the same person has nowhere to put it: JIM reports
+# the clash and stages nothing, which is correct behaviour and made every export row in this matrix
+# unsatisfiable. Separating the source of identity from the accounts provisioned off it is also how a
+# real deployment is arranged, so the matrix is now testing the shape we would recommend rather than
+# one JIM is right to refuse.
+function New-Scenario16ConnectedSystem {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)][string]$Purpose,
+        [Parameter(Mandatory=$true)][string[]]$SelectTypeNames
+    )
+
+Write-TestStep "Step 6" "Creating the Connected System '$Name'"
+$system = New-JIMConnectedSystem -Name $Name `
+    -Description "Scenario 16: JIM SQL Connector matrix against $($config.DisplayName). $Purpose" `
     -ConnectorDefinitionId $connector.id -PassThru
 
 $settings = @{
@@ -344,7 +364,7 @@ $anchorColumns = @{
 }
 
 $selectedTypes = @{}
-foreach ($typeName in $expectedTypes) {
+foreach ($typeName in $SelectTypeNames) {
     $objectType = $objectTypes | Where-Object { $_.name -eq $typeName }
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $system.id -ObjectTypeId $objectType.id -Selected $true | Out-Null
 
@@ -381,6 +401,10 @@ foreach ($typeName in $expectedTypes) {
         }
     }
 
+    # Which Connected System an Object Type belongs to, so a matrix row reading Connected System Objects
+    # of that type resolves the right one without having to know how the two systems were divided.
+    $objectType | Add-Member -NotePropertyName connectedSystemId -NotePropertyValue $system.id -Force
+
     $selectedTypes[$typeName] = $objectType
     Write-Host "  OK $typeName ($($objectType.attributes.Count) attributes, anchor $anchor)" -ForegroundColor Green
 }
@@ -404,6 +428,29 @@ $runProfiles = @(
 foreach ($runProfile in $runProfiles) {
     New-JIMRunProfile -ConnectedSystemId $system.id -Name $runProfile.Name -RunType $runProfile.RunType -PageSize $pageSize | Out-Null
     Write-Host "  OK $($runProfile.Name) (page size $pageSize)" -ForegroundColor Green
+}
+
+    return @{ System = $system; SelectedTypes = $selectedTypes; PageSize = $pageSize }
+}
+
+# The source of identity: the employee table and the view over it.
+$importSystem = New-Scenario16ConnectedSystem -Name $systemName `
+    -Purpose "The source of identity: employees and the view over them." `
+    -SelectTypeNames @("Person", "PersonView")
+
+# The accounts provisioned from it. Same database, separate Connected System, for the reason above.
+$exportTypeNames = @("AppUser", "NaturalKeyAccount")
+if ($Provider -eq "Oracle") { $exportTypeNames += "GuidKeyedPerson" }
+
+$exportSystem = New-Scenario16ConnectedSystem -Name $exportSystemName `
+    -Purpose "The accounts provisioned from that identity." `
+    -SelectTypeNames $exportTypeNames
+
+$system        = $importSystem.System
+$pageSize      = $importSystem.PageSize
+$selectedTypes = @{}
+foreach ($source in @($importSystem.SelectedTypes, $exportSystem.SelectedTypes)) {
+    foreach ($key in $source.Keys) { $selectedTypes[$key] = $source[$key] }
 }
 
 # ─── Step 11: Metaverse plumbing ───────────────────────────────────────────────
@@ -560,7 +607,7 @@ Write-TestStep "Step 14" "Creating the outbound Synchronisation Rules"
 $appUserRule = New-JIMSyncRule `
     -Name "SQL Matrix AppUser Export ($($config.DisplayName))" `
     -Description "Scenario 16 outbound rule: provisions into APP_USERS, whose primary key the database generates." `
-    -ConnectedSystemId $system.id `
+    -ConnectedSystemId $exportSystem.System.id `
     -ConnectedSystemObjectTypeId $selectedTypes['AppUser'].id `
     -MetaverseObjectTypeId $mvUserType.id `
     -Direction Export `
@@ -617,7 +664,7 @@ Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attr
 $naturalRule = New-JIMSyncRule `
     -Name "SQL Matrix NaturalKeyAccount Export ($($config.DisplayName))" `
     -Description "Scenario 16 outbound rule: provisions into a table whose primary key JIM authors." `
-    -ConnectedSystemId $system.id `
+    -ConnectedSystemId $exportSystem.System.id `
     -ConnectedSystemObjectTypeId $selectedTypes['NaturalKeyAccount'].id `
     -MetaverseObjectTypeId $mvUserType.id `
     -Direction Export `
@@ -659,7 +706,7 @@ if ($Provider -eq "Oracle") {
     $guidRule = New-JIMSyncRule `
         -Name "SQL Matrix GuidKeyedPerson Export (Oracle)" `
         -Description "Scenario 16 outbound rule: provisions into a table keyed RAW(16) DEFAULT SYS_GUID()." `
-        -ConnectedSystemId $system.id `
+        -ConnectedSystemId $exportSystem.System.id `
         -ConnectedSystemObjectTypeId $selectedTypes['GuidKeyedPerson'].id `
         -MetaverseObjectTypeId $mvUserType.id `
         -Direction Export `
@@ -687,8 +734,8 @@ if ($Provider -eq "Oracle") {
 }
 
 Write-TestSection "Scenario 16 Setup Complete: $($config.DisplayName)"
-Write-Host "  Connected System:   $systemName (ID: $($system.id))" -ForegroundColor Cyan
-Write-Host "  Object Types:       $(($expectedTypes) -join ', ')" -ForegroundColor Cyan
+Write-Host "  Identity source:    $systemName (ID: $($system.id)) - Person, PersonView" -ForegroundColor Cyan
+Write-Host "  Accounts:           $exportSystemName (ID: $($exportSystem.System.id)) - $($exportTypeNames -join ', ')" -ForegroundColor Cyan
 Write-Host "  Database Time Zone: $DatabaseTimeZone (deliberately not UTC)" -ForegroundColor Cyan
 Write-Host "  Page size:          $pageSize" -ForegroundColor Cyan
 Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 3 } else { 2 }) outbound" -ForegroundColor Cyan
@@ -696,7 +743,13 @@ Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 
 return @{
     Provider           = $Provider
     ConnectedSystemId  = $system.id
+
+    # The accounts system. Every Object Type also carries its own connectedSystemId, so a row that reads
+    # Connected System Objects resolves the right system from the type rather than choosing between these.
+    ExportConnectedSystemId = $exportSystem.System.id
+
     SystemName         = $systemName
+    ExportSystemName   = $exportSystemName
     ObjectTypes        = $selectedTypes
     RowCount           = $RowCount
     DatabaseTimeZone   = $DatabaseTimeZone
