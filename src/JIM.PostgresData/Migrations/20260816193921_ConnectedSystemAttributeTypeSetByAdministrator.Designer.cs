@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20260813074802_ConnectedSystemAttributeTypeSetByAdministrator")]
+    [Migration("20260816193921_ConnectedSystemAttributeTypeSetByAdministrator")]
     partial class ConnectedSystemAttributeTypeSetByAdministrator
     {
         /// <inheritdoc />
@@ -2646,6 +2646,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<bool>("Excluded")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ExternalId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2656,6 +2659,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("ObjectCount")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("ParentContainerId")
                         .HasColumnType("integer");
@@ -3405,9 +3411,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIConnector")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ImplementsIContainers")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIExportUsingCalls")
