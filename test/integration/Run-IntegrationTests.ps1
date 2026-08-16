@@ -2653,11 +2653,14 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
 # PostgreSQL and MySQL stay dormant; they are staged for the priority 2 providers, which Scenario 16
 # does not yet cover.
 if ($Scenario -like "*Scenario16*") {
-    $phase2Services = switch ($Provider) {
+    # @(...) around the switch is load-bearing: PowerShell unwraps a single-element array returned from
+    # a switch to a bare string, and splatting a string passes it one character at a time, so a
+    # single-provider run asked Compose to start a service called "o". Only -Provider Both survived.
+    $phase2Services = @(switch ($Provider) {
         "SqlServer" { @("sqlserver-hris-a") }
         "Oracle"    { @("oracle-hris-b") }
         default     { @("sqlserver-hris-a", "oracle-hris-b") }
-    }
+    })
 
     Write-Step "Starting database containers for Scenario 16 ($($phase2Services -join ', '))..."
     $phase2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d @phase2Services 2>&1
