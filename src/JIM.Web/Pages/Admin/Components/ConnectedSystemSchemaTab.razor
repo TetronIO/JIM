@@ -1399,6 +1399,11 @@
             return;
 
         _objectTypeAttributeBeingEdited.Type = (AttributeDataType)Enum.Parse(typeof(AttributeDataType), _objectTypeAttributeBeingEditedText);
+
+        // Marks the type as the administrator's rather than the Connector's, so the next schema refresh
+        // leaves it alone instead of silently restoring what discovery inferred (#1354).
+        _objectTypeAttributeBeingEdited.TypeSetByAdministrator = true;
+
         _editSchemaAttributeDialogVisible = false;
 
         // the Type chip filters are contextual and the row may no longer match the chosen ones, so the window is
@@ -1406,7 +1411,7 @@
         await RefreshAttributeGridAsync();
 
         // all done, let the user know
-        Snackbar.Add("Attribute data type updated.", Severity.Success);
+        Snackbar.Add("Attribute data type updated. Save your changes to apply it.", Severity.Success);
     }
 
     private async Task ShowCsvErrorDialogAsync(CsvParsingException ex)

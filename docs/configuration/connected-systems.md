@@ -211,6 +211,58 @@ If a source value feeding one of these attributes genuinely does change (an empl
 
 The Attribute Flow editor marks an export mapping whose target is set on creation only, so it is clear at a glance which mappings apply during provisioning alone, and a Connected System Object's detail page marks the attribute itself, so the same is obvious when looking at a single object's values.
 
+## Attribute data types
+
+Every discovered attribute is recorded with a JIM data type, shown in the Schema tab's **Type** column. An Attribute Flow requires its source and target to be the same type, so this is what decides which Metaverse Attributes an attribute can be mapped to.
+
+Most of the time the Connected System states its type unambiguously and JIM simply records it. A directory's schema and a SCIM service provider's schema are both definitive, so their attribute types are fixed and cannot be changed.
+
+### When the source cannot say
+
+Two cases leave JIM inferring rather than reading.
+
+A delimited file names no types at all, so the File Connector has always asked you to choose.
+
+A relational database states a type for every column, but not every database distinguishes types the way JIM does. Microsoft SQL Server does: `int` is a whole number, `bigint` a 64-bit whole number, `decimal(9,4)` a fractional figure, and JIM records each accordingly. **Oracle has a single numeric type.** An employee identifier, a large counter and a fractional figure are all `NUMBER`, distinguished only by the precision and scale the column was declared with.
+
+JIM therefore reads that declaration and picks the narrowest type guaranteed to hold every value the column permits:
+
+| Declared | Becomes | Why |
+|----------|---------|-----|
+| `NUMBER(p,0)`, p up to 9 | Number | The widest such column holds 999,999,999, which fits a 32-bit whole number. |
+| `NUMBER(p,0)`, p from 10 to 18 | Long Number | Ten digits already exceed a 32-bit whole number, so the ordinary sequence-backed key lands here. |
+| `NUMBER(p,0)`, p of 19 or more | Decimal | Nineteen digits can exceed a 64-bit whole number, so narrowing would risk losing a value. |
+| `NUMBER(p,s)` with a scale | Decimal | The column is genuinely fractional. |
+| `NUMBER` with no precision | Decimal | The declaration states no width, so JIM assumes the widest. |
+
+`NUMBER(1)` is a whole number unless you switch on **Treat NUMBER(1) Columns as Boolean** on the Connected System, which is opt-in because a single-digit column is just as often a small number as a flag.
+
+### Overriding an inferred type
+
+Where a Connector's schema cannot state a type definitively, the Schema tab shows an **Edit** control on each attribute row. Choose the type the column is actually for and the attribute is recorded with it.
+
+The attribute's **Description** states the source column type it was built from (`Source column type: NUMBER(10).`), so you can see what the inference was based on before deciding whether to disagree with it.
+
+This is how an Oracle `NUMBER(10)` employee identifier is pointed at the built-in `Employee Number` Metaverse Attribute, which is a Number. Use the built-in attributes wherever they fit: a custom attribute created only to work around a type is one no other Connected System will match on.
+
+!!! warning "Set the type before you build on it"
+    An override is refused once the attribute is referenced by a Synchronisation Rule or already holds values, because changing it then would reinterpret data that was imported under the previous type. If you need to change it later, remove the references, or clear the Connected System Objects, first.
+
+From PowerShell:
+
+```powershell
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 10 -Type Integer
+```
+
+`Integer` is the friendly name for the Number type, matching `New-JIMMetaverseAttribute`. There is no bulk equivalent: the bulk attribute endpoint refuses a request carrying a data type rather than ignoring it, so a scripted build cannot appear to succeed having changed nothing.
+
+The same field is available on the REST API's attribute update, `PUT api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`.
+
+An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything the Connector discovered (writability, plurality, the source column type) and leaves your choice alone. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
+
+!!! note "Existing Connected Systems"
+    Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.
+
 ## Credential attributes are never managed
 
 Some attributes hold credential material, or a hash of it. JIM will never import them, never let you select them for management, and never let you name them as the source or target of an Attribute Flow:

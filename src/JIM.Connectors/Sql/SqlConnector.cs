@@ -99,8 +99,14 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorSettin
     // strong suggestion, but views have none and a natural key is often the better anchor.
     public bool SupportsUserSelectedExternalId => true;
 
-    // The catalogue states every column's type, so JIM maps them rather than asking.
-    public bool SupportsUserSelectedAttributeTypes => false;
+    // The catalogue states every column's type, and on Microsoft SQL Server that statement is
+    // definitive. On Oracle it is not: Oracle has one numeric type, so NUMBER(10) is the ordinary
+    // sequence-backed primary key, NUMBER(19) an ordinary large counter and NUMBER(9,4) a genuinely
+    // fractional figure, all under the same name. JIM infers the narrowest safe type from the declared
+    // precision and scale, but an estate can always mean something the declaration does not say, and
+    // being wrong here puts the built-in numeric Metaverse Attributes out of reach for the whole
+    // Connected System. The administrator gets the final word, per attribute, on the Schema tab (#1354).
+    public bool SupportsUserSelectedAttributeTypes => true;
 
     // A committed transaction is a verified write, so an export needs no confirming import.
     public bool SupportsAutoConfirmExport => true;

@@ -189,6 +189,13 @@ public class ConnectedSystemAttributeDto
     public string? ClassName { get; set; }
     public DateTime Created { get; set; }
     public string Type { get; set; } = null!;
+
+    /// <summary>
+    /// Whether <see cref="Type"/> was chosen by an administrator rather than inferred by schema discovery.
+    /// A chosen type is left alone by a schema refresh; an inferred one is restated from the Connector.
+    /// </summary>
+    public bool TypeSetByAdministrator { get; set; }
+
     public string AttributePlurality { get; set; } = null!;
     public bool Selected { get; set; }
     public bool IsExternalId { get; set; }
@@ -222,6 +229,7 @@ public class ConnectedSystemAttributeDto
             ClassName = entity.ClassName,
             Created = entity.Created,
             Type = entity.Type.ToString(),
+            TypeSetByAdministrator = entity.TypeSetByAdministrator,
             AttributePlurality = entity.AttributePlurality.ToString(),
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
