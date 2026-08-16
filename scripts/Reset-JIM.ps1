@@ -57,7 +57,12 @@ param(
     [switch]$JIMOnly,
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipConfirmation
+    [switch]$SkipConfirmation,
+
+    # Runs the reset from a linked git worktree, which the preflight below otherwise refuses. Only
+    # correct when no other JIM stack is running on this host.
+    [Parameter(Mandatory=$false)]
+    [switch]$AllowWorktree
 )
 
 Set-StrictMode -Version Latest
@@ -65,6 +70,11 @@ $ErrorActionPreference = "Stop"
 
 # Resolve paths relative to this script's location (script is in scripts/ folder)
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+# Preflight: refuse to run from a linked git worktree. This script removes the JIM volumes by their
+# global names, so from a second checkout it destroys the primary checkout's instance.
+. "$PSScriptRoot/Assert-PrimaryCheckout.ps1"
+Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "Reset-JIM.ps1"
 $jimCompose = Join-Path $repoRoot "docker-compose.yml"
 $jimComposeOverride = Join-Path $repoRoot "docker-compose.override.yml"
 $integrationCompose = Join-Path $repoRoot "test/integration/docker/docker-compose.integration-tests.yml"

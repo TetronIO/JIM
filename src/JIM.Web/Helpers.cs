@@ -289,6 +289,9 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
+            // Raised while evaluating outbound exports during synchronisation, before anything is exported,
+            // so it belongs with the synchronisation phase rather than "Export Failed".
+            [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",

@@ -49,4 +49,12 @@ public class ExportEvaluationResult
     /// change was generated for those attributes; the worker surfaces each as a MultiValuedToSingleValued RPEI.
     /// </summary>
     public List<AttributeFlowError> AttributeFlowErrors { get; set; } = [];
+
+    /// <summary>
+    /// Outbound Synchronisation Rules that could not export because the Metaverse Object's one Connected
+    /// System Object in the target Connected System is of a different Connected System Object Type than the
+    /// Rule targets (#1331). No Pending Export was staged for those Rules; the worker surfaces each as a
+    /// CouldNotExportDueToExistingConnectedSystemObject RPEI.
+    /// </summary>
+    public List<ExportObjectTypeConflict> ObjectTypeConflicts { get; set; } = [];
 }

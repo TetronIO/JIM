@@ -792,6 +792,13 @@ public class ExportEvaluationTests
         });
 
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        // The Rule must target the same Connected System Object Type as the object it deprovisions, as the
+        // sibling arrange helpers in this fixture already do. A Rule pointed at a different Object Type would
+        // be deprovisioning an object it does not own, which #1331 now detects and refuses.
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+
         var provisionedCso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
