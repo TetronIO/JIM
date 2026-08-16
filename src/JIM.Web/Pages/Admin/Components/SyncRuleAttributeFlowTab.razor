@@ -44,7 +44,7 @@
                     {
                         <MudChip Value="@type.Key"
                                  Color="@(_selectedMappingTypes.Contains(type.Key) ? Color.Default : Helpers.GetMappingTypeChipColour(type.Key))"
-                                 Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetMappingTypeChipColour(type.Key)">
                             @type.Key.ToString().SplitOnCapitalLetters()
                             <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
@@ -63,7 +63,7 @@
                     {
                         <MudChip Value="@type.Key"
                                  Color="@(_selectedDataTypes.Contains(type.Key) ? Color.Default : Helpers.GetAttributeTypeChipColour(type.Key))"
-                                 Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetAttributeTypeChipColour(type.Key)">
                             @type.Key.ToString().SplitOnCapitalLetters()
                             <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
@@ -82,7 +82,7 @@
                     {
                         <MudChip Value="@plurality.Key"
                                  Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Helpers.GetAttributePluralityChipColour(plurality.Key))"
-                                 Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetAttributePluralityChipColour(plurality.Key)">
                             @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                             <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>

@@ -313,6 +313,10 @@ public class MetaverseRepository : IMetaverseRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null,
         bool includeTotalCount = true)
     {
         if (count < 1)
@@ -324,7 +328,8 @@ public class MetaverseRepository : IMetaverseRepository
         if (count > MaxAttributeHeaderWindowSize)
             count = MaxAttributeHeaderWindowSize;
 
-        var query = BuildMetaverseAttributeHeaderQuery(searchQuery, sortBy, sortDescending);
+        var query = BuildMetaverseAttributeHeaderQuery(
+            searchQuery, sortBy, sortDescending, typeFilter, pluralityFilter, builtInFilter, objectTypeId);
 
         // Counting is the expensive half of a window read (it scans every matching attribute rather than a window
         // of them), so it is skipped entirely when the caller already holds the total. Sorting cannot change how
@@ -346,13 +351,18 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Shared query core for the paged and range attribute-header reads: applies the name search filter and the
-    /// sort so the two reads cannot drift apart. Callers own input validation and window clamping.
+    /// Shared query core for the paged and range attribute-header reads: applies the name search filter, the
+    /// optional type/plurality/built-in/Object Type filters, and the sort, so the two reads cannot drift apart.
+    /// Callers own input validation and window clamping.
     /// </summary>
     private IQueryable<MetaverseAttribute> BuildMetaverseAttributeHeaderQuery(
         string? searchQuery,
         string? sortBy,
-        bool sortDescending)
+        bool sortDescending,
+        AttributeDataType? typeFilter = null,
+        AttributePlurality? pluralityFilter = null,
+        bool? builtInFilter = null,
+        int? objectTypeId = null)
     {
         var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
@@ -363,6 +373,30 @@ public class MetaverseRepository : IMetaverseRepository
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(a => EF.Functions.ILike(a.Name, searchPattern));
+        }
+
+        if (typeFilter.HasValue)
+        {
+            var typeFilterValue = typeFilter.Value;
+            query = query.Where(a => a.Type == typeFilterValue);
+        }
+
+        if (pluralityFilter.HasValue)
+        {
+            var pluralityFilterValue = pluralityFilter.Value;
+            query = query.Where(a => a.AttributePlurality == pluralityFilterValue);
+        }
+
+        if (builtInFilter.HasValue)
+        {
+            var builtInFilterValue = builtInFilter.Value;
+            query = query.Where(a => a.BuiltIn == builtInFilterValue);
+        }
+
+        if (objectTypeId.HasValue)
+        {
+            var objectTypeIdValue = objectTypeId.Value;
+            query = query.Where(a => a.MetaverseObjectTypes.Any(t => t.Id == objectTypeIdValue));
         }
 
         // Apply sorting

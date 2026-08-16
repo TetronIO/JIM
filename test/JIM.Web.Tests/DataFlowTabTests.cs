@@ -353,7 +353,7 @@ public class DataFlowTabTests : JimComponentTestContext
 
             // One chip for the shown source and one for the flow's target; a chip per source would be four.
             Assert.That(cut.FindComponents<AttributeChip>(), Has.Count.EqualTo(2));
-            Assert.That(cut.Find(".jim-attr-expand-btn").TextContent.Trim(), Is.EqualTo("+2 more"));
+            Assert.That(cut.Find(".jim-attr-expand-link").TextContent.Trim(), Is.EqualTo("+2 more"));
         }
     }
 

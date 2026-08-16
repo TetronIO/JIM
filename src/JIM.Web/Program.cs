@@ -163,12 +163,16 @@ try
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
 
-    // Register UI theme settings from environment variable
+    // Register UI theme settings from environment variable.
+    // The paths carry a content-derived version because these are the only stylesheets not emitted by a tag helper
+    // with asp-append-version: the same value is used by the <link> in _Layout.cshtml, by Error.cshtml and by the
+    // runtime theme swap in MainLayout, so versioning it here is what covers all three. Without it a browser keeps
+    // a theme file across an upgrade that changed it, while every other stylesheet refreshes.
     var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "navy-o6";
     builder.Services.AddSingleton(new ThemeSettings
     {
-        LightThemePath = $"css/themes/{themeName}-light.css",
-        DarkThemePath = $"css/themes/{themeName}-dark.css"
+        LightThemePath = JIM.Web.Helpers.AppendFileVersion(builder.Environment.WebRootPath, $"css/themes/{themeName}-light.css"),
+        DarkThemePath = JIM.Web.Helpers.AppendFileVersion(builder.Environment.WebRootPath, $"css/themes/{themeName}-dark.css")
     });
 
     // Configure ASP.NET Core Data Protection for credential encryption

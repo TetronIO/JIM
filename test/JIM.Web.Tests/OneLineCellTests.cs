@@ -130,7 +130,7 @@ public class OneLineCellTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Administrator"));
-            Assert.That(cut.FindAll(".jim-attr-expand-btn"), Is.Empty,
+            Assert.That(cut.FindAll(".jim-attr-expand-link"), Is.Empty,
                 "one item is the whole set, so there is nothing for an affordance to reveal");
         }
     }
@@ -154,7 +154,7 @@ public class OneLineCellTests : JimComponentTestContext
     {
         var cut = RenderOverflowList(["Administrator", "Operator", "Auditor"]);
 
-        Assert.That(cut.Find(".jim-attr-expand-btn").TextContent.Trim(), Is.EqualTo("+2 more"));
+        Assert.That(cut.Find(".jim-attr-expand-link").TextContent.Trim(), Is.EqualTo("+2 more"));
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public class OneLineCellTests : JimComponentTestContext
         var provider = Render<MudDialogProvider>();
         var cut = RenderOverflowList(["Administrator", "Operator", "Auditor"]);
 
-        cut.Find(".jim-attr-expand-btn").Click();
+        cut.Find(".jim-attr-expand-link").Click();
 
         provider.WaitForAssertion(() =>
         {

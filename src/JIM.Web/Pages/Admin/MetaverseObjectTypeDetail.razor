@@ -295,7 +295,7 @@
                         {
                             <MudChip Value="@type.Key"
                                      Color="@(_selectedTypes.Contains(type.Key) ? Color.Default : Color.Primary)"
-                                     Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                     Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Primary">
                                 @type.Key.ToString().SplitOnCapitalLetters()
                                 <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
@@ -315,7 +315,7 @@
                         {
                             <MudChip Value="@plurality.Key"
                                      Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Color.Info)"
-                                     Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                     Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Info">
                                 @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                                 <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
@@ -335,7 +335,7 @@
                         {
                             <MudChip Value="@builtIn.Key"
                                      Color="Color.Default"
-                                     Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Outlined : Variant.Text)"
+                                     Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Default">
                                 @(builtIn.Key ? "Yes" : "No")
                                 <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
