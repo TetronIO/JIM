@@ -1,0 +1,30 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A sortable column header inside a VirtualisedDataGrid. The grid drives sorting server-side (a TemplateColumn
+   cannot expose a server-side sort key), so the header click sets the SQL sort column via the cascaded grid
+   rather than MudDataGrid's own sort state. Place inside a TemplateColumn's HeaderTemplate. *@
+
+<span class="cursor-pointer d-inline-flex align-center" @onclick="@(() => Grid.ToggleSortAsync(EffectiveName))">
+    <MudText Typo="Typo.button">@Title</MudText>
+    @if (Grid.SortBy == EffectiveName)
+    {
+        <MudIcon Icon="@(Grid.SortDescending ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)"
+                 Size="Size.Small" Class="ml-1" />
+    }
+</span>
+
+@code {
+    [CascadingParameter]
+    public IVirtualisedSortable Grid { get; set; } = null!;
+
+    /// <summary>The header text shown to the reader.</summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The server-side sort key this column sorts by. Defaults to <see cref="Title"/>.</summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    private string EffectiveName => Name ?? Title;
+}

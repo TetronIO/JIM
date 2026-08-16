@@ -47,5 +47,169 @@ window.jimInterop = {
         } catch {
             return false;
         }
+    },
+    // Rewrites the current URL's query string in place, without adding a history entry and without telling
+    // Blazor. A virtualised list keeps its search, sort and scroll position in the URL so a refresh or a shared
+    // link lands where the reader left off, and it updates that URL as the reader scrolls. NavigationManager
+    // cannot be used for this: it raises a navigation, which re-runs the page's OnParametersSetAsync and so its
+    // whole database load, on every scroll. replaceState is also the right history semantics here, because
+    // scrolling a list is not somewhere the back button should return you to.
+    replaceQueryString: function (query) {
+        var url = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+        window.history.replaceState(window.history.state, '', url);
+    }
+};
+
+// Scroll tracking for virtualised lists. Kept apart from jimInterop because these helpers hold per-element
+// state (a listener and its debounce timer) that has to be released when the component goes away.
+window.jimVirtualList = {
+    _observed: {},
+    _fitted: {},
+    // Gives a virtualised list's scroll container a height CEILING so a long list ends with the page footer
+    // at the bottom of the viewport, with the same breathing room below the footer as it has above it (its own
+    // top margin), and keeps that true as the window resizes. It is a ceiling, not a fixed height: a list of a
+    // few rows collapses to its content like an ordinary table, with the footer following it up the page.
+    // Measuring where the footer actually lands, rather than each page carrying a hand-tuned constant, is what
+    // makes long lists end in the same place whatever header, filter and breadcrumb chrome sits above the grid.
+    fit: function (selector) {
+        window.jimVirtualList.unfit(selector);
+        var element = document.querySelector(selector);
+        if (!element) return false;
+
+        var entry = { element: element, timer: null };
+        entry.apply = function () {
+            var footer = document.querySelector('.jim-page-footer');
+            // A dialog is its own window onto the page: it is positioned against the viewport, scrolls its own
+            // body, and the page footer behind it describes geometry the dialog has no relationship with. A grid
+            // in one takes a readable share of the viewport instead of measuring anything.
+            var inDialog = !!element.closest('.mud-dialog');
+            // A grid that starts below the fold cannot be sized against a viewport it is not in: the measurement
+            // below goes to nothing and the grid collapses to its floor. Such a grid takes the same readable
+            // share, which is what the reader sees once they scroll to it.
+            var readableShare = Math.min(480, Math.round(window.innerHeight * 0.6));
+            // A couple of passes, because changing the ceiling can re-wrap content and move the measurements.
+            for (var i = 0; i < 3; i++) {
+                var gap = footer ? parseFloat(window.getComputedStyle(footer).marginTop) || 20 : 20;
+                var rect = element.getBoundingClientRect();
+                var ceiling;
+                if (inDialog) {
+                    ceiling = readableShare;
+                } else {
+                    // Everything between the container's bottom edge and the footer's bottom edge moves with the
+                    // container, so their distance is the same however tall the container is; the ceiling is what
+                    // remains of the viewport after the chrome above the container and that fixed tail below it.
+                    // Measured in viewport coordinates throughout: getBoundingClientRect is already viewport
+                    // relative, so adding the page's scroll offset (as this once did) shrank every grid on a page
+                    // long enough to scroll, which is every page holding a grid among other content.
+                    var below = footer ? footer.getBoundingClientRect().bottom - rect.bottom : 0;
+                    ceiling = Math.round(window.innerHeight - Math.max(0, rect.top) - below - gap);
+                    if (ceiling < 240) ceiling = readableShare;
+                }
+                var current = parseFloat(element.style.maxHeight) || 0;
+                if (Math.abs(ceiling - current) < 1) break;
+                element.style.maxHeight = ceiling + 'px';
+            }
+        };
+        entry.handler = function () {
+            if (entry.timer) window.clearTimeout(entry.timer);
+            entry.timer = window.setTimeout(entry.apply, 100);
+        };
+
+        entry.apply();
+        window.addEventListener('resize', entry.handler);
+        // The page keeps moving after the grid appears: filter summaries and alerts render above it as their
+        // data arrives, and a one-shot measurement goes stale the moment they do. Watching the document's own
+        // height re-fits whenever anything moves the footer; this converges rather than looping, because a fit
+        // that already holds computes a delta of zero and writes nothing.
+        entry.observer = new ResizeObserver(entry.handler);
+        entry.observer.observe(document.body);
+        window.jimVirtualList._fitted[selector] = entry;
+        return true;
+    },
+    // Releases the resize listener fit registered. Deliberately separate from stop(): observe() replaces the
+    // scroll listener via stop() while the fit must live on, so the two lifecycles cannot share a teardown.
+    unfit: function (selector) {
+        var entry = window.jimVirtualList._fitted[selector];
+        if (!entry) return;
+
+        if (entry.timer) window.clearTimeout(entry.timer);
+        window.removeEventListener('resize', entry.handler);
+        if (entry.observer) entry.observer.disconnect();
+        delete window.jimVirtualList._fitted[selector];
+    },
+    // The height a rendered row actually occupies, which is what an index has to be derived from. The grid tells
+    // the virtualiser an ItemSize, but that is an estimate: padding, a chip, a two-line cell and the theme's own
+    // spacing all land on top of it, and a row set out at 50 renders at 56. Deriving an index from the estimate
+    // put every deep link and every restored position out by the difference (a twelfth of the list, and growing
+    // with how far down it was). Measured off a real row, falling back to the estimate before any row exists.
+    measuredRowHeight: function (element, estimate) {
+        var rows = element.querySelectorAll('tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var height = rows[i].getBoundingClientRect().height;
+            // A virtualiser brackets its rows with spacer rows sized to the scroll area, so anything absurdly
+            // tall is the spacer rather than a row; anything at zero is not laid out yet.
+            if (height > 8 && height < 400) return height;
+        }
+        return estimate;
+    },
+    // Reports the index of the first visible row back to .NET as the reader scrolls, debounced so a flick
+    // through a long list produces one call rather than hundreds. Every row is the same height, which is what
+    // makes an index derivable from scrollTop at all; see measuredRowHeight for where that height comes from.
+    observe: function (selector, dotNetRef, rowHeight, debounceMs) {
+        window.jimVirtualList.stop(selector);
+        var element = document.querySelector(selector);
+        if (!element || !rowHeight) return false;
+
+        var entry = { element: element, timer: null };
+        entry.handler = function () {
+            if (entry.timer) window.clearTimeout(entry.timer);
+            entry.timer = window.setTimeout(function () {
+                var row = Math.max(0, Math.round(element.scrollTop / window.jimVirtualList.measuredRowHeight(element, rowHeight)));
+                // The circuit can go away between the scroll and the timer firing; there is nothing to recover
+                // from that, and throwing here would surface in the browser console for no one's benefit.
+                dotNetRef.invokeMethodAsync('OnFirstVisibleRowChanged', row).catch(function () { });
+            }, debounceMs);
+        };
+
+        element.addEventListener('scroll', entry.handler, { passive: true });
+        window.jimVirtualList._observed[selector] = entry;
+        return true;
+    },
+    // Scrolls to a row once that row exists to scroll to, reporting whether it got there.
+    //
+    // The waiting is the point. A virtualiser sizes its scroll area from the total row count, which arrives with
+    // the first window of data, so at the moment a restoring page asks for row 3868 the container is either absent
+    // or only a screen tall, and setting scrollTop is silently clamped to the current bottom. Blazor gives no
+    // convenient re-render to retry on either: the grid loading its data does not re-render the page hosting it.
+    // Polling here keeps that patience next to the DOM state it is waiting for, and gives the caller one definitive
+    // answer instead of an attempt it has to second-guess.
+    //
+    // Giving up is a real outcome, not a failure to handle: a link may name a row that no longer exists because the
+    // match set has shrunk since it was shared, and the reader should land at the top rather than nowhere.
+    scrollToRow: async function (selector, row, rowHeight, timeoutMs) {
+        if (!rowHeight) return false;
+
+        var deadline = Date.now() + (timeoutMs || 5000);
+
+        for (;;) {
+            var element = document.querySelector(selector);
+            // Measured per attempt, not once: the first attempts run before any row is laid out, when there is
+            // nothing to measure and the estimate is all there is.
+            var target = element ? row * window.jimVirtualList.measuredRowHeight(element, rowHeight) : 0;
+            if (element && target <= element.scrollHeight - element.clientHeight) {
+                element.scrollTop = target;
+                return true;
+            }
+            if (Date.now() >= deadline) return false;
+            await new Promise(function (resolve) { window.setTimeout(resolve, 100); });
+        }
+    },
+    stop: function (selector) {
+        var entry = window.jimVirtualList._observed[selector];
+        if (!entry) return;
+
+        if (entry.timer) window.clearTimeout(entry.timer);
+        entry.element.removeEventListener('scroll', entry.handler);
+        delete window.jimVirtualList._observed[selector];
     }
 };

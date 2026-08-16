@@ -52,7 +52,10 @@
     *@
 
     <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-        <MudNavLink Href="/activity" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Activity</MudNavLink>
+        @* Prefix matching keeps this link lit on the Activity detail pages (/activity/{id}, /activity/item/{id}),
+           but /activity/mine is also under that prefix and belongs to the link below; flip to exact matching
+           while there so only My Activity is highlighted. *@
+        <MudNavLink Href="/activity" Match="@(IsOnMyActivity ? NavLinkMatch.All : NavLinkMatch.Prefix)" Class="jim-nav-child">Activity</MudNavLink>
         <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
     </MudNavGroup>
 
@@ -218,6 +221,9 @@
 
         StateHasChanged();
     }
+
+    // _currentUrl is base-relative and lowercased, and may carry a query string, so a prefix test is the right shape.
+    private bool IsOnMyActivity => _currentUrl.StartsWith("activity/mine");
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {

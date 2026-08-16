@@ -1507,34 +1507,17 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogDebug("Getting pending deletions summary");
 
-        // Get all pending deletions to calculate summary
-        var result = await _application.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
-            page: 1,
-            pageSize: 100,
-            objectTypeId: null);
-
-        var now = DateTime.UtcNow;
-        var allPending = result.Results;
-
-        // Get total count (may be more than 100)
-        var totalCount = await _application.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
-
-        // Calculate status counts
-        var deprovisioningCount = allPending.Count(m => m.ConnectedSystemObjects.Any());
-        var readyForDeletionCount = allPending.Count(m =>
-            !m.ConnectedSystemObjects.Any() &&
-            (!m.DeletionEligibleDate.HasValue || m.DeletionEligibleDate.Value <= now));
-        var awaitingGracePeriodCount = allPending.Count(m =>
-            !m.ConnectedSystemObjects.Any() &&
-            m.DeletionEligibleDate.HasValue &&
-            m.DeletionEligibleDate.Value > now);
+        // Counted across the whole match set by the server. This previously read the first hundred pending
+        // deletions and counted the states within them, so every figure but the total under-reported the moment
+        // more than a hundred objects were awaiting deletion.
+        var counts = await _application.Metaverse.GetMetaverseObjectsPendingDeletionStateCountsAsync();
 
         var summary = new PendingDeletionSummary
         {
-            TotalCount = totalCount,
-            DeprovisioningCount = deprovisioningCount,
-            AwaitingGracePeriodCount = awaitingGracePeriodCount,
-            ReadyForDeletionCount = readyForDeletionCount
+            TotalCount = counts.Total,
+            DeprovisioningCount = counts.Deprovisioning,
+            AwaitingGracePeriodCount = counts.AwaitingGracePeriod,
+            ReadyForDeletionCount = counts.ReadyForDeletion
         };
 
         return Ok(summary);
