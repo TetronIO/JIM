@@ -108,6 +108,27 @@ public class LdapConnectorExportObjectClassTests
         }
     }
 
+    /// <summary>
+    /// Delta convergence: an entry gains an auxiliary class in the same modify that first flows one of its
+    /// attributes, as an add rather than a replace. Replacing would restate the entry's whole class membership from
+    /// what JIM believes it to be, and JIM's belief is only as fresh as its last import.
+    /// </summary>
+    [Test]
+    public void BuildModifyRequests_ForAClassBeingAdded_SendsItAsAnAddNotAReplace()
+    {
+        var pendingExport = PendingExportWithClasses("posixAccount");
+        pendingExport.ChangeType = PendingExportChangeType.Update;
+
+        var modifications = LdapConnectorExport.ConsolidateModifications(pendingExport, "uid=jbloggs,ou=People,dc=example,dc=org");
+
+        var objectClass = modifications.Single(m => m.AttributeName == "objectClass");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectClass.Operation, Is.EqualTo(DirectoryAttributeOperation.Add));
+            Assert.That(objectClass.AttributeChanges.Select(change => change.StringValue), Is.EqualTo(new[] { "posixAccount" }));
+        }
+    }
+
     #region Fixtures
 
     private static string[] ObjectClassValues(AddRequest addRequest)

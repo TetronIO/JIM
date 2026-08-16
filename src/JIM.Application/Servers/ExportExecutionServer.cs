@@ -3,6 +3,7 @@
 
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
+using JIM.Application.Staging;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -550,7 +551,7 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken, connectorProgress);
+                                exportResults = await ExportBatchAsync(connector, connectedSystem, immediateExports, cancellationToken, connectorProgress);
                             }
 
                             // Process results
@@ -872,7 +873,7 @@ public class ExportExecutionServer
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, passTotal,
+                await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, deferredBatches, result, cancellationToken, progressCallback, passTotal,
                     connectedSystem.EffectiveInitialPasswordTimeToLive);
             }
         }
@@ -937,6 +938,7 @@ public class ExportExecutionServer
     /// </param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
+        ConnectedSystem connectedSystem,
         List<List<PendingExport>> batches,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
@@ -987,7 +989,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                exportResults = await connector.ExportAsync(batch, cancellationToken, connectorProgress);
+                exportResults = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -1106,7 +1108,7 @@ public class ExportExecutionServer
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
                     // Execute batch via connector
-                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken, connectorProgress);
+                    var exportResults = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
@@ -1256,6 +1258,58 @@ public class ExportExecutionServer
     private static async Task MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
     {
         await repository.MarkPendingExportsAsExecutingAsync(batch);
+    }
+
+    /// <summary>
+    /// Sends a batch to the Connector, holding back any export that would leave an object invalid at the Connected
+    /// System and failing it with the attributes named. Results come back in the batch's own order either way.
+    /// </summary>
+    /// <remarks>
+    /// Refusing here rather than letting the Connected System reject the change gives an administrator something
+    /// they can act on: "posixAccount requires gidNumber" rather than whichever error the directory chose to
+    /// return. It is the same reasoning as the managed-scope refusal in the LDAP Connector.
+    /// </remarks>
+    internal static async Task<List<ConnectedSystemExportResult>> ExportBatchAsync(
+        IConnectorExportUsingCalls connector,
+        ConnectedSystem connectedSystem,
+        List<PendingExport> batch,
+        CancellationToken cancellationToken,
+        IConnectorProgress connectorProgress)
+    {
+        var refusals = new Dictionary<int, ConnectedSystemExportResult>();
+        var sendable = new List<PendingExport>();
+
+        for (var i = 0; i < batch.Count; i++)
+        {
+            var refusal = ClassMembershipValidator.Check(batch[i], connectedSystem);
+            if (refusal == null)
+                sendable.Add(batch[i]);
+            else
+                refusals[i] = refusal;
+        }
+
+        if (refusals.Count == 0)
+            return await connector.ExportAsync(batch, cancellationToken, connectorProgress);
+
+        Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' because a class being added has required attributes with no value.",
+            refusals.Count, batch.Count, connectedSystem.Name);
+
+        var sentResults = sendable.Count > 0
+            ? await connector.ExportAsync(sendable, cancellationToken, connectorProgress)
+            : [];
+
+        // Rebuild in the batch's order, because the caller pairs results with exports by index.
+        var results = new List<ConnectedSystemExportResult>(batch.Count);
+        var sentIndex = 0;
+        for (var i = 0; i < batch.Count; i++)
+        {
+            if (refusals.TryGetValue(i, out var refusal))
+                results.Add(refusal);
+            else
+                results.Add(sentIndex < sentResults.Count ? sentResults[sentIndex++] : ConnectedSystemExportResult.Succeeded());
+        }
+
+        return results;
     }
 
     /// <summary>
