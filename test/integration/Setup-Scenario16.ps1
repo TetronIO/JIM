@@ -358,6 +358,29 @@ foreach ($typeName in $expectedTypes) {
     }
 
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $system.id -ObjectTypeId $objectType.id -AttributeUpdates $attributeUpdates | Out-Null
+
+    # Oracle has one numeric type, so a column's declared precision is all JIM has to go on. It infers the
+    # narrowest type guaranteed to hold every permitted value, which for NUMBER(10) is a 64-bit whole
+    # number, and for NUMBER(19) a decimal. This estate knows more than the declaration does: these columns
+    # hold an employee identifier and a headcount well inside a smaller type, so the administrator says so.
+    # That is the practice we recommend, and it is what lets these columns flow into the built-in numeric
+    # Metaverse Attributes without an expression (#1354). Set before any Synchronisation Rule references
+    # them and before any values exist, which is when JIM will still accept it.
+    if ($Provider -eq "Oracle") {
+        foreach ($override in @(
+            @{ Column = 'EMPLOYEE_ID'; Type = 'Integer'    }
+            @{ Column = 'HEADCOUNT';   Type = 'LongNumber' }
+        )) {
+            $attribute = $objectType.attributes | Where-Object { $_.name -eq $override.Column } | Select-Object -First 1
+            if ($attribute) {
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId $system.id -ObjectTypeId $objectType.id `
+                    -AttributeId $attribute.id -Type $override.Type -ErrorAction Stop | Out-Null
+                $attribute.type = if ($override.Type -eq 'Integer') { 'Number' } else { $override.Type }
+                Write-Host "    Recorded $($override.Column) as $($override.Type), which its NUMBER declaration understates" -ForegroundColor Gray
+            }
+        }
+    }
+
     $selectedTypes[$typeName] = $objectType
     Write-Host "  OK $typeName ($($objectType.attributes.Count) attributes, anchor $anchor)" -ForegroundColor Green
 }
@@ -416,18 +439,15 @@ function Add-Scenario16MetaverseAttribute {
     return $attribute
 }
 
-# Oracle has no distinct integer widths: every whole-number column is a NUMBER, which the Connector maps
-# to Decimal, so one column is LongNumber on SQL Server and Decimal on Oracle. A Metaverse Attribute
-# carries a single type and the mapping validator refuses a mismatch, so a whole-number attribute cannot
-# be shared between the two providers; each gets its own, typed to what that provider's schema discovery
-# actually yields. FTE is decimal(9,4) on SQL Server and NUMBER(9,4) on Oracle, both of which map to
-# Decimal, so it stays shared.
-$anchorNumberType = if ($Provider -eq "Oracle") { 'Decimal' } else { 'Integer'    }
-$bigNumberType    = if ($Provider -eq "Oracle") { 'Decimal' } else { 'LongNumber' }
-
-$mvFteAttribute        = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE" -Type Decimal
-$mvHeadcountAttribute  = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount ($($config.DisplayName))"   -Type $bigNumberType
-$mvEmployeeIdAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Employee Id ($($config.DisplayName))" -Type $anchorNumberType
+# Both providers share these, because both now present the same JIM types for the same columns: SQL
+# Server's named types say so outright, and Oracle's are recorded by the administrator in Step 9 where
+# its single NUMBER type understates them. An earlier revision gave each provider its own attributes to
+# work around that, which was the wrong example to ship: using the built-in Metaverse Attributes wherever
+# they fit is the practice we recommend, and a custom attribute created only to dodge a type is one no
+# other Connected System will ever match on. EMPLOYEE_ID therefore flows into the built-in
+# 'Employee Number' on both providers.
+$mvFteAttribute       = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE"       -Type Decimal
+$mvHeadcountAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount" -Type LongNumber
 
 $mvAttributes = @(Get-JIMMetaverseAttribute)
 
@@ -489,7 +509,7 @@ $importRule = New-JIMSyncRule `
 $importMappings = @(
     @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Employee ID'         }
     @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Account Name'        }
-    @{ Cs = 'EMPLOYEE_ID';         Mv = $mvEmployeeIdAttribute.name }
+    @{ Cs = 'EMPLOYEE_ID';         Mv = 'Employee Number'     }
     @{ Cs = 'FIRST_NAME';          Mv = 'First Name'          }
     @{ Cs = 'LAST_NAME';           Mv = 'Last Name'           }
     @{ Cs = 'EMAIL';               Mv = 'Email'               }
@@ -692,11 +712,10 @@ return @{
         ZonelessDate    = 'Employee Start Date'
         OffsetDate      = 'Employee End Date'
         LocalZoneDate   = 'Account Expires'
-        # Named for their column rather than their type: the whole-number ones are LongNumber on
-        # SQL Server and Decimal on Oracle, so a type-shaped key would be wrong on one provider.
+        # Named for their column rather than their type, so a row reads what it is asserting on.
         Fte             = $mvFteAttribute.name
         Headcount       = $mvHeadcountAttribute.name
-        EmployeeId      = $mvEmployeeIdAttribute.name
+        EmployeeId      = 'Employee Number'
         MultiValued     = 'Other Telephones'
     }
 }

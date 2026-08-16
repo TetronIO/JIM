@@ -233,7 +233,7 @@ INSERT INTO hr.EMPLOYEES
      HEADCOUNT, FTE, IS_ACTIVE, START_DATE, LAST_MODIFIED, HIRED_AT, EMPLOYEE_GUID, PHOTO)
 SELECT
     n,
-    CONCAT('E', RIGHT(CONCAT('00000000', CAST(n AS varchar(20))), 8)),
+    CONCAT('$($config.EmployeeNumberPrefix)', RIGHT(CONCAT('00000000', CAST(n AS varchar(20))), 8)),
     CHOOSE((n % 8) + 1, 'Ada', 'Bram', 'Cleo', 'Dara', 'Emil', 'Fern', 'Gita', 'Hugo'),
     CHOOSE((n % 6) + 1, 'Ashcroft', 'Brandt', 'Calder', 'Duquesne', 'Ellery', 'Fairhurst'),
     CONCAT('user', CAST(n AS varchar(20)), '@panoply.local'),
@@ -457,7 +457,7 @@ INSERT INTO EMPLOYEES
      HEADCOUNT, FTE, IS_ACTIVE, START_DATE, LAST_MODIFIED, HIRED_AT, HIRED_AT_LOCAL, EMPLOYEE_GUID, PHOTO)
 SELECT
     n,
-    'E' || LPAD(TO_CHAR(n), 8, '0'),
+    '$($config.EmployeeNumberPrefix)' || LPAD(TO_CHAR(n), 8, '0'),
     DECODE(MOD(n, 8), 0, 'Ada', 1, 'Bram', 2, 'Cleo', 3, 'Dara', 4, 'Emil', 5, 'Fern', 6, 'Gita', 'Hugo'),
     DECODE(MOD(n, 6), 0, 'Ashcroft', 1, 'Brandt', 2, 'Calder', 3, 'Duquesne', 4, 'Ellery', 'Fairhurst'),
     'user' || TO_CHAR(n) || '@panoply.local',

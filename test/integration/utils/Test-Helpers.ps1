@@ -569,6 +569,15 @@ function Get-DatabaseConfig {
             SqlCommand          = @("/opt/mssql-tools18/bin/sqlcmd", "-C", "-b", "-S", "localhost", "-U", "sa", "-P", $password)
             ScriptArgument      = "-i"
 
+            # The two providers seed the same row numbers, so without a distinct natural key they would
+            # describe the same people. The Object Matching Rule joins on EMPLOYEE_NUMBER, so identical
+            # values had both Connected Systems joining to one set of Metaverse Objects: whichever
+            # provider's Synchronisation Rule won Attribute Priority decided every shared attribute, and
+            # a row asserting on what the other provider imported read back the wrong system's value.
+            # Only the prefix differs, so every other seeded value stays identical across providers and
+            # comparable between them.
+            EmployeeNumberPrefix = "S"
+
             # Dialect spellings for the column types the matrix exercises. Kept here so the seeder's
             # table definitions differ in one place rather than throughout.
             Types = @{
@@ -616,6 +625,9 @@ function Get-DatabaseConfig {
             # made the original Oracle healthcheck fail on every interval.
             SqlCommand          = @("sqlplus", "-s", "system/`"$password`"@//localhost:1521/FREEPDB1")
             ScriptArgument      = "@"
+
+            # See the SQL Server config above for why the providers seed different natural keys.
+            EmployeeNumberPrefix = "O"
 
             Types = @{
                 Anchor          = "NUMBER(10)"
