@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -10,9 +10,10 @@ namespace JIM.PostgresData.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Defaults to false, which is the correct reading of every existing row: until now a data type
-            // could only be whatever schema discovery inferred, so nothing already stored was chosen by an
-            // administrator. A refresh therefore keeps refreshing every existing attribute exactly as before.
+            // Defaults to false, which is the correct reading of every existing row: until
+            // now a data type could only be whatever schema discovery inferred, so nothing
+            // already stored was chosen by an administrator. A refresh therefore keeps
+            // refreshing every existing attribute exactly as before.
             migrationBuilder.AddColumn<bool>(
                 name: "TypeSetByAdministrator",
                 table: "ConnectedSystemAttributes",
