@@ -39,9 +39,9 @@
       },
       "System.DirectoryServices.Protocols": {
         "type": "Direct",
-        "requested": "[10.0.10, )",
-        "resolved": "10.0.10",
-        "contentHash": "VQdfESaky3eXlvEuvtBndmZjOt65g+Ah6/0j39MPgPJ3gkbGuURlTFDRq0Y2uX64z5qVEVe1Ln6B4a06+vIzTQ=="
+        "requested": "[10.0.11, )",
+        "resolved": "10.0.11",
+        "contentHash": "Q4DEPB0wfAMAM6zjCjioFQoDZGC6uCeAZMU30sdjMgVtKbSuSBjhASVlxVOTYmQKCdUqZInnDwZ3W/ZTWB4m3Q=="
       },
       "Microsoft.Bcl.Cryptography": {
         "type": "Transitive",
