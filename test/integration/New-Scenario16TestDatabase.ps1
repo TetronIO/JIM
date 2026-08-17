@@ -509,6 +509,67 @@ EXIT SUCCESS
 "@
 }
 
+# The export-target tables are written by JIM, not by the seeder, so the seed hash says nothing about
+# their state: a preserved database volume carries one run's exported rows into the next, where a fresh
+# JIM stages Creates for people who already have rows. Natural-key inserts then die on the primary key,
+# database-generated keys duplicate silently, and every export row of the matrix fails against residue
+# rather than against the code under test. These scripts run on the hash-match path, so the expensive
+# source seed is still skipped while JIM's own targets always start empty. Identity counters are
+# deliberately NOT restarted: continuing from a higher value never overlaps the seeded EMPLOYEE_ID
+# range, which is all the seed's START WITH 1,000,000 exists to guarantee, and the matrix reads
+# generated keys back from the database rather than asserting absolute values.
+
+function New-SqlServerExportTargetResetScript {
+    return @"
+SET NOCOUNT ON;
+GO
+
+USE JIMTEST;
+GO
+
+DELETE FROM hr.APP_USER_ROLES;
+DELETE FROM hr.APP_USERS;
+DELETE FROM hr.APP_ACCOUNTS_NATURAL;
+DELETE FROM hr.APP_USERS_CHANGE_LOG;
+DELETE FROM hr.APP_ACCOUNTS_CHANGE_LOG;
+GO
+
+SELECT 'RESET' AS RESULT;
+GO
+"@
+}
+
+function New-OracleExportTargetResetScript {
+    return @"
+WHENEVER SQLERROR EXIT FAILURE
+SET DEFINE OFF
+SET FEEDBACK OFF
+
+ALTER SESSION SET CURRENT_SCHEMA = JIMTEST;
+
+DELETE FROM APP_USER_ROLES;
+DELETE FROM APP_USERS;
+DELETE FROM APP_ACCOUNTS_NATURAL;
+DELETE FROM GUID_KEYED_PEOPLE;
+DELETE FROM APP_USERS_CHANGE_LOG;
+DELETE FROM APP_ACCOUNTS_CHANGE_LOG;
+DELETE FROM GUID_PEOPLE_CHANGE_LOG;
+
+-- The three rows whose keys the database authors, restored exactly as the main seed writes them, so an
+-- import of a RAW(16) anchor has something to read before any export has run.
+INSERT INTO GUID_KEYED_PEOPLE (FULL_NAME, DEPARTMENT)
+SELECT 'Guid Person ' || TO_CHAR(n), 'Research' FROM (SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= 3)
+/
+
+COMMIT
+/
+
+SET FEEDBACK ON
+SELECT 'RESET' AS RESULT FROM DUAL;
+EXIT SUCCESS
+"@
+}
+
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
 # Execution
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -646,7 +707,14 @@ Write-Host "  Seed hash:  $seedHash" -ForegroundColor Gray
 if (-not $Force) {
     $existingHash = Get-SeededHash -Config $config
     if ($existingHash -eq $seedHash) {
-        Write-Host "  OK Database already matches this seed; skipping (pass -Force to re-seed)" -ForegroundColor Green
+        # The hash covers the source data alone. The export targets hold whatever JIM wrote last run,
+        # so they are reset here even when the seed itself is skipped; see the reset scripts above.
+        Write-Host "  OK Source data already matches this seed; resetting export targets only (pass -Force to re-seed)" -ForegroundColor Green
+        $resetScript = if ($Provider -eq "SqlServer") { New-SqlServerExportTargetResetScript } else { New-OracleExportTargetResetScript }
+        $resetResult = Invoke-ContainerSqlScript -Config $config -ScriptText $resetScript -ScriptName "jim-scenario16-reset-$($Provider.ToLowerInvariant()).sql"
+        if ($resetResult -notmatch 'RESET') {
+            throw "Resetting $($config.DisplayName)'s export targets produced no completion marker. Output:`n$resetResult"
+        }
         return @{ Provider = $Provider; RowCount = $RowCount; SeedHash = $seedHash; Reseeded = $false }
     }
     if ($existingHash) {
