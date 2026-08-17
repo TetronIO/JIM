@@ -148,4 +148,7 @@ FROM ${OPENAPI_STAGE} AS final-source
 FROM base AS final
 WORKDIR /app
 COPY --from=final-source /app/publish .
+# Third-party licence texts the image is bound to carry (the Oracle managed driver in particular);
+# see third-party-notices/README.md.
+COPY ["third-party-notices/", "./third-party-notices/"]
 ENTRYPOINT ["dotnet", "JIM.Web.dll"]

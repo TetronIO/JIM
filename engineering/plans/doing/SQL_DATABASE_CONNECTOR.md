@@ -1,8 +1,8 @@
 # SQL Database Connector: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phases 1-6 and 8 complete; Phase 7 matrix at 29 of 36 cells, the Delta cells and the 500,000-row import outstanding)
 - **Issue:** [#170](https://github.com/TetronIO/JIM/issues/170)
-- **PRD:** [PRD_SQL_DATABASE_CONNECTOR.md](../prd/doing/PRD_SQL_DATABASE_CONNECTOR.md)
+- **PRD:** [PRD_SQL_DATABASE_CONNECTOR.md](../../prd/doing/PRD_SQL_DATABASE_CONNECTOR.md)
 
 ## Overview
 
@@ -58,14 +58,14 @@ src/JIM.Connectors/Sql/
 
 Test-driven throughout: each phase writes failing tests first, in `test/JIM.Worker.Tests/Connectors/` following the LDAP/File naming conventions (`MethodName_Scenario_ExpectedResult`).
 
-### Phase 1: Provider abstraction and type mapping
+### Phase 1: Provider abstraction and type mapping ✅
 
 - Add `Microsoft.Data.SqlClient` 7.0.2 and `Oracle.ManagedDataAccess.Core` 23.26.300 to `src/JIM.Connectors/JIM.Connectors.csproj` (exact versions); `dotnet restore JIM.sln --force-evaluate`; review the lock-file diff (ripples into every downstream project's `packages.lock.json`); commit lock files with the version change. Never add `Microsoft.Data.SqlClient.Extensions.Azure`.
 - `ISqlProvider`, `SqlServerProvider`, `OracleProvider`: connection-string construction from discrete settings, identifier quoting, parameter prefixing, keyset-pagination SQL, schema-catalogue queries, generated-key retrieval strategy, trivial-connectivity query.
 - `SqlTypeMapper` implementing the PRD type-mapping table, including the Oracle `NUMBER(1)`-to-Boolean opt-in, `RAW(16)` GUID handling via `IdentifierParser.FromRfc4122Bytes` (big-endian, per `engineering/plans/doing/GUID_UUID_HANDLING.md`), and FLOAT/REAL to Decimal.
 - Unit tests: dialect differences per provider, type-mapping matrix, Decimal canonical round-trip.
 
-### Phase 2: Connector skeleton, settings, validation, registration
+### Phase 2: Connector skeleton, settings, validation, registration ✅
 
 - `SqlConnector` with capability declarations and Connectivity settings per PRD requirements 1-2: Database Type drop-down, Host, Port, database name vs Oracle service name/SID via conditional settings, Username, Password (`StringEncrypted`), TLS options, connection timeout, and the required zoneless time-zone setting with a visible UTC default (`DefaultStringValue`). Do not name any setting "Mode" (File Connector semantics are keyed to that literal in `ConnectedSystemExtensions`).
 - `ValidateSettingValues`: LDAP-thin body; live connectivity test (open, trivial query per provider, close) in try/finally; failure results carry `ErrorMessage` + `Exception`.
@@ -73,13 +73,13 @@ Test-driven throughout: each phase writes failing tests first, in `test/JIM.Work
 - Registration: `ConnectorFactory.CreateConnectorInstance` branch; `SeedingServer.SeedAsync` Connector Definitions region and `SyncBuiltInConnectorDefinitionsAsync` list; invert `Create_SqlConnectorName_ThrowsNotSupportedException` to `ReturnsSqlConnector`; add `SqlConnectorPhaseConformanceTests : ConnectorPhaseConformanceTests`.
 - `SqlConnectorPhases` + `GetPhases()` per run type ("Executing query", "Fetching rows", "Writing rows" vocabulary).
 
-### Phase 3: Schema discovery and object type configuration
+### Phase 3: Schema discovery and object type configuration ✅
 
 - Design decision (recommended approach): object type definitions are richer than the flat settings framework expresses (N object types, each with a primary table/view or admin-supplied `SELECT`, anchor column(s), and N related tables with join conditions). Represent them as a structured JSON document in a `Text` setting in the Schema category ("Object Types"), parsed into `SqlObjectTypeConfiguration`, validated in `ValidateSettingValues` with precise error messages, and documented with copy-paste examples. This is privileged administrator input per the PRD trust model. Alternative (rejected for v1): extending the settings framework with repeating groups; disproportionate for one connector.
 - `GetSchemaAsync`: enumerate tables/views and columns via provider catalogue queries; apply the type mapper; emit one `ConnectorSchemaObjectType` per configured object type with primary-key-derived `RecommendedExternalIdAttribute`; surface related-table value columns as multi-valued attributes; explicit per-column Reference designation from configuration, never inferred. Where declared foreign-key constraints match a configured object type's anchor, surface them as pre-populated Reference suggestions for the administrator to confirm (PRD requirement 6).
 - Unit tests against mocked `DbConnection`/provider fakes; catalogue query correctness verified later by integration tests.
 
-### Phase 4: Full import
+### Phase 4: Full import ✅
 
 - `SqlConnectorImport`: keyset pagination on the anchor (never OFFSET) honouring `ConnectedSystemRunProfile.PageSize`, one `ConnectedSystemPaginationToken` per object type carrying the last-seen anchor (`StringValue`); empty token list terminates.
 - Per page: materialise rows, gather multi-valued attributes from related tables (single batched query per page, keyed on the page's anchors), emit typed attribute values, references as anchor strings in `ReferenceValues`.
@@ -87,14 +87,14 @@ Test-driven throughout: each phase writes failing tests first, in `test/JIM.Work
 - Progress: `EnterPhaseAsync` per object type/page; `ReportExpectedObjectCountAsync` from a cheap `COUNT(*)` on the primary table/view (PRD requirement 21: databases can state result-set sizes cheaply, so a real percentage and time remaining are mandatory, not optional); `ReportObjectsReadAsync` where one call drains multiple provider pages; `ReportAsync` for detail the counts cannot carry.
 - Unit tests: paging termination, related-table gathering, type fidelity, error classification (`ConnectedSystemImportObjectError`) for unparseable values.
 
-### Phase 5: Delta import
+### Phase 5: Delta import ✅
 
 - Two modes per the PRD (change-log table with deletes; watermark column create/update-only), selected per Connected System via an extensible drop-down (SQL Server Change Tracking is a fast-follow member).
 - `SqlConnectorWatermark` serialised to `ConnectedSystemImportResult.PersistedConnectorData` on the first page, following the `LdapConnectorRootDse` round-trip rules exactly (original watermark read on every page; new value saved by the Worker after the run completes).
 - Missing/undeserialisable watermark: `CannotPerformDeltaImportException`, or fallback to full import with `WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport` (mirrors `LdapConnectorImportDeltaFallbackTests` coverage).
 - Change-log mode emits explicit `Create`/`Update`/`Delete` change types beyond the persisted watermark and advances it transactionally with the read.
 
-### Phase 6: Export
+### Phase 6: Export ✅
 
 - `SqlConnectorExport`: per-object `DbTransaction` spanning the parent row and related-table maintenance; parameterised statements only, identifiers quoted through the provider; provider-specific generated-key retrieval (`OUTPUT INSERTED.*` / `RETURNING ... INTO`) returned as `ConnectedSystemExportResult.Succeeded(externalId)`.
 - Positional result contract; per-object failures return `Failed(...)` without poisoning the batch, feeding the existing retry/backoff machinery.
@@ -110,12 +110,14 @@ Test-driven throughout: each phase writes failing tests first, in `test/JIM.Work
 - Test strategy (PRD, decided 2026-08-02): this matrix scenario is the correctness gate; cross-technology regression breadth follows via the road-mapped Multi-Source Aggregation scenario once the matrix is green. Databases are not retrofitted into scenarios 1-14; if regressions slip past both vehicles, parameterising Scenario 1's HR source (CSV vs SQL) is the one retrofit worth considering.
 - Update `engineering/INTEGRATION_TESTING.md` (Phase 2 sections, port tables, Oracle start-up troubleshooting) and `test/integration/README.md`.
 
-### Phase 8: Documentation and release polish
+### Phase 8: Documentation and release polish ✅
 
 - `docs/connectors/jim-sql-connector.md`: per-provider configuration, object type configuration examples, type mapping, security/least-privilege guidance, the Oracle Free Distribution licence note, and the wider-database-support callout inviting feedback via the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas).
 - Dedicated delta import setup pages (change-log table; watermark column) linked from the connector page, each covering setup end to end including the watermark mode's documented no-delete semantics.
 - Ship a copy of Oracle's LICENSE.txt with the distribution (third-party notices) per the governance record.
 - Nav/index updates, `docs/concepts/connected-systems.md` and roadmap rows, `JIM_AI_ASSISTANT_CONTEXT.md` connector table + version bump, CHANGELOG entry, PRD to `done/` on issue closure.
+
+Delivered 2026-08-17: `docs/connectors/jim-sql-connector.md` plus the two delta-import setup pages, `third-party-notices/` (the Oracle terms, copied into every image), the concept diagrams and README exports showing the SQL Connector live, and the AI assistant context at version 1.8. `docs/concepts/connected-systems.md` does not exist, so that item had nothing to update; the PRD moves to `done/` when #170 closes.
 
 ## Success Criteria
 
