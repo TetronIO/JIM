@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🔒 The container images now build on patched .NET 10 base images, clearing CVE-2026-62901.
 - 🐛 Moving a Container in a Connected System no longer removes it from JIM along with its selection, which took the objects beneath it out of scope and obsoleted them on the next Full Import. A moved Container is now filed under its new parent. (#1318)
 - 🐛 Deletion detection now works for an Object Type anchored on a 64-bit whole number (a `bigint` identity column, for example). It has never worked: an object removed from the Connected System was recorded as "not found", the import completed successfully, and the object stayed in the Connector Space indefinitely, joined to its Metaverse Object. Nothing reported it, because a missing object and an unrecognised anchor type were indistinguishable to the code that decides. **After upgrading, run a Full Import against any Connected System whose Object Types use such an anchor**: deletions that happened while this was broken are detected on the next Full Import, and may make Metaverse Objects eligible for deletion in the synchronisation that follows. Anchors of other types were unaffected. An anchor type deletion detection cannot handle now fails the run rather than passing silently. (#1283)
 

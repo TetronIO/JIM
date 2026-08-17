@@ -147,9 +147,10 @@ internal class LdapConnectorExport
         return results;
     }
 
-    // The containers the administrator has selected on this Connected System, or empty when JIM has not stated a
-    // scope (a Connected System with no container selections, or a caller that does not supply one). Each carries
-    // its own Container Scope, so a One Level container permits writes directly within it and nowhere beneath it.
+    // Every container stating where the administrator manages on this Connected System, selections and exclusions
+    // alike, or empty when JIM has not stated a scope (a Connected System with no container selections, or a
+    // caller that does not supply one). Each carries its own Container Scope, so a One Level container speaks for
+    // writes directly within it and for nothing beneath it.
     private IReadOnlyList<ConnectedSystemContainer> _managedScope = [];
 
     /// <summary>
@@ -159,9 +160,9 @@ internal class LdapConnectorExport
     /// An empty or unset scope means "not stated" and permits everything, so a Connected System with no container
     /// selections behaves exactly as it always has.
     /// </remarks>
-    internal void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> selectedContainers)
+    internal void SetManagedScope(IReadOnlyList<ConnectedSystemContainer> scopeDecidingContainers)
     {
-        _managedScope = selectedContainers;
+        _managedScope = scopeDecidingContainers;
     }
 
     /// <summary>
@@ -198,15 +199,27 @@ internal class LdapConnectorExport
 
     private bool IsWithinManagedScope(string targetDn)
     {
-        if (LdapConnectorUtilities.IsDnWithinAnyContainerScope(targetDn, _managedScope))
+        if (LdapConnectorUtilities.IsDnInScope(targetDn, _managedScope))
             return true;
 
         // A container created during this run is selected by JIM the moment the run finishes, so an object being
         // provisioned into one it has just created is in scope even though the stored selection has yet to catch
         // up. It is selected as a subtree, which is what JIM's own auto-selection records.
-        return _createdContainerExternalIds.Any(createdDn =>
+        var withinAContainerCreatedThisRun = _createdContainerExternalIds.Any(createdDn =>
             LdapConnectorUtilities.IsDnWithinContainerScope(targetDn, new ConnectedSystemContainer { ExternalId = createdDn }));
+
+        // ...unless an exclusion carves that branch out, in which case the container JIM created sits inside a
+        // part of the directory the administrator has said it does not manage, and the selection about to catch up
+        // will not cover it either (#1255).
+        return withinAContainerCreatedThisRun && !IsCarvedOutByAnExclusion(targetDn);
     }
+
+    /// <summary>
+    /// Whether an excluded Container is the one with the final say over a Distinguished Name. Distinct from
+    /// "not in scope": a name nothing covers is merely unmanaged, where this one has been deliberately carved out.
+    /// </summary>
+    private bool IsCarvedOutByAnExclusion(string targetDn) =>
+        LdapConnectorUtilities.ResolveMostSpecificContainerScope(targetDn, _managedScope) is { Excluded: true };
 
     private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport)
     {

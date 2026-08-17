@@ -47,22 +47,78 @@ public static class ContainerSpecificity
     public static ConnectedSystemContainer? ResolveMostSpecific(
         string? objectIdentifier,
         IReadOnlyCollection<ConnectedSystemContainer> containers,
+        Func<string?, ConnectedSystemContainer, bool> isWithinContainer) =>
+        ResolveMostSpecificMatches(objectIdentifier, containers, isWithinContainer).FirstOrDefault();
+
+    /// <summary>
+    /// Whether <paramref name="objectIdentifier"/> is in the scope these Containers describe: the Container with the
+    /// final say over it admits it rather than carving it out.
+    /// </summary>
+    /// <param name="objectIdentifier">The object's identifier in the Connected System's own terms.</param>
+    /// <param name="containers">
+    /// Every Container making a statement about scope, selections and exclusions alike. Supplying only the
+    /// selections answers a different and wrong question: an exclusion the caller left out cannot carve anything
+    /// out, so the object comes back in scope.
+    /// </param>
+    /// <param name="isWithinContainer">The containment rule, which must be the Connector's own.</param>
+    /// <param name="isExcluded">
+    /// Whether a Container carves its scope out rather than admitting it. Defaults to the Container's own
+    /// <see cref="ConnectedSystemContainer.Excluded"/> flag, which is what a caller working from the stored
+    /// configuration wants. A caller evaluating a *proposed* selection must supply its own, because the stored
+    /// flags are precisely what the proposal is asking to change; taking them at face value would answer the
+    /// question the administrator is trying to move away from.
+    /// </param>
+    /// <returns>
+    /// <c>false</c> where no Container admits the object at all. An empty collection is therefore out of scope
+    /// rather than unconstrained; a caller holding no Container-level opinion has no scope to narrow and does not
+    /// ask this question.
+    /// </returns>
+    /// <remarks>
+    /// Where two Containers admit the object and neither holds the other, ranking has nothing to separate them, and
+    /// <see cref="ResolveMostSpecific"/> is explicit that a caller attaching opposing meanings must resolve that tie
+    /// deliberately. This one resolves it to <b>excluded wins</b>: importing an object an administrator excluded is
+    /// the worse of the two failures, and it is the direction every other synchronisation-integrity decision in JIM
+    /// already leans. Such a tie cannot arise from a hierarchy, where every Container admitting an object lies on
+    /// one path down to it.
+    /// </remarks>
+    public static bool IsInScope(
+        string? objectIdentifier,
+        IReadOnlyCollection<ConnectedSystemContainer> containers,
+        Func<string?, ConnectedSystemContainer, bool> isWithinContainer,
+        Func<ConnectedSystemContainer, bool>? isExcluded = null)
+    {
+        var carvesOut = isExcluded ?? (static container => container.Excluded);
+        var deciding = ResolveMostSpecificMatches(objectIdentifier, containers, isWithinContainer);
+
+        return deciding.Count > 0 && !deciding.Any(carvesOut);
+    }
+
+    /// <summary>
+    /// The Containers with the final say over an object: those admitting it that no other admitting Container is
+    /// more specific than. One of them in a hierarchy; more only where containment is not one.
+    /// </summary>
+    private static List<ConnectedSystemContainer> ResolveMostSpecificMatches(
+        string? objectIdentifier,
+        IReadOnlyCollection<ConnectedSystemContainer> containers,
         Func<string?, ConnectedSystemContainer, bool> isWithinContainer)
     {
         ArgumentNullException.ThrowIfNull(containers);
         ArgumentNullException.ThrowIfNull(isWithinContainer);
 
         if (containers.Count == 0 || string.IsNullOrEmpty(objectIdentifier))
-            return null;
+            return [];
 
         var matches = containers.Where(container => isWithinContainer(objectIdentifier, container)).ToList();
         if (matches.Count <= 1)
-            return matches.FirstOrDefault();
+            return matches;
 
         // The most specific match is the one holding no other match: anything holding another match is an ancestor
         // of it, and an ancestor is the more general statement of the two.
-        return matches.FirstOrDefault(candidate => !matches.Any(other =>
-                   !ReferenceEquals(other, candidate) && isWithinContainer(other.ExternalId, candidate)))
-               ?? matches[0];
+        var mostSpecific = matches.Where(candidate => !matches.Any(other =>
+            !ReferenceEquals(other, candidate) && isWithinContainer(other.ExternalId, candidate))).ToList();
+
+        // Containment that admits every match into every other leaves nothing to rank, so every match still has a
+        // say. Ranking cannot narrow the field, and silently picking one would hide that.
+        return mostSpecific.Count > 0 ? mostSpecific : matches;
     }
 }

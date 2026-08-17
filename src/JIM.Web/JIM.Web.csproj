@@ -32,7 +32,7 @@
          Keep in sync with the ASP.NET Core runtime version bundled by the pinned
          mcr.microsoft.com/dotnet/aspnet and dotnet/sdk digests whenever either is
          bumped (see engineering/DEPENDENCY_PINNING.md). -->
-    <RuntimeFrameworkVersion>10.0.9</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion>10.0.11</RuntimeFrameworkVersion>
   </PropertyGroup>
 
   <ItemGroup>
