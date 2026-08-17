@@ -701,6 +701,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
+            // The administrator's auxiliary class selections. Both the REST representation of an Object Type and
+            // the validation that changes the set read them, and a selection that is not fetched reads as one that
+            // was never made.
+            .Include(ot => ot.Extensions)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
     }
@@ -3066,6 +3070,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(q => q.Attributes)
             .Include(q => q.Tags)
+            .Include(q => q.Extensions)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)

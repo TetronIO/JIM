@@ -1519,9 +1519,267 @@ ConvertFrom-SecureString -SecureString $result.password -AsPlainText
 
 ---
 
+## Get-JIMConnectedSystemAuxiliaryClass
+
+Lists the auxiliary classes that can be merged into a Connected System Object Type, and which of them are merged already.
+
+Merging an auxiliary class brings its attributes into the Object Type, so JIM can import and export them. See [Auxiliary Object Classes](../connectors/jim-ldap-connector.md#auxiliary-object-classes) for what this means on a directory.
+
+Nothing is returned for an Object Type whose Connected System does not let JIM compose class membership (Active Directory resolves its own auxiliary classes into each structural class), or for an Object Type that is itself an auxiliary class.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId <int> -ObjectTypeId <int> [-MergedOnly] [-SuggestedOnly]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
+| `ObjectTypeId` | `int` | Yes | | Object Type identifier. Accepts pipeline input by property name |
+| `MergedOnly` | `switch` | No | `$false` | Return only the classes currently merged into the Object Type |
+| `SuggestedOnly` | `switch` | No | `$false` | Return only the classes something suggests |
+
+### Output
+
+One object per auxiliary class, ordered merged first, then suggested, then the rest by name.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ObjectTypeId` | `int` | The auxiliary class's own Object Type identifier, which is what merging is set by |
+| `Name` | `string` | The class as the directory spells it |
+| `Merged` | `bool` | Whether it is merged into this Object Type |
+| `ContributedAttributeCount` | `int` | How many attributes merging it would contribute |
+| `PermittedByTheConnectedSystem` | `bool` | A DIT Content Rule says it may attach here |
+| `EntriesObservedOn` | `int?` | How many of the entries the last discovery run read carried it. `$null` when no run has observed it, which is different from `0` |
+| `IsSuggested` | `bool` | Whether either reason above applies |
+
+### Examples
+
+```powershell title="List every auxiliary class on offer"
+Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5
+```
+
+```powershell title="Show only the classes JIM has a reason to suggest"
+Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -SuggestedOnly |
+    Format-Table Name, ContributedAttributeCount, EntriesObservedOn
+```
+
+```powershell title="Name what the Object Type carries today"
+Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -MergedOnly |
+    Select-Object -ExpandProperty Name
+```
+
+---
+
+## Set-JIMConnectedSystemAuxiliaryClass
+
+Sets which auxiliary classes a Connected System Object Type carries.
+
+### Syntax
+
+```powershell
+# Set (default)
+Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId <int> -ObjectTypeId <int> -AuxiliaryClassObjectTypeId <int[]> [-PassThru]
+
+# Clear
+Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId <int> -ObjectTypeId <int> -Clear [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
+| `ObjectTypeId` | `int` | Yes | | Object Type the classes are merged into. Accepts pipeline input by property name |
+| `AuxiliaryClassObjectTypeId` | `int[]` | Yes (Set) | | The auxiliary classes it should carry, by their own Object Type identifiers |
+| `Clear` | `switch` | Yes (Clear) | | Withdraw every auxiliary class selection |
+| `PassThru` | `switch` | No | `$false` | Returns the updated Object Type |
+
+### Output
+
+When `-PassThru` is specified, returns the updated Object Type. Its `MergedAuxiliaryClassObjectTypeIds` property lists what it now carries. Otherwise, no output.
+
+### Examples
+
+```powershell title="Merge one auxiliary class"
+Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -AuxiliaryClassObjectTypeId 12
+```
+
+```powershell title="Add a class to whatever is already merged"
+$merged = (Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -MergedOnly).ObjectTypeId
+Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -AuxiliaryClassObjectTypeId ($merged + 12)
+```
+
+```powershell title="Withdraw every auxiliary class from an Object Type"
+Set-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId 1 -ObjectTypeId 5 -Clear
+```
+
+### Notes
+
+- **This replaces the whole set, it does not add to it.** A class that is merged and not named here is withdrawn. Read the current set first, as the second example does, when you mean to add one.
+- Withdrawing a class removes its attributes from the Object Type at the next schema import, which removes any Attribute Flow using them. Run `Get-JIMConnectedSystemAuxiliaryClass -ConnectedSystemId <id> -ObjectTypeId <id> -MergedOnly` and check what flows those attributes before clearing.
+- Merged attributes appear after the next `Import-JIMConnectedSystemSchema`.
+- Supports `ShouldProcess` (Medium impact).
+
+---
+
+## Set-JIMConnectedSystemStructuralCarrierClass
+
+Sets the Structural Carrier Class of an auxiliary Connected System Object Type: the structural class JIM writes alongside the auxiliary one when creating an entry.
+
+Every entry in a directory carries exactly one structural class, so until a carrier is named JIM can import objects of the type but cannot create them.
+
+### Syntax
+
+```powershell
+# Set (default)
+Set-JIMConnectedSystemStructuralCarrierClass -ConnectedSystemId <int> -ObjectTypeId <int> -StructuralCarrierObjectTypeId <int> [-PassThru]
+
+# Clear
+Set-JIMConnectedSystemStructuralCarrierClass -ConnectedSystemId <int> -ObjectTypeId <int> -Clear [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
+| `ObjectTypeId` | `int` | Yes | | The auxiliary Object Type. Accepts pipeline input by property name |
+| `StructuralCarrierObjectTypeId` | `int` | Yes (Set) | | The structural Object Type to write alongside it |
+| `Clear` | `switch` | Yes (Clear) | | Clear the carrier, leaving the Object Type importable but not creatable |
+| `PassThru` | `switch` | No | `$false` | Returns the updated Object Type |
+
+### Output
+
+When `-PassThru` is specified, returns the updated Object Type. Its `StructuralCarrierObjectTypeId` property names its carrier. Otherwise, no output.
+
+### Examples
+
+```powershell title="Name the structural class to create objects as"
+Set-JIMConnectedSystemStructuralCarrierClass -ConnectedSystemId 1 -ObjectTypeId 12 -StructuralCarrierObjectTypeId 3
+```
+
+```powershell title="Find selected auxiliary Object Types JIM cannot yet create objects for"
+Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
+    Where-Object { $_.isAuxiliary -and $_.selected -and -not $_.structuralCarrierObjectTypeId } |
+    Select-Object -Property id, name
+```
+
+### Notes
+
+- Only an auxiliary Object Type takes a carrier, and only a structural Object Type in the same Connected System can be one. Anything else is refused with a message naming the problem.
+- Supports `ShouldProcess` (Medium impact).
+
+---
+
+## Start-JIMConnectedSystemAuxiliaryClassDiscovery
+
+Starts a run that reads a Connected System's entries to find which auxiliary classes they carry.
+
+It changes no configuration: what an Object Type carries stays whatever an administrator has merged. The counts become suggestions on `Get-JIMConnectedSystemAuxiliaryClass`.
+
+### Syntax
+
+```powershell
+Start-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId <int> -Scope <string> [-SampleSizePerObjectType <int>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name |
+| `Scope` | `string` | Yes | | `QuickSample` or `FullScan` |
+| `SampleSizePerObjectType` | `int` | No | `5000` | Entries of each Object Type a quick sample reads. Ignored for a full scan |
+
+### Output
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `WorkerTaskId` | `Guid` | The queued task, for cancelling the run |
+| `ActivityId` | `Guid` | The Activity carrying the run's progress and outcome |
+
+### Examples
+
+```powershell title="Sample each Object Type"
+Start-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1 -Scope QuickSample
+```
+
+```powershell title="Read every entry in scope"
+Start-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1 -Scope FullScan
+```
+
+```powershell title="Start a larger sample and watch its Activity"
+$run = Start-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1 -Scope QuickSample -SampleSizePerObjectType 20000
+Get-JIMActivity -Id $run.ActivityId
+```
+
+### Notes
+
+- A quick sample cannot prove a class unused: a directory returns entries in its own order, so a rarely used class can be missed. Only a full scan's "not in use" means anything.
+- A full scan reads every entry in scope and can take a long time on a large directory. It requests class membership and nothing else.
+- One run at a time per Connected System. Starting a second while one is in progress is refused with a message saying so.
+- Supports `ShouldProcess` (Medium impact).
+
+---
+
+## Get-JIMConnectedSystemAuxiliaryClassDiscovery
+
+Gets the last auxiliary class discovery run for a Connected System, whatever its outcome. Returns nothing when none has been started.
+
+### Syntax
+
+```powershell
+Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId <int>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name |
+
+### Output
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Id` | `int` | Run identifier |
+| `Scope` | `string` | `QuickSample` or `FullScan` |
+| `SampleSizePerObjectType` | `int?` | Entries per Object Type a quick sample read. `$null` for a full scan |
+| `Status` | `string` | `InProgress`, `Complete`, `Cancelled` or `Failed` |
+| `Started` | `DateTime` | When the run began |
+| `Completed` | `DateTime?` | When it stopped, however it stopped. `$null` while it is still going |
+| `EntriesRead` | `int` | How many entries were read |
+| `ActivityId` | `Guid?` | The Activity carrying its progress and errors |
+| `InitiatedByName` | `string` | Who asked for the run |
+| `ErrorMessage` | `string` | Why it failed, when `Status` is `Failed` |
+| `Results` | `object[]` | One per class observed, each with `StructuralObjectTypeId`, `AuxiliaryClassName` and `EntryCount` |
+
+### Examples
+
+```powershell title="Read the last run"
+Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1
+```
+
+```powershell title="Rank the classes the last run observed"
+(Get-JIMConnectedSystemAuxiliaryClassDiscovery -ConnectedSystemId 1).Results |
+    Sort-Object -Property EntryCount -Descending |
+    Format-Table AuxiliaryClassName, EntryCount
+```
+
+### Notes
+
+- A cancelled run keeps the results it did gather. Those classes are genuinely in use; the ones it never reached are unknown.
+
+---
+
 ## See also
 
 - [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the connector space, partitions and containers, and common workflows
+- [LDAP Connector: Auxiliary Object Classes](../connectors/jim-ldap-connector.md#auxiliary-object-classes): what merging an auxiliary class does on a directory, and how JIM composes each entry's class membership on export
 - [Run Profiles](run-profiles.md): execute import, sync, and export operations on Connected Systems
 - [Synchronisation Rules](synchronisation-rules.md): define attribute mappings and scoping for Connected System synchronisation, including the initial password set on provisioned accounts
 - [Connection](connection.md): establish a session before using these cmdlets

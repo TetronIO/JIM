@@ -266,14 +266,18 @@
         _saving = true;
         try
         {
-            using var jim = JimFactory.Create();
-            var applied = merged
-                ? await jim.ConnectedSystems.AddObjectTypeExtensionAsync(ObjectType.Id, offer.ObjectType.Id)
-                : await jim.ConnectedSystems.RemoveObjectTypeExtensionAsync(ObjectType.Id, offer.ObjectType.Id);
+            // The whole set, through the same validated path the REST API and PowerShell use, rather than a
+            // per-class add or remove of its own.
+            var wanted = _offers
+                .Where(candidate => candidate.ObjectType.Id == offer.ObjectType.Id ? merged : candidate.Merged)
+                .Select(candidate => candidate.ObjectType.Id);
 
-            if (!applied)
+            using var jim = JimFactory.Create();
+            var result = await jim.ConnectedSystems.SetObjectTypeExtensionsAsync(ObjectType.Id, wanted);
+
+            if (!result.Success)
             {
-                Snackbar.Add($"'{offer.ObjectType.Name}' could not be {(merged ? "merged into" : "removed from")} '{ObjectType.Name}'.", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? $"'{offer.ObjectType.Name}' could not be changed.", Severity.Error);
                 return;
             }
 
@@ -297,7 +301,13 @@
         try
         {
             using var jim = JimFactory.Create();
-            await jim.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(ObjectType.Id, carrierObjectTypeId);
+            var result = await jim.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(ObjectType.Id, carrierObjectTypeId);
+
+            if (!result.Success)
+            {
+                Snackbar.Add(result.ErrorMessage ?? $"The Structural Carrier Class for '{ObjectType.Name}' could not be changed.", Severity.Error);
+                return;
+            }
 
             // Keep the loaded graph in step so the select and its guidance reflect the save without a reload.
             ObjectType.StructuralCarrierObjectTypeId = carrierObjectTypeId;

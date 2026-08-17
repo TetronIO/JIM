@@ -3607,30 +3607,89 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Records that one Object Type should be extended with the attributes of another.
+    /// Sets exactly which auxiliary classes an Object Type carries, merging in what is new to the set and
+    /// withdrawing what has left it.
     /// </summary>
-    /// <returns>True if a new selection was recorded; false if it was already there.</returns>
-    public async Task<bool> AddObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    /// <remarks>
+    /// The whole set rather than one class at a time, so that the portal, the REST API and PowerShell reach the
+    /// same state through the same validation. An empty set withdraws every selection.
+    /// </remarks>
+    /// <param name="objectTypeId">The Object Type the classes are merged into.</param>
+    /// <param name="extensionObjectTypeIds">The Object Types of the auxiliary classes it should carry.</param>
+    public async Task<AuxiliaryClassSelectionResult> SetObjectTypeExtensionsAsync(
+        int objectTypeId,
+        IEnumerable<int> extensionObjectTypeIds)
     {
-        return await Application.Repository.ConnectedSystems.AddObjectTypeExtensionAsync(baseObjectTypeId, extensionObjectTypeId);
-    }
+        var objectType = await GetObjectTypeAsync(objectTypeId);
+        if (objectType == null)
+            return AuxiliaryClassSelectionResult.Refused($"Object Type {objectTypeId} does not exist.");
 
-    /// <summary>
-    /// Withdraws an auxiliary class selection.
-    /// </summary>
-    /// <returns>True if a selection was removed; false if there was nothing to remove.</returns>
-    public async Task<bool> RemoveObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
-    {
-        return await Application.Repository.ConnectedSystems.RemoveObjectTypeExtensionAsync(baseObjectTypeId, extensionObjectTypeId);
+        if (!objectType.ManagesClassMembership())
+            return AuxiliaryClassSelectionResult.Refused(
+                $"'{objectType.Name}' belongs to a Connected System that does not let JIM compose class membership, so it has nowhere to write an auxiliary class.");
+
+        if (objectType.IsAuxiliary())
+            return AuxiliaryClassSelectionResult.Refused(
+                $"'{objectType.Name}' is itself an auxiliary class, and an auxiliary class cannot carry another.");
+
+        var wanted = extensionObjectTypeIds.ToHashSet();
+        var schema = await GetObjectTypesAsync(objectType.ConnectedSystemId);
+
+        foreach (var wantedId in wanted)
+        {
+            var candidate = schema.FirstOrDefault(type => type.Id == wantedId);
+            if (candidate == null)
+                return AuxiliaryClassSelectionResult.Refused(
+                    $"Object Type {wantedId} is not part of the same Connected System as '{objectType.Name}'.");
+
+            if (!candidate.IsAuxiliary())
+                return AuxiliaryClassSelectionResult.Refused(
+                    $"'{candidate.Name}' is not an auxiliary class, so it cannot be merged into '{objectType.Name}'.");
+        }
+
+        var current = (await GetObjectTypeExtensionsAsync(objectType.ConnectedSystemId))
+            .Where(extension => extension.BaseObjectTypeId == objectTypeId)
+            .Select(extension => extension.ExtensionObjectTypeId)
+            .ToHashSet();
+
+        foreach (var toAdd in wanted.Except(current))
+            await Application.Repository.ConnectedSystems.AddObjectTypeExtensionAsync(objectTypeId, toAdd);
+
+        foreach (var toRemove in current.Except(wanted))
+            await Application.Repository.ConnectedSystems.RemoveObjectTypeExtensionAsync(objectTypeId, toRemove);
+
+        return AuxiliaryClassSelectionResult.Applied();
     }
 
     /// <summary>
     /// Names the structural Object Type to use as the carrier when creating objects of a type that cannot stand
     /// alone, or clears it when passed null.
     /// </summary>
-    public async Task SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId)
+    public async Task<AuxiliaryClassSelectionResult> SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId)
     {
+        var objectType = await GetObjectTypeAsync(objectTypeId);
+        if (objectType == null)
+            return AuxiliaryClassSelectionResult.Refused($"Object Type {objectTypeId} does not exist.");
+
+        if (carrierObjectTypeId != null)
+        {
+            if (!objectType.IsAuxiliary())
+                return AuxiliaryClassSelectionResult.Refused(
+                    $"'{objectType.Name}' is not an auxiliary class, so it already states what its objects are and needs no carrier.");
+
+            var schema = await GetObjectTypesAsync(objectType.ConnectedSystemId);
+            var carrier = schema.FirstOrDefault(type => type.Id == carrierObjectTypeId);
+            if (carrier == null)
+                return AuxiliaryClassSelectionResult.Refused(
+                    $"Object Type {carrierObjectTypeId} is not part of the same Connected System as '{objectType.Name}'.");
+
+            if (!carrier.IsStructural())
+                return AuxiliaryClassSelectionResult.Refused(
+                    $"'{carrier.Name}' is not a structural class, so an object cannot be created as one.");
+        }
+
         await Application.Repository.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(objectTypeId, carrierObjectTypeId);
+        return AuxiliaryClassSelectionResult.Applied();
     }
 
     #endregion

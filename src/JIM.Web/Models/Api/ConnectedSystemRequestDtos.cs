@@ -128,6 +128,69 @@ public class UpdateConnectedSystemObjectTypeRequest
 }
 
 /// <summary>
+/// Request DTO for setting which auxiliary classes a Connected System Object Type carries.
+/// </summary>
+/// <remarks>
+/// The whole set, not a delta: whatever is not named here is withdrawn. An empty list withdraws every selection,
+/// which is deliberately expressible rather than requiring a separate endpoint.
+/// </remarks>
+public class SetObjectTypeAuxiliaryClassesRequest
+{
+    /// <summary>
+    /// The auxiliary classes the Object Type should carry, by their own Connected System Object Type ids. Each must
+    /// be an auxiliary class in the same Connected System.
+    /// </summary>
+    public List<int>? ObjectTypeIds { get; set; }
+}
+
+/// <summary>
+/// Request DTO for setting the Structural Carrier Class of an auxiliary Connected System Object Type.
+/// </summary>
+public class SetObjectTypeStructuralCarrierRequest
+{
+    /// <summary>
+    /// The structural Object Type JIM writes alongside the auxiliary class when creating an object, or null to
+    /// clear the carrier and leave the Object Type importable but not creatable.
+    /// </summary>
+    public int? StructuralCarrierObjectTypeId { get; set; }
+}
+
+/// <summary>
+/// Request DTO for starting an auxiliary class discovery run.
+/// </summary>
+public class StartAuxiliaryClassDiscoveryRequest
+{
+    /// <summary>
+    /// How much of the Connected System to read: a quick sample of each Object Type, or a full scan of everything
+    /// in scope.
+    /// </summary>
+    [Required]
+    public AuxiliaryClassDiscoveryScope Scope { get; set; }
+
+    /// <summary>
+    /// How many entries of each Object Type a quick sample should read. Required for a quick sample, and ignored
+    /// for a full scan, which has no per-type limit.
+    /// </summary>
+    public int? SampleSizePerObjectType { get; set; }
+}
+
+/// <summary>
+/// Response DTO for a queued auxiliary class discovery run.
+/// </summary>
+public class AuxiliaryClassDiscoveryStartedDto
+{
+    /// <summary>
+    /// The queued task, for a caller that wants to cancel it.
+    /// </summary>
+    public Guid? WorkerTaskId { get; set; }
+
+    /// <summary>
+    /// The Activity carrying the run's progress, cancellation and errors.
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+}
+
+/// <summary>
 /// Request DTO for updating a Connected System Attribute.
 /// </summary>
 public class UpdateConnectedSystemAttributeRequest
