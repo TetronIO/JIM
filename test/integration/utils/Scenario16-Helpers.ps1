@@ -692,7 +692,7 @@ function Test-S16ExportNaturalKey {
     }
 
     # The key JIM authored has to be the value the Attribute Flow supplied, not a surrogate of its own.
-    $malformed = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_ACCOUNTS_NATURAL WHERE ACCOUNT_CODE NOT LIKE 'E%';")
+    $malformed = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_ACCOUNTS_NATURAL WHERE ACCOUNT_CODE NOT LIKE '$($Config.EmployeeNumberPrefix)%';")
     if ($malformed -ne 0) {
         return @{ Status = 'fail'; Detail = "$malformed row(s) carry an ACCOUNT_CODE that did not come from the Metaverse 'Account Name' flow." }
     }
@@ -744,9 +744,13 @@ function Test-S16TypeMappingRoundTrip {
     $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
     $failures = @()
 
-    $sourceFte = [decimal](Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(FTE) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" | ForEach-Object { $_ }).Trim()
-    if ($Config.Provider -eq "SqlServer") {
-        $sourceFte = [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT CAST(FTE AS varchar(32)) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;").Trim())
+    # Provider-specific from the start: TO_CHAR does not exist on SQL Server, and running the Oracle
+    # form first "to be overwritten" fails the whole row there with Msg 195 before the override runs.
+    $sourceFte = if ($Config.Provider -eq "SqlServer") {
+        [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT CAST(FTE AS varchar(32)) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;").Trim())
+    }
+    else {
+        [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(FTE) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" | ForEach-Object { $_ }) -join '').Trim()
     }
 
     $exportedFteText = (Invoke-Scenario16Query -Config $Config -Query $(
