@@ -84,19 +84,16 @@ public static class ClassMembershipPlanner
         // belongs to the class once it actually carries one of the class's attributes, and claiming otherwise would
         // oblige it to satisfy that class's requirements for nothing.
         var contributed = objectType.Attributes ?? [];
-        foreach (var extension in objectType.Extensions)
-        {
-            var className = extension.ExtensionObjectType?.Name;
-            if (className == null || classes.Contains(className, StringComparer.OrdinalIgnoreCase))
-                continue;
-
-            var contributesAWrittenAttribute = contributed.Any(attribute =>
+        var auxiliaryClasses = objectType.Extensions
+            .Select(extension => extension.ExtensionObjectType?.Name)
+            .OfType<string>()
+            .Where(className => contributed.Any(attribute =>
                 string.Equals(attribute.ClassName, className, StringComparison.OrdinalIgnoreCase) &&
-                attributesBeingWritten.Contains(attribute.Name));
+                attributesBeingWritten.Contains(attribute.Name)));
 
-            if (contributesAWrittenAttribute)
-                classes.Add(className);
-        }
+        // Except discards a class already listed, which an extension naming the carrier or the object type's own
+        // class would be, and discards duplicates among the extensions themselves.
+        classes.AddRange(auxiliaryClasses.Except(classes, StringComparer.OrdinalIgnoreCase).ToList());
 
         return classes;
     }

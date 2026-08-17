@@ -47,14 +47,14 @@ public static class ClassMembershipValidator
         if (classesBeingAdded.Count == 0)
             return null;
 
-        var satisfied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var change in pendingExport.AttributeValueChanges.Where(c => c.Attribute != null && HasAValue(c)))
-            satisfied.Add(change.Attribute.Name);
-
-        foreach (var value in pendingExport.ConnectedSystemObject?.AttributeValues ?? [])
-            if (value.Attribute != null)
-                satisfied.Add(value.Attribute.Name);
+        // A requirement is satisfied either by a value this export writes or by one already on the object.
+        var satisfied = pendingExport.AttributeValueChanges
+            .Where(HasAValue)
+            .Select(change => change.Attribute?.Name)
+            .Concat((pendingExport.ConnectedSystemObject?.AttributeValues ?? [])
+                .Select(value => value.Attribute?.Name))
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var missing = (objectType.Attributes ?? [])
             .Where(attribute => attribute.Required)
