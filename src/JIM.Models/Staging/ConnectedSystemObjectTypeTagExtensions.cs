@@ -28,6 +28,47 @@ public static class ConnectedSystemObjectTypeTagExtensions
     }
 
     /// <summary>
+    /// Whether the Connected System classified this object type as a structural class: one an object can be, rather
+    /// than one it merely carries.
+    /// </summary>
+    /// <remarks>
+    /// The strict reading of the tag, so an unclassified type is not structural either. Callers choosing between
+    /// classes want the ones the Connected System actually vouched for; <see cref="IsAuxiliary"/> negated would
+    /// offer abstract and unclassified types alongside them.
+    /// </remarks>
+    public static bool IsStructural(this ConnectedSystemObjectType objectType)
+    {
+        return objectType.Tags.Any(tag =>
+            tag.Key == ObjectTypeTags.Keys.ClassKind &&
+            tag.Value == ObjectTypeTags.Values.ClassKindStructural);
+    }
+
+    /// <summary>
+    /// The name of the attribute carrying this object type's class membership, or null when the Connected System
+    /// does not have the concept.
+    /// </summary>
+    /// <remarks>
+    /// Its presence is what says JIM computes class membership for this object type rather than an administrator
+    /// flowing it, so it also answers "does merging auxiliary classes mean anything here?" for the surfaces that
+    /// offer it. See <see cref="ObjectTypeTags.Keys.ClassMembershipAttribute"/>.
+    /// </remarks>
+    public static string? ClassMembershipAttributeName(this ConnectedSystemObjectType objectType)
+    {
+        var name = objectType.Tags
+            .FirstOrDefault(tag => tag.Key == ObjectTypeTags.Keys.ClassMembershipAttribute)?.Value;
+
+        return string.IsNullOrEmpty(name) ? null : name;
+    }
+
+    /// <summary>
+    /// Whether the Connected System hands this object type's class membership to JIM to compute.
+    /// </summary>
+    public static bool ManagesClassMembership(this ConnectedSystemObjectType objectType)
+    {
+        return objectType.ClassMembershipAttributeName() != null;
+    }
+
+    /// <summary>
     /// Whether the Connected System reported this object type as one it uses for its own configuration or operation,
     /// rather than one an administrator would manage.
     /// </summary>

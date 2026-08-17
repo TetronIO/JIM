@@ -104,6 +104,7 @@ else if (_drift is { TrackingDisabled: true })
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
             <ConnectedSystemSchemaTab ConnectedSystem="_connectedSystem"
+                                      LatestAuxiliaryClassDiscoveryRun="_latestAuxiliaryClassDiscoveryRun"
                                       OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
         </MudTabPanel>
 
@@ -155,6 +156,8 @@ else if (_drift is { TrackingDisabled: true })
 
     private IList<MetaverseAttribute>? _metaverseAttributes;
 
+    private AuxiliaryClassDiscoveryRun? _latestAuxiliaryClassDiscoveryRun;
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -202,6 +205,11 @@ else if (_drift is { TrackingDisabled: true })
         _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(Id);
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
         _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();
+
+        // Loaded here rather than by the Schema tab's Auxiliary Classes panel, which is rendered once per Object
+        // Type: the run belongs to the whole Connected System, and a panel that fetched it for itself would query
+        // once per type on every render. The tab reaches the application layer only in response to an action.
+        _latestAuxiliaryClassDiscoveryRun = await jim.ConnectedSystems.GetLatestAuxiliaryClassDiscoveryRunAsync(Id);
     }
 
     private async Task ReloadConnectedSystemAsync()

@@ -404,6 +404,14 @@
             </MudPaper>
         }
 
+        @* Renders nothing unless the Connected System hands class membership to JIM to compute, which is what makes
+           merging an auxiliary class mean anything. *@
+        <AuxiliaryClassesPanel
+            ConnectedSystem="ConnectedSystem"
+            ObjectType="selectedObjectType"
+            LatestDiscoveryRun="LatestAuxiliaryClassDiscoveryRun"
+            OnSchemaChanged="OnConnectedSystemChanged" />
+
         <MudPaper Outlined="true" Class="pa-4 mt-5">
             <MudText Typo="Typo.h6" Class="mb-3">Attribute Selection</MudText>
             <MudText>
@@ -728,6 +736,14 @@
 @code {
     [Parameter, EditorRequired]
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's last auxiliary class discovery run, or null when none has been run. Supplied by the
+    /// page rather than fetched here: the tab renders one Auxiliary Classes panel per Object Type, and the run
+    /// belongs to the whole Connected System.
+    /// </summary>
+    [Parameter]
+    public AuxiliaryClassDiscoveryRun? LatestAuxiliaryClassDiscoveryRun { get; set; }
 
     [Parameter]
     public EventCallback OnConnectedSystemChanged { get; set; }

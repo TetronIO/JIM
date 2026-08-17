@@ -1,0 +1,417 @@
+@using JIM.Models.Staging
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Merging auxiliary classes only means something where JIM computes class membership, and an auxiliary class
+   cannot itself be extended. Active Directory resolves its own auxiliary classes into each structural class, so
+   it never reaches here. *@
+@if (ObjectType.ManagesClassMembership() && !ObjectType.IsAuxiliary())
+{
+    @* mt-5 rather than the mt-6 in JIM.Web/CLAUDE.md: this panel sits between the Object Type's existing panels,
+       which are all mt-5, and one panel out of rhythm reads as a mistake. *@
+    <MudPaper Outlined="true" Class="pa-4 mt-5">
+        <MudText Typo="Typo.h6" Class="mb-3">Auxiliary Classes</MudText>
+        <MudText>
+            Merge attributes from auxiliary classes into this Object Type. Only the classes you enable here shape the
+            schema; suggestions never apply themselves.
+        </MudText>
+
+        @if (_offers.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+                @ConnectedSystem.Name defines no auxiliary classes, so there is nothing to merge into this Object Type.
+            </MudAlert>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Elevation="0" Class="mt-4">
+                <tbody>
+                @foreach (var offer in _offers)
+                {
+                    <tr @key="offer.ObjectType.Id">
+                        <td style="width: 1%;">
+                            <MudSwitch
+                                T="bool"
+                                Value="offer.Merged"
+                                ValueChanged="@(merged => HandleMergeChangedAsync(offer, merged))"
+                                Color="Color.Primary"
+                                Disabled="_saving" />
+                        </td>
+                        <td>
+                            <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined">@offer.ObjectType.Name</MudChip>
+                        </td>
+                        <td class="mud-text-secondary">
+                            @($"+{offer.ContributedAttributeCount} attribute{(offer.ContributedAttributeCount == 1 ? "" : "s")}")
+                        </td>
+                        <td style="text-align: right;">
+                            @if (offer.PermittedByTheConnectedSystem)
+                            {
+                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                    <TooltipContent>
+                                        <TooltipText Text="@($"{ConnectedSystem.Name} publishes a DIT Content Rule saying this class may attach to {ObjectType.Name} entries. It is a statement of what is permitted, not of what is in use.")" />
+                                    </TooltipContent>
+                                    <ChildContent>
+                                        <MudChip T="string" Variant="Variant.Outlined">suggested: DIT Content Rule</MudChip>
+                                    </ChildContent>
+                                </MudTooltip>
+                            }
+                            @if (offer.EntriesObservedOn is > 0)
+                            {
+                                var entriesObservedOn = offer.EntriesObservedOn.Value;
+                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                    <TooltipContent>
+                                        <TooltipText Text="@ObservationTooltip(entriesObservedOn)" />
+                                    </TooltipContent>
+                                    <ChildContent>
+                                        <MudChip T="string" Variant="Variant.Outlined">@($"suggested: in use on {entriesObservedOn:N0} entries")</MudChip>
+                                    </ChildContent>
+                                </MudTooltip>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        }
+
+        @* ─── Discovery ─── *@
+        <MudPaper Outlined="true" Class="pa-4 mt-5">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Discover in-use auxiliary classes</MudText>
+            <MudText Class="mb-3">
+                Reading entries tells you which auxiliary classes this Connected System's objects actually carry. It
+                only adds suggestions above; every auxiliary class in the schema is listed for enabling either way.
+            </MudText>
+
+            <MudRadioGroup T="AuxiliaryClassDiscoveryScope" @bind-Value="_scope" Disabled="DiscoveryInProgress">
+                <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.QuickSample" Color="Color.Primary">
+                    Quick sample
+                </MudRadio>
+                <MudText Typo="Typo.caption" Class="d-block ml-8 mb-2 mud-text-secondary">
+                    Reads the first entries of each Object Type. Fast. A directory returns entries in its own order,
+                    so a rarely used class can be missed; the results are ranked suggestions, never limits.
+                </MudText>
+                <MudRadio T="AuxiliaryClassDiscoveryScope" Value="AuxiliaryClassDiscoveryScope.FullScan" Color="Color.Primary">
+                    Full scan
+                </MudRadio>
+                <MudText Typo="Typo.caption" Class="d-block ml-8 mud-text-secondary">
+                    Reads every entry in scope, asking for its class membership and nothing else. Complete, and the
+                    only scope whose answer of "this class is not in use" means anything. It can take a long time on a
+                    large directory, and runs as an Activity you can watch and cancel.
+                </MudText>
+            </MudRadioGroup>
+
+            @if (_scope == AuxiliaryClassDiscoveryScope.QuickSample)
+            {
+                <MudNumericField
+                    T="int"
+                    @bind-Value="_sampleSizePerObjectType"
+                    Label="Entries to read per Object Type"
+                    Variant="Variant.Outlined"
+                    Min="1"
+                    Max="1000000"
+                    Immediate="true"
+                    Disabled="DiscoveryInProgress"
+                    Class="mt-4"
+                    Style="max-width: 20rem;" />
+            }
+
+            <MudButton
+                Variant="Variant.Outlined"
+                Color="Color.Primary"
+                Class="mt-4"
+                Disabled="@(DiscoveryInProgress || _startingDiscovery || !CanStartDiscovery())"
+                OnClick="HandleRunDiscoveryAsync">
+                Run Discovery
+            </MudButton>
+
+            @* ─── Status ─── *@
+            <MudDivider Class="my-4" />
+            @if (LatestDiscoveryRun == null)
+            {
+                <MudText Class="mud-text-secondary">Discovery has never been run on @ConnectedSystem.Name.</MudText>
+            }
+            else
+            {
+                var latestRun = LatestDiscoveryRun;
+                <div class="d-flex align-center flex-wrap gap-2">
+                    <MudChip T="string" Color="@StatusColour(latestRun.Status)" Variant="Variant.Outlined">
+                        @StatusText(latestRun.Status)
+                    </MudChip>
+                    <MudText Class="mud-text-secondary">@DescribeRun(latestRun)</MudText>
+                    @if (latestRun.ActivityId.HasValue)
+                    {
+                        var activityId = latestRun.ActivityId.Value;
+                        <MudLink Href="@($"/activity/{activityId}")">View Activity</MudLink>
+                    }
+                    @if (DiscoveryInProgress)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Disabled="_cancellingDiscovery"
+                                   OnClick="HandleCancelDiscoveryAsync">
+                            Cancel
+                        </MudButton>
+                    }
+                </div>
+                @if (latestRun.Status == AuxiliaryClassDiscoveryStatus.Cancelled)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        A cancelled run keeps what it found. Those classes are genuinely in use; the ones it never
+                        reached are simply unknown.
+                    </MudText>
+                }
+                @if (latestRun.Status == AuxiliaryClassDiscoveryStatus.Failed && !string.IsNullOrEmpty(latestRun.ErrorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-2">@latestRun.ErrorMessage</MudAlert>
+                }
+            }
+        </MudPaper>
+    </MudPaper>
+}
+
+@* An auxiliary Object Type has no structural class of its own, so JIM cannot create one of its entries without
+   being told what to write alongside it. *@
+@if (ObjectType.ManagesClassMembership() && ObjectType.IsAuxiliary())
+{
+    <MudPaper Outlined="true" Class="pa-4 mt-5">
+        <MudText Typo="Typo.h6" Class="mb-3">Provisioning</MudText>
+        <MudText>
+            Every entry in @ConnectedSystem.Name carries exactly one structural class. Name the one JIM should write
+            alongside @ObjectType.Name when it creates an entry of this Object Type.
+        </MudText>
+        <MudSelect
+            T="int?"
+            Label="Structural Carrier Class"
+            Variant="Variant.Outlined"
+            Class="mt-4"
+            Style="max-width: 30rem;"
+            Clearable="true"
+            Disabled="_saving"
+            Value="ObjectType.StructuralCarrierObjectTypeId"
+            ValueChanged="HandleCarrierChangedAsync">
+            @foreach (var candidate in _carrierCandidates)
+            {
+                <MudSelectItem T="int?" Value="candidate.Id">@candidate.Name</MudSelectItem>
+            }
+        </MudSelect>
+        @if (ObjectType.StructuralCarrierObjectTypeId == null)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+                Until a carrier is chosen, JIM can import @ObjectType.Name objects but cannot create them.
+            </MudAlert>
+        }
+        else
+        {
+            var carrierName = _carrierCandidates.FirstOrDefault(c => c.Id == ObjectType.StructuralCarrierObjectTypeId)?.Name;
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                On create, JIM writes both @carrierName and @ObjectType.Name.
+            </MudText>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public ConnectedSystemObjectType ObjectType { get; set; } = null!;
+
+    /// <summary>
+    /// The Connected System's last auxiliary class discovery run, or null when none has been run. Supplied rather
+    /// than fetched, so the panel renders without reaching the application layer; it is the host's to reload when
+    /// <see cref="OnSchemaChanged"/> says something has changed.
+    /// </summary>
+    [Parameter]
+    public AuxiliaryClassDiscoveryRun? LatestDiscoveryRun { get; set; }
+
+    /// <summary>
+    /// Raised after a change the host needs to reload the Connected System for: merging a class changes which
+    /// attributes the Object Type has, and the attribute table is built from them; starting or cancelling a
+    /// discovery run changes what this panel's own status strip should say.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSchemaChanged { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private const int DefaultSampleSizePerObjectType = 5000;
+
+    private List<AuxiliaryClassOffer> _offers = [];
+    private List<ConnectedSystemObjectType> _carrierCandidates = [];
+    private AuxiliaryClassDiscoveryScope _scope = AuxiliaryClassDiscoveryScope.QuickSample;
+    private int _sampleSizePerObjectType = DefaultSampleSizePerObjectType;
+    private bool _saving;
+    private bool _startingDiscovery;
+    private bool _cancellingDiscovery;
+
+    private bool DiscoveryInProgress => LatestDiscoveryRun?.Status == AuxiliaryClassDiscoveryStatus.InProgress;
+
+    protected override void OnParametersSet()
+    {
+        var objectTypes = ConnectedSystem.ObjectTypes ?? [];
+        _offers = AuxiliaryClassOfferBuilder.Build(ObjectType, objectTypes, LatestDiscoveryRun);
+        _carrierCandidates = AuxiliaryClassOfferBuilder.CarrierCandidates(objectTypes);
+    }
+
+    private bool CanStartDiscovery()
+    {
+        return _scope != AuxiliaryClassDiscoveryScope.QuickSample || _sampleSizePerObjectType > 0;
+    }
+
+    private async Task HandleMergeChangedAsync(AuxiliaryClassOffer offer, bool merged)
+    {
+        _saving = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var applied = merged
+                ? await jim.ConnectedSystems.AddObjectTypeExtensionAsync(ObjectType.Id, offer.ObjectType.Id)
+                : await jim.ConnectedSystems.RemoveObjectTypeExtensionAsync(ObjectType.Id, offer.ObjectType.Id);
+
+            if (!applied)
+            {
+                Snackbar.Add($"'{offer.ObjectType.Name}' could not be {(merged ? "merged into" : "removed from")} '{ObjectType.Name}'.", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(
+                merged
+                    ? $"'{offer.ObjectType.Name}' merged into '{ObjectType.Name}'. Refresh the schema to bring in its attributes."
+                    : $"'{offer.ObjectType.Name}' is no longer merged into '{ObjectType.Name}'.",
+                Severity.Success);
+
+            await OnSchemaChanged.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task HandleCarrierChangedAsync(int? carrierObjectTypeId)
+    {
+        _saving = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            await jim.ConnectedSystems.SetStructuralCarrierObjectTypeAsync(ObjectType.Id, carrierObjectTypeId);
+
+            // Keep the loaded graph in step so the select and its guidance reflect the save without a reload.
+            ObjectType.StructuralCarrierObjectTypeId = carrierObjectTypeId;
+            ObjectType.StructuralCarrierObjectType = _carrierCandidates.FirstOrDefault(c => c.Id == carrierObjectTypeId);
+
+            Snackbar.Add(
+                carrierObjectTypeId == null
+                    ? $"'{ObjectType.Name}' no longer has a Structural Carrier Class, so JIM cannot create its objects."
+                    : $"'{ObjectType.Name}' objects will be created as '{ObjectType.StructuralCarrierObjectType?.Name}'.",
+                Severity.Success);
+
+            await OnSchemaChanged.InvokeAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task HandleRunDiscoveryAsync()
+    {
+        _startingDiscovery = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.ConnectedSystems.StartAuxiliaryClassDiscoveryAsync(
+                ConnectedSystem.Id,
+                _scope,
+                _scope == AuxiliaryClassDiscoveryScope.QuickSample ? _sampleSizePerObjectType : null,
+                user);
+
+            if (!result.Success)
+            {
+                Snackbar.Add(result.ErrorMessage ?? "Discovery could not be started.", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add("Discovery queued. Its progress and results are on its Activity.", Severity.Success);
+            await OnSchemaChanged.InvokeAsync();
+        }
+        finally
+        {
+            _startingDiscovery = false;
+        }
+    }
+
+    private async Task HandleCancelDiscoveryAsync()
+    {
+        var activityId = LatestDiscoveryRun?.ActivityId;
+        if (activityId == null)
+            return;
+
+        _cancellingDiscovery = true;
+        try
+        {
+            using (var jim = JimFactory.Create())
+            {
+                var workerTask = await jim.Tasking.GetWorkerTaskByActivityIdAsync(activityId.Value);
+                if (workerTask == null)
+                {
+                    Snackbar.Add("The discovery run has already finished.", Severity.Info);
+                }
+                else
+                {
+                    await jim.Tasking.RequestWorkerTaskCancellationAsync(workerTask.Id);
+                    Snackbar.Add("Cancellation requested. What the run has already found is kept.", Severity.Success);
+                }
+            }
+
+            await OnSchemaChanged.InvokeAsync();
+        }
+        finally
+        {
+            _cancellingDiscovery = false;
+        }
+    }
+
+    private static string ObservationTooltip(int entriesObservedOn)
+    {
+        return $"The last discovery run saw this class on {entriesObservedOn:N0} of the entries it read. " +
+               "A quick sample counts within the sample, not within the whole population.";
+    }
+
+    private static Color StatusColour(AuxiliaryClassDiscoveryStatus status) => status switch
+    {
+        AuxiliaryClassDiscoveryStatus.InProgress => Color.Info,
+        AuxiliaryClassDiscoveryStatus.Complete => Color.Success,
+        AuxiliaryClassDiscoveryStatus.Cancelled => Color.Warning,
+        AuxiliaryClassDiscoveryStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string StatusText(AuxiliaryClassDiscoveryStatus status) => status switch
+    {
+        AuxiliaryClassDiscoveryStatus.InProgress => "Running",
+        AuxiliaryClassDiscoveryStatus.Complete => "Last completed",
+        AuxiliaryClassDiscoveryStatus.Cancelled => "Cancelled, partial",
+        AuxiliaryClassDiscoveryStatus.Failed => "Failed",
+        _ => "Not run"
+    };
+
+    private static string DescribeRun(AuxiliaryClassDiscoveryRun run)
+    {
+        var scope = run.Scope == AuxiliaryClassDiscoveryScope.QuickSample
+            ? $"Quick sample ({run.SampleSizePerObjectType:N0} per Object Type)"
+            : "Full scan";
+
+        var when = run.Completed.HasValue
+            ? run.Completed.Value.ToLocalTime().ToFriendlyDate()
+            : $"started {run.Started.ToLocalTime().ToRelativeTime()}";
+
+        var who = string.IsNullOrEmpty(run.InitiatedByName) ? "" : $" by {run.InitiatedByName}";
+
+        return $"{scope}, {when}{who}, {run.EntriesRead:N0} entries read";
+    }
+}
