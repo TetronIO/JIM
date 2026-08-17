@@ -63,6 +63,7 @@ BeforeAll {
             CommitSeq  = 0
             RefWrites  = [System.Collections.ArrayList]::new()
             Calls      = [System.Collections.ArrayList]::new()
+            RefuseCreate = $false
         }
 
         foreach ($name in $Branches.Keys) { $hub.Refs[$name] = $Branches[$name] }
@@ -285,7 +286,8 @@ BeforeAll {
             }
             'create' {
                 $head = $GhArgs[[array]::IndexOf($GhArgs, '--head') + 1]
-                if (@($global:FakeHub.Prs | Where-Object { $_.head -eq $head -and $_.state -eq 'OPEN' }).Count -gt 0) {
+                if ($global:FakeHub.RefuseCreate -or
+                    @($global:FakeHub.Prs | Where-Object { $_.head -eq $head -and $_.state -eq 'OPEN' }).Count -gt 0) {
                     $global:LASTEXITCODE = 1
                     return "gh: a pull request for branch $head already exists"
                 }
@@ -336,6 +338,10 @@ BeforeAll {
             # *>&1, not 2>&1: the script reports through Write-Host (the
             # information stream), which 2>&1 does not capture.
             $script:Output = & $script:ScriptPath @arguments *>&1 | Out-String
+            $script:Failed = $false
+        } catch {
+            $script:Output = "$_"
+            $script:Failed = $true
         } finally {
             Pop-Location
         }
@@ -467,6 +473,21 @@ Describe 'open-pin-pr.ps1' {
             $global:FakeHub.Refs.ContainsKey($script:BotBranch) | Should -BeTrue
             $global:FakeHub.Parents[$global:FakeHub.Refs[$script:BotBranch]] | Should -Be 'basesha001'
             (Get-FakePr -Number 1).state | Should -Be 'OPEN'
+        }
+
+        It 'fails the run when the pull request cannot be opened' {
+            # The tooling bot did exactly this in production, weekly, from 21
+            # July: it created the branch, pushed the bump commit, logged
+            # "Opening new PR ...", had `gh pr create` refused, and reported
+            # success because nothing checked the exit code. A bot that raises
+            # nothing must not report a green run.
+            $global:FakeHub.RefuseCreate = $true
+
+            $output = Invoke-OpenPinPr -WorkingTree (New-WorkingTree)
+
+            $script:Failed | Should -BeTrue
+            $output | Should -Match 'Failed to open a PR'
+            $global:FakeHub.Prs.Count | Should -Be 0
         }
 
         It 'opens a fresh pull request when the previous one was merged' {
