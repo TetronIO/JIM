@@ -625,6 +625,7 @@ function Show-ScenarioMenu {
                 "*Scenario15*" { "SCIM 2.0 Client Connector (import, join, bulk export, confirm)" }
                 "*Scenario16*" { "JIM SQL Connector provider x capability matrix (SQL Server, Oracle)" }
                 "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
+                "*Scenario18*" { "Writeback into the source Connected System (EXPECTED TO FAIL until #1284)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1251,7 +1252,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario14*",  # Attribute Priority - fixed six-user dataset per suffix, no template scaling
     "*Scenario15*",  # SCIM Connector - data comes from the SCIM test provider's own seed and a bespoke CSV
     "*Scenario16*",  # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
-    "*Scenario17*"   # Initial Password - asserts against one account; a larger template only lengthens the export
+    "*Scenario17*",  # Initial Password - asserts against one account; a larger template only lengthens the export
+    "*Scenario18*"   # Writeback To Source - three seeded people; the question is per-object, not per-population
 )
 
 function Test-TemplateRelevant {
@@ -1683,6 +1685,17 @@ if ($Scenario -eq "All") {
             continue
         }
         $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
+    }
+
+    # Scenario 18 states an open defect (#1284) rather than recording one: its writeback assertion is
+    # written against the behaviour JIM should have, so it fails by design until the fix lands. It is
+    # excluded from the sweep so a full regression stays a signal about regressions, and run
+    # explicitly (-Scenario Scenario18-WritebackToSource) when the question is being worked on.
+    # DELETE THIS BLOCK when #1284 is resolved; the scenario should then pass with no edit.
+    $knownFailing = @($implementedScenarios | Where-Object { $_ -like "*Scenario18*" })
+    if ($knownFailing.Count -gt 0) {
+        Write-Host "${YELLOW}Skipping known-failing scenario(s) pending #1284: $($knownFailing -join ', ')${NC}"
+        $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario18*" })
     }
 
     # Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology); skip it on a
