@@ -1,6 +1,6 @@
 # Configuration Change Preview Framework
 
-- **Status:** Doing (Phase 0 complete; Phase 2 acknowledgement flow piloted on the Synchronisation Rule editor)
+- **Status:** Doing (framework complete and proven by two shipped adapters, G5 deletion settings and G4 partition/container deselection, each across portal, REST and PowerShell; four of six coverage-map gaps remain, all blocked on the #288 engine core)
 - **Created:** 2026-07-16
 - **Author:** JayVDZ
 - **Issue:** [#827](https://github.com/TetronIO/JIM/issues/827)
