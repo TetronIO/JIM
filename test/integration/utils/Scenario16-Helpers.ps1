@@ -1,4 +1,4 @@
-# Copyright (c) Tetron Limited. All rights reserved.
+﻿# Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 <#
@@ -328,14 +328,50 @@ function Test-S16DeltaChangeLog {
 
 # ─── Shared machinery for the synchronisation and export rows ──────────────────
 
-function Invoke-S16RunProfile {
+function Get-S16SystemIdForType {
+    <#
+    .SYNOPSIS
+        Which Connected System holds a given Object Type.
+    .DESCRIPTION
+        The scenario spans two Connected Systems over one database: the source of identity, and the
+        accounts provisioned from it. A row asks for the Object Type it cares about and gets the system
+        that holds it, rather than having to know how the two were divided.
+    #>
     param(
         [Parameter(Mandatory=$true)][hashtable]$Context,
         [Parameter(Mandatory=$true)][string]$Name
     )
 
-    $result = Start-JIMRunProfile -ConnectedSystemId $Context.ConnectedSystemId -RunProfileName $Name -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($($Context.Provider))"
+    if (-not $Context.ObjectTypes.ContainsKey($Name)) {
+        throw "Object Type '$Name' was not selected by Setup-Scenario16.ps1."
+    }
+    return $Context.ObjectTypes[$Name].connectedSystemId
+}
+
+function Invoke-S16RunProfile {
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Context,
+        [Parameter(Mandatory=$true)][string]$Name,
+
+        # Which of the scenario's Connected Systems to run against. Import is the default because most
+        # rows drive the source of identity; the account systems are named explicitly where a row means
+        # one of them, so the choice is visible at the call site rather than inferred.
+        [Parameter(Mandatory=$false)][ValidateSet('Import', 'AppUsers', 'Accounts')][string]$System = 'Import'
+    )
+
+    $systemId = switch ($System) {
+        'AppUsers' { $Context.AppUserConnectedSystemId }
+        'Accounts' { $Context.ExportConnectedSystemId }
+        default    { $Context.ConnectedSystemId }
+    }
+    $label = switch ($System) {
+        'AppUsers' { "$($Context.Provider) app users" }
+        'Accounts' { "$($Context.Provider) accounts" }
+        default    { $Context.Provider }
+    }
+
+    $result = Start-JIMRunProfile -ConnectedSystemId $systemId -RunProfileName $Name -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $result.activityId -Name "Scenario 16 $Name ($label)"
     return $result
 }
 
@@ -352,10 +388,16 @@ function Invoke-S16Pipeline {
     #>
     param([Parameter(Mandatory=$true)][hashtable]$Context)
 
+    # Import and synchronise the source of identity, then export and confirm on each account system.
+    # The synchronisation runs on the identity system because that is where the Metaverse Objects come
+    # from, and it stages Pending Exports for every outbound rule regardless of which system owns it;
+    # each account system's own Export run profile is what then writes them.
     Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
     Invoke-S16RunProfile -Context $Context -Name "Full Synchronisation" | Out-Null
-    Invoke-S16RunProfile -Context $Context -Name "Export"               | Out-Null
-    Invoke-S16RunProfile -Context $Context -Name "Full Import"          | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Export"               -System AppUsers | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          -System AppUsers | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Export"               -System Accounts | Out-Null
+    Invoke-S16RunProfile -Context $Context -Name "Full Import"          -System Accounts | Out-Null
 
     # A pipeline satisfies the lighter baseline too, so a driver-shape row running after an export row
     # does not import and synchronise all over again for nothing.
@@ -400,10 +442,18 @@ function Get-S16ExportBlocker {
     param([Parameter(Mandatory=$true)][hashtable]$Context)
 
     $appUserTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'AppUser'
-    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -Count)
+    $appUserSystemId = Get-S16SystemIdForType -Context $Context -Name 'AppUser'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -Count)
     if ($csoCount -gt 0) { return $null }
 
-    return "Not exercisable in this topology: JIM excludes the Connected System being synchronised from export evaluation (ExportEvaluationServer.BuildExportEvaluationCacheAsync filters target systems with 'id != sourceConnectedSystemId'), and this scenario imports from and provisions into one Connected System. The outbound rules were created and enabled, the Full Synchronisation completed and projected every Metaverse Object, and no Pending Export was raised. Splitting the export targets into a second Connected System against the same database would exercise the row."
+    # This used to report that the row was not exercisable at all: JIM excludes the Connected System
+    # being synchronised from export evaluation (ExportEvaluationServer.BuildExportEvaluationCacheAsync
+    # filters target systems with 'id != sourceConnectedSystemId'), and the scenario used to import from
+    # and provision into a single Connected System, so no Pending Export was ever raised. The remedy that
+    # note called for has since been made: the export Object Types live in their own Connected System
+    # against the same database. The guard stays because reaching it now means something is wrong rather
+    # than merely unsupported, so it says so.
+    return "No AppUser Connected System Objects exist after the export baseline, so nothing was provisioned to assert on. The scenario provisions into separate Connected Systems precisely so export evaluation can see the outbound rules, which means this is a failure to diagnose rather than a topology JIM cannot serve. Check the Full Synchronisation's Activity: an Object Type conflict there means two outbound rules into one Connected System claimed the same person, which the split into an app users system and an accounts system is meant to make impossible."
 }
 
 function Initialize-S16ExportBaseline {
@@ -445,8 +495,20 @@ function Get-S16ExpectedCount {
 }
 
 function Get-S16EmployeeNumber {
-    param([Parameter(Mandatory=$true)][int]$EmployeeId)
-    return "E{0:D8}" -f $EmployeeId
+    <#
+    .SYNOPSIS
+        The employee number the seeder gave one employee, composed with the provider's own prefix.
+    .DESCRIPTION
+        Each provider seeds a distinct prefix (S for SQL Server, O for Oracle) so the two providers
+        describe different people; a hardcoded prefix here once made every by-number lookup query for
+        rows that did not exist, failing rows with messages like "has no APP_USERS row" while the row
+        sat in the table under the other prefix.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
+    return "$($Config.EmployeeNumberPrefix){0:D8}" -f $EmployeeId
 }
 
 function Get-S16MetaverseObject {
@@ -454,13 +516,16 @@ function Get-S16MetaverseObject {
     .SYNOPSIS
         The Metaverse Object the inbound rule projected for one seeded employee, with its values.
     #>
-    param([Parameter(Mandatory=$true)][int]$EmployeeId)
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
 
     # Filtered on the 'Employee ID' attribute rather than -Search. -Search matches DISPLAY NAME only,
     # and this scenario's inbound rule deliberately flows no Display Name (the source has no such
     # column), so every search returned nothing and every driver-shape row failed with "No Metaverse
     # Object was projected" while all fifty were sitting in the Metaverse.
-    $employeeNumber = Get-S16EmployeeNumber -EmployeeId $EmployeeId
+    $employeeNumber = Get-S16EmployeeNumber -Config $Config -EmployeeId $EmployeeId
     $match = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName 'Employee ID' -AttributeValue $employeeNumber -PageSize 10) | Select-Object -First 1
     if (-not $match) { return $null }
     return Get-JIMMetaverseObject -Id $match.id
@@ -501,7 +566,8 @@ function Test-S16ExportCreate {
     # written; if the external ID it composed from the row differed from the one the insert returned, the
     # import would have created a second Connected System Object for each and the count would be doubled.
     $appUserTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'AppUser'
-    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -Count)
+    $appUserSystemId = Get-S16SystemIdForType -Context $Context -Name 'AppUser'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -Count)
 
     if ($csoCount -ne $expected) {
         return @{ Status = 'fail'; Detail = "APP_USERS holds $actualRows row(s) but JIM holds $csoCount Connected System Object(s) for the type. A mismatch here means the external ID composed on export does not equal the one composed on import, so the confirming import did not recognise the objects it had just created." }
@@ -509,7 +575,7 @@ function Test-S16ExportCreate {
 
     # A generated key is only proof of anything if it actually came from the database: the seeded table is
     # empty before this row runs, so every identifier present was returned by an insert.
-    $anchors = @(Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $appUserTypeId -All -Force |
+    $anchors = @(Get-JIMConnectedSystemObject -ConnectedSystemId $appUserSystemId -ObjectTypeId $appUserTypeId -All -Force |
                  ForEach-Object { $_.externalIdValue })
     $unusable = @($anchors | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -notmatch '^\d+$' })
     if ($unusable.Count -gt 0) {
@@ -530,7 +596,7 @@ function Test-S16ExportUpdate {
     # Employee 12 is enabled (12 is not a multiple of seven) and has two phone numbers (12 is a multiple
     # of three), so both a scalar change and a multi-valued change have somewhere to land.
     $employeeId = 12
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
     $newEmail = "updated.employee$employeeId@panoply.local"
     $newPhone = "+44 113 496 9999"
 
@@ -573,7 +639,7 @@ function Test-S16ExportDelete {
     # outbound rule's scope; the rule's OutboundDeprovisionAction is Delete, so that becomes a delete
     # export rather than a disconnect.
     $employeeId = 20
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
 
     $before = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';")
     if ($before -ne 1) {
@@ -619,13 +685,14 @@ function Test-S16ExportNaturalKey {
     }
 
     $naturalTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'NaturalKeyAccount'
-    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $naturalTypeId -Count)
+    $naturalSystemId = Get-S16SystemIdForType -Context $Context -Name 'NaturalKeyAccount'
+    $csoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $naturalSystemId -ObjectTypeId $naturalTypeId -Count)
     if ($csoCount -ne $expected) {
         return @{ Status = 'fail'; Detail = "APP_ACCOUNTS_NATURAL holds $actualRows row(s) but JIM holds $csoCount Connected System Object(s), so the anchor JIM authored on export is not the one it composed on import." }
     }
 
     # The key JIM authored has to be the value the Attribute Flow supplied, not a surrogate of its own.
-    $malformed = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_ACCOUNTS_NATURAL WHERE ACCOUNT_CODE NOT LIKE 'E%';")
+    $malformed = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_ACCOUNTS_NATURAL WHERE ACCOUNT_CODE NOT LIKE '$($Config.EmployeeNumberPrefix)%';")
     if ($malformed -ne 0) {
         return @{ Status = 'fail'; Detail = "$malformed row(s) carry an ACCOUNT_CODE that did not come from the Metaverse 'Account Name' flow." }
     }
@@ -647,8 +714,8 @@ function Test-S16ReferenceExport {
     # than the source system's employee identifier.
     $employeeId = 12
     $managerEmployeeId = ($employeeId % 10) + 1
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
-    $managerUserName = Get-S16EmployeeNumber -EmployeeId $managerEmployeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
+    $managerUserName = Get-S16EmployeeNumber -Config $Config -EmployeeId $managerEmployeeId
 
     $expectedManagerId = (Invoke-Scenario16Query -Config $Config -Query "SELECT ID FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$managerUserName';").Trim()
     if ([string]::IsNullOrWhiteSpace($expectedManagerId)) {
@@ -674,12 +741,16 @@ function Test-S16TypeMappingRoundTrip {
     # One employee, every mapped shape, source value against exported value. Employee 12 is enabled so it
     # has an exported row, and its FTE is 0.25, a value binary floating point cannot represent exactly.
     $employeeId = 12
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
     $failures = @()
 
-    $sourceFte = [decimal](Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(FTE) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" | ForEach-Object { $_ }).Trim()
-    if ($Config.Provider -eq "SqlServer") {
-        $sourceFte = [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT CAST(FTE AS varchar(32)) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;").Trim())
+    # Provider-specific from the start: TO_CHAR does not exist on SQL Server, and running the Oracle
+    # form first "to be overwritten" fails the whole row there with Msg 195 before the override runs.
+    $sourceFte = if ($Config.Provider -eq "SqlServer") {
+        [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT CAST(FTE AS varchar(32)) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;").Trim())
+    }
+    else {
+        [decimal]((Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(FTE) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" | ForEach-Object { $_ }) -join '').Trim()
     }
 
     $exportedFteText = (Invoke-Scenario16Query -Config $Config -Query $(
@@ -841,7 +912,7 @@ function Test-S16DateTimeNonUtc {
         param([hashtable]$RowContext, [string]$Label, [string]$WallClock, [int]$Employee)
 
         $attributeName = $RowContext.MetaverseAttributes.ZonelessDate
-        $mvo = Get-S16MetaverseObject -EmployeeId $Employee
+        $mvo = Get-S16MetaverseObject -Config $Config -EmployeeId $Employee
         if (-not $mvo) { return @{ Failure = "No Metaverse Object was projected for employee $Employee ($Label)."; Observation = $null } }
 
         $value = Get-S16MvoValue -Mvo $mvo -AttributeName $attributeName
@@ -904,7 +975,7 @@ function Test-S16OffsetVersusZoneless {
     $employeeId = 7
     $failures = @()
 
-    $mvo = Get-S16MetaverseObject -EmployeeId $employeeId
+    $mvo = Get-S16MetaverseObject -Config $Config -EmployeeId $employeeId
     if (-not $mvo) {
         return @{ Status = 'fail'; Detail = "No Metaverse Object was projected for employee $employeeId, so neither value can be read back." }
     }
@@ -952,7 +1023,7 @@ function Test-S16LocalTimeZone {
     $employeeId = 7
     $catalogueType = (Invoke-Scenario16Query -Config $Config -Query "SELECT DATA_TYPE FROM ALL_TAB_COLUMNS WHERE OWNER = '$($Config.Schema)' AND TABLE_NAME = 'EMPLOYEES' AND COLUMN_NAME = 'HIRED_AT_LOCAL';").Trim()
 
-    $mvo = Get-S16MetaverseObject -EmployeeId $employeeId
+    $mvo = Get-S16MetaverseObject -Config $Config -EmployeeId $employeeId
     if (-not $mvo) {
         return @{ Status = 'fail'; Detail = "No Metaverse Object was projected for employee $employeeId." }
     }
@@ -995,7 +1066,8 @@ function Test-S16Raw16Anchor {
     if ($blocker) { return @{ Status = 'skip'; Detail = $blocker } }
 
     $guidTypeId = Get-Scenario16ObjectTypeId -Context $Context -Name 'GuidKeyedPerson'
-    $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -Count
+    $guidSystemId = Get-S16SystemIdForType -Context $Context -Name 'GuidKeyedPerson'
+    $imported = Get-JIMConnectedSystemObject -ConnectedSystemId $guidSystemId -ObjectTypeId $guidTypeId -Count
     $expected = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).GUID_KEYED_PEOPLE;")
 
     if ([int]$imported -ne $expected) {
@@ -1010,7 +1082,7 @@ function Test-S16Raw16Anchor {
         return @{ Status = 'fail'; Detail = "The rule is scoped to Department = Finance, so $expectedProvisioned row(s) should have been provisioned on top of the three seeded ones; GUID_KEYED_PEOPLE holds $expected row(s) in total." }
     }
 
-    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $Context.ConnectedSystemId -ObjectTypeId $guidTypeId -All -Force
+    $objects = Get-JIMConnectedSystemObject -ConnectedSystemId $guidSystemId -ObjectTypeId $guidTypeId -All -Force
     $anchors = @($objects | ForEach-Object { $_.externalIdValue })
     $malformed = @($anchors | Where-Object { $_ -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' })
 

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
 using JIM.Application.Staging;
@@ -1622,6 +1623,60 @@ public class ExportExecutionServer
     /// and saves all CSO updates together.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
+    /// <summary>
+    /// Stores a connector-returned external ID on an attribute value, in the typed slot the anchor
+    /// attribute declares.
+    /// </summary>
+    /// <remarks>
+    /// The typed slot matters more than it looks (#1386): the confirming import's attribute diff is
+    /// typed, so a Number anchor it expects in IntValue but finds stored as a string is invisible to
+    /// it, and the diff stages a typed duplicate alongside. The object then holds two values for its
+    /// External ID attribute, which kills the change-record read on the confirming import; nothing is
+    /// ever confirmed, and every subsequent synchronisation cycle exports the same objects again,
+    /// duplicating rows in the customer's target database.
+    /// <para>
+    /// A value that does not parse into its declared type is preserved as text and logged as an error
+    /// rather than dropped: it means the connector returned a key of the wrong shape, and the value is
+    /// the evidence. The confirming import cannot match it, which it reports per object.
+    /// </para>
+    /// </remarks>
+    internal static void ApplyExternalIdToAttributeValue(
+        ConnectedSystemObjectAttributeValue attributeValue,
+        AttributeDataType? declaredType,
+        string externalId,
+        Guid csoId)
+    {
+        // Clear every slot first: this instance may be reused from an earlier export, and a stale
+        // value left in another slot would make the anchor ambiguous.
+        attributeValue.StringValue = null;
+        attributeValue.GuidValue = null;
+        attributeValue.IntValue = null;
+        attributeValue.LongValue = null;
+
+        switch (declaredType)
+        {
+            case AttributeDataType.Number when int.TryParse(externalId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue):
+                attributeValue.IntValue = intValue;
+                return;
+            case AttributeDataType.LongNumber when long.TryParse(externalId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue):
+                attributeValue.LongValue = longValue;
+                return;
+            case AttributeDataType.Guid when Guid.TryParse(externalId, out var guidValue):
+                attributeValue.GuidValue = guidValue;
+                return;
+        }
+
+        if (declaredType is AttributeDataType.Number or AttributeDataType.LongNumber or AttributeDataType.Guid)
+        {
+            Log.Error("ApplyExternalIdToAttributeValue: the Connector returned '{ExternalId}' as the external ID for " +
+                "Connected System Object {CsoId}, but the anchor attribute is declared {DeclaredType} and the value does not " +
+                "parse into it. Stored as text; the confirming import will not be able to match this object by its anchor.",
+                LogSanitiser.Sanitise(externalId), csoId, declaredType);
+        }
+
+        attributeValue.StringValue = externalId;
+    }
+
     private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
         List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate,
         ISyncRepository repository)
@@ -1665,7 +1720,10 @@ public class ExportExecutionServer
                     .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
 
                 // Capture old primary external ID value before overwriting for cache invalidation
-                var oldPrimaryIdValue = externalIdAttrValue?.StringValue ?? externalIdAttrValue?.GuidValue?.ToString();
+                var oldPrimaryIdValue = externalIdAttrValue?.StringValue
+                    ?? externalIdAttrValue?.GuidValue?.ToString()
+                    ?? externalIdAttrValue?.IntValue?.ToString(CultureInfo.InvariantCulture)
+                    ?? externalIdAttrValue?.LongValue?.ToString(CultureInfo.InvariantCulture);
 
                 if (externalIdAttrValue == null)
                 {
@@ -1678,16 +1736,7 @@ public class ExportExecutionServer
                     newAttributeValues.Add(externalIdAttrValue);
                 }
 
-                if (externalIdAttribute?.Type == AttributeDataType.Guid && Guid.TryParse(exportResult.ExternalId, out var guidValue))
-                {
-                    externalIdAttrValue.GuidValue = guidValue;
-                    externalIdAttrValue.StringValue = null;
-                }
-                else
-                {
-                    externalIdAttrValue.StringValue = exportResult.ExternalId;
-                    externalIdAttrValue.GuidValue = null;
-                }
+                ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttribute?.Type, exportResult.ExternalId, cso.Id);
 
                 // Track cache invalidation: evict old value if it differs from the new one
                 if (oldPrimaryIdValue != null && !oldPrimaryIdValue.Equals(exportResult.ExternalId, StringComparison.OrdinalIgnoreCase))
@@ -2117,7 +2166,7 @@ public class ExportExecutionServer
     /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
     /// not the primary external ID (objectGUID). We use the secondary external ID when available.
     /// </summary>
-    private static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
+    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
     {
         var allResolved = true;
 
@@ -2144,12 +2193,11 @@ public class ExportExecutionServer
 
                 // Use secondary external ID (DN) if available, otherwise fall back to primary
                 var resolvedAttr = secondaryExternalIdAttr ?? externalIdAttr;
+                var resolvedValue = resolvedAttr?.ToReferenceValueString();
 
-                if (resolvedAttr != null)
+                if (resolvedValue != null)
                 {
-                    attrChange.StringValue = resolvedAttr.StringValue ??
-                                             resolvedAttr.GuidValue?.ToString() ??
-                                             resolvedAttr.IntValue?.ToString();
+                    attrChange.StringValue = resolvedValue;
                     attrChange.UnresolvedReferenceValue = null;
 
                     // Issue #1079 (optimistic export apply, persisted per SPEC-1079B): the
@@ -2166,8 +2214,13 @@ public class ExportExecutionServer
                 }
                 else
                 {
-                    Log.Warning("Could not resolve reference for MVO {MvoId}: CSO {CsoId} has no external ID attribute",
-                        referencedMvoId, referencedCso.Id);
+                    // The referenced object exists but its anchor is not yet known: typically a
+                    // database-generated anchor whose own export has not been confirmed. Stamping
+                    // the change resolved here would send a null anchor to the connector (#1398);
+                    // leaving it unresolved keeps the export deferred until the anchor arrives.
+                    Log.Debug("TryResolveReferencesFromLookup: Cannot resolve reference for PE {PeId}: " +
+                        "CSO {CsoId} (MVO {MvoId}) does not hold an anchor value yet. Export stays deferred.",
+                        pendingExport.Id, referencedCso.Id, referencedMvoId);
                     allResolved = false;
                 }
             }

@@ -1,4 +1,4 @@
-# Copyright (c) Tetron Limited. All rights reserved.
+﻿# Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 <#
@@ -73,6 +73,8 @@ $null = $Template
 
 $config = Get-DatabaseConfig -Provider $Provider
 $systemName = "SQL Matrix $($config.DisplayName)"
+$appUserSystemName = "SQL Matrix $($config.DisplayName) App Users"
+$exportSystemName = "SQL Matrix $($config.DisplayName) Accounts"
 
 Write-TestSection "Scenario 16 Setup: $($config.DisplayName)"
 Write-Host "  Host:              $($config.Host):$($config.Port)" -ForegroundColor Gray
@@ -95,10 +97,14 @@ Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 # ─── Step 3: Clean up any prior run ────────────────────────────────────────────
 
 Write-TestStep "Step 3" "Removing any Connected System left by a previous run"
-$existing = Get-JIMConnectedSystem -Name $systemName -ErrorAction SilentlyContinue
-foreach ($system in @($existing | Where-Object { $_ })) {
-    Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
-    Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
+# Accounts first: it holds the Connected System Objects provisioned from the other one, so removing the
+# source of identity first would deprovision them on the way past rather than simply dropping them.
+foreach ($name in @($exportSystemName, $appUserSystemName, $systemName)) {
+    $existing = Get-JIMConnectedSystem -Name $name -ErrorAction SilentlyContinue
+    foreach ($system in @($existing | Where-Object { $_ })) {
+        Remove-JIMConnectedSystem -Id $system.id -Force | Out-Null
+        Write-Host "  Removed '$($system.name)'" -ForegroundColor Gray
+    }
 }
 
 # ─── Step 4: Resolve the connector definition and its settings ─────────────────
@@ -261,11 +267,26 @@ $objectTypesJson = @"
 }
 "@
 
-# ─── Step 6: Create and configure the Connected System ─────────────────────────
+# ─── Step 6: Create and configure the Connected Systems ────────────────────────
 
-Write-TestStep "Step 6" "Creating the Connected System '$systemName'"
-$system = New-JIMConnectedSystem -Name $systemName `
-    -Description "Scenario 16: JIM SQL Connector matrix against $($config.DisplayName)" `
+# Two Connected Systems over the same database, and this is not an arbitrary split. A Metaverse Object
+# can hold only one Connected System Object per Connected System, which is a deliberate, index-backed
+# invariant (#1331). The Person import projects a Metaverse Object and takes that one slot, so a rule
+# in the SAME system that provisions an AppUser for the same person has nowhere to put it: JIM reports
+# the clash and stages nothing, which is correct behaviour and made every export row in this matrix
+# unsatisfiable. Separating the source of identity from the accounts provisioned off it is also how a
+# real deployment is arranged, so the matrix is now testing the shape we would recommend rather than
+# one JIM is right to refuse.
+function New-Scenario16ConnectedSystem {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)][string]$Purpose,
+        [Parameter(Mandatory=$true)][string[]]$SelectTypeNames
+    )
+
+Write-TestStep "Step 6" "Creating the Connected System '$Name'"
+$system = New-JIMConnectedSystem -Name $Name `
+    -Description "Scenario 16: JIM SQL Connector matrix against $($config.DisplayName). $Purpose" `
     -ConnectorDefinitionId $connector.id -PassThru
 
 $settings = @{
@@ -344,7 +365,7 @@ $anchorColumns = @{
 }
 
 $selectedTypes = @{}
-foreach ($typeName in $expectedTypes) {
+foreach ($typeName in $SelectTypeNames) {
     $objectType = $objectTypes | Where-Object { $_.name -eq $typeName }
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $system.id -ObjectTypeId $objectType.id -Selected $true | Out-Null
 
@@ -358,6 +379,33 @@ foreach ($typeName in $expectedTypes) {
     }
 
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $system.id -ObjectTypeId $objectType.id -AttributeUpdates $attributeUpdates | Out-Null
+
+    # Oracle has one numeric type, so a column's declared precision is all JIM has to go on. It infers the
+    # narrowest type guaranteed to hold every permitted value, which for NUMBER(10) is a 64-bit whole
+    # number, and for NUMBER(19) a decimal. This estate knows more than the declaration does: these columns
+    # hold an employee identifier and a headcount well inside a smaller type, so the administrator says so.
+    # That is the practice we recommend, and it is what lets these columns flow into the built-in numeric
+    # Metaverse Attributes without an expression (#1354). Set before any Synchronisation Rule references
+    # them and before any values exist, which is when JIM will still accept it.
+    if ($Provider -eq "Oracle") {
+        foreach ($override in @(
+            @{ Column = 'EMPLOYEE_ID'; Type = 'Integer'    }
+            @{ Column = 'HEADCOUNT';   Type = 'LongNumber' }
+        )) {
+            $attribute = $objectType.attributes | Where-Object { $_.name -eq $override.Column } | Select-Object -First 1
+            if ($attribute) {
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId $system.id -ObjectTypeId $objectType.id `
+                    -AttributeId $attribute.id -Type $override.Type -ErrorAction Stop | Out-Null
+                $attribute.type = if ($override.Type -eq 'Integer') { 'Number' } else { $override.Type }
+                Write-Host "    Recorded $($override.Column) as $($override.Type), which its NUMBER declaration understates" -ForegroundColor Gray
+            }
+        }
+    }
+
+    # Which Connected System an Object Type belongs to, so a matrix row reading Connected System Objects
+    # of that type resolves the right one without having to know how the two systems were divided.
+    $objectType | Add-Member -NotePropertyName connectedSystemId -NotePropertyValue $system.id -Force
+
     $selectedTypes[$typeName] = $objectType
     Write-Host "  OK $typeName ($($objectType.attributes.Count) attributes, anchor $anchor)" -ForegroundColor Green
 }
@@ -381,6 +429,42 @@ $runProfiles = @(
 foreach ($runProfile in $runProfiles) {
     New-JIMRunProfile -ConnectedSystemId $system.id -Name $runProfile.Name -RunType $runProfile.RunType -PageSize $pageSize | Out-Null
     Write-Host "  OK $($runProfile.Name) (page size $pageSize)" -ForegroundColor Green
+}
+
+    return @{ System = $system; SelectedTypes = $selectedTypes; PageSize = $pageSize }
+}
+
+# The source of identity: the employee table and the view over it.
+$importSystem = New-Scenario16ConnectedSystem -Name $systemName `
+    -Purpose "The source of identity: employees and the view over them." `
+    -SelectTypeNames @("Person", "PersonView")
+
+# AppUser gets a Connected System to itself, and that is not symmetry for its own sake. Its MANAGER_ID
+# column is a self-reference: an AppUser's manager is another AppUser, so a manager can only be resolved
+# if the manager is also in this rule's scope. That forces the scope to stay broad (every enabled
+# employee), which in turn means it claims people the other two rules also want. Sharing a system with
+# them would put two Connected System Objects on one Metaverse Object, which #1331 refuses. Narrowing
+# this rule instead would be the wrong trade: scoped to one department only two of the ten referenced
+# managers would have an account, and the reference row would be measuring the scope rather than the
+# reference resolution it exists to test.
+$appUserSystem = New-Scenario16ConnectedSystem -Name $appUserSystemName `
+    -Purpose "Application accounts, whose manager column references another account in this same system." `
+    -SelectTypeNames @("AppUser")
+
+# The remaining account shapes. These two can share, because their scopes are already disjoint by
+# department (Research and Finance) and neither references the other.
+$otherAccountTypeNames = @("NaturalKeyAccount")
+if ($Provider -eq "Oracle") { $otherAccountTypeNames += "GuidKeyedPerson" }
+
+$exportSystem = New-Scenario16ConnectedSystem -Name $exportSystemName `
+    -Purpose "Accounts keyed the two other ways the matrix covers." `
+    -SelectTypeNames $otherAccountTypeNames
+
+$system        = $importSystem.System
+$pageSize      = $importSystem.PageSize
+$selectedTypes = @{}
+foreach ($source in @($importSystem.SelectedTypes, $appUserSystem.SelectedTypes, $exportSystem.SelectedTypes)) {
+    foreach ($key in $source.Keys) { $selectedTypes[$key] = $source[$key] }
 }
 
 # ─── Step 11: Metaverse plumbing ───────────────────────────────────────────────
@@ -416,18 +500,15 @@ function Add-Scenario16MetaverseAttribute {
     return $attribute
 }
 
-# Oracle has no distinct integer widths: every whole-number column is a NUMBER, which the Connector maps
-# to Decimal, so one column is LongNumber on SQL Server and Decimal on Oracle. A Metaverse Attribute
-# carries a single type and the mapping validator refuses a mismatch, so a whole-number attribute cannot
-# be shared between the two providers; each gets its own, typed to what that provider's schema discovery
-# actually yields. FTE is decimal(9,4) on SQL Server and NUMBER(9,4) on Oracle, both of which map to
-# Decimal, so it stays shared.
-$anchorNumberType = if ($Provider -eq "Oracle") { 'Decimal' } else { 'Integer'    }
-$bigNumberType    = if ($Provider -eq "Oracle") { 'Decimal' } else { 'LongNumber' }
-
-$mvFteAttribute        = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE" -Type Decimal
-$mvHeadcountAttribute  = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount ($($config.DisplayName))"   -Type $bigNumberType
-$mvEmployeeIdAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Employee Id ($($config.DisplayName))" -Type $anchorNumberType
+# Both providers share these, because both now present the same JIM types for the same columns: SQL
+# Server's named types say so outright, and Oracle's are recorded by the administrator in Step 9 where
+# its single NUMBER type understates them. An earlier revision gave each provider its own attributes to
+# work around that, which was the wrong example to ship: using the built-in Metaverse Attributes wherever
+# they fit is the practice we recommend, and a custom attribute created only to dodge a type is one no
+# other Connected System will ever match on. EMPLOYEE_ID therefore flows into the built-in
+# 'Employee Number' on both providers.
+$mvFteAttribute       = Add-Scenario16MetaverseAttribute -Name "SQL Matrix FTE"       -Type Decimal
+$mvHeadcountAttribute = Add-Scenario16MetaverseAttribute -Name "SQL Matrix Headcount" -Type LongNumber
 
 $mvAttributes = @(Get-JIMMetaverseAttribute)
 
@@ -489,7 +570,7 @@ $importRule = New-JIMSyncRule `
 $importMappings = @(
     @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Employee ID'         }
     @{ Cs = 'EMPLOYEE_NUMBER';     Mv = 'Account Name'        }
-    @{ Cs = 'EMPLOYEE_ID';         Mv = $mvEmployeeIdAttribute.name }
+    @{ Cs = 'EMPLOYEE_ID';         Mv = 'Employee Number'     }
     @{ Cs = 'FIRST_NAME';          Mv = 'First Name'          }
     @{ Cs = 'LAST_NAME';           Mv = 'Last Name'           }
     @{ Cs = 'EMAIL';               Mv = 'Email'               }
@@ -540,7 +621,7 @@ Write-TestStep "Step 14" "Creating the outbound Synchronisation Rules"
 $appUserRule = New-JIMSyncRule `
     -Name "SQL Matrix AppUser Export ($($config.DisplayName))" `
     -Description "Scenario 16 outbound rule: provisions into APP_USERS, whose primary key the database generates." `
-    -ConnectedSystemId $system.id `
+    -ConnectedSystemId $appUserSystem.System.id `
     -ConnectedSystemObjectTypeId $selectedTypes['AppUser'].id `
     -MetaverseObjectTypeId $mvUserType.id `
     -Direction Export `
@@ -579,6 +660,11 @@ New-JIMSyncRuleMapping -SyncRuleId $appUserRule.id `
 # source row's IS_ACTIVE takes its Metaverse Object out of scope, and OutboundDeprovisionAction Delete
 # turns that into a delete export rather than a disconnect. The seeded data disables every seventh
 # employee, so both sides of the scope are populated from the first import.
+#
+# Broad on purpose, and it has to stay broad: MANAGER_ID references another AppUser, so a manager can
+# only be resolved if the manager is provisioned by this same rule. That is why AppUser has a Connected
+# System to itself (see Step 6) rather than sharing one with the other account shapes, whose narrower
+# scopes it would otherwise overlap.
 $appUserScope = New-JIMScopingCriteriaGroup -SyncRuleId $appUserRule.id -Type All -PassThru
 New-JIMScopingCriterion `
     -SyncRuleId $appUserRule.id `
@@ -597,7 +683,7 @@ Write-Host "  OK AppUser export rule created ($($appUserMappings.Count + 1) Attr
 $naturalRule = New-JIMSyncRule `
     -Name "SQL Matrix NaturalKeyAccount Export ($($config.DisplayName))" `
     -Description "Scenario 16 outbound rule: provisions into a table whose primary key JIM authors." `
-    -ConnectedSystemId $system.id `
+    -ConnectedSystemId $exportSystem.System.id `
     -ConnectedSystemObjectTypeId $selectedTypes['NaturalKeyAccount'].id `
     -MetaverseObjectTypeId $mvUserType.id `
     -Direction Export `
@@ -639,7 +725,7 @@ if ($Provider -eq "Oracle") {
     $guidRule = New-JIMSyncRule `
         -Name "SQL Matrix GuidKeyedPerson Export (Oracle)" `
         -Description "Scenario 16 outbound rule: provisions into a table keyed RAW(16) DEFAULT SYS_GUID()." `
-        -ConnectedSystemId $system.id `
+        -ConnectedSystemId $exportSystem.System.id `
         -ConnectedSystemObjectTypeId $selectedTypes['GuidKeyedPerson'].id `
         -MetaverseObjectTypeId $mvUserType.id `
         -Direction Export `
@@ -667,8 +753,9 @@ if ($Provider -eq "Oracle") {
 }
 
 Write-TestSection "Scenario 16 Setup Complete: $($config.DisplayName)"
-Write-Host "  Connected System:   $systemName (ID: $($system.id))" -ForegroundColor Cyan
-Write-Host "  Object Types:       $(($expectedTypes) -join ', ')" -ForegroundColor Cyan
+Write-Host "  Identity source:    $systemName (ID: $($system.id)) - Person, PersonView" -ForegroundColor Cyan
+Write-Host "  App users:          $appUserSystemName (ID: $($appUserSystem.System.id)) - AppUser" -ForegroundColor Cyan
+Write-Host "  Accounts:           $exportSystemName (ID: $($exportSystem.System.id)) - $($otherAccountTypeNames -join ', ')" -ForegroundColor Cyan
 Write-Host "  Database Time Zone: $DatabaseTimeZone (deliberately not UTC)" -ForegroundColor Cyan
 Write-Host "  Page size:          $pageSize" -ForegroundColor Cyan
 Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 3 } else { 2 }) outbound" -ForegroundColor Cyan
@@ -676,7 +763,16 @@ Write-Host "  Synchronisation Rules: 1 inbound, $(if ($Provider -eq 'Oracle') { 
 return @{
     Provider           = $Provider
     ConnectedSystemId  = $system.id
+
+    # The two account systems. Every Object Type also carries its own connectedSystemId, so a row that
+    # reads Connected System Objects resolves the right system from the type rather than choosing
+    # between these; these exist for the pipeline, which has to run each system's Export and confirming
+    # import.
+    AppUserConnectedSystemId = $appUserSystem.System.id
+    ExportConnectedSystemId  = $exportSystem.System.id
+
     SystemName         = $systemName
+    ExportSystemName   = $exportSystemName
     ObjectTypes        = $selectedTypes
     RowCount           = $RowCount
     DatabaseTimeZone   = $DatabaseTimeZone
@@ -692,11 +788,10 @@ return @{
         ZonelessDate    = 'Employee Start Date'
         OffsetDate      = 'Employee End Date'
         LocalZoneDate   = 'Account Expires'
-        # Named for their column rather than their type: the whole-number ones are LongNumber on
-        # SQL Server and Decimal on Oracle, so a type-shaped key would be wrong on one provider.
+        # Named for their column rather than their type, so a row reads what it is asserting on.
         Fte             = $mvFteAttribute.name
         Headcount       = $mvHeadcountAttribute.name
-        EmployeeId      = $mvEmployeeIdAttribute.name
+        EmployeeId      = 'Employee Number'
         MultiValued     = 'Other Telephones'
     }
 }

@@ -317,13 +317,36 @@ foreach ($currentProvider in $providers) {
     Write-TestStep "Matrix" "Running $($rowsForProvider.Count) capability row(s)"
 
     foreach ($row in $rowsForProvider) {
+        # Start each row on an empty sentinel. Start-JIMRunProfile aborts its wait whenever the watcher
+        # has captured anything, and the sentinel accumulates for the whole run, so without this one
+        # row's errors abort every Run Profile after it and the rest of the matrix reports failures it
+        # never had. That is not hypothetical: four export errors on the first provider once cost every
+        # remaining SQL Server row and all nineteen Oracle rows, which made a two-defect run look like
+        # twenty-three.
+        $leakedFromPreviousRow = @(Clear-JimErrorWatcher)
+        if ($leakedFromPreviousRow.Count -gt 0) {
+            Write-Host "    (cleared $($leakedFromPreviousRow.Count) error line(s) left by the previous row)" -ForegroundColor DarkGray
+        }
+
         try {
             $outcome = Invoke-Scenario16Row -Row $row -Context $context -Config $config
-            Add-CellResult -Provider $currentProvider -Row $row.name -Status $outcome.Status -Detail $outcome.Detail
+            $detail = $outcome.Detail
         }
         catch {
-            Add-CellResult -Provider $currentProvider -Row $row.name -Status 'fail' -Detail $_.Exception.Message
+            $outcome = @{ Status = 'fail' }
+            $detail = $_.Exception.Message
         }
+
+        # Errors this row provoked are named on the row itself rather than left to abort the next one.
+        # A row that passed while the services logged an error is still reported as passing: the row's
+        # own assertion is what decides, and Assert-NoWorkerErrors at the end of the run is what holds
+        # the whole run to account for the errors themselves.
+        $rowErrors = @(Clear-JimErrorWatcher)
+        if ($rowErrors.Count -gt 0) {
+            $detail = "$detail Services logged $($rowErrors.Count) error line(s) during this row; first: $($rowErrors[0])"
+        }
+
+        Add-CellResult -Provider $currentProvider -Row $row.name -Status $outcome.Status -Detail $detail
     }
 }
 

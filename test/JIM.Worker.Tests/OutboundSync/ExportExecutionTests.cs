@@ -1078,6 +1078,109 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// Issue #1386: a database-generated key returned for a Number-typed anchor must be stored in
+    /// IntValue, where the confirming import's typed diff reads it. Stored as a string it is invisible
+    /// to that diff, which stages a typed duplicate alongside it; the duplicate kills the confirming
+    /// import and the export is re-staged every cycle, duplicating rows in the target database.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_NumberTypedAnchor_StoresGeneratedKeyInIntValueAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // A Number-typed anchor, the shape of a database-generated integer key (JIM SQL Connector).
+        var idAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 998,
+            Name = "ID",
+            Type = AttributeDataType.Number,
+            ConnectedSystemObjectType = targetUserType
+        };
+        targetUserType.Attributes.Add(idAttr);
+        ConnectedSystemAttributesData.Add(idAttr);
+        SyncRepo.SeedObjectType(targetUserType);
+
+        var pendingProvisioningCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            DateJoined = DateTime.UtcNow,
+            ExternalIdAttributeId = idAttr.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(pendingProvisioningCso);
+        SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = pendingProvisioningCso,
+            ConnectedSystemObjectId = pendingProvisioningCso.Id,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Ada Ashcroft",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        // The connector returns the database-generated key, stringified, as every connector does.
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Successful Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync(new List<ConnectedSystemExportResult>
+            {
+                ConnectedSystemExportResult.Succeeded("1000039")
+            });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
+
+        var externalIdAttrValue = pendingProvisioningCso.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == idAttr.Id);
+        Assert.That(externalIdAttrValue, Is.Not.Null, "External ID attribute value should be created");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(externalIdAttrValue!.IntValue, Is.EqualTo(1000039),
+                "A Number anchor must be stored in IntValue: the confirming import's typed diff only reads the typed slot, and a string-stored anchor makes it stage a duplicate (#1386).");
+            Assert.That(externalIdAttrValue!.StringValue, Is.Null,
+                "Nothing may be left in the untyped slot.");
+        }
+    }
+
+    /// <summary>
     /// Tests that ErrorCount is incremented exactly once when an export fails.
     /// This verifies the fix for a bug where ErrorCount was being incremented twice:
     /// once in the connector's catch block and once in ExportExecutionServer.MarkExportFailed.
