@@ -46,7 +46,7 @@ jobs:
       shell: pwsh
       run: |
         $config = New-PesterConfiguration
-        $config.Run.Path = @("./src/JIM.PowerShell/Tests", "./scripts/Tests", "./test/integration/utils")
+        $config.Run.Path = @("./src/JIM.PowerShell/Tests", "./scripts/Tests", "./test/integration/utils", "./.github/scripts/Tests")
         $config.Run.Exit = $true
         $config.Output.Verbosity = "Detailed"
         $config.TestResult.Enabled = $true
@@ -313,7 +313,7 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@c4dd10e44af883a891fe31ced449bcb4a6728b9b  # v3.37.6
+      uses: github/codeql-action/upload-sarif@f3712979fa5f215279b101dd0a2e3bdfb4353324  # v3.37.7
       with:
         sarif_file: trivy-results.sarif
         # Category is keyed by image repository (stable), not Dockerfile line
