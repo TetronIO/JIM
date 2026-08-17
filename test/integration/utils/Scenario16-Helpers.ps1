@@ -495,8 +495,20 @@ function Get-S16ExpectedCount {
 }
 
 function Get-S16EmployeeNumber {
-    param([Parameter(Mandatory=$true)][int]$EmployeeId)
-    return "E{0:D8}" -f $EmployeeId
+    <#
+    .SYNOPSIS
+        The employee number the seeder gave one employee, composed with the provider's own prefix.
+    .DESCRIPTION
+        Each provider seeds a distinct prefix (S for SQL Server, O for Oracle) so the two providers
+        describe different people; a hardcoded prefix here once made every by-number lookup query for
+        rows that did not exist, failing rows with messages like "has no APP_USERS row" while the row
+        sat in the table under the other prefix.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
+    return "$($Config.EmployeeNumberPrefix){0:D8}" -f $EmployeeId
 }
 
 function Get-S16MetaverseObject {
@@ -504,13 +516,16 @@ function Get-S16MetaverseObject {
     .SYNOPSIS
         The Metaverse Object the inbound rule projected for one seeded employee, with its values.
     #>
-    param([Parameter(Mandatory=$true)][int]$EmployeeId)
+    param(
+        [Parameter(Mandatory=$true)][hashtable]$Config,
+        [Parameter(Mandatory=$true)][int]$EmployeeId
+    )
 
     # Filtered on the 'Employee ID' attribute rather than -Search. -Search matches DISPLAY NAME only,
     # and this scenario's inbound rule deliberately flows no Display Name (the source has no such
     # column), so every search returned nothing and every driver-shape row failed with "No Metaverse
     # Object was projected" while all fifty were sitting in the Metaverse.
-    $employeeNumber = Get-S16EmployeeNumber -EmployeeId $EmployeeId
+    $employeeNumber = Get-S16EmployeeNumber -Config $Config -EmployeeId $EmployeeId
     $match = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName 'Employee ID' -AttributeValue $employeeNumber -PageSize 10) | Select-Object -First 1
     if (-not $match) { return $null }
     return Get-JIMMetaverseObject -Id $match.id
@@ -581,7 +596,7 @@ function Test-S16ExportUpdate {
     # Employee 12 is enabled (12 is not a multiple of seven) and has two phone numbers (12 is a multiple
     # of three), so both a scalar change and a multi-valued change have somewhere to land.
     $employeeId = 12
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
     $newEmail = "updated.employee$employeeId@panoply.local"
     $newPhone = "+44 113 496 9999"
 
@@ -624,7 +639,7 @@ function Test-S16ExportDelete {
     # outbound rule's scope; the rule's OutboundDeprovisionAction is Delete, so that becomes a delete
     # export rather than a disconnect.
     $employeeId = 20
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
 
     $before = [int](Invoke-Scenario16Query -Config $Config -Query "SELECT COUNT(*) FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$userName';")
     if ($before -ne 1) {
@@ -699,8 +714,8 @@ function Test-S16ReferenceExport {
     # than the source system's employee identifier.
     $employeeId = 12
     $managerEmployeeId = ($employeeId % 10) + 1
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
-    $managerUserName = Get-S16EmployeeNumber -EmployeeId $managerEmployeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
+    $managerUserName = Get-S16EmployeeNumber -Config $Config -EmployeeId $managerEmployeeId
 
     $expectedManagerId = (Invoke-Scenario16Query -Config $Config -Query "SELECT ID FROM $($Config.Schema).APP_USERS WHERE USER_NAME = '$managerUserName';").Trim()
     if ([string]::IsNullOrWhiteSpace($expectedManagerId)) {
@@ -726,7 +741,7 @@ function Test-S16TypeMappingRoundTrip {
     # One employee, every mapped shape, source value against exported value. Employee 12 is enabled so it
     # has an exported row, and its FTE is 0.25, a value binary floating point cannot represent exactly.
     $employeeId = 12
-    $userName = Get-S16EmployeeNumber -EmployeeId $employeeId
+    $userName = Get-S16EmployeeNumber -Config $Config -EmployeeId $employeeId
     $failures = @()
 
     $sourceFte = [decimal](Invoke-Scenario16Query -Config $Config -Query "SELECT TO_CHAR(FTE) FROM $($Config.Schema).EMPLOYEES WHERE EMPLOYEE_ID = $employeeId;" | ForEach-Object { $_ }).Trim()
@@ -893,7 +908,7 @@ function Test-S16DateTimeNonUtc {
         param([hashtable]$RowContext, [string]$Label, [string]$WallClock, [int]$Employee)
 
         $attributeName = $RowContext.MetaverseAttributes.ZonelessDate
-        $mvo = Get-S16MetaverseObject -EmployeeId $Employee
+        $mvo = Get-S16MetaverseObject -Config $Config -EmployeeId $Employee
         if (-not $mvo) { return @{ Failure = "No Metaverse Object was projected for employee $Employee ($Label)."; Observation = $null } }
 
         $value = Get-S16MvoValue -Mvo $mvo -AttributeName $attributeName
@@ -956,7 +971,7 @@ function Test-S16OffsetVersusZoneless {
     $employeeId = 7
     $failures = @()
 
-    $mvo = Get-S16MetaverseObject -EmployeeId $employeeId
+    $mvo = Get-S16MetaverseObject -Config $Config -EmployeeId $employeeId
     if (-not $mvo) {
         return @{ Status = 'fail'; Detail = "No Metaverse Object was projected for employee $employeeId, so neither value can be read back." }
     }
@@ -1004,7 +1019,7 @@ function Test-S16LocalTimeZone {
     $employeeId = 7
     $catalogueType = (Invoke-Scenario16Query -Config $Config -Query "SELECT DATA_TYPE FROM ALL_TAB_COLUMNS WHERE OWNER = '$($Config.Schema)' AND TABLE_NAME = 'EMPLOYEES' AND COLUMN_NAME = 'HIRED_AT_LOCAL';").Trim()
 
-    $mvo = Get-S16MetaverseObject -EmployeeId $employeeId
+    $mvo = Get-S16MetaverseObject -Config $Config -EmployeeId $employeeId
     if (-not $mvo) {
         return @{ Status = 'fail'; Detail = "No Metaverse Object was projected for employee $employeeId." }
     }
