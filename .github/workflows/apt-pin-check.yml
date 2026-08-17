@@ -54,22 +54,43 @@ jobs:
         shell: pwsh
         run: |
           ./.github/scripts/check-apt-pins.ps1 -Apply
-          # Exit 2 means "updates applied"; treat as success for the workflow.
-          if ($LASTEXITCODE -eq 2) { exit 0 }
+          # 2 means "updates applied" and 3 means "a pinned set can no longer be
+          # installed". Neither stops the run here: the bump PR is raised first,
+          # and the unbuildable state is failed on at the end, so the run that
+          # reports the problem is also the run that proposes the fix.
+          if ($LASTEXITCODE -in @(2, 3)) { exit 0 }
           exit $LASTEXITCODE
 
+      # Minted unconditionally: with no bump to propose the next step still has
+      # a stale bump PR to close deliberately.
       - name: Mint GitHub App installation token
-        if: steps.check.outputs.has_updates == 'true'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
 
-      - name: Open or update bump PR
-        if: steps.check.outputs.has_updates == 'true'
+      - name: Open, update or close the bump PR
         shell: pwsh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ./.github/scripts/open-pin-pr.ps1 -BodyFile apt-pin-pr-body.md
+        run: |
+          # Close a stale bump PR only when detection actually reported nothing
+          # to propose. A clean tree for any other reason (a bump that failed to
+          # apply, say) leaves the PR alone.
+          $nothingToPropose = '${{ steps.check.outputs.has_updates }}' -ne 'true'
+          ./.github/scripts/open-pin-pr.ps1 -BodyFile apt-pin-pr-body.md -CloseStalePr:$nothingToPropose
+
+      # Deliberately the last step, and deliberately a failure. A pinned version
+      # the archive has withdrawn means `main` cannot build that image, and
+      # nothing else in CI notices: build-and-test compiles and runs tests rather
+      # than building the production images. In #1374 that state lasted two days
+      # with every required check green.
+      - name: Fail when a pinned package set can no longer be installed
+        if: steps.check.outputs.unbuildable == 'true'
+        shell: pwsh
+        run: |
+          $files = '${{ steps.check.outputs.unbuildable_dockerfiles }}'
+          Write-Host "::error title=Production image cannot be built::Pinned apt packages no longer resolve in the base image for: $files. See the job log for apt's diagnosis, and land the bump PR this run raised."
+          exit 1
