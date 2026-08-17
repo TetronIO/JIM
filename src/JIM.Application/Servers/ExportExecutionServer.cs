@@ -2099,7 +2099,7 @@ public class ExportExecutionServer
     /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
     /// not the primary external ID (objectGUID). We use the secondary external ID when available.
     /// </summary>
-    private static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
+    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
     {
         var allResolved = true;
 
@@ -2126,12 +2126,11 @@ public class ExportExecutionServer
 
                 // Use secondary external ID (DN) if available, otherwise fall back to primary
                 var resolvedAttr = secondaryExternalIdAttr ?? externalIdAttr;
+                var resolvedValue = resolvedAttr?.ToReferenceValueString();
 
-                if (resolvedAttr != null)
+                if (resolvedValue != null)
                 {
-                    attrChange.StringValue = resolvedAttr.StringValue ??
-                                             resolvedAttr.GuidValue?.ToString() ??
-                                             resolvedAttr.IntValue?.ToString();
+                    attrChange.StringValue = resolvedValue;
                     attrChange.UnresolvedReferenceValue = null;
 
                     // Issue #1079 (optimistic export apply, persisted per SPEC-1079B): the
@@ -2148,8 +2147,13 @@ public class ExportExecutionServer
                 }
                 else
                 {
-                    Log.Warning("Could not resolve reference for MVO {MvoId}: CSO {CsoId} has no external ID attribute",
-                        referencedMvoId, referencedCso.Id);
+                    // The referenced object exists but its anchor is not yet known: typically a
+                    // database-generated anchor whose own export has not been confirmed. Stamping
+                    // the change resolved here would send a null anchor to the connector (#1398);
+                    // leaving it unresolved keeps the export deferred until the anchor arrives.
+                    Log.Debug("TryResolveReferencesFromLookup: Cannot resolve reference for PE {PeId}: " +
+                        "CSO {CsoId} (MVO {MvoId}) does not hold an anchor value yet. Export stays deferred.",
+                        pendingExport.Id, referencedCso.Id, referencedMvoId);
                     allResolved = false;
                 }
             }
