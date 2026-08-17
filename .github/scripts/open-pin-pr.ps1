@@ -120,23 +120,36 @@ if (-not $Repository) { throw 'Repository not set. Pass -Repository owner/repo o
 # call below checks $LASTEXITCODE rather than relying on try/catch.
 function Invoke-Gh { param([string[]]$GhArgs) & gh @GhArgs }
 
+# The SINGULAR git/ref/heads/<name> endpoint, which is an exact lookup. The
+# plural git/refs/heads/<name> matches by PREFIX and returns every ref beneath
+# it, so probing "automation/apt-pin-updates" with it answers "exists" purely on
+# the strength of "automation/apt-pin-updates-staging" being there. That is not
+# hypothetical: it is how the first live run of this script failed, updating a
+# ref that had never been created.
 function Test-BotRef {
     param([string]$Name)
-    Invoke-Gh @('api', "repos/$Repository/git/refs/heads/$Name", '--silent') *> $null
+    Invoke-Gh @('api', "repos/$Repository/git/ref/heads/$Name", '--silent') *> $null
     return ($LASTEXITCODE -eq 0)
 }
 
-# Create-or-move, so no caller has to care whether the ref already exists.
+# Create-or-move, so no caller has to care whether the ref already exists. The
+# probe decides which call to try first; whichever it picks, the other is tried
+# before giving up, so a misjudged probe costs an extra request rather than the
+# run.
 function Set-BotRef {
     param([string]$Name, [string]$Sha)
 
-    if (Test-BotRef -Name $Name) {
-        Invoke-Gh @('api', '-X', 'PATCH', "repos/$Repository/git/refs/heads/$Name", '-f', "sha=$Sha", '-F', 'force=true') | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Failed to move $Name to $Sha." }
-    } else {
-        Invoke-Gh @('api', '-X', 'POST', "repos/$Repository/git/refs", '-f', "ref=refs/heads/$Name", '-f', "sha=$Sha") | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Failed to create $Name at $Sha." }
+    $update = { Invoke-Gh @('api', '-X', 'PATCH', "repos/$Repository/git/refs/heads/$Name", '-f', "sha=$Sha", '-F', 'force=true') | Out-Null }
+    $create = { Invoke-Gh @('api', '-X', 'POST', "repos/$Repository/git/refs", '-f', "ref=refs/heads/$Name", '-f', "sha=$Sha") | Out-Null }
+
+    $ordered = if (Test-BotRef -Name $Name) { @($update, $create) } else { @($create, $update) }
+
+    foreach ($attempt in $ordered) {
+        & $attempt
+        if ($LASTEXITCODE -eq 0) { return }
     }
+
+    throw "Failed to point $Name at $Sha (both create and update were refused)."
 }
 
 function Remove-BotRef {

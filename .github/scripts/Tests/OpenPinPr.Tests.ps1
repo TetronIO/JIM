@@ -178,18 +178,37 @@ BeforeAll {
             return "{`"data`":{`"createCommitOnBranch`":{`"commit`":{`"oid`":`"$oid`",`"url`":`"https://example.invalid/$oid`"}}}}"
         }
 
-        # repos/<owner>/<repo>/git/ref(s)/heads/<branch>, or .../git/refs for creates.
-        if ($endpoint -match "^repos/$([regex]::Escape($global:FakeRepository))/git/refs?(?:/heads/(?<branch>.+))?$") {
+        # The singular endpoint, repos/<owner>/<repo>/git/ref/heads/<branch>, is
+        # an exact lookup and 404s when the ref does not exist.
+        if ($endpoint -match "^repos/$([regex]::Escape($global:FakeRepository))/git/ref/heads/(?<branch>.+)$") {
+            $branch = $matches['branch']
+            if (-not $global:FakeHub.Refs.ContainsKey($branch)) {
+                $global:LASTEXITCODE = 1
+                return 'gh: Not Found (HTTP 404)'
+            }
+            $sha = $global:FakeHub.Refs[$branch]
+            return (Invoke-FakeJq -Filter $jq -Json "{`"object`":{`"sha`":`"$sha`"}}")
+        }
+
+        # repos/<owner>/<repo>/git/refs/heads/<branch>, or .../git/refs for creates.
+        if ($endpoint -match "^repos/$([regex]::Escape($global:FakeRepository))/git/refs(?:/heads/(?<branch>.+))?$") {
             $branch = $matches['branch']
 
             switch ($method) {
                 'GET' {
-                    if (-not $global:FakeHub.Refs.ContainsKey($branch)) {
+                    # The PLURAL endpoint matches by PREFIX and returns every ref
+                    # under it. This is the sharp edge that broke the first live
+                    # run: probing "automation/x" found "automation/x-staging"
+                    # and reported a branch that did not exist as existing.
+                    $matched = @($global:FakeHub.Refs.Keys | Where-Object { $_ -eq $branch -or $_.StartsWith($branch) })
+                    if ($matched.Count -eq 0) {
                         $global:LASTEXITCODE = 1
                         return 'gh: Not Found (HTTP 404)'
                     }
-                    $sha = $global:FakeHub.Refs[$branch]
-                    return (Invoke-FakeJq -Filter $jq -Json "{`"object`":{`"sha`":`"$sha`"}}")
+                    $refs = @($matched | ForEach-Object {
+                        [pscustomobject]@{ ref = "refs/heads/$_"; object = [pscustomobject]@{ sha = $global:FakeHub.Refs[$_] } }
+                    })
+                    return ($refs | ConvertTo-Json -Depth 5 -AsArray)
                 }
                 'PATCH' {
                     if (-not $global:FakeHub.Refs.ContainsKey($branch)) {
@@ -433,6 +452,21 @@ Describe 'open-pin-pr.ps1' {
             $global:FakeHub.Prs.Count | Should -Be 1
             (Get-FakePr -Number 1).state | Should -Be 'OPEN'
             $global:FakeHub.Parents[$global:FakeHub.Refs[$script:BotBranch]] | Should -Be 'basesha001'
+        }
+
+        It 'creates the bump branch even though the staging ref shares its name as a prefix' {
+            # The first live run died here. The bot branch did not exist, the
+            # staging ref did, and the existence probe used GitHub's plural refs
+            # endpoint, which matches by prefix: it saw "<branch>-staging",
+            # reported the branch as existing, and the update of a ref that was
+            # never created failed with a 422.
+            $global:FakeHub.Refs["$($script:BotBranch)-staging"] = 'leftover01'
+
+            Invoke-OpenPinPr -WorkingTree (New-WorkingTree) | Out-Null
+
+            $global:FakeHub.Refs.ContainsKey($script:BotBranch) | Should -BeTrue
+            $global:FakeHub.Parents[$global:FakeHub.Refs[$script:BotBranch]] | Should -Be 'basesha001'
+            (Get-FakePr -Number 1).state | Should -Be 'OPEN'
         }
 
         It 'opens a fresh pull request when the previous one was merged' {
