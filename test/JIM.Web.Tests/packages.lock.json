@@ -855,8 +855,8 @@
       },
       "System.DirectoryServices.Protocols": {
         "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "VQdfESaky3eXlvEuvtBndmZjOt65g+Ah6/0j39MPgPJ3gkbGuURlTFDRq0Y2uX64z5qVEVe1Ln6B4a06+vIzTQ=="
+        "resolved": "10.0.11",
+        "contentHash": "Q4DEPB0wfAMAM6zjCjioFQoDZGC6uCeAZMU30sdjMgVtKbSuSBjhASVlxVOTYmQKCdUqZInnDwZ3W/ZTWB4m3Q=="
       },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "Transitive",
@@ -909,7 +909,7 @@
           "JIM.Utilities": "[0.14.0, )",
           "Microsoft.Data.SqlClient": "[7.0.2, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.300, )",
-          "System.DirectoryServices.Protocols": "[10.0.10, )"
+          "System.DirectoryServices.Protocols": "[10.0.11, )"
         }
       },
       "jim.data": {
