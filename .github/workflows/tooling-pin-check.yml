@@ -59,16 +59,16 @@ jobs:
           if ($LASTEXITCODE -eq 2) { exit 0 }
           exit $LASTEXITCODE
 
+      # Minted unconditionally: with no bump to propose the next step still has
+      # a stale bump PR to close deliberately.
       - name: Mint GitHub App installation token
-        if: steps.check.outputs.has_updates == 'true'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
 
-      - name: Open or update bump PR
-        if: steps.check.outputs.has_updates == 'true'
+      - name: Open, update or close the bump PR
         shell: pwsh
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -80,10 +80,15 @@ jobs:
           for evaluation by the tooling-pin-check workflow. Where a tool is pinned in
           more than one file, every location has been moved to the same version.
           '@
+          # Close a stale bump PR only when detection actually reported nothing
+          # to propose. A clean tree for any other reason (a bump that failed to
+          # apply, say) leaves the PR alone.
+          $nothingToPropose = '${{ steps.check.outputs.has_updates }}' -ne 'true'
           ./.github/scripts/open-pin-pr.ps1 `
             -BodyFile tooling-pin-pr-body.md `
             -FilePattern '(^|/)(setup\.sh|\.mcp\.json)$' `
             -Branch 'automation/tooling-pin-updates' `
             -CommitHeadline 'chore(deps): bump pinned development tooling versions' `
             -CommitBodyIntro $intro `
-            -Label 'dependencies'
+            -Label 'dependencies' `
+            -CloseStalePr:$nothingToPropose
