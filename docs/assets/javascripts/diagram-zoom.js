@@ -158,10 +158,34 @@
   }
 
   // The visible window always carries the stage's aspect ratio, so the SVG maps
-  // onto the stage exactly and "meet" never letterboxes. 100% is fit-to-width:
-  // a diagram taller than the stage is shown full width and panned down, which
-  // is what makes tall Mermaid flowcharts readable rather than shrunk to a
-  // thumbnail the way fitting the whole thing to viewport height would.
+  // onto the stage exactly and "meet" never letterboxes.
+  //
+  // The opening view ("home", and what 100% and Reset mean) is the whole
+  // diagram where that is worth having, and fit-to-width where it is not.
+  // Fit-to-width alone was the original rule, because containing a long Mermaid
+  // flowchart shrinks it to a thumbnail: measured at 1294px wide fit-to-width
+  // against 180px fitting the whole thing to viewport height. But it is wrong
+  // for a diagram only slightly taller than the stage, which is every concept
+  // SVG -- a 1160x640 diagram on a 2.01-aspect stage opens with its bottom 10%
+  // quietly cut off, looking whole rather than looking panable. So contain by
+  // default, and fall back to fit-to-width only when containing would render
+  // the diagram too small to read.
+  //
+  // "Too small" has to be measured in CSS pixels, not as a share of the stage.
+  // A share alone gets the phone case wrong: on a 390px-wide window the stage
+  // is tall and narrow, so containing a 4000-unit flowchart costs only 42% of
+  // the width -- which sounds cheap and is in fact a 153px sliver. The two
+  // populations separate cleanly by absolute width: on the worst realistic
+  // desktop window (1440x620, stage aspect 2.72) the tallest concept diagrams
+  // contain to 674px and 755px, perfectly readable, while a Mermaid flowchart
+  // contains to between 98px and 182px on every window tested. MIN_CONTAIN_PX
+  // sits between them with room either side.
+  //
+  // It also errs the right way, because the overlay has zoom controls: a
+  // diagram shown whole but small can be zoomed into, whereas a cropped one
+  // only helps a reader who notices it pans.
+  var MIN_CONTAIN_PX = 560;
+
   function initView(svg) {
     var base = parseViewBox(svg);
     if (!base) {
@@ -176,8 +200,9 @@
 
     // Start at the top of the diagram; clampView centres it on any axis where
     // the window is larger than the diagram.
-    var w = base[2];
-    view = { svg: svg, base: base, x: base[0], y: base[1], w: w, h: w / stageAspect() };
+    var aspect = stageAspect();
+    var home = homeWidth(base, aspect);
+    view = { svg: svg, base: base, home: home, x: base[0], y: base[1], w: home, h: home / aspect };
     applyView();
   }
 
@@ -186,11 +211,24 @@
     return r.height > 0 ? r.width / r.height : 16 / 9;
   }
 
+  // The window width the overlay opens at: the whole diagram where that stays
+  // readable, fit-to-width where it would not. Returns a viewBox width, so a
+  // value wider than the diagram means the diagram is contained with padding.
+  function homeWidth(base, aspect) {
+    var contained = Math.max(base[2], base[3] * aspect);
+    if (contained <= base[2]) return base[2];        // nothing to lose; already whole
+    var stagePx = ovStage.getBoundingClientRect().width;
+    var containedPx = stagePx * (base[2] / contained);
+    return containedPx >= MIN_CONTAIN_PX ? contained : base[2];
+  }
+
   function applyView() {
     if (!view) return;
     clampView();
     view.svg.setAttribute("viewBox", view.x + " " + view.y + " " + view.w + " " + view.h);
-    ovLevel.textContent = Math.round((view.base[2] / view.w) * 100) + "%";
+    // Relative to home, so the overlay always opens at 100% and Reset returns
+    // to it, whichever of the two home is.
+    ovLevel.textContent = Math.round((view.home / view.w) * 100) + "%";
     ovStage.dataset.panable =
       view.w < view.base[2] || view.h < view.base[3] ? "true" : "false";
   }
@@ -201,7 +239,9 @@
   function clampView() {
     var b = view.base;
     var minW = b[2] / MAX_SCALE;
-    if (view.w > b[2]) { view.w = b[2]; view.h = view.w / stageAspect(); }
+    // Zooming out stops at home, which may be wider than the diagram when home
+    // contains it; capping at b[2] here is what used to crop the opening view.
+    if (view.w > view.home) { view.w = view.home; view.h = view.w / stageAspect(); }
     if (view.w < minW) { view.w = minW; view.h = view.w / stageAspect(); }
 
     view.x = view.w >= b[2]
@@ -221,7 +261,7 @@
 
     var b = view.base;
     var minW = b[2] / MAX_SCALE;
-    var nw = Math.min(b[2], Math.max(minW, view.w / factor));
+    var nw = Math.min(view.home, Math.max(minW, view.w / factor));
     var k = nw / view.w;
 
     view.x = cx - (cx - view.x) * k;
@@ -238,12 +278,12 @@
     applyView();
   }
 
-  // Back to fit-to-width, scrolled to the top of the diagram.
+  // Back to the opening view, scrolled to the top of the diagram.
   function resetView() {
     if (!view) return;
     view.x = view.base[0];
     view.y = view.base[1];
-    view.w = view.base[2];
+    view.w = view.home;
     view.h = view.w / stageAspect();
     applyView();
   }
@@ -394,12 +434,48 @@
     return t ? t.textContent.trim() : "";
   }
 
-  // Strip ids from the clone so the copies never collide with the originals.
-  // Safe for these diagrams: the ids exist only for aria-labelledby, and none
-  // of them are referenced internally via url(#...) or <mpath>.
+  // Rewrite the clone's ids rather than stripping them, so the copy never
+  // collides with the original *and* keeps resolving its own internal
+  // references. Diagrams whose edge labels sit on the line carry a
+  // <mask id="...-labelcut"> that the edge group points at with
+  // mask="url(#...)"; stripping ids leaves that reference dangling, and a
+  // dangling mask reference renders unmasked, so the lines would be drawn
+  // straight through the labels in the overlay. It happens to survive today
+  // only because the in-page copy is still in the document for the reference
+  // to land on -- which stops being true the moment two diagrams share an id,
+  // or the page copy is removed. Suffix everything instead.
+  var cloneCounter = 0;
+
   function cloneForOverlay(svg) {
     var copy = svg.cloneNode(true);
-    copy.querySelectorAll("[id]").forEach(function (n) { n.removeAttribute("id"); });
+    var suffix = "-dgz" + (++cloneCounter);
+    var renamed = Object.create(null);
+
+    copy.querySelectorAll("[id]").forEach(function (n) {
+      var oldId = n.getAttribute("id");
+      renamed[oldId] = oldId + suffix;
+      n.setAttribute("id", renamed[oldId]);
+    });
+
+    // Repoint every reference that could name one of those ids: url(#id) in a
+    // presentation attribute or inline style, and href="#id" (<use>, <mpath>).
+    if (Object.keys(renamed).length) {
+      copy.querySelectorAll("*").forEach(function (n) {
+        Array.prototype.slice.call(n.attributes).forEach(function (attr) {
+          var value = attr.value;
+          if (value.indexOf("#") === -1) return;
+          var next = value.replace(/url\(\s*#([^)\s"']+)\s*\)/g, function (whole, id) {
+            return renamed[id] ? "url(#" + renamed[id] + ")" : whole;
+          });
+          if (attr.name === "href" || attr.name === "xlink:href") {
+            var target = value.charAt(0) === "#" ? value.slice(1) : null;
+            if (target && renamed[target]) next = "#" + renamed[target];
+          }
+          if (next !== value) n.setAttribute(attr.name, next);
+        });
+      });
+    }
+
     copy.removeAttribute("id");
     copy.removeAttribute("aria-labelledby");
     copy.setAttribute("aria-hidden", "true");
@@ -521,8 +597,14 @@
       if (!svg) return;
       layoutStage(svg);
       if (view) {
-        // Keep the zoom level; re-derive the window height from the new stage.
-        view.h = view.w / stageAspect();
+        // home depends on the stage's aspect ratio, so a resize moves it. Keep
+        // the reader's zoom level relative to home rather than their absolute
+        // window width, so a diagram opened whole stays whole across a resize.
+        var aspect = stageAspect();
+        var wasAtHome = view.w >= view.home;
+        view.home = homeWidth(view.base, aspect);
+        if (wasAtHome) view.w = view.home;
+        view.h = view.w / aspect;
         applyView();
       }
     });

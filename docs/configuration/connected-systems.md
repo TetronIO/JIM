@@ -11,6 +11,8 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 ## What a Connected System contains
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
+
+    The Schema, Partitions &amp; Containers and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
@@ -69,6 +71,22 @@ Inside a partition, or directly inside the connector space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
+### How many objects each container holds
+
+Each container row shows how many objects it holds, so you can tell a container worth managing from an empty one before you tick anything.
+
+The figure is read from the Connected System itself, not from what JIM has already imported, so it is there the first time you open the tab on a brand new Connected System. That is the moment it matters most: you are deciding what to manage, and JIM holds nothing yet.
+
+- **The figure follows the container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).** A container set to This and below reports what its whole branch holds; one narrowed to This level reports only what sits directly in it. Hover the number to see both, and which of them is on screen.
+- **Only the Object Types you have selected are counted**, so the number matches what a Full Import would actually bring back. Select them on the Schema tab first; nothing is counted until you have.
+- **Zero and blank mean different things.** Zero is a container that was searched and found empty. A blank means nobody has counted it: either the Connector cannot report counts, the hierarchy has not been retrieved since this feature shipped, or counting was cut short, in which case the hierarchy refresh's Activity says so and why.
+- **Selections and exclusions are ignored.** The figure says what is in the container, not what JIM would import from it once your exclusions apply. [Preview Changes](#previewing-a-partition-or-container-change) answers that second question.
+
+Counts are gathered as part of **Retrieve Hierarchy**, so refreshing the hierarchy refreshes the numbers, and the tab tells you when it last ran. Counting is bounded: if it takes longer than a minute, or the directory stops the search at its own size or time limit, JIM discards that partition's figures rather than showing numbers that are quietly short of the truth, and the refresh's Activity completes with a warning naming the partition and what stopped the count. Raising the directory's limit, or narrowing the selected Object Types, is the usual fix. The hierarchy itself still arrives either way.
+
+!!! note "This reads your directory"
+    Counting means retrieving the matching entries, because LDAP has no count operation. JIM asks for names only, which is far lighter than an import, and runs one search per partition rather than one per container. It is still a read against your production directory, so it happens when you retrieve the hierarchy and at no other time.
+
 ### What your selections mean
 
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
@@ -76,6 +94,42 @@ Selection is how you tell JIM which parts of a system it manages, and it binds e
 - A [Run Profile](run-profiles.md) that targets a deselected partition is refused rather than run. The Run Profiles tab marks it, and the property is available over REST and PowerShell so you can find every affected Run Profile at once.
 - Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
+
+### Stating Container Scope as text (Advanced Mode)
+
+The Partitions & Containers tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
+
+- **Simple** is the tree: tick the Containers you manage, and set each one's [Container Scope](../connectors/jim-ldap-connector.md#container-scope).
+- **Advanced** is the same scope written out, one statement per line. It is for the hierarchy that is impractical to click through, and for keeping a scope under version control, reviewing it as a diff, or copying it between Connected Systems.
+
+```text
+include OU=Corp,DC=example,DC=com
+exclude OU=Service Accounts,OU=Corp,DC=example,DC=com
+include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
+```
+
+Each line is a directive, an optional `one-level`, then the Container's path:
+
+| Statement | Means |
+|---|---|
+| `include <path>` | Manage this Container and everything beneath it. `+` is accepted as shorthand. |
+| `include one-level <path>` | Manage the objects held directly in this Container, and no Container beneath it. |
+| `exclude <path>` | Carve this Container out of the selection an ancestor made. `-` is accepted as shorthand. |
+| `exclude one-level <path>` | Carve out the objects held directly in this Container, leaving the Containers beneath it as their ancestors had them. |
+
+Blank lines are ignored, and so is any line beginning with `#`. Comments are whole-line only, because a Distinguished Name may itself contain a `#`.
+
+The text states **the whole** of Container Scope, not a change to it. A Container the text does not name states nothing, so removing a line is how a Container is deselected, and empty text clears the scope entirely. Partition selection is left alone, except that naming a Container selects the partition holding it.
+
+Nothing is applied by halves. Each of these is refused, naming the line at fault, with the scope left exactly as it was:
+
+- a path that names no Container JIM has discovered (retrieve the hierarchy if the Container is new);
+- the same Container stated twice, because a Container states one thing about itself;
+- a statement an ancestor already makes, which would change nothing.
+
+**Apply** edits the selection, exactly as ticking a box does; nothing reaches the Connected System until you **Save Changes**, so Advanced Mode gets the same preview and the same confirmation as the tree. Switching back to **Simple** applies the text first rather than discarding it, and every scope expressible one way is expressible the other, so nothing is lost in either direction.
+
+Automation has the same surface: [`Get-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) in PowerShell, or `GET`/`PUT connected-systems/{id}/container-scope-text` in the [REST API](../../api/reference/).
 
 ### Previewing a partition or container change
 
@@ -156,6 +210,58 @@ JIM therefore treats these attributes as write-once, and enforces it on the expo
 If a source value feeding one of these attributes genuinely does change (an employee number is reissued, say), JIM will not chase it into the Connected System. That is deliberate: re-identifying an existing object is a decision for an administrator, not something a synchronisation run should do quietly.
 
 The Attribute Flow editor marks an export mapping whose target is set on creation only, so it is clear at a glance which mappings apply during provisioning alone, and a Connected System Object's detail page marks the attribute itself, so the same is obvious when looking at a single object's values.
+
+## Attribute data types
+
+Every discovered attribute is recorded with a JIM data type, shown in the Schema tab's **Type** column. An Attribute Flow requires its source and target to be the same type, so this is what decides which Metaverse Attributes an attribute can be mapped to.
+
+Most of the time the Connected System states its type unambiguously and JIM simply records it. A directory's schema and a SCIM service provider's schema are both definitive, so their attribute types are fixed and cannot be changed.
+
+### When the source cannot say
+
+Two cases leave JIM inferring rather than reading.
+
+A delimited file names no types at all, so the File Connector has always asked you to choose.
+
+A relational database states a type for every column, but not every database distinguishes types the way JIM does. Microsoft SQL Server does: `int` is a whole number, `bigint` a 64-bit whole number, `decimal(9,4)` a fractional figure, and JIM records each accordingly. **Oracle has a single numeric type.** An employee identifier, a large counter and a fractional figure are all `NUMBER`, distinguished only by the precision and scale the column was declared with.
+
+JIM therefore reads that declaration and picks the narrowest type guaranteed to hold every value the column permits:
+
+| Declared | Becomes | Why |
+|----------|---------|-----|
+| `NUMBER(p,0)`, p up to 9 | Number | The widest such column holds 999,999,999, which fits a 32-bit whole number. |
+| `NUMBER(p,0)`, p from 10 to 18 | Long Number | Ten digits already exceed a 32-bit whole number, so the ordinary sequence-backed key lands here. |
+| `NUMBER(p,0)`, p of 19 or more | Decimal | Nineteen digits can exceed a 64-bit whole number, so narrowing would risk losing a value. |
+| `NUMBER(p,s)` with a scale | Decimal | The column is genuinely fractional. |
+| `NUMBER` with no precision | Decimal | The declaration states no width, so JIM assumes the widest. |
+
+`NUMBER(1)` is a whole number unless you switch on **Treat NUMBER(1) Columns as Boolean** on the Connected System, which is opt-in because a single-digit column is just as often a small number as a flag.
+
+### Overriding an inferred type
+
+Where a Connector's schema cannot state a type definitively, the Schema tab shows an **Edit** control on each attribute row. Choose the type the column is actually for and the attribute is recorded with it.
+
+The attribute's **Description** states the source column type it was built from (`Source column type: NUMBER(10).`), so you can see what the inference was based on before deciding whether to disagree with it.
+
+This is how an Oracle `NUMBER(10)` employee identifier is pointed at the built-in `Employee Number` Metaverse Attribute, which is a Number. Use the built-in attributes wherever they fit: a custom attribute created only to work around a type is one no other Connected System will match on.
+
+!!! warning "Set the type before you build on it"
+    An override is refused once the attribute is referenced by a Synchronisation Rule or already holds values, because changing it then would reinterpret data that was imported under the previous type. If you need to change it later, remove the references, or clear the Connected System Objects, first.
+
+From PowerShell:
+
+```powershell
+Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 5 -AttributeId 10 -Type Integer
+```
+
+`Integer` is the friendly name for the Number type, matching `New-JIMMetaverseAttribute`. There is no bulk equivalent: the bulk attribute endpoint refuses a request carrying a data type rather than ignoring it, so a scripted build cannot appear to succeed having changed nothing.
+
+The same field is available on the REST API's attribute update, `PUT api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}`.
+
+An override survives a schema refresh. JIM records that the type was chosen rather than inferred, so a refresh restates everything the Connector discovered (writability, plurality, the source column type) and leaves your choice alone. To go back to the inferred type, set it back yourself; a refresh will not do it for you.
+
+!!! note "Existing Connected Systems"
+    Improvements to how JIM infers a type apply when a schema is next retrieved. An existing Connected System keeps the types it already holds until you refresh its schema.
 
 ## Credential attributes are never managed
 

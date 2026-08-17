@@ -13,6 +13,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Logic;
 using JIM.Utilities;
+using JIM.Web.Shared;
 using JIM.Web.Causality;
 using JIM.Web.Models;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -35,6 +36,71 @@ public enum ExternalIdStatus
 
 public static class Helpers
 {
+    /// <summary>
+    /// Appends a content-derived version to a web-root-relative asset path, so that an upgrade which changes the
+    /// file changes its URL and a browser cannot keep the old one.
+    /// </summary>
+    /// <remarks>
+    /// This exists for the theme stylesheets, which are the one set of assets the portal serves unversioned. Every
+    /// other stylesheet is emitted by a tag helper carrying <c>asp-append-version</c>; a theme's path is held on
+    /// <see cref="Models.ThemeSettings"/> and consumed twice, by the <c>&lt;link&gt;</c> in <c>_Layout.cshtml</c> and
+    /// by the runtime theme swap in <c>MainLayout</c>, so versioning the tag alone would leave the swap serving a
+    /// bare path. Versioning the value on <see cref="Models.ThemeSettings"/> covers both, and <c>Error.cshtml</c>
+    /// with them.
+    /// <para>
+    /// Hashing the content rather than stamping a build number keeps the URL stable across restarts and deployments
+    /// that do not touch the file, so a theme is not needlessly re-fetched.
+    /// </para>
+    /// </remarks>
+    /// <param name="webRootPath">The absolute path of the web root; a null or empty value returns the path unchanged.</param>
+    /// <param name="relativePath">The asset path relative to the web root, e.g. <c>css/themes/navy-o6-dark.css</c>.</param>
+    /// <returns>The path with a <c>?v=</c> query appended, or the path unchanged when the file cannot be read.</returns>
+    public static string AppendFileVersion(string? webRootPath, string relativePath)
+    {
+        if (string.IsNullOrEmpty(webRootPath) || string.IsNullOrEmpty(relativePath))
+            return relativePath;
+
+        var fullPath = Path.Join(webRootPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+        byte[] hash;
+        try
+        {
+            using var stream = File.OpenRead(fullPath);
+            hash = System.Security.Cryptography.SHA256.HashData(stream);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or IOException
+                                      or UnauthorizedAccessException or ArgumentException or NotSupportedException
+                                      or System.Security.SecurityException)
+        {
+            // A missing or unreadable theme must not stop the portal starting; serving it unversioned is what
+            // happened before this method existed, so the failure mode is the old behaviour rather than a crash.
+            return relativePath;
+        }
+
+        // base64url: the version goes straight into a query string, where '+', '/' and '=' would need escaping.
+        var version = Convert.ToBase64String(hash, 0, 8)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+
+        return $"{relativePath}?v={version}";
+    }
+
+    /// <summary>
+    /// Describes an attribute for an <c>AttributeChip</c> tooltip: which side of the Metaverse it belongs to, its
+    /// data type and its plurality.
+    /// </summary>
+    /// <remarks>
+    /// Built here rather than inline so the Attribute Flow tab's eleven chips cannot drift apart again; two of its
+    /// clusters previously disagreed, one carrying this detail and the other only a generic label.
+    /// </remarks>
+    public static string DescribeAttribute(AttributeChipKind kind, AttributeDataType type, AttributePlurality plurality)
+    {
+        var side = kind == AttributeChipKind.Metaverse ? "Metaverse" : "Connected System";
+        var valued = plurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued";
+        return $"{side}: {type.ToString().SplitOnCapitalLetters()}, {valued}";
+    }
+
     /// <summary>
     /// Converts a string to a format that can be used as a Url parameter.
     /// </summary>
@@ -223,6 +289,9 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
+            // Raised while evaluating outbound exports during synchronisation, before anything is exported,
+            // so it belongs with the synchronisation phase rather than "Export Failed".
+            [ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject] = "Synchronisation Failed",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",

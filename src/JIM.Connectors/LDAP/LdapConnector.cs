@@ -15,7 +15,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -356,6 +356,44 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     }
     #endregion
 
+    #region IConnectorContainerObjectCounts members
+    /// <summary>
+    /// Counts the objects each Container in a partition holds, using one attribute-free paged subtree search.
+    /// </summary>
+    /// <remarks>
+    /// Opens its own connection, exactly as partition discovery does, because it runs from the portal rather than
+    /// inside a Run Profile execution and has no session to borrow.
+    /// </remarks>
+    public async Task<ConnectorContainerObjectCountResult> GetContainerObjectCountsAsync(
+        List<ConnectedSystemSettingValue> settingValues,
+        ConnectorPartition connectorPartition,
+        IReadOnlyList<string> objectTypeNames,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connectorPartition);
+        ArgumentNullException.ThrowIfNull(objectTypeNames);
+
+        OpenImportConnection(settingValues, null, logger);
+
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to count Container objects with");
+
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var containerCounts = new LdapConnectorContainerCounts(
+                new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
+
+            return await containerCounts.CountAsync(connectorPartition, objectTypeNames, cancellationToken);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+    #endregion
+
     #region IConnectorDetectedCapabilities members
     /// <summary>
     /// Maps the rootDSE facts JIM already persists between synchronisation runs (issue #230's
@@ -682,6 +720,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         connection.SessionOptions.ProtocolVersion = 3;
         connection.Timeout = timeout;
 
+        // Every connection JIM opens, not just the primary one: a referral can be returned to any search, and a
+        // parallel import connection chasing one anonymously fails exactly as the primary would.
+        LdapConnectorUtilities.DisableReferralChasing(connection, logger);
+
         // Configure LDAPS if enabled
         if (useSsl)
         {
@@ -842,7 +884,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     {
         var result = await resultTask;
 
-        import.LogEntriesDiscardedByExclusion();
+        import.ReportEntriesDiscardedByExclusion(result);
 
         if (result.WarningMessage == null && import.PinValidationWarning != null)
             result.WarningMessage = import.PinValidationWarning;

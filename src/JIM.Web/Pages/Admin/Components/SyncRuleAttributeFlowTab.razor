@@ -39,12 +39,12 @@
                 <MudChipSet T="SyncRuleMappingSourcesType"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedMappingTypes"
-                            SelectedValuesChanged="OnMappingTypeFilterChanged">
+                            SelectedValuesChanged="OnMappingTypeFilterChangedAsync">
                     @foreach (var type in GetAvailableMappingTypes())
                     {
                         <MudChip Value="@type.Key"
                                  Color="@(_selectedMappingTypes.Contains(type.Key) ? Color.Default : Helpers.GetMappingTypeChipColour(type.Key))"
-                                 Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetMappingTypeChipColour(type.Key)">
                             @type.Key.ToString().SplitOnCapitalLetters()
                             <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
@@ -58,12 +58,12 @@
                 <MudChipSet T="AttributeDataType"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedDataTypes"
-                            SelectedValuesChanged="OnFlowDataTypeFilterChanged">
+                            SelectedValuesChanged="OnFlowDataTypeFilterChangedAsync">
                     @foreach (var type in GetAvailableFlowDataTypes())
                     {
                         <MudChip Value="@type.Key"
                                  Color="@(_selectedDataTypes.Contains(type.Key) ? Color.Default : Helpers.GetAttributeTypeChipColour(type.Key))"
-                                 Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetAttributeTypeChipColour(type.Key)">
                             @type.Key.ToString().SplitOnCapitalLetters()
                             <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
@@ -77,12 +77,12 @@
                 <MudChipSet T="AttributePlurality"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedPluralities"
-                            SelectedValuesChanged="OnFlowPluralityFilterChanged">
+                            SelectedValuesChanged="OnFlowPluralityFilterChangedAsync">
                     @foreach (var plurality in GetAvailableFlowPluralities())
                     {
                         <MudChip Value="@plurality.Key"
                                  Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Helpers.GetAttributePluralityChipColour(plurality.Key))"
-                                 Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                 Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
                                  SelectedColor="@Helpers.GetAttributePluralityChipColour(plurality.Key)">
                             @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                             <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
@@ -95,140 +95,175 @@
 
     @if (_attributeFlowTableView)
     {
-        <MudTable Items="@SyncRule.AttributeFlowRules" Hover="true" Outlined="true" Elevation="0"
-                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2"
-                  Filter="new Func<SyncRuleMapping, bool>(FilterAttributeFlowRules)">
-            <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.GetSourceType().ToString())"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => GetSortableSourceName(x))"><MudText Typo="Typo.button">Source</MudText></MudTableSortLabel></MudTh>
-                <MudTh></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => GetSortableTargetName(x))"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.LastUpdated ?? DateTime.MinValue)"><MudText Typo="Typo.button">Updated</MudText></MudTableSortLabel></MudTh>
-                <MudTh></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Type">
-                    <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.GetSourceType())">
-                        @context.GetSourceType().ToString().SplitOnCapitalLetters()
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Source">
-                    @foreach (var source in context.Sources.OrderBy(q => q.Order))
-                    {
-                        if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
-                        {
-                            <MudTooltip Text="@($"Connected System: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                        else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
-                        {
-                            <MudTooltip Text="@($"Metaverse: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                        else if (!string.IsNullOrWhiteSpace(source.Expression))
-                        {
-                            <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium" Class="jim-expr-chip">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                    }
-                </MudTd>
-                <MudTd><MudText Class="mud-text-secondary">→</MudText></MudTd>
-                <MudTd DataLabel="Target">
-                    <div class="d-flex align-center flex-wrap">
-                        @if (SyncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
-                        {
-                            <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
-                        }
-                        else if (SyncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
-                        {
-                            <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Size="Size.Medium">
-                                    <AvatarContent>
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </AvatarContent>
-                                    <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
-                                </MudChip>
-                            </MudTooltip>
-                            @if (context.InitialExportOnly)
+        @* A Synchronisation Rule's Attribute Flows are held on the rule the page already loaded, so the grid's
+           windows are sliced from that collection; the chip filters above it are the page's own, so changing one
+           re-counts the match set (see RefreshFlowGridAsync). *@
+        <VirtualisedDataGrid @ref="_flowGrid" T="SyncRuleMapping"
+                             ContainerId="sync-rule-attribute-flow-list"
+                             UrlParameterPrefix="af-"
+                             DefaultSortBy="target"
+                             LoadWindow="LoadAttributeFlowWindowAsync"
+                             SingularName="Attribute Flow"
+                             PluralName="Attribute Flows"
+                             SearchPlaceholder="Search by attribute or expression">
+            <Columns>
+                <TemplateColumn Title="Type" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Type" Name="type" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.Item.GetSourceType())">
+                            @context.Item.GetSourceType().ToString().SplitOnCapitalLetters()
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Source" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Source" Name="source" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @* A row in a virtualised grid is one line, and a flow can join several sources, so the
+                           first is shown and the rest open in a dialog drawn with the same chips. *@
+                        <OverflowList TItem="SyncRuleMappingSource" Items="@context.Item.Sources.OrderBy(q => q.Order).ToList()" Title="Sources">
+                            <ItemTemplate Context="source">
+                                @if (SyncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
+                                {
+                                    var connectedSystemSource = source.ConnectedSystemAttribute;
+                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                   Name="@connectedSystemSource.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemSource.Type, connectedSystemSource.AttributePlurality)" />
+                                }
+                                else if (SyncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
+                                {
+                                    var metaverseSource = source.MetaverseAttribute;
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                   Name="@metaverseSource.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseSource.Type, metaverseSource.AttributePlurality)" />
+                                }
+                                else if (!string.IsNullOrWhiteSpace(source.Expression))
+                                {
+                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
+                                }
+                            </ItemTemplate>
+                        </OverflowList>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Sortable="false">
+                    <HeaderTemplate></HeaderTemplate>
+                    <CellTemplate>
+                        <MudText Class="mud-text-secondary">→</MudText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Target" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Target" Name="target" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @* One line, and the attribute name is the part that gives way: the modifier chips beside
+                           it qualify what the flow does, so they must never be what a long name pushes out. *@
+                        <div class="jim-one-line-list">
+                            @if (SyncRule.Direction == SyncRuleDirection.Import && context.Item.TargetMetaverseAttribute is { } metaverseTarget)
                             {
-                                <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                                <span class="jim-one-line-list-value">
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                   Name="@metaverseTarget.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseTarget.Type, metaverseTarget.AttributePlurality)" />
+                                </span>
+                            }
+                            else if (SyncRule.Direction == SyncRuleDirection.Export && context.Item.TargetConnectedSystemAttribute is { } connectedSystemTarget)
+                            {
+                                <span class="jim-one-line-list-value">
+                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                   Name="@connectedSystemTarget.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemTarget.Type, connectedSystemTarget.AttributePlurality)" />
+                                </span>
+                                @if (context.Item.InitialExportOnly)
+                                {
+                                    <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (connectedSystemTarget.Writability == AttributeWritability.WritableOnCreate)
+                                {
+                                    <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
+                                    </MudTooltip>
+                                }
+                            }
+                            @if (MappingIsMvaToSva(context.Item))
+                            {
+                                <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
+                                    <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="ml-2 jim-mva-sva-indicator" />
                                 </MudTooltip>
                             }
-                            @if (context.TargetConnectedSystemAttribute.Writability == AttributeWritability.WritableOnCreate)
-                            {
-                                <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(AttributeWritability.WritableOnCreate)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Set on creation only</MudChip>
-                                </MudTooltip>
-                            }
-                        }
-                        @if (MappingIsMvaToSva(context))
-                        {
-                            <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
-                                <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Color="Color.Inherit" Size="Size.Small" Class="ml-2 jim-mva-sva-indicator" />
-                            </MudTooltip>
-                        }
-                    </div>
-                </MudTd>
-                <MudTd DataLabel="Created">
-                    <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <MudText Typo="Typo.body2">@context.Created.ToLocalTime().ToRelativeTime()</MudText>
-                    </MudTooltip>
-                </MudTd>
-                <MudTd DataLabel="Updated">
-                    @if (context.LastUpdated.HasValue)
-                    {
-                        var lastUpdated = context.LastUpdated.Value;
-                        <MudTooltip Text="@lastUpdated.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <MudText Typo="Typo.body2">@lastUpdated.ToLocalTime().ToRelativeTime()</MudText>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Created" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Created" Name="created" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            <MudText Typo="Typo.body2">@context.Item.Created.ToLocalTime().ToRelativeTime()</MudText>
                         </MudTooltip>
-                    }
-                    else
-                    {
-                        <EmptyValue />
-                    }
-                </MudTd>
-                <MudTd>
-                    <div class="d-flex justify-end gap-2">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
-                            Size="Size.Small" aria-label="edit"
-                            OnClick="@(() => HandleEditAttributeFlowRuleAsync(context))" />
-                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
-                            Size="Size.Small" aria-label="delete"
-                            OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(context))" />
-                    </div>
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                No Attribute Flow Rules defined yet.
-            </NoRecordsContent>
-        </MudTable>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Updated" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Updated" Name="updated" />
+                    </HeaderTemplate>
+                    <CellTemplate>
+                        @if (context.Item.LastUpdated.HasValue)
+                        {
+                            var lastUpdated = context.Item.LastUpdated.Value;
+                            <MudTooltip Text="@lastUpdated.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.body2">@lastUpdated.ToLocalTime().ToRelativeTime()</MudText>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Sortable="false">
+                    <HeaderTemplate></HeaderTemplate>
+                    <CellTemplate>
+                        <div class="d-flex justify-end gap-2">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
+                                Size="Size.Small" aria-label="edit"
+                                OnClick="@(() => HandleEditAttributeFlowRuleAsync(context.Item))" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
+                                Size="Size.Small" aria-label="delete"
+                                OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(context.Item))" />
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Attribute Flows match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else if (AnyAttributeFlowFilterIsActive)
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
+                                     PrimaryText="No Attribute Flows match these filters"
+                                     SecondaryText="Clear a Mapping Type, Data Type or Plurality filter above to widen the list." />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.Map"
+                                     PrimaryText="No Attribute Flows defined yet"
+                                     SecondaryText="Use the Add Attribute Flow button to say which attribute values this Synchronisation Rule moves." />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
     }
     else
     {
@@ -260,14 +295,9 @@
                     @if (SyncRule.Direction == SyncRuleDirection.Import)
                     {
                         <div class="d-flex align-center flex-wrap">
-                            <MudChip T="string" Size="Size.Medium">
-                                <AvatarContent>
-                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
-                            </MudChip>
+                            <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                           Name="@attributeFlowRule.TargetMetaverseAttribute?.Name"
+                                           Tooltip="@DescribeMetaverseAttribute(attributeFlowRule.TargetMetaverseAttribute)" />
 
                             <MudText Class="mud-text-secondary mx-1">→</MudText>
 
@@ -275,25 +305,13 @@
                             {
                                 if (source.ConnectedSystemAttribute != null)
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                                   Name="@source.ConnectedSystemAttribute.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, source.ConnectedSystemAttribute.Type, source.ConnectedSystemAttribute.AttributePlurality)" />
                                 }
                                 else if (!string.IsNullOrWhiteSpace(source.Expression))
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
                                 }
 
                                 <!-- some thought needs to be given to how we handle specifying constant values -->
@@ -307,25 +325,13 @@
                             {
                                 if (source.MetaverseAttribute != null)
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.Metaverse"
+                                                   Name="@source.MetaverseAttribute.Name"
+                                                   Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, source.MetaverseAttribute.Type, source.MetaverseAttribute.AttributePlurality)" />
                                 }
                                 else if (!string.IsNullOrWhiteSpace(source.Expression))
                                 {
-                                    <MudChip T="string" Size="Size.Medium">
-                                        <AvatarContent>
-                                            <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
-                                                <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
-                                            </MudTooltip>
-                                        </AvatarContent>
-                                        <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
-                                    </MudChip>
+                                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
                                 }
 
                                 <!-- some thought needs to be given to how we handle specifying constant values -->
@@ -333,14 +339,9 @@
 
                             <MudText Class="mud-text-secondary mx-1">→</MudText>
 
-                            <MudChip T="string" Size="Size.Medium">
-                                <AvatarContent>
-                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Secondary">CS</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>
-                            </MudChip>
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem"
+                                           Name="@attributeFlowRule.TargetConnectedSystemAttribute?.Name"
+                                           Tooltip="@DescribeConnectedSystemAttribute(attributeFlowRule.TargetConnectedSystemAttribute)" />
 
                             @if (attributeFlowRule.InitialExportOnly)
                             {
@@ -624,6 +625,20 @@
 </MudDialog>
 
 @code {
+    /// <summary>
+    /// Tooltip for a Metaverse Attribute that the markup reaches through a nullable navigation. Falls back to the
+    /// chip's own default when the navigation is not loaded, rather than showing a tooltip asserting a data type
+    /// nobody read.
+    /// </summary>
+    private static string? DescribeMetaverseAttribute(MetaverseAttribute? attribute) =>
+        attribute == null ? null : Helpers.DescribeAttribute(AttributeChipKind.Metaverse, attribute.Type, attribute.AttributePlurality);
+
+    /// <summary>
+    /// The Connected System sibling of <see cref="DescribeMetaverseAttribute"/>.
+    /// </summary>
+    private static string? DescribeConnectedSystemAttribute(ConnectedSystemObjectTypeAttribute? attribute) =>
+        attribute == null ? null : Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, attribute.Type, attribute.AttributePlurality);
+
     [Parameter]
     public SyncRule SyncRule { get; set; } = null!;
 
@@ -696,6 +711,7 @@
     private string? _attributeFlowMappingSourceType;
     private bool _attributeFlowTableView = true;
     private bool _isEditingAttributeFlow;
+    private VirtualisedDataGrid<SyncRuleMapping>? _flowGrid;
 
     // Advisory Standard Mapping hints for the dialog's attribute pickers (#1122). Loaded when the dialog opens
     // and cached for as long as the rule keeps pointing at the same Connected System and Metaverse Object Type.
@@ -1200,6 +1216,7 @@
         _attributeFlowMapping = null;
         _attributeFlowMappingSource = null;
         _isEditingAttributeFlow = false;
+        await RefreshFlowGridAsync();
         await OnChanged.InvokeAsync();
     }
 
@@ -1209,8 +1226,63 @@
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
             SyncRule.AttributeFlowRules.Remove(attributeFlowRule);
+            await RefreshFlowGridAsync();
             await OnChanged.InvokeAsync();
         }
+    }
+
+    /// <summary>
+    /// Whether any of the page's own chip filters is narrowing the list. It tells the empty state apart from the
+    /// "nothing configured yet" case, which has a different way out.
+    /// </summary>
+    private bool AnyAttributeFlowFilterIsActive =>
+        _selectedMappingTypes.Count > 0 || _selectedDataTypes.Count > 0 || _selectedPluralities.Count > 0;
+
+    /// <summary>
+    /// Slices one window of the Synchronisation Rule's Attribute Flows, applying the page's chip filters, the
+    /// grid's search (attribute names on either side, and expression text) and its sort. The flows are held on the
+    /// rule the page already loaded, so there is no database range read.
+    /// </summary>
+    private Task<VirtualisedWindow<SyncRuleMapping>> LoadAttributeFlowWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        var flows = SyncRule.AttributeFlowRules.Where(FilterAttributeFlowRules);
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            flows = flows.Where(m =>
+                GetSortableSourceName(m).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                GetSortableTargetName(m).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                m.Sources.Any(s => s.Expression != null && s.Expression.Contains(search, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        IOrderedEnumerable<SyncRuleMapping> Order<TKey>(Func<SyncRuleMapping, TKey> key, IComparer<TKey>? comparer = null) =>
+            request.SortDescending ? flows.OrderByDescending(key, comparer) : flows.OrderBy(key, comparer);
+
+        var sorted = request.SortBy switch
+        {
+            "type" => Order(m => m.GetSourceType().ToString(), StringComparer.OrdinalIgnoreCase),
+            "source" => Order(GetSortableSourceName, StringComparer.OrdinalIgnoreCase),
+            "created" => Order(m => m.Created),
+            "updated" => Order(m => m.LastUpdated ?? DateTime.MinValue),
+            _ => Order(GetSortableTargetName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return Task.FromResult(sorted.ToWindow(request));
+    }
+
+    /// <summary>
+    /// Reloads the grid after the set of Attribute Flows, or the filters over it, has changed. The totals are
+    /// invalidated because the match set is a different one, and the reader is returned to the top because the
+    /// position they held described rows that are no longer there.
+    /// </summary>
+    private async Task RefreshFlowGridAsync()
+    {
+        if (_flowGrid == null)
+            return;
+
+        await _flowGrid.ResetScrollAsync();
+        await _flowGrid.RefreshAsync(invalidateTotals: true);
     }
 
     private bool FilterAttributeFlowRules(SyncRuleMapping mapping)
@@ -1290,12 +1362,21 @@
             .OrderBy(x => x.Key);
     }
 
-    private void OnMappingTypeFilterChanged(IReadOnlyCollection<SyncRuleMappingSourcesType> selected)
-        => _selectedMappingTypes = selected;
+    private async Task OnMappingTypeFilterChangedAsync(IReadOnlyCollection<SyncRuleMappingSourcesType> selected)
+    {
+        _selectedMappingTypes = selected;
+        await RefreshFlowGridAsync();
+    }
 
-    private void OnFlowDataTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selected)
-        => _selectedDataTypes = selected;
+    private async Task OnFlowDataTypeFilterChangedAsync(IReadOnlyCollection<AttributeDataType> selected)
+    {
+        _selectedDataTypes = selected;
+        await RefreshFlowGridAsync();
+    }
 
-    private void OnFlowPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selected)
-        => _selectedPluralities = selected;
+    private async Task OnFlowPluralityFilterChangedAsync(IReadOnlyCollection<AttributePlurality> selected)
+    {
+        _selectedPluralities = selected;
+        await RefreshFlowGridAsync();
+    }
 }

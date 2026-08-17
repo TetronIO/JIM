@@ -58,7 +58,82 @@ public class SchedulingRepository : ISchedulingRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // Deliberately no Include of Steps: the header carries a count, so a page of up to 100 Schedules no longer
+        var offset = (page - 1) * pageSize;
+        var (results, totalCount) = await QueryScheduleHeadersByRangeAsync(
+            offset, pageSize, searchQuery, sortBy, sortDescending, includeTotalCount: true);
+
+        var pagedResultSet = new PagedResultSet<ScheduleHeader>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged Schedule header read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetScheduleHeadersRangeAsync"/> will return, bounding the latency of a single
+    /// read. It mirrors the Schedule Execution window cap for the same reason: a page size is a number a person
+    /// picked from a fixed list, whereas a virtualiser asks for however many rows the viewport needs, and a cap it
+    /// can actually reach truncates the window silently, rendering the shortfall as blank rows.
+    /// </summary>
+    private const int MaxScheduleHeaderWindowSize = 500;
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ScheduleHeader>> GetScheduleHeadersRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxScheduleHeaderWindowSize)
+            count = MaxScheduleHeaderWindowSize;
+
+        var (results, totalCount) = await QueryScheduleHeadersByRangeAsync(
+            offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+
+        return new RangeResultSet<ScheduleHeader>
+        {
+            Results = results,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Schedule header reads: applies the optional search and the sort, windows
+    /// the result by absolute <paramref name="offset"/> and <paramref name="count"/>, and returns it alongside the
+    /// total match count (or null for that total when <paramref name="includeTotalCount"/> is false). Shared so the
+    /// two reads can never disagree on which Schedules match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<ScheduleHeader> Results, int? TotalResults)> QueryScheduleHeadersByRangeAsync(
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        // Deliberately no Include of Steps: the header carries a count, so a window of Schedules no longer
         // materialises every step row just to display "6 steps".
         var query = Repository.Database.Schedules.AsQueryable();
 
@@ -77,7 +152,7 @@ public class SchedulingRepository : ISchedulingRepository
             "name" => sortDescending
                 ? query.OrderByDescending(s => s.Name)
                 : query.OrderBy(s => s.Name),
-            "isenabled" or "enabled" => sortDescending
+            "isenabled" or "enabled" or "status" => sortDescending
                 ? query.OrderByDescending(s => s.IsEnabled)
                 : query.OrderBy(s => s.IsEnabled),
             "lastruntime" or "lastrun" => sortDescending
@@ -91,19 +166,20 @@ public class SchedulingRepository : ISchedulingRepository
                 : query.OrderBy(s => s.Created)
         };
 
-        var totalCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
+        // Counting is the expensive half of a window read, so it only happens when the caller asks; a null total
+        // means "not counted", never "nothing matched".
+        int? totalCount = includeTotalCount ? await query.CountAsync() : null;
 
         // The most recent execution is projected via correlated subqueries over the Schedule's executions, ordered by
-        // QueuedAt. EF Core renders each of these as a scalar subquery inside the single SELECT that fetches the page
-        // ("... ORDER BY s1.QueuedAt DESC LIMIT 1"), so the whole page costs one round trip no matter how many
-        // Schedules are on it; this must never become a per-row query. The composite
+        // QueuedAt. EF Core renders each of these as a scalar subquery inside the single SELECT that fetches the
+        // window ("... ORDER BY s1.QueuedAt DESC LIMIT 1"), so the whole window costs one round trip no matter how
+        // many Schedules are in it; this must never become a per-row query. The composite
         // IX_ScheduleExecutions_ScheduleId_QueuedAt index turns each subquery into a backward index scan with a
         // LIMIT 1, rather than a sort over every execution the Schedule has ever had. Verified against a real
         // PostgreSQL by ScheduleHeaderQueryDatabaseTests, which counts the commands the provider actually executes.
         var results = await query
             .Skip(offset)
-            .Take(pageSize)
+            .Take(count)
             .Select(s => new ScheduleHeader
             {
                 Id = s.Id,
@@ -134,23 +210,7 @@ public class SchedulingRepository : ISchedulingRepository
             })
             .ToListAsync();
 
-        var pagedResultSet = new PagedResultSet<ScheduleHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return (results, totalCount);
     }
 
     public async Task CreateScheduleAsync(Schedule schedule)
@@ -253,6 +313,87 @@ public class SchedulingRepository : ISchedulingRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
+            scheduleId, offset, pageSize, searchQuery: null, sortBy, sortDescending, includeTotalCount: true);
+
+        var pagedResultSet = new PagedResultSet<ScheduleExecution>
+        {
+            PageSize = pageSize,
+            // The count was requested above, so it is always present here; paging cannot work without it.
+            TotalResults = totalCount ?? throw new InvalidOperationException(
+                "The paged Schedule Execution read asked for the total match count and did not receive one."),
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <summary>
+    /// The largest window <see cref="GetScheduleExecutionsRangeAsync"/> will return, bounding the latency of a
+    /// single read. It is deliberately five times the paged reader's page-size cap, because the two caps protect
+    /// against different things: a page size is a number a person picked from a fixed list and never approaches
+    /// 100, whereas a virtualiser asks for however many rows the viewport needs, and a cap it can actually reach
+    /// truncates the window silently, rendering the shortfall as blank rows rather than raising anything. The
+    /// derivation from the list grid's height and row-height arithmetic lives on
+    /// <c>MetaverseRepository.MaxHeaderWindowSize</c>, which this cap mirrors.
+    /// </summary>
+    private const int MaxExecutionWindowSize = 500;
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<ScheduleExecution>> GetScheduleExecutionsRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        if (count > MaxExecutionWindowSize)
+            count = MaxExecutionWindowSize;
+
+        var (results, totalCount) = await QueryScheduleExecutionsByRangeAsync(
+            scheduleId, offset, count, searchQuery, sortBy, sortDescending, includeTotalCount);
+
+        return new RangeResultSet<ScheduleExecution>
+        {
+            Results = results,
+            TotalResults = totalCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range Schedule Execution reads: applies the optional Schedule filter and
+    /// the sort, windows the result by absolute <paramref name="offset"/> and <paramref name="count"/>, and
+    /// returns it alongside the total match count (or null for that total when
+    /// <paramref name="includeTotalCount"/> is false). Shared so the two reads can never disagree on which
+    /// executions match; callers own input validation and clamping.
+    /// </summary>
+    private async Task<(List<ScheduleExecution> Results, int? TotalResults)> QueryScheduleExecutionsByRangeAsync(
+        Guid? scheduleId,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
         var query = Repository.Database.ScheduleExecutions
             .Include(e => e.Schedule)
             .AsQueryable();
@@ -260,11 +401,22 @@ public class SchedulingRepository : ISchedulingRepository
         // Filter by schedule if specified
         if (scheduleId.HasValue)
         {
-            query = query.Where(e => e.ScheduleId == scheduleId.Value);
+            var scheduleIdValue = scheduleId.Value;
+            query = query.Where(e => e.ScheduleId == scheduleIdValue);
+        }
+
+        // Apply search filter. The two names are what a reader can actually recognise an execution by: which
+        // Schedule ran, and who set it off.
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            query = query.Where(e =>
+                e.ScheduleName.ToLower().Contains(searchLower) ||
+                (e.InitiatedByName != null && e.InitiatedByName.ToLower().Contains(searchLower)));
         }
 
         // Apply sorting
-        query = sortBy?.ToLower() switch
+        var ordered = sortBy?.ToLower() switch
         {
             "status" => sortDescending
                 ? query.OrderByDescending(e => e.Status)
@@ -280,27 +432,20 @@ public class SchedulingRepository : ISchedulingRepository
                 : query.OrderBy(e => e.QueuedAt)
         };
 
-        var totalCount = await query.CountAsync();
-        var offset = (page - 1) * pageSize;
-        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+        // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every sort key
+        // above can tie (a Schedule that fans several executions into the queue at once stamps them all with the
+        // same queued time, and a never-started execution has a null started and completed time). Without it,
+        // PostgreSQL may order tied rows differently per window, repeating some executions and skipping others.
+        query = ordered.ThenBy(e => e.Id);
 
-        var pagedResultSet = new PagedResultSet<ScheduleExecution>
-        {
-            PageSize = pageSize,
-            TotalResults = totalCount,
-            CurrentPage = page,
-            Results = results
-        };
+        // Counting scans every matching execution rather than a window of them, so it is skipped entirely when
+        // the caller already holds the total. Sorting cannot change how many executions match.
+        int? totalCount = null;
+        if (includeTotalCount)
+            totalCount = await query.CountAsync();
 
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        var results = await query.Skip(offset).Take(count).ToListAsync();
+        return (results, totalCount);
     }
 
     public async Task CreateScheduleExecutionAsync(ScheduleExecution execution)

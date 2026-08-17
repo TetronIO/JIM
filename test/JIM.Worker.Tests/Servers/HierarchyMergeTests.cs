@@ -974,4 +974,68 @@ public class HierarchyMergeTests
     }
 
     #endregion
+
+    #region First retrieval on a new Connected System (#1369)
+
+    [Test]
+    public void MergeHierarchy_FirstRetrievalOnANewConnectedSystem_KeepsTheContainersItJustDiscovered()
+    {
+        // The whole point of the first Retrieve Hierarchy is to populate the hierarchy, and it populated nothing:
+        // the Containers were built onto the new partition, reported as added, and then deleted again before the
+        // save, so an administrator had to press the button a second time to get any Containers at all.
+        var connectedSystem = new ConnectedSystem();
+        var discovered = new ConnectorPartition { Id = "DC=corp,DC=local", Name = "corp.local" };
+        var people = new ConnectorContainer("OU=People,DC=corp,DC=local", "People");
+        people.ChildContainers.Add(new ConnectorContainer("OU=Contractors,OU=People,DC=corp,DC=local", "Contractors"));
+        discovered.Containers.Add(people);
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discovered]);
+
+        var partition = connectedSystem.Partitions!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(partition.Containers, Has.Count.EqualTo(1), "the discovered Container must survive the merge");
+            Assert.That(partition.Containers!.Single().ChildContainers, Has.Count.EqualTo(1),
+                "and so must the Container beneath it");
+            Assert.That(result.TotalContainers, Is.EqualTo(2));
+            Assert.That(result.AddedContainers, Has.Count.EqualTo(2));
+            Assert.That(result.RemovedContainers, Is.Empty,
+                "nothing was there to remove; a Container discovered for the first time is not also a removal");
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_APartitionAddedAlongsideAnExistingOne_KeepsBothSetsOfContainers()
+    {
+        // The removal pass walks every partition, so a new partition's Containers were deleted even while a
+        // matched partition's survived beside them. This is the shape a second naming context produces.
+        var existingContainer = new ConnectedSystemContainer { ExternalId = "OU=Old,DC=one,DC=local", Name = "Old" };
+        var connectedSystem = new ConnectedSystem
+        {
+            Partitions =
+            [
+                new ConnectedSystemPartition
+                {
+                    ExternalId = "DC=one,DC=local", Name = "one.local", Containers = [existingContainer]
+                }
+            ]
+        };
+
+        var matched = new ConnectorPartition { Id = "DC=one,DC=local", Name = "one.local" };
+        matched.Containers.Add(new ConnectorContainer("OU=Old,DC=one,DC=local", "Old"));
+        var brandNew = new ConnectorPartition { Id = "DC=two,DC=local", Name = "two.local" };
+        brandNew.Containers.Add(new ConnectorContainer("OU=New,DC=two,DC=local", "New"));
+
+        ConnectedSystemServer.MergeHierarchy(connectedSystem, [matched, brandNew]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connectedSystem.Partitions!.Single(p => p.ExternalId == "DC=one,DC=local").Containers,
+                Has.Count.EqualTo(1), "the matched partition keeps its Container");
+            Assert.That(connectedSystem.Partitions!.Single(p => p.ExternalId == "DC=two,DC=local").Containers,
+                Has.Count.EqualTo(1), "and the new partition keeps the one just discovered in it");
+        }
+    }
+
+    #endregion
 }

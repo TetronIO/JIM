@@ -24,23 +24,23 @@ public class SyncRepositoryRemainingTests
     [Test]
     public void AddCsoToCache_DoesNotThrow()
     {
-        Assert.DoesNotThrow(() =>
-            _repo.AddCsoToCache(CsId, 10, "ext-id-1", Guid.NewGuid()));
+        Assert.That(() =>
+            _repo.AddCsoToCache(CsId, 10, "ext-id-1", Guid.NewGuid()), Throws.Nothing);
     }
 
     [Test]
     public void EvictCsoFromCache_DoesNotThrow()
     {
         _repo.AddCsoToCache(CsId, 10, "ext-id-1", Guid.NewGuid());
-        Assert.DoesNotThrow(() =>
-            _repo.EvictCsoFromCache(CsId, 10, "ext-id-1"));
+        Assert.That(() =>
+            _repo.EvictCsoFromCache(CsId, 10, "ext-id-1"), Throws.Nothing);
     }
 
     [Test]
     public void EvictCsoFromCache_NonExistent_DoesNotThrow()
     {
-        Assert.DoesNotThrow(() =>
-            _repo.EvictCsoFromCache(CsId, 10, "nonexistent"));
+        Assert.That(() =>
+            _repo.EvictCsoFromCache(CsId, 10, "nonexistent"), Throws.Nothing);
     }
 
     #endregion

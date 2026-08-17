@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using JIM.Application;
@@ -257,6 +258,12 @@ public class SyncImportTaskProcessor
         }
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
+
+        // What each excluded Container cost this run, accumulated across every call the Connector answers
+        // (#1255). Declared out here because both import shapes report it and the Activity carries one figure
+        // per Container for the run, not per page.
+        var entriesDiscardedByExclusion = new Dictionary<int, long>();
+
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
         // connecting out before it began.
@@ -391,6 +398,8 @@ public class SyncImportTaskProcessor
                             connectorWarningMessage = result.WarningMessage;
                         }
 
+                        AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
+
                         // process the results from this page
                         using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
                         {
@@ -492,6 +501,8 @@ public class SyncImportTaskProcessor
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 
+                AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
+
                 // Progress is now initialised inside ProcessImportObjectsAsync
 
                 // add the external ids from the results to our external id collection for later deletion calculation
@@ -512,6 +523,10 @@ public class SyncImportTaskProcessor
             default:
                 throw new NotSupportedException("Connector inheritance type is not supported (not calls, not files)");
         }
+
+        // Recorded before the cancellation check below, because an abandoned run still read and threw those
+        // entries away and the administrator asking why it was slow is owed the figure either way.
+        await RecordExclusionDiscardsAsync(entriesDiscardedByExclusion);
 
         // If cancelled during import, skip all post-import phases (deletions, references, persistence).
         // In-memory CSO collections are discarded cleanly — nothing has been persisted yet.
@@ -3091,7 +3106,7 @@ public class SyncImportTaskProcessor
                             rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
                             if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
                             {
-                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it.";
                                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
                             }
                             else
@@ -3105,7 +3120,7 @@ public class SyncImportTaskProcessor
                         case UnresolvedReferenceHandling.Warn:
                             // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
                             // summary warning after the loop instead (see below).
-                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope.",
+                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope, or inside a Container it excludes.",
                                 LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
                             break;
 
@@ -3127,7 +3142,10 @@ public class SyncImportTaskProcessor
 
             if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
             {
-                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope. View the affected Connected System Objects for details.";
+                // Both ways an object can be out of scope, named explicitly (#1255): its Container was never
+                // selected, or a Container excludes it. The second is the harder to spot, because the branch above
+                // the referenced object is selected and looks right.
+                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope, or inside a Container it excludes. View the affected Connected System Objects for details.";
                 _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
                     ? warningSummary
                     : $"{_activity.WarningMessage}\n{warningSummary}";
@@ -3136,6 +3154,42 @@ public class SyncImportTaskProcessor
 
         // persist final progress so the UI reflects completion before moving to the next phase
         await _syncRepo.UpdateActivityAsync(_activity);
+    }
+
+    /// <summary>
+    /// Adds what one import call discarded through exclusions to the run's running totals.
+    /// </summary>
+    private static void AccumulateExclusionDiscards(ConnectedSystemImportResult result, Dictionary<int, long> runningTotals)
+    {
+        foreach (var discarded in result.EntriesDiscardedByExclusion)
+            runningTotals[discarded.ContainerId] = runningTotals.GetValueOrDefault(discarded.ContainerId) + discarded.EntriesDiscarded;
+    }
+
+    /// <summary>
+    /// Records what the run's exclusions cost onto the Activity, so the transfer an exclusion causes is visible
+    /// where the administrator who configured it will look (#1255).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not a warning: an exclusion discarding entries is it doing exactly what it was configured to
+    /// do, and flagging every exclusion-configured import as warned would train administrators to ignore the
+    /// field. Deliberately not fatal either; reporting how a run was performed must never fail the run, so a
+    /// failure here is logged and swallowed, as it is for the run's steps.
+    /// </remarks>
+    private async Task RecordExclusionDiscardsAsync(IReadOnlyDictionary<int, long> entriesDiscardedByExclusion)
+    {
+        if (entriesDiscardedByExclusion.Count == 0)
+            return;
+
+        try
+        {
+            await _syncRepo.RecordExclusionDiscardCountsAsync(_activity.Id, entriesDiscardedByExclusion);
+            Log.Information("PerformImportAsync: {DiscardedCount} entries were read and discarded across {ContainerCount} excluded Container(s)",
+                entriesDiscardedByExclusion.Values.Sum(), entriesDiscardedByExclusion.Count);
+        }
+        catch (Exception ex) when (ex is DbException or InvalidOperationException)
+        {
+            Log.Warning(ex, "PerformImportAsync: Could not record what this run's exclusions discarded. The import itself is unaffected.");
+        }
     }
 
     /// <summary>

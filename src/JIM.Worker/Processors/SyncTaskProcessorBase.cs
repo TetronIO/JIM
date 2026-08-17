@@ -1731,6 +1731,14 @@ public abstract class SyncTaskProcessorBase
                 _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
+            // Create error RPEIs where an outbound Synchronisation Rule could not export because the Metaverse
+            // Object's one Connected System Object in this system is of a different Object Type (#1331). No
+            // Pending Export was staged for that Rule; the object's other export Rules are unaffected. Reported
+            // rather than thrown, because it is a configuration fault for the administrator to resolve and the
+            // rest of the run still carries useful work.
+            foreach (var conflict in result.ObjectTypeConflicts)
+                _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
+
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {
@@ -1905,10 +1913,18 @@ public abstract class SyncTaskProcessorBase
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
+            var deprovisionConflicts = new List<ExportObjectTypeConflict>();
             var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
                 _connectedSystem,
-                _exportEvaluationCache!);
+                _exportEvaluationCache!,
+                deprovisionConflicts);
+
+            // A Rule that went out of scope for a Metaverse Object whose Connected System Object belongs to a
+            // different Object Type deprovisioned nothing (#1331). Report it rather than leaving an object an
+            // administrator believes was deprovisioned still sitting in the Connected System.
+            foreach (var conflict in deprovisionConflicts)
+                _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
             // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
             // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
@@ -1927,6 +1943,27 @@ public abstract class SyncTaskProcessorBase
     /// newly assigned MVO IDs. This is necessary because AutoDetectChangesEnabled is disabled
     /// during page flush, so EF does not detect CSO scalar property changes automatically.
     /// </summary>
+    /// <summary>
+    /// Builds the Run Profile Execution Item reporting that an outbound Synchronisation Rule could not act,
+    /// because the Metaverse Object's one Connected System Object in this system is of a different Connected
+    /// System Object Type than the Rule targets (#1331). Shared by export evaluation and out-of-scope
+    /// deprovisioning so both read identically on the Activity.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildObjectTypeConflictRpei(ExportObjectTypeConflict conflict)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotExportDueToExistingConnectedSystemObject;
+        rpei.ConnectedSystemObjectId = conflict.ExistingConnectedSystemObjectId;
+        rpei.ErrorMessage =
+            $"Metaverse Object {conflict.MetaverseObjectId}: Synchronisation Rule '{conflict.SyncRuleName}' targets Connected System " +
+            $"Object Type '{conflict.TargetObjectTypeName}' in '{_connectedSystem.Name}', but this Metaverse Object is already " +
+            $"represented there by a '{conflict.ExistingObjectTypeName}' object. A Metaverse Object can have only one Connected " +
+            "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
+            "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
+            "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
         if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0)

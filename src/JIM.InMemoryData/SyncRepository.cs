@@ -1541,7 +1541,34 @@ public class SyncRepository : ISyncRepository
 
     public Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
-        foreach (var pe in pendingExports)
+        var batch = pendingExports.ToList();
+
+        // PostgreSQL's IX_PendingExports_ConnectedSystemObjectId_Unique permits at most one Pending Export
+        // per Connected System Object, and the bulk insert is a single statement, so a batch carrying a
+        // duplicate is refused whole rather than half-applied. Validate before mutating anything so this
+        // double cannot be left holding part of a rejected batch either. Pending Exports with no Connected
+        // System Object are exempt: the index is filtered on "ConnectedSystemObjectId" IS NOT NULL, because
+        // rows awaiting reference resolution must not collide with each other.
+        //
+        // Enforced here because the invariant used to live only in PostgreSQL (#1331): two outbound
+        // Synchronisation Rules resolving to one Connected System Object staged two Pending Exports for it,
+        // this double accepted both, and the entire unit suite passed while the sync run died on a raw 23505.
+        var csoIdsInBatch = new HashSet<Guid>();
+        foreach (var csoId in batch.Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                                   .Select(pe => pe.ConnectedSystemObjectId!.Value))
+        {
+            if (!csoIdsInBatch.Add(csoId))
+                throw new InvalidOperationException(
+                    $"Two Pending Exports in the same batch target Connected System Object {csoId}. " +
+                    "Only one Pending Export may exist per Connected System Object.");
+
+            if (_pendingExportsByCsoId.ContainsKey(csoId))
+                throw new InvalidOperationException(
+                    $"A Pending Export already exists for Connected System Object {csoId}. " +
+                    "Only one Pending Export may exist per Connected System Object.");
+        }
+
+        foreach (var pe in batch)
         {
             if (pe.Id == Guid.Empty)
                 pe.Id = Guid.NewGuid();
@@ -1709,6 +1736,31 @@ public class SyncRepository : ISyncRepository
     /// narrated its steps.
     /// </summary>
     public IReadOnlyCollection<ActivityPhase> ActivityPhases => _activityPhases.Values;
+
+    public Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
+    {
+        if (entriesDiscardedByContainerId.Count == 0)
+            return Task.CompletedTask;
+
+        var counts = _exclusionDiscardCounts.TryGetValue(activityId, out var existing)
+            ? existing
+            : _exclusionDiscardCounts[activityId] = new Dictionary<int, long>();
+
+        // Accumulated rather than replaced, matching the real repository's upsert: a caller reporting per page
+        // must reach the same total as one reporting once.
+        foreach (var (containerId, discarded) in entriesDiscardedByContainerId)
+            counts[containerId] = counts.GetValueOrDefault(containerId) + discarded;
+
+        return Task.CompletedTask;
+    }
+
+    private readonly Dictionary<Guid, Dictionary<int, long>> _exclusionDiscardCounts = new();
+
+    /// <summary>
+    /// Entries discarded through an exclusion so far, keyed by Activity then by excluded Container id, for tests
+    /// asserting what a run reported about the cost of its carve-outs (#1255).
+    /// </summary>
+    public IReadOnlyDictionary<Guid, Dictionary<int, long>> ExclusionDiscardCounts => _exclusionDiscardCounts;
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {

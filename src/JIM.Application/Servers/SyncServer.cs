@@ -10,6 +10,7 @@ using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.Servers;
@@ -341,8 +342,9 @@ public class SyncServer : ISyncServer
     public Task<List<PendingExport>> EvaluateOutOfScopeExportsAsync(
         MetaverseObject mvo,
         ConnectedSystem? sourceSystem,
-        ExportEvaluationCache cache)
-        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, sourceSystem, cache);
+        ExportEvaluationCache cache,
+        List<ExportObjectTypeConflict>? objectTypeConflicts = null)
+        => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, sourceSystem, cache, objectTypeConflicts);
 
     public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null)
         => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);

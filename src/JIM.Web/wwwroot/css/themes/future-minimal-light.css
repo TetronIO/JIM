@@ -134,27 +134,29 @@ html[lang] {
     --jim-instance-bar-bg: #adb0ae;
 }
 
-/* Uncomment to lighten outlined/text primary button text for readability */
-/*
+/* Darken outlined/text primary button text for readability. The dark themes lighten it here for
+   exactly the same reason: the readable direction is away from the ground, and on a near-white
+   page that is downwards. Measured on the rendered page, not picked by eye; the count chip and
+   icon inside such a button inherit this colour, so they move with it.
+   This theme grounds on a mid grey rather than white, so it needs more than the sibling themes:
+   the label sat at 2.77:1 against the page, and --mud-palette-primary-darken alone reaches only
+   3.58:1, still under the 4.5:1 WCAG AA asks for. Mixing that 75% towards black is the measured
+   point that clears the minimum with room to spare, at 5.31:1 against the page and 6.17:1 on a
+   card, without turning the accent black. */
 html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled),
 html[lang] .mud-button-text.mud-button-text-primary:not(:disabled) {
-    color: <lightened-primary>;
+    color: color-mix(in srgb, var(--mud-palette-primary-darken) 75%, black);
 }
-*/
 
-/* Uncomment to match outlined primary button border to the lightened text colour (solo buttons only) */
-/*
+/* Match outlined primary button border to the darkened text colour (solo buttons only) */
 html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
-    border-color: <lightened-primary>;
+    border-color: color-mix(in srgb, var(--mud-palette-primary-darken) 75%, black);
 }
-*/
 
-/* Uncomment to revert outlined border to primary within button groups */
-/*
+/* Revert outlined border to primary within button groups */
 html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
     border-color: var(--mud-palette-primary);
 }
-*/
 
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {

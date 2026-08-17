@@ -268,6 +268,34 @@ Describe 'Set-JIMConnectedSystemAttribute' {
             $command.Parameters['IsExternalId'] | Should -Not -BeNullOrEmpty
         }
 
+        # An Oracle NUMBER column arrives as a Decimal because Oracle has one numeric type, and an
+        # Attribute Flow needs its source and target types to match. Overriding the type is what lets it
+        # reach a built-in numeric Metaverse Attribute without an expression (#1354).
+        It 'Should have a Type parameter on the Single parameter set only' {
+            $param = $command.Parameters['Type']
+            $param | Should -Not -BeNullOrEmpty
+
+            $parameterAttributes = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute]
+            }
+            $parameterAttributes.ParameterSetName | Should -Be @('Single')
+        }
+
+        It 'Should offer the same data types as New-JIMMetaverseAttribute' {
+            $param = $command.Parameters['Type']
+            $validateSet = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ValidateSetAttribute]
+            }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Be @(
+                'Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')
+        }
+
+        It 'Should reject a data type that is not a JIM attribute type' {
+            { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 1 -AttributeId 1 -Type 'NotSet' -ErrorAction Stop } |
+                Should -Throw
+        }
+
         It 'Should have IsSecondaryExternalId parameter' {
             $command.Parameters['IsSecondaryExternalId'] | Should -Not -BeNullOrEmpty
         }
@@ -348,6 +376,10 @@ Describe 'Set-JIMConnectedSystemContainer' {
             $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $validateSet.ValidValues | Should -Be @('Subtree', 'OneLevel')
         }
+
+        It 'Should have an Excluded parameter' {
+            $command.Parameters['Excluded'] | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Request body composition' {
@@ -394,6 +426,48 @@ Describe 'Set-JIMConnectedSystemContainer' {
 
         It 'Rejects a scope value outside the ValidateSet' {
             { Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'Bogus' -Confirm:$false -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Sends excluded in the PUT body when -Excluded is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Service Accounts' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Excluded $true -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.excluded -eq $true -and -not $Body.ContainsKey('selected')
+                }
+            }
+        }
+
+        It 'Omits excluded from the PUT body when -Excluded is not specified' {
+            # A caller changing scope must not silently hand an excluded branch back into scope.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Service Accounts' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Scope 'OneLevel' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('excluded')
+                }
+            }
+        }
+
+        It 'Sends both halves when a selection is replaced with an exclusion' {
+            # The API rejects a request that would leave a Container both selected and excluded, so stating both is
+            # how a caller moves one from a selection to an exclusion.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 10; name = 'OU=Service Accounts' } }
+
+                Set-JIMConnectedSystemContainer -ConnectedSystemId 1 -ContainerId 10 -Selected $false -Excluded $true -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.selected -eq $false -and $Body.excluded -eq $true
+                }
+            }
         }
     }
 }

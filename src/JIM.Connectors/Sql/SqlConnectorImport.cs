@@ -1279,10 +1279,10 @@ internal sealed class SqlConnectorImport
                 attribute.StringValues.Add(ToText(value));
                 break;
             case AttributeDataType.Number:
-                attribute.IntValues.Add(Convert.ToInt32(value, CultureInfo.InvariantCulture));
+                attribute.IntValues.Add(Convert.ToInt32(RequireWholeNumber(value, type), CultureInfo.InvariantCulture));
                 break;
             case AttributeDataType.LongNumber:
-                attribute.LongValues.Add(Convert.ToInt64(value, CultureInfo.InvariantCulture));
+                attribute.LongValues.Add(Convert.ToInt64(RequireWholeNumber(value, type), CultureInfo.InvariantCulture));
                 break;
             case AttributeDataType.Decimal:
                 attribute.DecimalValues.Add(ToDecimal(value));
@@ -1343,6 +1343,45 @@ internal sealed class SqlConnectorImport
     /// introduced to fix.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Refuses a value carrying a fraction where the attribute's type is a whole number.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Convert.ToInt32(object?, IFormatProvider?)"/> <b>rounds</b> rather than throwing, so
+    /// without this a fractional value reaching a whole-number attribute is silently altered: 4200.7
+    /// becomes 4201 and nothing anywhere says so. An overflow is already loud, because Convert throws
+    /// and <c>IsValueConversionFailure</c> turns it into a per-object error; rounding was the one way a
+    /// value could change on the way in without being reported.
+    /// </para>
+    /// <para>
+    /// It is reachable through an administrator's data type override: recording an Oracle
+    /// <c>NUMBER(9,4)</c> column as a whole number is a plausible mistake, and the values in the column
+    /// are what disprove it. Refused per value rather than per column, so the rows that do hold whole
+    /// numbers still import and the object that does not gets an error naming what was wrong with it.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidCastException">The value has a fractional component the attribute's type cannot hold.</exception>
+    private static object RequireWholeNumber(object value, AttributeDataType type)
+    {
+        // Only exact numerics can be checked for a fraction meaningfully; a string or a driver wrapper is
+        // left to Convert, which reports its own failure through the same per-object path.
+        var fraction = value switch
+        {
+            decimal exact => exact != decimal.Truncate(exact),
+            double approximate => Math.Abs(approximate % 1) > double.Epsilon,
+            float approximate => Math.Abs(approximate % 1) > float.Epsilon,
+            _ => false
+        };
+
+        if (!fraction)
+            return value;
+
+        throw new InvalidCastException(
+            $"the value {Convert.ToString(value, CultureInfo.InvariantCulture)} has a fractional part, and this attribute's data type is {type}, which holds whole numbers only. " +
+            "Rounding it would change the value without saying so. Either record the attribute as a Decimal on the Connected System's Schema tab, or correct the value in the source.");
+    }
+
     /// <exception cref="OverflowException">The value is beyond what a CLR decimal holds, reported with the same advice an exact numeric column's overflow carries.</exception>
     private static decimal ToDecimal(object value)
     {

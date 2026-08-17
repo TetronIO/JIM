@@ -563,7 +563,9 @@ public class SqlConnectorSchemaTests
 
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
-        Assert.That(schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "COST_CENTRE_ID").Description, Is.Null,
+        // Every attribute carries its source column type, so the absence of a suggestion is asserted on the
+        // suggestion's own wording rather than on the Description being empty (#1354).
+        Assert.That(schema.ObjectTypes.Single().Attributes.Single(a => a.Name == "COST_CENTRE_ID").Description, Does.Not.Contain("Foreign key"),
             "A foreign key to something JIM does not synchronise is not a Reference an administrator could confirm.");
     }
 
@@ -584,7 +586,8 @@ public class SqlConnectorSchemaTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(department.Type, Is.EqualTo(AttributeDataType.Reference));
-            Assert.That(department.Description, Is.Null, "There is nothing left to suggest once the administrator has configured it.");
+            Assert.That(department.Description, Does.Not.Contain("Foreign key"), "There is nothing left to suggest once the administrator has configured it.");
+            Assert.That(department.Description, Does.Contain("Source column type: int"), "The source column type is stated regardless, so the administrator can see what the attribute was built from.");
         }
     }
 
@@ -619,7 +622,7 @@ public class SqlConnectorSchemaTests
     }
 
     [Test]
-    public async Task GetSchemaAsync_OracleNumber1WithTheOptInOff_MapsToDecimalAsync()
+    public async Task GetSchemaAsync_OracleNumber1WithTheOptInOff_StaysNumericAsync()
     {
         var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
         provider.Catalogue.AddTable("HR", "EMPLOYEES",
@@ -628,8 +631,55 @@ public class SqlConnectorSchemaTests
 
         var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
 
-        Assert.That(AttributeType(schema.ObjectTypes.Single(), "IS_ACTIVE"), Is.EqualTo(AttributeDataType.Decimal),
-            "Reinterpreting a number as a flag is never inferred, only opted into.");
+        Assert.That(AttributeType(schema.ObjectTypes.Single(), "IS_ACTIVE"), Is.EqualTo(AttributeDataType.Number),
+            "Reinterpreting a number as a flag is never inferred, only opted into. Without the opt-in it stays numeric, and one digit with no scale is a whole number (#1354).");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_EveryColumn_StatesItsSourceTypeInTheDescriptionAsync()
+    {
+        // The inferred type is only arguable if the administrator can see what it was inferred from,
+        // which matters most on Oracle where the declaration is the whole signal (#1354).
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("FTE", "NUMBER", Precision: 9, Scale: 4));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
+        var objectType = schema.ObjectTypes.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(objectType.Attributes.Single(a => a.Name == "EMPLOYEE_ID").Description, Is.EqualTo("Source column type: NUMBER(10)."),
+                "A zero scale is left off, because NUMBER(10) is how the column is written.");
+            Assert.That(objectType.Attributes.Single(a => a.Name == "FTE").Description, Is.EqualTo("Source column type: NUMBER(9,4)."),
+                "A scale that carries meaning is stated, because it is what makes the column fractional.");
+        }
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_OracleWholeNumberAnchor_MapsToLongNumberAsync()
+    {
+        // The ordinary Oracle sequence-backed primary key. Ten digits reach 9,999,999,999, which
+        // overflows a 32-bit whole number, so LongNumber is the narrowest type that always holds it.
+        var provider = new FakeSqlProvider { DialectUnderTest = SqlDatabaseType.Oracle };
+        provider.Catalogue.AddTable("HR", "EMPLOYEES",
+            new FakeCatalogueColumn("EMPLOYEE_ID", "NUMBER", Precision: 10, Scale: 0, IsNullable: false),
+            new FakeCatalogueColumn("HEADCOUNT", "NUMBER", Precision: 19, Scale: 0),
+            new FakeCatalogueColumn("FTE", "NUMBER", Precision: 9, Scale: 4));
+
+        var schema = await GetSchemaAsync(provider, ObjectTypesDocument("HR", "EMPLOYEES"));
+        var objectType = schema.ObjectTypes.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AttributeType(objectType, "EMPLOYEE_ID"), Is.EqualTo(AttributeDataType.LongNumber),
+                "NUMBER(10,0) exceeds a 32-bit whole number but fits a 64-bit one.");
+            Assert.That(AttributeType(objectType, "HEADCOUNT"), Is.EqualTo(AttributeDataType.Decimal),
+                "NUMBER(19,0) straddles long.MaxValue, so narrowing it is not safe.");
+            Assert.That(AttributeType(objectType, "FTE"), Is.EqualTo(AttributeDataType.Decimal),
+                "NUMBER(9,4) is genuinely fractional.");
+        }
     }
 
     [Test]

@@ -204,7 +204,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetRowsPerPageAsync(25));
+        Assert.That(async () => await _service.SetRowsPerPageAsync(25), Throws.Nothing);
     }
 
     [Test]
@@ -218,7 +218,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetRowsPerPageAsync(25));
+        Assert.That(async () => await _service.SetRowsPerPageAsync(25), Throws.Nothing);
     }
 
     #endregion
@@ -361,7 +361,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetDarkModeAsync(true));
+        Assert.That(async () => await _service.SetDarkModeAsync(true), Throws.Nothing);
     }
 
     [Test]
@@ -375,7 +375,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetDarkModeAsync(false));
+        Assert.That(async () => await _service.SetDarkModeAsync(false), Throws.Nothing);
     }
 
     #endregion
@@ -518,7 +518,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetDrawerPinnedAsync(true));
+        Assert.That(async () => await _service.SetDrawerPinnedAsync(true), Throws.Nothing);
     }
 
     [Test]
@@ -532,7 +532,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetDrawerPinnedAsync(false));
+        Assert.That(async () => await _service.SetDrawerPinnedAsync(false), Throws.Nothing);
     }
 
     #endregion
@@ -740,7 +740,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetMvaViewModeAsync("Static Members", "table"));
+        Assert.That(async () => await _service.SetMvaViewModeAsync("Static Members", "table"), Throws.Nothing);
     }
 
     [Test]
@@ -754,7 +754,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetMvaViewModeAsync("Owners", "chipset"));
+        Assert.That(async () => await _service.SetMvaViewModeAsync("Owners", "chipset"), Throws.Nothing);
     }
 
     #endregion
@@ -957,7 +957,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetCategoryExpandedAsync(1, "Identity", true));
+        Assert.That(async () => await _service.SetCategoryExpandedAsync(1, "Identity", true), Throws.Nothing);
     }
 
     [Test]
@@ -971,7 +971,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetCategoryExpandedAsync(1, "Contact", false));
+        Assert.That(async () => await _service.SetCategoryExpandedAsync(1, "Contact", false), Throws.Nothing);
     }
 
     #endregion
@@ -1100,7 +1100,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityViewAsync("timeline"));
+        Assert.That(async () => await _service.SetCausalityViewAsync("timeline"), Throws.Nothing);
     }
 
     [Test]
@@ -1114,7 +1114,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityViewAsync("flow"));
+        Assert.That(async () => await _service.SetCausalityViewAsync("flow"), Throws.Nothing);
     }
 
     #endregion
@@ -1224,7 +1224,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityTechNamesAsync(true));
+        Assert.That(async () => await _service.SetCausalityTechNamesAsync(true), Throws.Nothing);
     }
 
     [Test]
@@ -1238,7 +1238,7 @@ public class UserPreferenceServiceTests
             .ThrowsAsync(new InvalidOperationException("JS interop not available"));
 
         // Act & Assert - should not throw
-        Assert.DoesNotThrowAsync(async () => await _service.SetCausalityTechNamesAsync(false));
+        Assert.That(async () => await _service.SetCausalityTechNamesAsync(false), Throws.Nothing);
     }
 
     #endregion

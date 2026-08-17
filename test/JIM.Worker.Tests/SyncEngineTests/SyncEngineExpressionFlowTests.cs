@@ -99,8 +99,8 @@ public class SyncEngineExpressionFlowTests
             .Returns((object?)null);
 
         // Act
-        Assert.DoesNotThrow(() =>
-            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object));
+        Assert.That(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object), Throws.Nothing);
 
         // Assert — the existing value is queued for removal (distinct from the throw path)
         Assert.That(mvo.PendingAttributeValueRemovals, Contains.Item(existingValue));
@@ -118,8 +118,8 @@ public class SyncEngineExpressionFlowTests
             .Returns("New Value");
 
         // Act
-        Assert.DoesNotThrow(() =>
-            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object));
+        Assert.That(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object), Throws.Nothing);
 
         // Assert — old value removed, new value added
         Assert.That(mvo.PendingAttributeValueRemovals, Contains.Item(existingValue));
@@ -192,8 +192,8 @@ public class SyncEngineExpressionFlowTests
             .Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<ExpressionContext>()))
             .Returns(result);
 
-        Assert.DoesNotThrow(() =>
-            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object));
+        Assert.That(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator.Object), Throws.Nothing);
     }
 
     [Test]
@@ -282,8 +282,8 @@ public class SyncEngineExpressionFlowTests
         var (cso, mvo, syncRule, csoType) = BuildDecimalTargetScenario("cs[\"salary\"]");
         var evaluator = new DynamicExpressoEvaluator();
 
-        Assert.DoesNotThrow(() =>
-            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator));
+        Assert.That(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator), Throws.Nothing);
 
         Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
         Assert.That(mvo.PendingAttributeValueAdditions.First().DecimalValue, Is.EqualTo(10.5m));
@@ -359,8 +359,8 @@ public class SyncEngineExpressionFlowTests
         var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.LongNumber, "cs[\"usnChanged\"]");
         var evaluator = new DynamicExpressoEvaluator();
 
-        Assert.DoesNotThrow(() =>
-            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator));
+        Assert.That(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator), Throws.Nothing);
 
         Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
         Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(9999999999L));

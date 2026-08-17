@@ -265,7 +265,12 @@ param(
     # The full matrix including the 500,000-row scale import. Off by default because the scale row
     # alone is the bulk of the runtime; -Quick is the representative subset for the regular gate.
     [Parameter(Mandatory=$false)]
-    [switch]$FullMatrix
+    [switch]$FullMatrix,
+
+    # Runs the suite from a linked git worktree, which the preflight below otherwise refuses. Only
+    # correct when no other JIM stack is running on this host; see the preflight for why.
+    [Parameter(Mandatory=$false)]
+    [switch]$AllowWorktree
 )
 
 Set-StrictMode -Version Latest
@@ -286,9 +291,15 @@ $NC = "$ESC[0m"
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 
+# Preflight: refuse to run from a linked git worktree, because the reset below removes the JIM volumes
+# by their global names and would take the primary checkout's instance with them.
+. "$repoRoot/scripts/Assert-PrimaryCheckout.ps1"
+Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "the integration suite"
+
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
 . "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
+. "$scriptRoot/utils/Invoke-IntegrationScenario.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -613,6 +624,7 @@ function Show-ScenarioMenu {
                 "*Scenario14*" { "Attribute priority (multi-source winner resolution)" }
                 "*Scenario15*" { "SCIM 2.0 Client Connector (import, join, bulk export, confirm)" }
                 "*Scenario16*" { "JIM SQL Connector provider x capability matrix (SQL Server, Oracle)" }
+                "*Scenario17*" { "Initial Password provisioning (account holder signs in and changes it)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1238,7 +1250,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario13*",  # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
     "*Scenario14*",  # Attribute Priority - fixed six-user dataset per suffix, no template scaling
     "*Scenario15*",  # SCIM Connector - data comes from the SCIM test provider's own seed and a bespoke CSV
-    "*Scenario16*"   # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
+    "*Scenario16*",  # JIM SQL Connector matrix - its own deterministic SQL seeder sizes the data, not Template
+    "*Scenario17*"   # Initial Password - asserts against one account; a larger template only lengthens the export
 )
 
 function Test-TemplateRelevant {
@@ -2641,11 +2654,14 @@ if ($Scenario -like "*Scenario8*" -and $DirectoryType -ne "OpenLDAP") {
 # PostgreSQL and MySQL stay dormant; they are staged for the priority 2 providers, which Scenario 16
 # does not yet cover.
 if ($Scenario -like "*Scenario16*") {
-    $phase2Services = switch ($Provider) {
+    # @(...) around the switch is load-bearing: PowerShell unwraps a single-element array returned from
+    # a switch to a bare string, and splatting a string passes it one character at a time, so a
+    # single-provider run asked Compose to start a service called "o". Only -Provider Both survived.
+    $phase2Services = @(switch ($Provider) {
         "SqlServer" { @("sqlserver-hris-a") }
         "Oracle"    { @("oracle-hris-b") }
         default     { @("sqlserver-hris-a", "oracle-hris-b") }
-    }
+    })
 
     Write-Step "Starting database containers for Scenario 16 ($($phase2Services -join ', '))..."
     $phase2Result = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d @phase2Services 2>&1
@@ -3273,8 +3289,12 @@ $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $st
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
-    & $scenarioScript @scenarioParams
-    $scenarioExitCode = $LASTEXITCODE
+    # Not `& $scenarioScript; $scenarioExitCode = $LASTEXITCODE`. PowerShell does not set
+    # $LASTEXITCODE for a .ps1 that returns rather than exits, so that read picked up
+    # whatever the last native command inside the scenario had left behind and the
+    # scenario's own verdict was never consulted. See Invoke-IntegrationScenario and #1382.
+    $scenarioOutcome = Invoke-IntegrationScenario -Path $scenarioScript -Parameters $scenarioParams
+    $scenarioExitCode = $scenarioOutcome.ExitCode
 }
 catch {
     $scenarioExitCode = 1

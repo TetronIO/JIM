@@ -1,0 +1,109 @@
+@typeparam TItem
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A cell holding a list, kept to exactly one line: the first item is rendered inline (clipped rather than
+   wrapped) and the rest sit behind a "+n more" affordance that opens the whole set in a dialog. Every
+   virtualised row is one line, because the virtualiser positions rows arithmetically from a single fixed
+   ItemSize, so a chip per item from a @foreach is a row that grows with its data.
+
+   This generalises the affordance the Connected System Object's attribute grid already carries, so a call site
+   supplies only what is particular to it: the items, how one of them is drawn, and what to call them. The
+   dialog draws each item with the SAME template, so chips stay chips and links stay clickable; a tooltip
+   listing the rest would have flattened both. *@
+
+@* The items are captured by the pattern rather than dereferenced through a guard, per the nullable-dereference
+   rule in JIM.Web/CLAUDE.md: a pattern guard does not satisfy CodeQL, a local bound by one does. *@
+@if (Items is { Count: > 0 } items)
+{
+    var visibleCount = Math.Min(MaxVisible, items.Count);
+    <div class="jim-one-line-list">
+        @for (var i = 0; i < visibleCount; i++)
+        {
+            var item = items[i];
+            @if (i == visibleCount - 1)
+            {
+                @* Only the last visible item needs to give way: everything before it is guaranteed to fit
+                   because it already rendered, so only the one at the truncation boundary can overflow. *@
+                <span class="jim-one-line-list-value">@ItemTemplate(item)</span>
+            }
+            else
+            {
+                @ItemTemplate(item)
+            }
+        }
+        @if (items.Count > visibleCount)
+        {
+            <MudLink Color="Color.Default" Underline="Underline.Hover" Class="jim-attr-expand-link" OnClick="OpenAllAsync">
+                +@((items.Count - visibleCount).ToString("N0")) more
+            </MudLink>
+        }
+    </div>
+}
+else if (EmptyContent != null)
+{
+    @EmptyContent
+}
+else
+{
+    <EmptyValue />
+}
+
+@code {
+    /// <summary>
+    /// The items the cell holds. The first is shown; the rest are reachable through the affordance.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TItem>? Items { get; set; }
+
+    /// <summary>
+    /// How one item is drawn, inline and in the dialog alike.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public RenderFragment<TItem> ItemTemplate { get; set; } = default!;
+
+    /// <summary>
+    /// What the items are, as a plural noun ("Roles", "Object Types", "Sources"). It titles the dialog and is
+    /// counted in it ("3 Roles").
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How many items to show inline before the rest collapse behind the "+n more" affordance. Defaults to 1;
+    /// raise it where the cell has room and the items are short (e.g. a handful of short chips).
+    /// </summary>
+    [Parameter]
+    public int MaxVisible { get; set; } = 1;
+
+    /// <summary>
+    /// What to render when there are no items at all. Defaults to the <see cref="EmptyValue"/> placeholder;
+    /// pass something where the emptiness itself means something the reader should be told ("Not assigned").
+    /// </summary>
+    [Parameter]
+    public RenderFragment? EmptyContent { get; set; }
+
+    /// <summary>
+    /// The dialog states its own height ceiling rather than the shared grid's footer measurement, because its
+    /// container is not the page: the measurement would describe the page behind the overlay.
+    /// </summary>
+    private static readonly DialogOptions Options = new() { FullWidth = true, MaxWidth = MaxWidth.Small, CloseButton = true };
+
+    private async Task OpenAllAsync()
+    {
+        var items = Items;
+        if (items == null)
+            return;
+
+        var parameters = new DialogParameters<OverflowListDialog<TItem>>
+        {
+            { x => x.Items, items },
+            { x => x.ItemTemplate, ItemTemplate },
+            { x => x.Title, Title }
+        };
+
+        await DialogService.ShowAsync<OverflowListDialog<TItem>>(Title, parameters, Options);
+    }
+}

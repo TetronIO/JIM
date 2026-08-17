@@ -22,6 +22,29 @@ public class ConnectedSystemObjectTypeAttribute
 
     public AttributeDataType Type { get; set; }
 
+    /// <summary>
+    /// Whether an administrator chose <see cref="Type"/>, rather than schema discovery inferring it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A schema refresh overwrites what the Connector discovered and preserves what the administrator
+    /// decided. Until an attribute's data type could be overridden it was purely discovered, so it sat
+    /// on the refreshed side; this flag is what moves an overridden one across.
+    /// </para>
+    /// <para>
+    /// Without it the refresh would silently undo an override, and silently is the danger: the mapping
+    /// validator runs when a mapping is created, not continuously, so a Synchronisation Rule validated
+    /// against the chosen type would keep running against the reverted one, and the Attribute Flow, which
+    /// switches on the source type, would write the value into the wrong column of the Metaverse Object.
+    /// It would also be a way around the rule that an override is refused once an attribute holds values.
+    /// </para>
+    /// <para>
+    /// It pins the type alone. Writability, plurality and the description remain the Connector's to state,
+    /// so an override cannot freeze an attribute in the past.
+    /// </para>
+    /// </remarks>
+    public bool TypeSetByAdministrator { get; set; }
+
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>

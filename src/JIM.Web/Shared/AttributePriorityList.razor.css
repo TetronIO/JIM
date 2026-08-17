@@ -23,7 +23,7 @@
 /* The row representing the mapping currently being edited or created (Surface 1). Tinted rather than outlined:
    the list is read-only there, so the row is being identified, not marked as needing action. */
 .apt-priority-list ::deep .apt-row-current {
-    background-color: var(--mud-palette-primary-hover);
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
 }
 
 /* Grab affordance for the whole-row drag. */
@@ -39,7 +39,7 @@
    where it will land. No full-accent flood; the surrounding rows keep their normal appearance. */
 .apt-priority-list ::deep .apt-row-dragging .apt-row {
     opacity: 0.7;
-    background-color: var(--mud-palette-primary-hover);
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
     outline: 2px dashed var(--mud-palette-primary);
     outline-offset: -2px;
 }

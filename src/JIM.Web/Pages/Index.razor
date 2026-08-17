@@ -3,6 +3,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Scheduling
 @using JIM.Models.Logic
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -153,31 +154,42 @@
 </MudGrid>
 
 @* ─── Schedule Summary (admin-only) ─── *@
-<AuthorizeView Roles="Administrator">
+@* Context is renamed because the grid's own cell templates use "context"; AuthorizeView would otherwise claim
+   the name for the authentication state and the two would collide. *@
+<AuthorizeView Roles="Administrator" Context="auth">
     <MudText Typo="Typo.h5" Class="mt-8">Schedules</MudText>
     @if (_dataLoaded)
     {
-        @if (_schedules.Count > 0)
-        {
-            <MudTable T="Schedule" Items="_schedules" Hover="true" Dense="true" Outlined="true" Elevation="0"
-                      OnRowClick="HandleScheduleRowClick" RowClass="cursor-pointer" Class="mt-3">
-                <HeaderContent>
-                    <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Trigger</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Last Run</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Next Run</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                </HeaderContent>
-                <RowTemplate Context="schedule">
-                    <MudTd DataLabel="Name">
-                        <MudText Typo="Typo.body1">@schedule.Name</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Trigger">
-                        @if (schedule.TriggerType == ScheduleTriggerType.Cron)
+        @* Schedules are a small configuration list, already loaded whole for the Getting Started checklist above,
+           so the grid slices its windows from memory rather than growing a database range read. *@
+        <VirtualisedDataGrid T="Schedule"
+                             ContainerId="home-schedule-list"
+                             UrlParameterPrefix="sc-"
+                             DefaultSortBy="name"
+                             LoadWindow="LoadScheduleWindowAsync"
+                             SingularName="Schedule"
+                             PluralName="Schedules"
+                             SearchPlaceholder="Search Schedules"
+                             RowClicked="HandleScheduleRowClicked">
+            <Columns>
+                <TemplateColumn Title="Name" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Name" Name="name" />
+                    </HeaderTemplate>
+                    <CellTemplate Context="cell">
+                        <MudText Typo="Typo.body1">@cell.Item.Name</MudText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Trigger" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Trigger" Name="trigger" />
+                    </HeaderTemplate>
+                    <CellTemplate Context="cell">
+                        @if (cell.Item.TriggerType == ScheduleTriggerType.Cron)
                         {
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
                                      Icon="@Icons.Material.Filled.Schedule">
-                                @GetScheduleDescription(schedule)
+                                @GetScheduleDescription(cell.Item)
                             </MudChip>
                         }
                         else
@@ -187,33 +199,50 @@
                                 Manual
                             </MudChip>
                         }
-                    </MudTd>
-                    <MudTd DataLabel="Last Run">
-                        @if (schedule.LastRunTime.HasValue)
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Last Run" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Last Run" Name="lastrun" />
+                    </HeaderTemplate>
+                    <CellTemplate Context="cell">
+                        @if (cell.Item.LastRunTime.HasValue)
                         {
-                            <MudTooltip Text="@schedule.LastRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                                <MudText Typo="Typo.body1">@schedule.LastRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
+                            var lastRun = cell.Item.LastRunTime.Value.ToLocalTime();
+                            <MudTooltip Text="@lastRun.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.body1">@lastRun.ToRelativeTime()</MudText>
                             </MudTooltip>
                         }
                         else
                         {
                             <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
                         }
-                    </MudTd>
-                    <MudTd DataLabel="Next Run">
-                        @if (schedule.NextRunTime.HasValue && schedule.IsEnabled && schedule.TriggerType == ScheduleTriggerType.Cron)
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Next Run" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Next Run" Name="nextrun" />
+                    </HeaderTemplate>
+                    <CellTemplate Context="cell">
+                        @if (cell.Item.NextRunTime.HasValue && cell.Item.IsEnabled && cell.Item.TriggerType == ScheduleTriggerType.Cron)
                         {
-                            <MudTooltip Text="@schedule.NextRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                                <MudText Typo="Typo.body1">@schedule.NextRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
+                            var nextRun = cell.Item.NextRunTime.Value.ToLocalTime();
+                            <MudTooltip Text="@nextRun.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.body1">@nextRun.ToRelativeTime()</MudText>
                             </MudTooltip>
                         }
                         else
                         {
                             <EmptyValue />
                         }
-                    </MudTd>
-                    <MudTd DataLabel="Status">
-                        @if (schedule.IsEnabled)
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Status" Sortable="false">
+                    <HeaderTemplate>
+                        <VirtualisedSortHeader Title="Status" Name="status" />
+                    </HeaderTemplate>
+                    <CellTemplate Context="cell">
+                        @if (cell.Item.IsEnabled)
                         {
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
                         }
@@ -221,27 +250,28 @@
                         {
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
                         }
-                    </MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    <MudText Class="pa-4 mud-text-secondary">No schedules configured.</MudText>
-                </NoRecordsContent>
-            </MudTable>
-        }
-        else
-        {
-            <MudPaper Class="pa-4 mt-6" Outlined="true">
-                <MudStack AlignItems="AlignItems.Center">
-                    <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Large" Class="mud-text-disabled" />
-                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No schedules have been created yet.</MudText>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                               Href="/admin/operations?t=schedules" Class="mt-2"
-                               StartIcon="@Icons.Material.Filled.Add">
-                        Create a Schedule
-                    </MudButton>
-                </MudStack>
-            </MudPaper>
-        }
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <EmptyContent Context="grid">
+                @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+                {
+                    <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                     PrimaryText="@($"No Schedules match \"{grid.SearchText}\"")"
+                                     SecondaryText="Try a different search term, or clear the search."
+                                     ActionText="Clear Search"
+                                     OnAction="@(() => grid.ClearSearchAsync())" />
+                }
+                else
+                {
+                    <TableEmptyState Icon="@Icons.Material.Outlined.Schedule"
+                                     PrimaryText="No Schedules have been created yet"
+                                     SecondaryText="A Schedule runs Run Profiles on a recurring trigger; create one to start synchronising unattended."
+                                     ActionText="Create a Schedule"
+                                     OnAction="GoToSchedules" />
+                }
+            </EmptyContent>
+        </VirtualisedDataGrid>
     }
 </AuthorizeView>
 
@@ -351,11 +381,42 @@
         _dataLoaded = true;
     }
 
-    private void HandleScheduleRowClick(TableRowClickEventArgs<Schedule> args)
+    /// <summary>
+    /// Slices one window of Schedules from the list the page already loaded, applying the grid's search (name)
+    /// and sort. Schedules are a small configuration list, so there is no database range read here.
+    /// </summary>
+    private Task<VirtualisedWindow<Schedule>> LoadScheduleWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
-        if (args.Item == null) return;
-        NavManager.NavigateTo("/admin/operations?t=schedules");
+        IEnumerable<Schedule> schedules = _schedules;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            schedules = schedules.Where(s => s.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // The trigger column reads as a sentence rather than as a stored value, so it sorts by the same text the
+        // reader sees; sorting by TriggerType alone would put "Every 5 min" and "Weekdays at 6am" in an order
+        // nothing on screen explains.
+        Func<Schedule, object> sortKey = request.SortBy switch
+        {
+            "trigger" => GetScheduleDescription,
+            "lastrun" => s => s.LastRunTime ?? DateTime.MinValue,
+            "nextrun" => s => s.NextRunTime ?? DateTime.MinValue,
+            "status" => s => s.IsEnabled,
+            _ => s => s.Name
+        };
+
+        var sorted = request.SortDescending
+            ? schedules.OrderByDescending(sortKey)
+            : schedules.OrderBy(sortKey);
+
+        return Task.FromResult(sorted.ToWindow(request));
     }
+
+    private void HandleScheduleRowClicked(Schedule schedule) => GoToSchedules();
+
+    private void GoToSchedules() => NavManager.NavigateTo("/admin/operations?t=schedules");
 
     // ─── Schedule Description Helpers (reused from OperationsSchedulesTab) ───
 

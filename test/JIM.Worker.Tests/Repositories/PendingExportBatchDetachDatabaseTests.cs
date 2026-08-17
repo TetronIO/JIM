@@ -164,7 +164,7 @@ public class PendingExportBatchDetachDatabaseTests
         var trackedPe = await LoadPendingExportAndPoisonTrackerAsync(ctx, csoId);
         trackedPe.Status = PendingExportStatus.Exported;
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.UpdatePendingExportsAsync([trackedPe]),
+        Assert.That(() => repository.Sync.UpdatePendingExportsAsync([trackedPe]), Throws.Nothing,
             "The post-export detach must not trigger change detection over a poisoned tracker");
 
         await using var verify = NewContext();
@@ -188,7 +188,7 @@ public class PendingExportBatchDetachDatabaseTests
         var repository = new PostgresDataRepository(ctx);
         var trackedPe = await LoadPendingExportAndPoisonTrackerAsync(ctx, csoId);
 
-        Assert.DoesNotThrowAsync(() => repository.Sync.DeletePendingExportsAsync([trackedPe]));
+        Assert.That(() => repository.Sync.DeletePendingExportsAsync([trackedPe]), Throws.Nothing);
 
         Assert.That(ctx.Entry(trackedPe).State, Is.EqualTo(EntityState.Detached),
             "The deleted Pending Export must be detached, not left tracked as a stale entry");
@@ -224,7 +224,7 @@ public class PendingExportBatchDetachDatabaseTests
         Assert.That(ctx.Entry(trackedPe.AttributeValueChanges.Single()).State, Is.EqualTo(EntityState.Detached),
             "The updated attribute value changes must be detached after the raw SQL write");
 
-        Assert.DoesNotThrowAsync(() => ctx.SaveChangesAsync());
+        Assert.That(() => ctx.SaveChangesAsync(), Throws.Nothing);
 
         await using var verify = NewContext();
         var persisted = await verify.PendingExports.Where(pe => pe.Id == pendingExportId)

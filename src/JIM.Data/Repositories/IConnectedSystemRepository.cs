@@ -63,6 +63,29 @@ public interface IConnectedSystemRepository
         int pageSize,
         string? searchText = null);
 
+    /// <summary>
+    /// Gets a window of one attribute's values on a Connected System Object addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for a virtualised (infinite-scroll) multi-valued
+    /// attribute on the object's detail page. Ordered by value id, and shares its query core with
+    /// <see cref="GetAttributeValuesPagedAsync"/> so the two reads can never disagree on which values match.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The Connected System Object whose values are wanted.</param>
+    /// <param name="attributeName">The attribute whose values are wanted.</param>
+    /// <param name="offset">The zero-based index of the first value wanted; negative values read as zero.</param>
+    /// <param name="count">How many values are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value, the unresolved
+    /// reference and the referenced object's own values.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesRangeAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue);
@@ -156,6 +179,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
+
+    /// <summary>
+    /// Names the given Containers, for a surface holding their ids and needing to render them. Ids that no longer
+    /// resolve are simply absent, which is the honest answer for a Container removed since whatever recorded the
+    /// id happened.
+    /// </summary>
+    Task<List<ConnectedSystemContainerSummary>> GetConnectedSystemContainerSummariesAsync(IReadOnlyCollection<int> containerIds);
 
     /// <summary>
     /// Retrieves all the Pending Exports for a given Connected System.
@@ -337,6 +367,31 @@ public interface IConnectedSystemRepository
         bool sortDescending = true);
 
     /// <summary>
+    /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetPendingExportHeadersAsync"/>. The window is clamped to a documented cap that a viewport
+    /// cannot reach. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match set when
+    /// the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="statusFilters">Optional filter by one or more statuses.</param>
+    /// <param name="searchQuery">Optional search query to filter by target object identifier, source MVO display name, or error message.</param>
+    /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        IEnumerable<PendingExportStatus>? statusFilters = null,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Retrieves a single Pending Export by ID.
     /// </summary>
     /// <param name="id">The unique identifier of the Pending Export.</param>
@@ -369,6 +424,30 @@ public interface IConnectedSystemRepository
         string? searchText = null);
 
     /// <summary>
+    /// Gets a window of one attribute's changes on a Pending Export addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for a virtualised (infinite-scroll) multi-valued
+    /// attribute. Ordered by change id, and shares its query core with
+    /// <see cref="GetPendingExportAttributeChangesPagedAsync"/> so the two reads can never disagree on which
+    /// changes match.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="attributeName">The name of the attribute to retrieve changes for.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional case-insensitive search over the stored value and the unresolved
+    /// reference.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<PendingExportAttributeValueChange>> GetPendingExportAttributeChangesRangeAsync(
+        Guid pendingExportId,
+        string attributeName,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Retrieves a paged list of all attribute value changes across all attributes for a Pending Export.
     /// Used by the CSO detail page for server-side pagination of the Pending Exports table.
     /// </summary>
@@ -382,6 +461,27 @@ public interface IConnectedSystemRepository
         int page,
         int pageSize,
         string? searchText = null);
+
+    /// <summary>
+    /// Gets a window of a Pending Export's attribute value changes addressed by absolute
+    /// <paramref name="offset"/> and <paramref name="count"/>, for the virtualised (infinite-scroll) Pending
+    /// Export grid on the Connected System Object detail page. Ordered by attribute name, and shares its query
+    /// core with <see cref="GetAllPendingExportChangesPagedAsync"/> so the two reads can never disagree on which
+    /// changes match.
+    /// </summary>
+    /// <param name="pendingExportId">The unique identifier of the Pending Export.</param>
+    /// <param name="offset">The zero-based index of the first change wanted; negative values read as zero.</param>
+    /// <param name="count">How many changes are wanted; clamped to the repository's window-size cap.</param>
+    /// <param name="searchText">Optional search text to filter changes by value or attribute name.</param>
+    /// <param name="includeTotalCount">Pass false to skip counting the whole match set when the caller already
+    /// holds the total; the returned total is then null rather than zero
+    /// (see <see cref="RangeResultSet{T}.TotalResults"/>).</param>
+    public Task<RangeResultSet<PendingExportAttributeValueChange>> GetAllPendingExportChangesRangeAsync(
+        Guid pendingExportId,
+        int offset,
+        int count,
+        string? searchText = null,
+        bool includeTotalCount = true);
 
     /// <summary>
     /// Retrieves the Pending Export header (without attribute value changes) for a specific Connected System Object,
@@ -641,6 +741,30 @@ public interface IConnectedSystemRepository
         int pageSize = 50);
 
     /// <summary>
+    /// Gets a window of deleted Connected System Object changes addressed by absolute offset and count, for the
+    /// virtualised (infinite-scroll) Deleted Objects list. Shares its filters and includes with
+    /// <see cref="GetDeletedCsoChangesAsync"/>, and keeps the same fixed ordering: deletion time, newest first.
+    /// The window is clamped to a documented cap that a viewport cannot reach. Pass
+    /// <paramref name="includeTotalCount"/> as false to skip counting the whole match set when the caller already
+    /// knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional case-insensitive search over the preserved External ID.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    Task<RangeResultSet<ConnectedSystemObjectChange>> GetDeletedCsoChangesRangeAsync(
+        int offset,
+        int count,
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Gets the full change history for a deleted CSO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
@@ -752,6 +876,35 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
+
+    /// <summary>
+    /// Retrieves a window of Connected System Object headers addressed by absolute offset and count, for
+    /// virtualised (infinite-scroll) list views. Shares its query, filters and projection with
+    /// <see cref="GetConnectedSystemObjectHeadersAsync"/>. The window is clamped to a documented cap that a
+    /// viewport cannot reach. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match
+    /// set when the caller already knows the total; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the system to return Connected System Objects for.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one.</param>
+    /// <param name="searchQuery">Optional search over display name, external id and secondary external id.</param>
+    /// <param name="sortBy">Optional column key to sort by (e.g. "externalid", "displayname", "created").</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="statusFilter">Optional filter by one or more statuses.</param>
+    /// <param name="objectTypeFilter">Optional filter by one or more object type ids.</param>
+    /// <param name="joinTypeFilter">Optional filter by one or more join types.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
+        int connectedSystemId,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
+        bool includeTotalCount = true);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>

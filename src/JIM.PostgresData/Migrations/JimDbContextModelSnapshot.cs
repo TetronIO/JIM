@@ -2739,6 +2739,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("ObjectCount")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ParentContainerId")
                         .HasColumnType("integer");
 
@@ -3123,6 +3126,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("TypeSetByAdministrator")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Writability")
                         .HasColumnType("integer");
@@ -3519,9 +3525,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIConnector")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ImplementsIContainers")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("ImplementsIExportUsingCalls")

@@ -388,4 +388,158 @@ public class SyncEnginePriorityFlowTests
         Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "no marker is written when assertions are disabled");
         Assert.That(mvo.AttributeValues.Single().StringValue, Is.EqualTo("IT"));
     }
+
+    // ----- Provenance takeover on an unchanged surviving value (#1292) -----
+
+    /// <summary>A CSO object type whose single attribute is a DateTime, for the non-text writer coverage below.</summary>
+    private static List<ConnectedSystemObjectType> DateTimeObjectTypes(int csoAttrId = 200) => new()
+    {
+        new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Attributes = [new ConnectedSystemObjectTypeAttribute { Id = csoAttrId, Name = "attr", Type = AttributeDataType.DateTime }]
+        }
+    };
+
+    [Test]
+    public void FlowInboundAttributes_OrphanedProvenanceOnSurvivingValue_IsRestampedByTheContributingRule()
+    {
+        // Deleting a Synchronisation Rule nulls the provenance on every value it contributed (ON DELETE SET NULL).
+        // A surviving rule contributing the identical value writes nothing (the diff is empty), so without an explicit
+        // takeover the row keeps its null ContributedBySyncRuleId indefinitely (#1292).
+        var dept = DeptAttr();
+        var survivingRule = PriorityRule(syncRuleId: 3, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { survivingRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "Engineering", syncRuleId: 3, systemId: 5);
+        var orphaned = mvo.AttributeValues.Single();
+        orphaned.ContributedBySyncRuleId = null;
+        orphaned.ContributedBySystemId = null;
+
+        var cso = CsoJoinedTo(mvo, "Engineering", connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, survivingRule, ObjectTypes(), priorityContext: context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "the value is unchanged, so nothing is added");
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "the value is unchanged, so nothing is removed");
+            Assert.That(orphaned.ContributedBySyncRuleId, Is.EqualTo(3), "the surviving contributor takes over the orphaned provenance");
+            Assert.That(orphaned.ContributedBySystemId, Is.EqualTo(5), "the contributing system is restored alongside the rule");
+        }
+    }
+
+    [Test]
+    public void FlowInboundAttributes_WinningContributionMatchingIncumbentValue_TakesOverProvenance()
+    {
+        // Two contributors supplying the identical value: the winner's contribution diffs to nothing, so the value
+        // keeps the loser's stamp unless provenance is taken over. A stale stamp makes the loser the incumbent, and
+        // the gate lets a rule overwrite its own incumbent, so the loser could later overwrite the winner.
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "Engineering", syncRuleId: 2, systemId: 9);
+        var cso = CsoJoinedTo(mvo, "Engineering", connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), priorityContext: context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty);
+            Assert.That(mvo.AttributeValues.Single().ContributedBySyncRuleId, Is.EqualTo(1), "the winning rule owns the value it contributed");
+            Assert.That(mvo.AttributeValues.Single().ContributedBySystemId, Is.EqualTo(5));
+        }
+    }
+
+    [Test]
+    public void FlowInboundAttributes_AfterTakeover_LosingRuleCannotOverwriteTheWinner()
+    {
+        // The consequence of the stale stamp, end to end: once the winner owns the value, the loser's later change
+        // must lose the gate rather than being waved through as "the same rule updating itself".
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "Engineering", syncRuleId: 2, systemId: 9);
+
+        // The higher-priority system synchronises, supplying the value the Metaverse Object already holds.
+        var winningCso = CsoJoinedTo(mvo, "Engineering", connectedSystemId: 5);
+        _engine.FlowInboundAttributes(winningCso, highRule, ObjectTypes(), priorityContext: context);
+
+        // The lower-priority system then changes its value.
+        var losingCso = CsoJoinedTo(mvo, "IT", connectedSystemId: 9);
+        _engine.FlowInboundAttributes(losingCso, lowRule, ObjectTypes(), priorityContext: context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "the lower-priority rule no longer owns the value, so it loses the gate");
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty);
+            Assert.That(mvo.AttributeValues.Single().StringValue, Is.EqualTo("Engineering"));
+        }
+    }
+
+    [Test]
+    public void FlowInboundAttributes_AbstainingContribution_DoesNotTakeOverProvenance()
+    {
+        // Takeover follows contribution: a rule that supplies no value has contributed nothing and must not claim
+        // another rule's value, or it would silently become the incumbent for the priority gate.
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "IT", syncRuleId: 2, systemId: 9);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), priorityContext: context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "abstains, leaving the lower-priority incumbent");
+            Assert.That(mvo.AttributeValues.Single().ContributedBySyncRuleId, Is.EqualTo(2), "the abstaining rule does not take the value over");
+            Assert.That(mvo.AttributeValues.Single().ContributedBySystemId, Is.EqualTo(9));
+        }
+    }
+
+    [Test]
+    public void FlowInboundAttributes_UnchangedDateTimeValue_TakesOverProvenance()
+    {
+        // Takeover belongs to every typed writer, not just text: each diffs by value and leaves an equal value alone.
+        var lastLogon = new MetaverseAttribute { Id = 101, Name = "lastLogon", Type = AttributeDataType.DateTime };
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, lastLogon);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, lastLogon);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var when = new DateTime(2026, 8, 12, 9, 30, 0, DateTimeKind.Utc);
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = lastLogon,
+            AttributeId = lastLogon.Id,
+            DateTimeValue = when,
+            ContributedBySyncRuleId = 2,
+            ContributedBySystemId = 9
+        });
+
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, DateTimeValue = when });
+
+        _engine.FlowInboundAttributes(cso, highRule, DateTimeObjectTypes(), priorityContext: context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+            Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty);
+            Assert.That(mvo.AttributeValues.Single().ContributedBySyncRuleId, Is.EqualTo(1));
+            Assert.That(mvo.AttributeValues.Single().ContributedBySystemId, Is.EqualTo(5));
+        }
+    }
 }

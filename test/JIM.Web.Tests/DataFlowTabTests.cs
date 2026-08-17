@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
+using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using Moq;
@@ -163,6 +164,51 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
+    public void DataFlowTab_Headings_NameTheSideOfTheMetaverseEachColumnBelongsTo()
+    {
+        // The columns used to sit under a band row that spanned each side and named it, which let the headings
+        // themselves stay short ("Object Type" twice, "Attribute" twice). The virtualised grid has exactly one
+        // heading per column and no way to span them, so the qualification moved into the headings: unqualified,
+        // "Object Type" would not say which side of the Metaverse it describes, and the reader would be back to
+        // checking each cell's CS / MV marker to work out what they are looking at.
+        SetupFlows(BuildImportFlow());
+
+        var cut = Render<DataFlowTab>();
+        var headerRows = cut.FindAll("thead tr");
+        var headings = headerRows[0].QuerySelectorAll("th").Select(th => th.TextContent.Trim()).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(headerRows, Has.Count.EqualTo(1), "a data grid has one heading row");
+            Assert.That(headings, Does.Contain("Connected System Object Type"));
+            Assert.That(headings, Does.Contain("Connected System Attribute"));
+            Assert.That(headings, Does.Contain("Metaverse Object Type"));
+            Assert.That(headings, Does.Contain("Metaverse Attribute"));
+            Assert.That(headings, Does.Not.Contain("Object Type"), "unqualified, it does not say which side");
+            Assert.That(headings, Does.Not.Contain("Attribute"), "unqualified, it does not say which side");
+        }
+    }
+
+    [Test]
+    public void DataFlowTab_StackedLabels_QualifyEachSideTheSameWayTheHeadingsDo()
+    {
+        // At narrow widths each row stacks into label and value pairs, taking its labels from the column titles
+        // rather than from the headings' markup, so they have to carry the same qualification.
+        SetupFlows(BuildImportFlow());
+
+        var cut = Render<DataFlowTab>();
+        var labels = cut.FindAll("tbody td").Select(td => td.GetAttribute("data-label")).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(labels, Does.Contain("Connected System Object Type"));
+            Assert.That(labels, Does.Contain("Connected System Attribute"));
+            Assert.That(labels, Does.Contain("Metaverse Object Type"));
+            Assert.That(labels, Does.Contain("Metaverse Attribute"));
+        }
+    }
+
+    [Test]
     public void DataFlowTab_MarksWhichSideOfTheMetaverseEachAttributeSitsOn()
     {
         // Both sides are just names, and the sides swap between directions, so the CS / MV markers are the only
@@ -279,6 +325,36 @@ public class DataFlowTabTests : JimComponentTestContext
         var cut = Render<DataFlowTab>();
 
         Assert.That(cut.Markup, Does.Contain("Department"));
+    }
+
+    /// <summary>
+    /// A row in the virtualised grid is one line, and the virtualiser positions every row from a single fixed
+    /// height, so a flow joining several sources must not render a chip per source: the first is shown, and the
+    /// affordance beside it counts what the dialog holds.
+    /// </summary>
+    [Test]
+    public void DataFlowTab_FlowWithSeveralSources_ShowsOnlyTheFirstOnTheRow()
+    {
+        var flow = BuildImportFlow();
+        flow.Sources =
+        [
+            new DataFlowSource { Order = 0, ConnectedSystemAttributeId = 9, ConnectedSystemAttributeName = "givenName" },
+            new DataFlowSource { Order = 1, ConnectedSystemAttributeId = 10, ConnectedSystemAttributeName = "sn" },
+            new DataFlowSource { Order = 2, ConnectedSystemAttributeId = 11, ConnectedSystemAttributeName = "middleName" }
+        ];
+        SetupFlows(flow);
+
+        var cut = Render<DataFlowTab>();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Contain("givenName"));
+            Assert.That(cut.Markup, Does.Not.Contain("middleName"), "a second source on the row is a second line");
+
+            // One chip for the shown source and one for the flow's target; a chip per source would be four.
+            Assert.That(cut.FindComponents<AttributeChip>(), Has.Count.EqualTo(2));
+            Assert.That(cut.Find(".jim-attr-expand-link").TextContent.Trim(), Is.EqualTo("+2 more"));
+        }
     }
 
     private static DataFlowHeader BuildImportFlow() => new()

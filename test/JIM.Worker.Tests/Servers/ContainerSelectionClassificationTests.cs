@@ -217,6 +217,114 @@ public class ContainerSelectionClassificationTests
 
     #endregion
 
+    #region Exclusions (#1255)
+
+    [Test]
+    public void Snapshot_AnExcludedContainer_IsCaptured()
+    {
+        // An exclusion is not a selection, and the snapshot used to capture only selections, so carving a branch out
+        // of a managed system left no trace in the configuration history at all: nothing to acknowledge before
+        // saving, nothing to audit afterwards, and nothing to roll back to.
+        var snapshot = _snapshots.CreateSnapshot(SystemWithCarveOut(excluded: true, reIncluded: false), HashKey);
+
+        Assert.That(ConfigurationSnapshotService.Serialise(snapshot), Does.Contain("OU=Service Accounts"));
+    }
+
+    [Test]
+    public void Snapshot_AReInclusionInsideAnExcludedBranch_IsCaptured()
+    {
+        // The path to a stated Container runs through Containers that state nothing themselves, and through the
+        // exclusion above it. Capturing only what is stated at each level loses the whole branch below the first
+        // silent one, which is exactly where a re-inclusion lives.
+        var snapshot = _snapshots.CreateSnapshot(SystemWithCarveOut(excluded: true, reIncluded: true), HashKey);
+
+        Assert.That(ConfigurationSnapshotService.Serialise(snapshot), Does.Contain("OU=App1"));
+    }
+
+    [Test]
+    public void Classify_ContainerExcluded_IsDestructive()
+    {
+        // Carving a branch out of a selection takes its objects out of scope, exactly as deselecting a Container or
+        // narrowing one to One Level does, and has to be acknowledged the same way.
+        var classification = Classify(
+            SystemWithCarveOut(excluded: false, reIncluded: false),
+            SystemWithCarveOut(excluded: true, reIncluded: false));
+
+        Assert.That(classification, Is.EqualTo(ConfigurationChangeClass.Destructive));
+    }
+
+    [Test]
+    public void Classify_ContainerExclusionCleared_IsClassifiedTheSameWayAsWideningAContainersScope()
+    {
+        // Handing a branch back takes nothing out of scope, so this is over-classified, deliberately and for exactly
+        // the reason widening a container's scope is: the classifier decides on the key and how it changed, never on
+        // the values, and splitting one key by direction would mean threading values through both the classifier and
+        // the preflight, whose agreement is the invariant this fixture exists to hold. The consequence text is what
+        // tells the two directions apart.
+        var classification = Classify(
+            SystemWithCarveOut(excluded: true, reIncluded: false),
+            SystemWithCarveOut(excluded: false, reIncluded: false));
+
+        Assert.That(classification, Is.EqualTo(ConfigurationChangeClass.Destructive));
+    }
+
+    [Test]
+    public async Task EvaluateConnectedSystemAsync_ExcludingAContainer_ReadsAsAnExclusionRatherThanAnAdditionAsync()
+    {
+        // A carved-out container arrives in the snapshot as a whole node, exactly as a selected one does, because
+        // neither was there before. Read from the arrival alone the confirmation tells an administrator that a
+        // container was "Added" and that its objects are coming into scope, at the moment they are leaving it. What
+        // the node states has to decide how the act is described.
+        SetStoredBaseline(SystemWithCarveOut(excluded: false, reIncluded: false));
+
+        var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(
+            SystemWithCarveOut(excluded: true, reIncluded: false));
+
+        var item = result.Items.Single(i => i.Label.EndsWith("OU=Service Accounts", StringComparison.Ordinal));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.CollectionItemVerb, Is.EqualTo("Excluded"));
+            Assert.That(item.Consequence, Does.StartWith("Excluding this container"));
+            Assert.That(item.Class, Is.EqualTo(ConfigurationChangeClass.Destructive));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateConnectedSystemAsync_SelectingAContainer_StillReadsAsAnAdditionAsync()
+    {
+        // The guard on the rule above: a container arriving because it was selected is described exactly as before.
+        SetStoredBaseline(SystemWithContainers(("OU=Users", true), ("OU=Contractors", false)));
+
+        var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(
+            SystemWithContainers(("OU=Users", true), ("OU=Contractors", true)));
+
+        var item = result.Items.Single(i => i.Label.EndsWith("OU=Contractors", StringComparison.Ordinal));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.CollectionItemVerb, Is.Null, "nothing overrides the plain Added the dialog already shows");
+            Assert.That(item.Consequence, Does.StartWith("Selecting this container"));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateConnectedSystemAsync_ExcludingAContainer_AsksBeforeItSavesAsync()
+    {
+        var before = SystemWithCarveOut(excluded: false, reIncluded: false);
+        var after = SystemWithCarveOut(excluded: true, reIncluded: false);
+        SetStoredBaseline(before);
+
+        var result = await _jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(after);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HighestClass, Is.EqualTo(Classify(before, after)),
+                "the class acknowledged must be the class the change history goes on to record");
+            Assert.That(result.HighestClass, Is.EqualTo(ConfigurationChangeClass.Destructive));
+        }
+    }
+
+    #endregion
+
     #region The preflight and the change history must reach the same verdict
 
     /// <summary>
@@ -262,6 +370,57 @@ public class ContainerSelectionClassificationTests
     {
         var diff = _jim.ConfigurationDiffs.Diff(_snapshots.CreateSnapshot(before, HashKey), _snapshots.CreateSnapshot(after, HashKey));
         return ConfigurationChangeClassifier.Classify(diff);
+    }
+
+    /// <summary>
+    /// A managed branch with a Container inside it optionally carved out, and a Container inside that optionally
+    /// brought back. Ids are stable across calls so the diff matches the containers up rather than reporting
+    /// wholesale replacement.
+    /// </summary>
+    private static ConnectedSystem SystemWithCarveOut(bool excluded, bool reIncluded)
+    {
+        var app1 = new ConnectedSystemContainer
+        {
+            Id = 202,
+            Name = "OU=App1",
+            ExternalId = "OU=App1,OU=Service Accounts,OU=Corp,DC=emea",
+            Selected = reIncluded
+        };
+        var serviceAccounts = new ConnectedSystemContainer
+        {
+            Id = 201,
+            Name = "OU=Service Accounts",
+            ExternalId = "OU=Service Accounts,OU=Corp,DC=emea",
+            Excluded = excluded
+        };
+        serviceAccounts.AddChildContainer(app1);
+
+        var corp = new ConnectedSystemContainer
+        {
+            Id = 200,
+            Name = "OU=Corp",
+            ExternalId = "OU=Corp,DC=emea",
+            Selected = true
+        };
+        corp.AddChildContainer(serviceAccounts);
+
+        return new ConnectedSystem
+        {
+            Id = ConnectedSystemId,
+            Name = "Corporate Directory",
+            ConnectorDefinitionId = 1,
+            Partitions =
+            [
+                new ConnectedSystemPartition
+                {
+                    Id = 50,
+                    Name = "EMEA",
+                    ExternalId = "DC=emea",
+                    Selected = true,
+                    Containers = [corp]
+                }
+            ]
+        };
     }
 
     /// <summary>

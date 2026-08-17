@@ -52,8 +52,8 @@ public class ScimConnectorProviderAwarenessTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.DoesNotThrow(() => connector.SetCredentialProtection(null));
-            Assert.DoesNotThrow(() => connector.SetCertificateProvider(null));
+            Assert.That(() => connector.SetCredentialProtection(null), Throws.Nothing);
+            Assert.That(() => connector.SetCertificateProvider(null), Throws.Nothing);
         }
     }
 }

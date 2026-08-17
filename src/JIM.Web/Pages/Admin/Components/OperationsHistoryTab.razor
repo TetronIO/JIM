@@ -4,220 +4,166 @@
 @using JIM.Models.Tasking
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
-@inject NavigationManager NavManager
-@inject IUserPreferenceService PreferenceService
 @inject IUiNotificationService UiNotifications
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@if (_preferencesLoaded)
-{
-    <MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
+@* mt-5 rather than a tab-panel padding: the Operations page hands its tabs no top padding of their own, because
+   the Schedules tab opens straight onto a grid that already supplies this same gap. *@
+<MudText Typo="Typo.h6" Class="mt-5 mb-3">Execution History</MudText>
 
-    @* Filter Controls *@
-    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap mb-4">
-            <MudItem Class="flex-grow-1">
-                <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
-                           Dense="true" Clearable="true" MultiSelection="true"
-                           SelectedValues="_filterConnectedSystems"
-                           SelectedValuesChanged="OnConnectedSystemFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-                    @if (_filterOptions != null)
-                    {
-                        @foreach (var cs in _filterOptions.ConnectedSystems)
-                        {
-                            <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
-                        }
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem Class="flex-grow-1">
-                <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
-                           Dense="true" Clearable="true" MultiSelection="true"
-                           SelectedValues="_filterRunProfiles"
-                           SelectedValuesChanged="OnRunProfileFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-                    @if (_filterOptions != null)
-                    {
-                        @foreach (var rp in _filterOptions.RunProfiles)
-                        {
-                            <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
-                        }
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem Class="flex-grow-1">
-                <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
-                           Dense="true" Clearable="true" MultiSelection="true"
-                           SelectedValues="_filterSchedules"
-                           SelectedValuesChanged="OnScheduleFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
-                    @if (_filterOptions != null)
-                    {
-                        @foreach (var schedule in _filterOptions.Schedules)
-                        {
-                            <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
-                        }
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem Class="flex-grow-1">
-                <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
-                           Dense="true" Clearable="true" MultiSelection="true"
-                           SelectedValues="_filterStatuses"
-                           SelectedValuesChanged="OnStatusFilterChanged"
-                           MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
-                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            <MudItem Class="flex-grow-1">
-                <SearchField Value="@_filterInitiatedBy"
-                             ValueChanged="OnInitiatedByFilterChanged"
-                             Label="Initiated By"
-                             Placeholder="Search by name..."
-                             DebounceInterval="500"
-                             Margin="Margin.None" />
-            </MudItem>
-            <MudItem Class="d-flex align-end">
-                <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
-                             Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
-            </MudItem>
-            <MudItem Class="d-flex align-end">
-                <MudCheckBox T="bool" Value="_filterScheduledOnly" ValueChanged="OnScheduledOnlyFilterChanged"
-                             Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
-            </MudItem>
-            <MudItem Class="d-flex align-end mb-2">
-                <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
-                    <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
-                                   Size="Size.Small"
-                                   OnClick="@(() => _pollingPaused = !_pollingPaused)"
-                                   Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
-                </MudTooltip>
-            </MudItem>
-    </MudStack>
+@* Filter Controls *@
+<MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap mb-4">
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterConnectedSystems"
+                   SelectedValuesChanged="OnConnectedSystemFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+            @if (_filterOptions != null)
+            {
+                @foreach (var cs in _filterOptions.ConnectedSystems)
+                {
+                    <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
+                }
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterRunProfiles"
+                   SelectedValuesChanged="OnRunProfileFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+            @if (_filterOptions != null)
+            {
+                @foreach (var rp in _filterOptions.RunProfiles)
+                {
+                    <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
+                }
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="Guid" Label="Schedule" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterSchedules"
+                   SelectedValuesChanged="OnScheduleFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetScheduleMultiSelectText))">
+            @if (_filterOptions != null)
+            {
+                @foreach (var schedule in _filterOptions.Schedules)
+                {
+                    <MudSelectItem T="Guid" Value="@schedule.Id">@schedule.Name</MudSelectItem>
+                }
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterStatuses"
+                   SelectedValuesChanged="OnStatusFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <SearchField Value="@_filterInitiatedBy"
+                     ValueChanged="OnInitiatedByFilterChanged"
+                     Label="Initiated By"
+                     Placeholder="Search by name..."
+                     DebounceInterval="500"
+                     Margin="Margin.None" />
+    </MudItem>
+    <MudItem Class="d-flex align-end">
+        <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
+                     Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+    </MudItem>
+    <MudItem Class="d-flex align-end">
+        <MudCheckBox T="bool" Value="_filterScheduledOnly" ValueChanged="OnScheduledOnlyFilterChanged"
+                     Label="Scheduled only" Dense="true" Class="mb-1 mud-typography-nowrap" />
+    </MudItem>
+    <MudItem Class="d-flex align-end mb-2">
+        <MudTooltip Text="@(_pollingPaused ? "Resume auto-refresh" : "Pause auto-refresh")" Placement="Placement.Top">
+            <MudIconButton Icon="@(_pollingPaused ? Icons.Material.Filled.PlayArrow : Icons.Material.Filled.Pause)"
+                           Size="Size.Small"
+                           OnClick="@(() => _pollingPaused = !_pollingPaused)"
+                           Color="@(_pollingPaused ? Color.Warning : Color.Default)" />
+        </MudTooltip>
+    </MudItem>
+</MudStack>
 
-    @* Top pager *@
-    <div class="d-flex justify-space-between align-center flex-wrap pa-2"
-         style="border: 1px solid var(--mud-palette-table-lines); border-bottom: none; border-radius: var(--jim-container-radius) var(--jim-container-radius) 0 0; background-color: var(--mud-palette-surface);">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
-            <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
-                       Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
-                       Style="width: 90px;" Class="mt-0">
-                <MudSelectItem T="int" Value="10">10</MudSelectItem>
-                <MudSelectItem T="int" Value="25">25</MudSelectItem>
-                <MudSelectItem T="int" Value="50">50</MudSelectItem>
-                <MudSelectItem T="int" Value="100">100</MudSelectItem>
-            </MudSelect>
-        </MudStack>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                @{ var topFirst = _totalItems == 0 ? 0 : _currentPage * _rowsPerPage + 1; }
-                @{ var topLast = Math.Min((_currentPage + 1) * _rowsPerPage, _totalItems); }
-                @topFirst-@topLast of @_totalItems
-            </MudText>
-            <MudPagination Selected="@(_currentPage + 1)"
-                           SelectedChanged="OnPageChanged"
-                           Count="@TotalPages"
-                           BoundaryCount="1" MiddleCount="3"
-                           ShowFirstButton="true" ShowLastButton="true"
-                           Rectangular="true" DropShadow="false" Size="Size.Small" />
-        </MudStack>
-    </div>
-
-    <MudTable T="Activity" Items="@_items"
-              Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
-              Class="no-border-radius">
-        <HeaderContent>
-            <MudTh>
-                <MudTableSortLabel SortLabel="connectedsystem" T="Activity"
-                                   SortBy="@(new Func<Activity, object>(_ => 0))"
-                                   SortDirectionChanged="@(dir => OnSortChanged("connectedsystem", dir))">
-                    <MudText Typo="Typo.button">Connected System</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="target" T="Activity"
-                                   SortBy="@(new Func<Activity, object>(_ => 0))"
-                                   SortDirectionChanged="@(dir => OnSortChanged("target", dir))">
-                    <MudText Typo="Typo.button">Run Profile</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
+@* The infinite-scroll machinery (URL state, scroll restore, window loading, the density toggle, the search box
+   and the toolbar count) lives in the shared grid; this tab supplies the columns, the window loader, the
+   page-owned filters above and the empty states. The URL parameters are prefixed so this grid's state cannot
+   collide with the Schedules tab's on the shared Operations page URL. *@
+<VirtualisedDataGrid @ref="_grid" T="Activity"
+                     ContainerId="operations-history"
+                     UrlParameterPrefix="h-"
+                     DefaultSortBy="created"
+                     DefaultSortDescending="true"
+                     LoadWindow="LoadWindowAsync"
+                     RowClicked="HandleRowClicked"
+                     SingularName="Execution"
+                     PluralName="Executions"
+                     SearchPlaceholder="Search target or initiator">
+    <Columns>
+        <TemplateColumn T="Activity" Title="Connected System" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                @if (!string.IsNullOrEmpty(activity.TargetContext))
+                {
+                    @activity.TargetContext
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Run Profile" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Run Profile" Name="target" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                @if (!string.IsNullOrEmpty(activity.TargetName))
+                {
+                    @activity.TargetName
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Schedule" Sortable="false">
+            <HeaderTemplate>
                 <MudText Typo="Typo.button">Schedule</MudText>
-            </MudTh>
-            <MudTh>
-                <MudText Typo="Typo.button">Outcomes</MudText>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="initiatedby" T="Activity"
-                                   SortBy="@(new Func<Activity, object>(_ => 0))"
-                                   SortDirectionChanged="@(dir => OnSortChanged("initiatedby", dir))">
-                    <MudText Typo="Typo.button">Initiated By</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="status" T="Activity"
-                                   SortBy="@(new Func<Activity, object>(_ => 0))"
-                                   SortDirectionChanged="@(dir => OnSortChanged("status", dir))">
-                    <MudText Typo="Typo.button">Status</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="created" T="Activity"
-                                   InitialDirection="SortDirection.Descending"
-                                   SortBy="@(new Func<Activity, object>(_ => 0))"
-                                   SortDirectionChanged="@(dir => OnSortChanged("created", dir))">
-                    <MudText Typo="Typo.button">Executed</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="executiontime" T="Activity"
-                                   SortBy="@(new Func<Activity, object>(_ => 0))"
-                                   SortDirectionChanged="@(dir => OnSortChanged("executiontime", dir))">
-                    <MudText Typo="Typo.button">Duration</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-        </HeaderContent>
-        <RowTemplate Context="context">
-            <MudTd DataLabel="Connected System">
-                @if (!string.IsNullOrEmpty(context.TargetContext))
-                {
-                    @context.TargetContext
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </MudTd>
-            <MudTd DataLabel="Run Profile">
-                @if (!string.IsNullOrEmpty(context.TargetName))
-                {
-                    @context.TargetName
-                }
-                else
-                {
-                    <EmptyValue />
-                }
-            </MudTd>
-            <MudTd DataLabel="Schedule">
-                @if (!string.IsNullOrEmpty(context.ScheduledByScheduleName))
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                @if (!string.IsNullOrEmpty(activity.ScheduledByScheduleName))
                 {
                     <MudStack Spacing="0">
-                        <span>@context.ScheduledByScheduleName</span>
-                        @if (context.ScheduleStepIndex.HasValue)
+                        <span>@activity.ScheduledByScheduleName</span>
+                        @if (activity.ScheduleStepIndex.HasValue)
                         {
-                            var stepNumber = context.ScheduleStepIndex.Value + 1;
+                            var stepNumber = activity.ScheduleStepIndex.Value + 1;
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Step @stepNumber</MudText>
                         }
                     </MudStack>
@@ -226,164 +172,170 @@
                 {
                     <EmptyValue />
                 }
-            </MudTd>
-            <MudTd DataLabel="Stats">
-                @if (context.Status != ActivityStatus.InProgress)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Outcomes</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                @if (activity.Status != ActivityStatus.InProgress)
                 {
-                    @if (HasAnyStats(context))
+                    @if (HasAnyStats(activity))
                     {
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                            @{ var runType = GetEffectiveRunType(context.ConnectedSystemRunType, context.TargetName); }
+                            @{ var runType = GetEffectiveRunType(activity.ConnectedSystemRunType, activity.TargetName); }
                             @if (runType == "Import")
                             {
-                                @if (context.TotalAdded > 0)
+                                @if (activity.TotalAdded > 0)
                                 {
                                     <MudTooltip Text="CSOs Added" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="jim-stat-chip">
-                                            @context.TotalAdded.ToString("N0")
+                                            @activity.TotalAdded.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalUpdated > 0)
+                                @if (activity.TotalUpdated > 0)
                                 {
                                     <MudTooltip Text="CSOs Updated" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="jim-stat-chip">
-                                            @context.TotalUpdated.ToString("N0")
+                                            @activity.TotalUpdated.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalDeleted > 0)
+                                @if (activity.TotalDeleted > 0)
                                 {
                                     <MudTooltip Text="CSO Deletions Detected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
-                                            @context.TotalDeleted.ToString("N0")
+                                            @activity.TotalDeleted.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
                             }
                             else if (runType == "Sync")
                             {
-                                @if (context.TotalProjected > 0)
+                                @if (activity.TotalProjected > 0)
                                 {
                                     <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="jim-stat-chip">
-                                            @context.TotalProjected.ToString("N0")
+                                            @activity.TotalProjected.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalJoined > 0)
+                                @if (activity.TotalJoined > 0)
                                 {
                                     <MudTooltip Text="CSOs Joined" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="jim-stat-chip">
-                                            @context.TotalJoined.ToString("N0")
+                                            @activity.TotalJoined.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalAttributeFlows > 0)
+                                @if (activity.TotalAttributeFlows > 0)
                                 {
                                     <MudTooltip Text="MVOs with Attribute Flow" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="jim-stat-chip">
-                                            @context.TotalAttributeFlows.ToString("N0")
+                                            @activity.TotalAttributeFlows.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalDisconnected > 0)
+                                @if (activity.TotalDisconnected > 0)
                                 {
                                     <MudTooltip Text="CSOs Disconnected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="jim-stat-chip">
-                                            @context.TotalDisconnected.ToString("N0")
+                                            @activity.TotalDisconnected.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalDisconnectedOutOfScope > 0)
+                                @if (activity.TotalDisconnectedOutOfScope > 0)
                                 {
                                     <MudTooltip Text="CSOs Disconnected (Out of Scope)" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" Class="jim-stat-chip">
-                                            @context.TotalDisconnectedOutOfScope.ToString("N0")
+                                            @activity.TotalDisconnectedOutOfScope.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalOutOfScopeRetainJoin > 0)
+                                @if (activity.TotalOutOfScopeRetainJoin > 0)
                                 {
                                     <MudTooltip Text="CSOs Out of Scope (Join Retained)" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" Class="jim-stat-chip">
-                                            @context.TotalOutOfScopeRetainJoin.ToString("N0")
+                                            @activity.TotalOutOfScopeRetainJoin.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalDeleted > 0)
+                                @if (activity.TotalDeleted > 0)
                                 {
                                     <MudTooltip Text="CSOs Deleted" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
-                                            @context.TotalDeleted.ToString("N0")
+                                            @activity.TotalDeleted.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalDriftCorrections > 0)
+                                @if (activity.TotalDriftCorrections > 0)
                                 {
                                     <MudTooltip Text="CSOs Drift Corrected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="jim-stat-chip">
-                                            @context.TotalDriftCorrections.ToString("N0")
+                                            @activity.TotalDriftCorrections.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalProvisioned > 0)
+                                @if (activity.TotalProvisioned > 0)
                                 {
                                     <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="jim-stat-chip">
-                                            @context.TotalProvisioned.ToString("N0")
+                                            @activity.TotalProvisioned.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalPendingExports > 0)
+                                @if (activity.TotalPendingExports > 0)
                                 {
                                     <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="jim-stat-chip">
-                                            @context.TotalPendingExports.ToString("N0")
+                                            @activity.TotalPendingExports.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
                             }
                             else if (runType == "Export")
                             {
-                                @if (context.TotalExported > 0)
+                                @if (activity.TotalExported > 0)
                                 {
                                     <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="jim-stat-chip">
-                                            @context.TotalExported.ToString("N0")
+                                            @activity.TotalExported.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
-                                @if (context.TotalDeprovisioned > 0)
+                                @if (activity.TotalDeprovisioned > 0)
                                 {
                                     <MudTooltip Text="CSOs Deprovisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="jim-stat-chip">
-                                            @context.TotalDeprovisioned.ToString("N0")
+                                            @activity.TotalDeprovisioned.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
                             }
-                            @if (context.TotalErrors > 0)
+                            @if (activity.TotalErrors > 0)
                             {
                                 <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
                                              Icon="@Icons.Material.Filled.Error" Class="jim-stat-chip">
-                                        @context.TotalErrors.ToString("N0")
+                                        @activity.TotalErrors.ToString("N0")
                                     </MudChip>
                                 </MudTooltip>
                             }
@@ -401,62 +353,87 @@
                 }
                 else
                 {
-                    @if (context.ObjectsToProcess > 0)
+                    @if (activity.ObjectsToProcess > 0)
                     {
-                        var percentage = (double)context.ObjectsProcessed / context.ObjectsToProcess * 100;
+                        var percentage = (double)activity.ObjectsProcessed / activity.ObjectsToProcess * 100;
                         <MudStack Spacing="0" Style="width: 120px;">
                             <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" Size="Size.Small" />
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3" Style="white-space: nowrap;">@context.ObjectsProcessed.ToString("N0") / @context.ObjectsToProcess.ToString("N0")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3" Style="white-space: nowrap;">@activity.ObjectsProcessed.ToString("N0") / @activity.ObjectsToProcess.ToString("N0")</MudText>
                         </MudStack>
                     }
                     else
                     {
                         <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" Style="width: 80px;" Size="Size.Small" />
-                        @if (!string.IsNullOrEmpty(context.Message))
+                        @if (!string.IsNullOrEmpty(activity.Message))
                         {
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Message</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@activity.Message</MudText>
                         }
                     }
                 }
-            </MudTd>
-            <MudTd DataLabel="Initiated By">
-                @if (context.InitiatedByType == ActivityInitiatorType.User && context.InitiatedById != null)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                @if (activity.InitiatedByType == ActivityInitiatorType.User && activity.InitiatedById != null)
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@context.InitiatedByName</span>
+                    <span>@activity.InitiatedByName</span>
                 }
-                else if (context.InitiatedByType == ActivityInitiatorType.ApiKey)
+                else if (activity.InitiatedByType == ActivityInitiatorType.ApiKey)
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@context.InitiatedByName</span>
+                    <span>@activity.InitiatedByName</span>
                 }
-                else if (context.InitiatedByType == ActivityInitiatorType.System)
+                else if (activity.InitiatedByType == ActivityInitiatorType.System)
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@(context.InitiatedByName ?? "Scheduler")</span>
+                    <span>@(activity.InitiatedByName ?? "Scheduler")</span>
                 }
-                else if (!string.IsNullOrEmpty(context.InitiatedByName))
+                else if (!string.IsNullOrEmpty(activity.InitiatedByName))
                 {
-                    <span>@context.InitiatedByName</span>
+                    <span>@activity.InitiatedByName</span>
                 }
-            </MudTd>
-            <MudTd DataLabel="Status">
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Status" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Status" Name="status" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
                 <MudChip T="string" Variant="Variant.Text"
-                         Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
-                    @context.Status.ToString().SplitOnCapitalLetters()
+                         Color="Helpers.GetActivityMudBlazorColorForStatus(activity.Status)">
+                    @activity.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Executed">
-                <MudTooltip Text="@context.Executed.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                    @context.Executed.ToLocalTime().ToRelativeTime()
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Executed" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Executed" Name="created" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                <MudTooltip Text="@activity.Executed.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @activity.Executed.ToLocalTime().ToRelativeTime()
                 </MudTooltip>
-            </MudTd>
-            <MudTd DataLabel="Duration">
-                @if (context.ExecutionTime.HasValue)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Activity" Title="Duration" Sortable="false">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Duration" Name="executiontime" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @{ var activity = context.Item; }
+                @if (activity.ExecutionTime.HasValue)
                 {
-                    @context.ExecutionTime.Value.ToCasualString()
+                    var executionTime = activity.ExecutionTime.Value;
+                    @executionTime.ToCasualString()
                 }
-                else if (context.Status == ActivityStatus.InProgress)
+                else if (activity.Status == ActivityStatus.InProgress)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-disabled">Running...</MudText>
                 }
@@ -464,42 +441,36 @@
                 {
                     <EmptyValue />
                 }
-            </MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            No execution history to display.
-        </NoRecordsContent>
-    </MudTable>
-
-    @* Bottom pager *@
-    <div class="d-flex justify-space-between align-center flex-wrap pa-2"
-         style="border: 1px solid var(--mud-palette-table-lines); border-top: none; border-radius: 0 0 var(--jim-container-radius) var(--jim-container-radius); background-color: var(--mud-palette-surface);">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Rows per page:</MudText>
-            <MudSelect T="int" Value="@_rowsPerPage" ValueChanged="OnRowsPerPageChanged"
-                       Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
-                       Style="width: 90px;" Class="mt-0">
-                <MudSelectItem T="int" Value="10">10</MudSelectItem>
-                <MudSelectItem T="int" Value="25">25</MudSelectItem>
-                <MudSelectItem T="int" Value="50">50</MudSelectItem>
-                <MudSelectItem T="int" Value="100">100</MudSelectItem>
-            </MudSelect>
-        </MudStack>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                @{ var bottomFirst = _totalItems == 0 ? 0 : _currentPage * _rowsPerPage + 1; }
-                @{ var bottomLast = Math.Min((_currentPage + 1) * _rowsPerPage, _totalItems); }
-                @bottomFirst-@bottomLast of @_totalItems
-            </MudText>
-            <MudPagination Selected="@(_currentPage + 1)"
-                           SelectedChanged="OnPageChanged"
-                           Count="@TotalPages"
-                           BoundaryCount="1" MiddleCount="3"
-                           ShowFirstButton="true" ShowLastButton="true"
-                           Rectangular="true" DropShadow="false" Size="Size.Small" />
-        </MudStack>
-    </div>
-}
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @* An empty list means one of three different things, and the message says which: a search that matched
+           nothing, filters nothing satisfies (both with the way out as the action), or nothing has run yet. *@
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No executions match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else if (HasActiveFilters)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No executions match the current filters"
+                             SecondaryText="Adjust or clear the filters above to see more executions."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.History"
+                             PrimaryText="Nothing has run yet"
+                             SecondaryText="Run Profile executions appear here once one has run, whether started from the Queue tab, by a Schedule, or through the API." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
 
 @* Activity Detail Panel with Overlay *@
 <MudOverlay @bind-Visible="_panelOpen" DarkBackground="true" AutoClose="true" ZIndex="1250" />
@@ -854,22 +825,19 @@
         ActivityTargetOperationType.Delete
     ];
 
-    private int _currentPage;
-    private int _rowsPerPage = 10;
-    private bool _preferencesLoaded;
+    private VirtualisedDataGrid<Activity>? _grid;
     private bool _panelOpen;
     private Activity? _selectedActivity;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _pollingPaused;
 
-    // Table data managed directly (no ServerData) to avoid MudTable's internal loading flicker
-    private List<Activity> _items = [];
-    private int _totalItems;
-    private string _currentSortLabel = "created";
-    private bool _currentSortDescending = true;
+    // How many of the newest executions a change-detection pass fingerprints: a screen's worth, matching what a
+    // reader parked at the top of the list can actually see change.
+    private const int FingerprintWindowSize = 20;
 
-    // Snapshot of last-displayed data for change detection during polling
+    // Snapshot of the newest executions for change detection. Written both by top-of-list window loads and by the
+    // detector itself, so an unchanged list never reloads.
     private string? _lastDataFingerprint;
 
     // Filter state
@@ -882,20 +850,15 @@
     private bool _filterHasChildren;
     private bool _filterScheduledOnly;
 
-    private int TotalPages => _totalItems == 0 ? 1 : (int)Math.Ceiling((double)_totalItems / _rowsPerPage);
+    // Whether any page-owned filter has been narrowed from its default. The grid's search box is judged
+    // separately, so the empty state can offer the more specific "Clear Search" way out.
+    private bool HasActiveFilters => _filterConnectedSystems.Any() || _filterRunProfiles.Any()
+        || _filterStatuses.Any() || _filterSchedules.Any() || !string.IsNullOrWhiteSpace(_filterInitiatedBy)
+        || _filterHasChildren || _filterScheduledOnly;
 
     protected override async Task OnInitializedAsync()
     {
-        // Restore sort state from URL query string (e.g. ?sort=status&dir=asc)
-        var uri = new Uri(NavManager.Uri);
-        var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        if (!string.IsNullOrEmpty(queryParams["sort"]))
-        {
-            _currentSortLabel = queryParams["sort"]!;
-            _currentSortDescending = queryParams["dir"] != "asc";
-        }
-
-        // Load filter options (data load deferred until preferences are loaded in OnAfterRenderAsync)
+        // Load the filter options; the grid loads its own first window as soon as it is in the DOM.
         using var jim = JimFactory.Create();
         _filterOptions = await jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
 
@@ -934,15 +897,15 @@
     }
 
     /// <summary>
-    /// Fetches page one with the current filters and re-renders only when the data fingerprint changed.
-    /// Serves both the polling loop and event-driven refreshes, so both respect the same guard: no
-    /// auto-refresh unless on page one with the panel closed and auto-refresh not paused. Overlapping
-    /// invocations are skipped via a non-blocking semaphore.
+    /// Fingerprints the newest window under the current filters and reloads the grid only when something actually
+    /// changed. The reload re-fetches the windows in view in place, so it never moves the reader's scroll position,
+    /// and it invalidates the totals so the toolbar count stays honest as executions arrive. Serves both the
+    /// polling loop and event-driven refreshes, so both respect the same guard: no auto-refresh while the detail
+    /// panel is open or auto-refresh is paused. Overlapping invocations are skipped via a non-blocking semaphore.
     /// </summary>
     private async Task RefreshIfChangedAsync()
     {
-        // Only auto-refresh when on page 1, panel is closed, and not paused
-        if (_currentPage != 0 || _panelOpen || _pollingPaused)
+        if (_grid == null || _panelOpen || _pollingPaused)
             return;
 
         if (!await _refreshLock.WaitAsync(0))
@@ -950,42 +913,74 @@
 
         try
         {
-            // Fetch current data and compare with what's displayed
-            var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
-            var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
-            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-            var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
-            var schedules = _filterSchedules.Any() ? _filterSchedules : null;
-
+            // Deliberately newest-first whatever the reader has sorted the grid by: this is a probe for "has
+            // anything changed", and the newest executions are where change shows up.
             using var refreshJim = JimFactory.Create();
-            var result = await refreshJim.Activities.GetActivitiesAsync(
-                page: 1,
-                pageSize: _rowsPerPage,
-                sortBy: _currentSortLabel,
-                sortDescending: _currentSortDescending,
+            var result = await refreshJim.Activities.GetActivitiesRangeAsync(
+                0,
+                FingerprintWindowSize,
+                string.IsNullOrWhiteSpace(_grid.SearchText) ? null : _grid.SearchText,
+                "created",
+                true,
                 operationFilter: WorkerTaskOperations,
                 typeFilter: WorkerTaskTargetTypes,
-                statusFilter: statuses,
+                statusFilter: _filterStatuses.Any() ? _filterStatuses : null,
                 hasChildActivities: _filterHasChildren ? true : null,
-                connectedSystemFilter: connectedSystems,
-                runProfileFilter: runProfiles,
-                initiatedByFilter: initiatedBy,
+                connectedSystemFilter: _filterConnectedSystems.Any() ? _filterConnectedSystems : null,
+                runProfileFilter: _filterRunProfiles.Any() ? _filterRunProfiles : null,
+                initiatedByFilter: string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy,
                 initiatedBySchedule: _filterScheduledOnly ? true : null,
-                scheduleFilter: schedules);
+                scheduleFilter: _filterSchedules.Any() ? _filterSchedules : null,
+                includeTotalCount: false);
 
             var fingerprint = BuildFingerprint(result.Results);
-            if (fingerprint != _lastDataFingerprint)
+            if (fingerprint == _lastDataFingerprint)
+                return;
+
+            // Advance the baseline before refreshing: a reader scrolled deep in the list never re-fetches the top
+            // window, so without this the same change would trigger a reload on every subsequent tick.
+            _lastDataFingerprint = fingerprint;
+            await InvokeAsync(async () =>
             {
-                _lastDataFingerprint = fingerprint;
-                _items = result.Results;
-                _totalItems = result.TotalResults;
-                await InvokeAsync(StateHasChanged);
-            }
+                if (_grid != null)
+                    await _grid.RefreshAsync(invalidateTotals: true);
+            });
         }
         finally
         {
             _refreshLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Loads one window of Worker Task executions for the grid, honouring the request's skip-the-count contract.
+    /// </summary>
+    private async Task<VirtualisedWindow<Activity>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
+    {
+        using var jim = JimFactory.Create();
+        var result = await jim.Activities.GetActivitiesRangeAsync(
+            request.StartIndex,
+            request.Count,
+            request.SearchText,
+            request.SortBy,
+            request.SortDescending,
+            operationFilter: WorkerTaskOperations,
+            typeFilter: WorkerTaskTargetTypes,
+            statusFilter: _filterStatuses.Any() ? _filterStatuses : null,
+            hasChildActivities: _filterHasChildren ? true : null,
+            connectedSystemFilter: _filterConnectedSystems.Any() ? _filterConnectedSystems : null,
+            runProfileFilter: _filterRunProfiles.Any() ? _filterRunProfiles : null,
+            initiatedByFilter: string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy,
+            initiatedBySchedule: _filterScheduledOnly ? true : null,
+            scheduleFilter: _filterSchedules.Any() ? _filterSchedules : null,
+            includeTotalCount: request.IncludeTotalCount);
+
+        // A newest-first read of the top of the list is exactly what the change detector fingerprints, so refresh
+        // its baseline here and a refresh only fires for changes the reader has not already been shown.
+        if (request.StartIndex == 0 && request.SortBy == "created" && request.SortDescending)
+            _lastDataFingerprint = BuildFingerprint(result.Results.Take(FingerprintWindowSize));
+
+        return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
     }
 
     private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
@@ -1014,25 +1009,6 @@
         });
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_preferencesLoaded)
-        {
-            try
-            {
-                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-                _rowsPerPage = preferredSize;
-                _preferencesLoaded = true;
-                await LoadDataAsync();
-                StateHasChanged();
-            }
-            catch
-            {
-                // JS interop not yet available, will retry on next render
-            }
-        }
-    }
-
     void IDisposable.Dispose()
     {
         UiNotifications.WorkerTaskChanged -= OnWorkerTaskChanged;
@@ -1041,69 +1017,33 @@
         _pollingCancellationTokenSource.Cancel();
     }
 
-    private async Task LoadDataAsync()
+    /// <summary>
+    /// Applies a page-owned filter change: the match set is different, so the total (and the scroll position that
+    /// described the old one) are both invalidated and the grid re-read from the top.
+    /// </summary>
+    private async Task ApplyFilterChangeAsync()
     {
-        var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
-        var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
-        var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-        var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
-        var schedules = _filterSchedules.Any() ? _filterSchedules : null;
+        if (_grid == null)
+            return;
 
-        using var jim = JimFactory.Create();
-        var result = await jim.Activities.GetActivitiesAsync(
-            page: _currentPage + 1,
-            pageSize: _rowsPerPage,
-            sortBy: _currentSortLabel,
-            sortDescending: _currentSortDescending,
-            operationFilter: WorkerTaskOperations,
-            typeFilter: WorkerTaskTargetTypes,
-            statusFilter: statuses,
-            hasChildActivities: _filterHasChildren ? true : null,
-            connectedSystemFilter: connectedSystems,
-            runProfileFilter: runProfiles,
-            initiatedByFilter: initiatedBy,
-            initiatedBySchedule: _filterScheduledOnly ? true : null,
-            scheduleFilter: schedules);
-
-        _items = result.Results;
-        _totalItems = result.TotalResults;
-        _lastDataFingerprint = BuildFingerprint(result.Results);
-
-        // Clamp page if it exceeds available pages (e.g. after a filter reduces results)
-        if (_currentPage > 0 && _currentPage >= TotalPages)
-        {
-            _currentPage = Math.Max(0, TotalPages - 1);
-            await LoadDataAsync();
-        }
+        await _grid.ResetScrollAsync();
+        await _grid.RefreshAsync(invalidateTotals: true);
     }
 
-    private async Task OnPageChanged(int page)
+    /// <summary>
+    /// Returns every page-owned filter to its default; offered as the way out by the empty state when the current
+    /// filters matched nothing.
+    /// </summary>
+    private async Task ClearFiltersAsync()
     {
-        _currentPage = page - 1; // MudPagination is 1-based, we use 0-based
-        await LoadDataAsync();
-    }
-
-    private async Task OnRowsPerPageChanged(int newSize)
-    {
-        _rowsPerPage = newSize;
-        _currentPage = 0;
-        await PreferenceService.SetRowsPerPageAsync(newSize);
-        await LoadDataAsync();
-    }
-
-    private async Task OnSortChanged(string sortLabel, SortDirection direction)
-    {
-        _currentSortLabel = sortLabel;
-        _currentSortDescending = direction == SortDirection.Descending;
-        _currentPage = 0;
-        await LoadDataAsync();
-
-        // Persist sort state in URL query string so it survives page reload
-        var uri = new Uri(NavManager.Uri);
-        var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        queryParams["sort"] = sortLabel;
-        queryParams["dir"] = _currentSortDescending ? "desc" : "asc";
-        NavManager.NavigateTo($"{uri.AbsolutePath}?{queryParams}", replace: true);
+        _filterConnectedSystems = [];
+        _filterRunProfiles = [];
+        _filterStatuses = [];
+        _filterSchedules = [];
+        _filterInitiatedBy = null;
+        _filterHasChildren = false;
+        _filterScheduledOnly = false;
+        await ApplyFilterChangeAsync();
     }
 
     /// <summary>
@@ -1120,50 +1060,43 @@
     private async Task OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterConnectedSystems = values;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnRunProfileFilterChanged(IReadOnlyCollection<string> values)
     {
         _filterRunProfiles = values;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnScheduleFilterChanged(IReadOnlyCollection<Guid> values)
     {
         _filterSchedules = values;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
         _filterStatuses = values;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnInitiatedByFilterChanged(string text)
     {
         _filterInitiatedBy = text;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnHasChildrenFilterChanged(bool value)
     {
         _filterHasChildren = value;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private async Task OnScheduledOnlyFilterChanged(bool value)
     {
         _filterScheduledOnly = value;
-        _currentPage = 0;
-        await LoadDataAsync();
+        await ApplyFilterChangeAsync();
     }
 
     private static string GetMultiSelectText(IReadOnlyList<string> selectedValues)
@@ -1193,12 +1126,9 @@
         return schedule?.Name ?? selectedValues[0];
     }
 
-    private void HandleRowClick(TableRowClickEventArgs<Activity> args)
+    private void HandleRowClicked(Activity activity)
     {
-        if (args.Item == null)
-            return;
-
-        _selectedActivity = args.Item;
+        _selectedActivity = activity;
         _panelOpen = true;
     }
 

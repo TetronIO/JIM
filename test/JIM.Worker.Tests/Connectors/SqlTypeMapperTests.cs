@@ -115,11 +115,11 @@ public class SqlTypeMapperTests
     }
 
     [Test]
-    public void Map_OracleNumberOnePrecisionWithoutTheOptIn_ReturnsDecimal()
+    public void Map_OracleNumberOnePrecisionWithoutTheOptIn_ReturnsNumber()
     {
         var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: 1, Scale: 0), SqlTypeMappingOptions.Default);
 
-        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), "NUMBER(1) is a number until an administrator declares it a flag; inferring Boolean would silently reinterpret real numeric data.");
+        Assert.That(result, Is.EqualTo(AttributeDataType.Number), "NUMBER(1) is a number until an administrator declares it a flag; inferring Boolean would silently reinterpret real numeric data. One digit with no scale is a whole number, so Number is the narrowest type that holds it.");
     }
 
     [Test]
@@ -133,13 +133,111 @@ public class SqlTypeMapperTests
     }
 
     [Test]
-    public void Map_OracleNumberWiderThanOneDigitWithTheOptIn_ReturnsDecimal()
+    public void Map_OracleNumberWiderThanOneDigitWithTheOptIn_ReturnsNumber()
     {
         var options = new SqlTypeMappingOptions { TreatSingleDigitNumberAsBoolean = true };
 
         var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: 5, Scale: 0), options);
 
-        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), "The opt-in is scoped to NUMBER(1); wider columns cannot hold a two-state value.");
+        Assert.That(result, Is.EqualTo(AttributeDataType.Number), "The opt-in is scoped to NUMBER(1); a wider whole-number column falls through to ordinary precision-based inference.");
+    }
+
+    #endregion
+
+    #region Oracle whole-number precision inference (#1354)
+
+    // Oracle has one numeric type, so the declared precision and scale are the only signal available
+    // for whether a column holds a whole number and how wide it is. Discarding them made every Oracle
+    // NUMBER a Decimal, which put every built-in numeric Metaverse Attribute out of reach.
+
+    [TestCase(1)]
+    [TestCase(5)]
+    [TestCase(9)]
+    public void Map_OracleWholeNumberWithinIntRange_ReturnsNumber(int precision)
+    {
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: precision, Scale: 0), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Number), $"NUMBER({precision},0) holds at most {new string('9', precision)}, which fits a 32-bit whole number.");
+    }
+
+    [TestCase(10)]
+    [TestCase(15)]
+    [TestCase(18)]
+    public void Map_OracleWholeNumberBeyondIntButWithinLongRange_ReturnsLongNumber(int precision)
+    {
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: precision, Scale: 0), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.LongNumber), $"NUMBER({precision},0) overflows a 32-bit whole number but fits a 64-bit one. Ten digits already exceed int.MaxValue, so this is the ordinary Oracle primary key.");
+    }
+
+    [TestCase(19)]
+    [TestCase(28)]
+    [TestCase(38)]
+    public void Map_OracleWholeNumberBeyondLongRange_ReturnsDecimal(int precision)
+    {
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: precision, Scale: 0), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), $"NUMBER({precision},0) can exceed long.MaxValue, so narrowing it would risk silently losing a value. Nineteen digits straddle the boundary, which is why it is not treated as safe.");
+    }
+
+    [TestCase(9, 4)]
+    [TestCase(10, 2)]
+    [TestCase(38, 38)]
+    public void Map_OracleNumberWithScale_ReturnsDecimal(int precision, int scale)
+    {
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: precision, Scale: scale), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), $"NUMBER({precision},{scale}) is genuinely fractional; narrowing it to a whole number would discard the fraction.");
+    }
+
+    [Test]
+    public void Map_OracleNumberWithNegativeScale_ReturnsDecimal()
+    {
+        // NUMBER(10,-2) rounds to hundreds and can hold twelve digits, so the usual precision
+        // arithmetic does not apply. Refused rather than reasoned about.
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: 10, Scale: -2), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), "A negative scale widens the range beyond what the declared precision states, so the narrowing arithmetic does not hold.");
+    }
+
+    [Test]
+    public void Map_OracleUnconstrainedNumber_ReturnsDecimal()
+    {
+        // The catalogue reports no DATA_PRECISION for a floating NUMBER, which means up to 38 digits.
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER"), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), "An unconstrained NUMBER states no width, so the widest exact type is the only safe answer.");
+    }
+
+    [Test]
+    public void Map_OracleWholeNumberWithNullScale_UsesPrecisionInference()
+    {
+        // A catalogue that reports a precision but no scale means a whole number, matching the
+        // 'Scale ?? 0' convention the Boolean opt-in already uses.
+        var result = SqlTypeMapper.Map(SqlDatabaseType.Oracle, new SqlColumnType("NUMBER", Precision: 5), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Number), "An absent scale is zero, so the column is a whole number of the declared width.");
+    }
+
+    [TestCase("int", AttributeDataType.Number)]
+    [TestCase("bigint", AttributeDataType.LongNumber)]
+    [TestCase("smallint", AttributeDataType.Number)]
+    public void Map_SqlServerIntegerTypeWithCataloguePrecision_IgnoresPrecisionInference(string typeName, AttributeDataType expected)
+    {
+        // SQL Server's catalogue reports a numeric precision for its integer types (int is 10), which
+        // would map to LongNumber if the Oracle inference leaked across. The named type states the
+        // width exactly, so it stays authoritative.
+        var result = SqlTypeMapper.Map(SqlDatabaseType.SqlServer, new SqlColumnType(typeName, Precision: 10, Scale: 0), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(expected), $"'{typeName}' states its own width, so precision-based inference must not apply to SQL Server.");
+    }
+
+    [Test]
+    public void Map_SqlServerNumericWithZeroScale_RemainsDecimal()
+    {
+        var result = SqlTypeMapper.Map(SqlDatabaseType.SqlServer, new SqlColumnType("numeric", Precision: 5, Scale: 0), SqlTypeMappingOptions.Default);
+
+        Assert.That(result, Is.EqualTo(AttributeDataType.Decimal), "A SQL Server author who writes numeric(5,0) rather than int has chosen an exact numeric; JIM does not second-guess a definitive named type.");
     }
 
     #endregion

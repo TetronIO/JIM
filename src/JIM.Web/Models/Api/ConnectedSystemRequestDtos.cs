@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 
 namespace JIM.Web.Models.Api;
@@ -145,6 +146,18 @@ public class UpdateConnectedSystemAttributeRequest
     /// Indicates if this attribute is used as a secondary identifier by the Connected System (e.g., DN in LDAP).
     /// </summary>
     public bool? IsSecondaryExternalId { get; set; }
+
+    /// <summary>
+    /// Overrides the data type schema discovery inferred for this attribute.
+    /// </summary>
+    /// <remarks>
+    /// Accepted only where the Connector declares that its schema cannot state a type definitively
+    /// (<c>SupportsUserSelectedAttributeTypes</c>): a delimited file names no types at all, and Oracle
+    /// has a single numeric type, so a <c>NUMBER</c> column may be a whole number, a counter or a
+    /// fractional figure. Refused once the attribute is referenced by a Synchronisation Rule or holds
+    /// values, because changing the type would reinterpret data already imported under the old one.
+    /// </remarks>
+    public AttributeDataType? Type { get; set; }
 }
 
 /// <summary>
@@ -223,6 +236,14 @@ public class UpdateConnectedSystemContainerRequest
     /// When selected, objects within this container will be imported during sync.
     /// </summary>
     public bool? Selected { get; set; }
+
+    /// <summary>
+    /// Whether this Container is carved out of a selection an ancestor made, leaving the objects within it
+    /// deliberately unimported. Mutually exclusive with <see cref="Selected"/>: a request that would leave both set
+    /// is rejected with 400, whether it states both itself or states one against a stored other.
+    /// Omit to leave the stored exclusion unchanged.
+    /// </summary>
+    public bool? Excluded { get; set; }
 
     /// <summary>
     /// How far beneath this Container objects are imported from, when it is selected. Subtree imports from this

@@ -226,6 +226,11 @@ public class SynchronisationController(
     /// - Selected: Whether the Attribute is managed by JIM
     /// - IsExternalId: Whether this is the unique identifier for objects
     /// - IsSecondaryExternalId: Whether this is a secondary identifier (e.g., DN for LDAP)
+    /// - Type: Overrides the data type schema discovery inferred, where the Connector supports it
+    ///
+    /// A data type override is accepted only where the Connector declares
+    /// SupportsUserSelectedAttributeTypes, and only while the attribute is neither referenced by a
+    /// Synchronisation Rule nor holding values.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
@@ -291,9 +296,51 @@ public class SynchronisationController(
                 "These attributes must remain selected to ensure sync operations function correctly."));
         }
 
+        // Validate: the data type may only be overridden where the Connector says its schema cannot state
+        // one definitively, and only while nothing has been built on the type JIM inferred. A delimited file
+        // names no types at all; Oracle has a single numeric type, so NUMBER(10) may be a whole number, a
+        // counter or a fractional figure and only the administrator knows which (#1354).
+        if (request.Type.HasValue)
+        {
+            if (request.Type.Value == AttributeDataType.NotSet)
+            {
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    "An attribute's data type cannot be set to NotSet. Choose the type the Connected System actually holds."));
+            }
+
+            // An absent Connector Definition is treated as not supporting the override: refusing a change
+            // JIM cannot justify is always safer than applying one it cannot check.
+            if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributeTypes != true)
+            {
+                _logger.LogWarning("Attempted to change the data type of attribute {AttributeId} on a Connector that does not support it", attributeId);
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states each attribute's data type from the " +
+                    "Connected System's own schema, so it cannot be overridden."));
+            }
+
+            if (request.Type.Value != attribute.Type &&
+                await _application.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            {
+                _logger.LogWarning("Attempted to change the data type of referenced attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"The data type of attribute '{attribute.Name}' cannot be changed because it is referenced by a Synchronisation Rule, or already holds values. " +
+                    "Changing it would reinterpret data imported under the previous type. Remove the references, or clear the Connected System Objects, and try again."));
+            }
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
+
+        if (request.Type.HasValue)
+        {
+            attribute.Type = request.Type.Value;
+
+            // Recorded, not inferred from the value being different: a schema refresh must leave this type
+            // alone even where the administrator happened to choose what discovery would have picked anyway,
+            // because the Connector's inference can change between releases.
+            attribute.TypeSetByAdministrator = true;
+        }
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
@@ -393,6 +440,19 @@ public class SynchronisationController(
         var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
+
+        // A data type override is refused here rather than dropped. Bulk update applies its changes through a
+        // single application-layer call that carries only the three selection flags, so honouring Type would
+        // need that contract widened; accepting and ignoring it would let a scripted build report success
+        // having changed nothing. The single-attribute endpoint applies it, one attribute at a time (#1354).
+        var typeOverrides = request.Attributes.Where(kvp => kvp.Value.Type.HasValue).Select(kvp => kvp.Key).ToList();
+        if (typeOverrides.Count > 0)
+        {
+            _logger.LogWarning("Rejected bulk attribute update carrying {Count} data type override(s)", typeOverrides.Count);
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"A data type cannot be set through a bulk attribute update ({typeOverrides.Count} attribute(s) requested one). " +
+                "Update each attribute individually via PUT connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}."));
+        }
 
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(
@@ -1059,10 +1119,12 @@ public class SynchronisationController(
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Container details.</returns>
     /// <response code="200">Container updated successfully.</response>
+    /// <response code="400">The request would leave the Container both selected and excluded.</response>
     /// <response code="404">Connected System or Container not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/containers/{containerId:int}", Name = "UpdateConnectedSystemContainer")]
     [ProducesResponseType(typeof(ConnectedSystemContainerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateConnectedSystemContainerAsync(int connectedSystemId, int containerId, [FromBody] UpdateConnectedSystemContainerRequest request)
@@ -1091,9 +1153,25 @@ public class SynchronisationController(
         if (!belongsToSystem)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in Connected System {connectedSystemId}."));
 
+        // A Container states one thing about itself, and "manage this" and "do not manage this" cannot both be it.
+        // The portal keeps the two apart by construction, so this is the only surface that can ask for both, and it
+        // refuses rather than picking one: guessing which half the caller meant is how a branch ends up imported
+        // that an administrator excluded. Evaluated against the state the request would leave behind, because a
+        // request naming one half against a stored other is just as contradictory as one naming both.
+        var wouldBeSelected = request.Selected ?? container.Selected;
+        var wouldBeExcluded = request.Excluded ?? container.Excluded;
+        if (wouldBeSelected && wouldBeExcluded)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Container with ID {containerId} cannot be both selected and excluded. Send Selected as false in the same request to replace the selection with an exclusion, or Excluded as false to replace the exclusion with a selection."));
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             container.Selected = request.Selected.Value;
+
+        if (request.Excluded.HasValue)
+            container.Excluded = request.Excluded.Value;
 
         if (request.Scope.HasValue)
             container.Scope = request.Scope.Value;
@@ -1108,6 +1186,98 @@ public class SynchronisationController(
         // Reload to get full entity with relationships
         var updated = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
         return Ok(ConnectedSystemContainerDto.FromEntity(updated!));
+    }
+
+    /// <summary>
+    /// Read a Connected System's Container Scope as text (Advanced Mode)
+    /// </summary>
+    /// <remarks>
+    /// One statement per line, in hierarchy order: <c>include</c> or <c>exclude</c>, an optional <c>one-level</c>,
+    /// then the Container's path. This is the canonical form, so text read here and sent straight back to
+    /// <c>PUT connected-systems/{id}/container-scope-text</c> leaves the scope exactly as it was.
+    ///
+    /// A Connected System with nothing selected returns empty text rather than nothing at all.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <response code="200">The Container Scope, as text.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/container-scope-text", Name = "GetConnectedSystemContainerScopeText")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerScopeTextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemContainerScopeTextAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested Container Scope text for Connected System: {Id}", connectedSystemId);
+
+        var text = await _application.ConnectedSystems.GetContainerScopeTextAsync(connectedSystemId);
+        if (text == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        return Ok(new ConnectedSystemContainerScopeTextDto { Text = text });
+    }
+
+    /// <summary>
+    /// State a Connected System's Container Scope as text (Advanced Mode)
+    /// </summary>
+    /// <remarks>
+    /// Replaces the whole of Container Scope with what the text states, which is what makes it usable on a
+    /// hierarchy too large to click through: a Container the text does not name states nothing, so empty text
+    /// clears every selection and exclusion. Partition selection is left alone, except that naming a Container
+    /// selects the partition holding it.
+    ///
+    /// Applied all-or-nothing, because a scope applied halfway takes objects out of import scope without anyone
+    /// asking for it. A path naming no Container, a Container named twice, and a statement an ancestor already
+    /// makes are each refused with the line that caused them, and nothing is changed. The response reports the
+    /// canonical text now in force.
+    ///
+    /// The change is recorded as one Activity and one versioned configuration snapshot, exactly as saving the tree
+    /// in the portal is. Preview what it would cost first with
+    /// <c>POST connected-systems/{id}/scope-selection/preview</c>.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">The Container Scope to apply.</param>
+    /// <response code="200">The Container Scope was applied. The response carries the canonical text.</response>
+    /// <response code="400">The text could not be applied. Nothing was changed.</response>
+    /// <response code="404">Connected System not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("connected-systems/{connectedSystemId:int}/container-scope-text", Name = "UpdateConnectedSystemContainerScopeText")]
+    [ProducesResponseType(typeof(ConnectedSystemContainerScopeTextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateConnectedSystemContainerScopeTextAsync(int connectedSystemId,
+        [FromBody] UpdateConnectedSystemContainerScopeTextRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        _logger.LogInformation("Applying Container Scope text to Connected System {Id}", connectedSystemId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for Container Scope text update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.ApplyContainerScopeTextAsync(connectedSystemId, request.Text, apiKey)
+            : await _application.ConnectedSystems.ApplyContainerScopeTextAsync(connectedSystemId, request.Text, initiatedBy);
+
+        if (result == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (!result.Applied)
+        {
+            // Every problem at once, each tied to its line: an administrator correcting a scope of any size one
+            // round trip at a time is how a half-corrected text gets saved.
+            var detail = string.Join(" ", result.Errors.Select(e => $"line {e.LineNumber}: {e.Message}"));
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The Container Scope text could not be applied, so nothing was changed. {detail}"));
+        }
+
+        return Ok(new ConnectedSystemContainerScopeTextDto { Text = result.Text });
     }
 
     /// <summary>
@@ -1158,14 +1328,13 @@ public class SynchronisationController(
 
         var currentSelection = ConnectedSystemScopeSelectionProposal.FromCurrentSelection(connectedSystem);
 
-        // Exclusions are carried forward from the current selection rather than proposed: this endpoint cannot
-        // express them yet (#1255 Phase 5 adds them to the request alongside the write surfaces). Omitting them
-        // would preview the removal of every exclusion the Connected System carries, which is a change the caller
-        // did not ask for and would be counted as objects coming back into scope.
+        // An omitted list means "leave this half of the selection as it stands", for all three: a caller changing
+        // only the containers has not asked to lift every exclusion, and reading silence that way would preview
+        // objects flooding back into scope. An explicitly empty list is a different statement and is honoured.
         var proposal = new ConnectedSystemScopeSelectionProposal(
             request.SelectedPartitionIds ?? currentSelection.SelectedPartitionIds,
             request.SelectedContainerIds ?? currentSelection.SelectedContainerIds,
-            currentSelection.ExcludedContainerIds);
+            request.ExcludedContainerIds ?? currentSelection.ExcludedContainerIds);
 
         // An id naming nothing in this hierarchy is different in kind from a selection the preview disagrees with:
         // there is no coherent proposal to evaluate, and silently ignoring it would produce a confident answer to a
@@ -1200,7 +1369,7 @@ public class SynchronisationController(
 
     /// <summary>
     /// The error response for a proposal naming a partition or container this Connected System does not have, or
-    /// null when every id resolves.
+    /// stating that one Container is both managed and carved out, or null when the proposal is coherent.
     /// </summary>
     private static ApiErrorResponse? UnknownScopeSelectionIds(
         ConnectedSystem connectedSystem, ConnectedSystemScopeSelectionProposal proposal)
@@ -1219,11 +1388,28 @@ public class SynchronisationController(
                 $"Partition ID(s) {string.Join(", ", unknownPartitions)} do not belong to Connected System {connectedSystem.Id}.");
         }
 
-        var unknownContainers = proposal.SelectedContainerIds.Where(id => !knownContainerIds.Contains(id)).ToList();
+        var proposedExclusions = proposal.ExcludedContainerIds ?? [];
+        var unknownContainers = proposal.SelectedContainerIds
+            .Concat(proposedExclusions)
+            .Where(id => !knownContainerIds.Contains(id))
+            .Distinct()
+            .ToList();
+
         if (unknownContainers.Count > 0)
         {
             return ApiErrorResponse.BadRequest(
                 $"Container ID(s) {string.Join(", ", unknownContainers)} do not belong to Connected System {connectedSystem.Id}.");
+        }
+
+        // A Container is managed or carved out, never both (#1255). The write endpoints refuse the contradiction
+        // rather than resolving it, and a preview has even less business picking a winner: it would go on to state
+        // a confident object count for a configuration that could not be saved.
+        var contradictory = proposedExclusions.Intersect(proposal.SelectedContainerIds).ToList();
+        if (contradictory.Count > 0)
+        {
+            return ApiErrorResponse.BadRequest(
+                $"Container ID(s) {string.Join(", ", contradictory)} are named as both selected and excluded. " +
+                "A Container states one or the other, so name it in one list only.");
         }
 
         return null;
