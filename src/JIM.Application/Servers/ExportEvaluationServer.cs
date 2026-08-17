@@ -939,15 +939,13 @@ public class ExportEvaluationServer
     /// (for example the DN for LDAP) when available, else the primary external ID. The same
     /// preference order export execution's reference resolution uses.
     /// </summary>
-    private static string? ResolveCsoReferenceValue(ConnectedSystemObject cso)
+    internal static string? ResolveCsoReferenceValue(ConnectedSystemObject cso)
     {
         var resolvedAttr =
             cso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true) ??
             cso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsExternalId == true);
 
-        return resolvedAttr?.StringValue ??
-               resolvedAttr?.GuidValue?.ToString() ??
-               resolvedAttr?.IntValue?.ToString();
+        return resolvedAttr?.ToReferenceValueString();
     }
 
     /// <summary>
