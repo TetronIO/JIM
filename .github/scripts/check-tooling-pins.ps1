@@ -28,6 +28,14 @@
       2. Queries the upstream registry (npm or NuGet) for the latest stable
          version.
       3. Flags any tool whose pinned version is behind the latest.
+      4. Checks that the pinned version ITSELF is still published. A version that
+         has been unpublished (npm) or deleted (NuGet) cannot be installed, so
+         the devcontainer can no longer be built, and asking only "is something
+         newer available?" would report that pin as perfectly current. This is
+         the tooling equivalent of #1374, where an Ubuntu archive rotation left
+         `main` unable to build the Worker image with every check green. Both
+         registry documents already carry the full version list, so it costs no
+         extra request.
 
     Default mode reports findings as a table. `-Apply` additionally rewrites the
     bumps into the pin files in place (used by the tooling-pin-check workflow to
@@ -46,11 +54,15 @@
     script only reports.
 
 .NOTES
-    Exit codes:
+    Exit codes (the highest applicable one wins):
       0  success; no updates available (or -Apply applied them cleanly)
       1  an error occurred (a registry query failed, a pin could not be parsed)
       2  updates are available (lets a scheduled check branch on "is there
          anything to evaluate")
+      3  a pinned version is no longer published upstream, so it can no longer be
+         installed. Reported after any bumps have been applied and written out,
+         so the workflow can still raise the PR that fixes it and then fail the
+         run.
 
     Like the apt pin check, a registry query that fails is treated as a hard
     error (exit 1), never as "current": a silent false negative would leave the
@@ -95,24 +107,34 @@ $tools = @(
 
 # --- Registry queries --------------------------------------------------------
 
-function Get-LatestNpmVersion {
+# Both return the latest stable version AND every version the registry still
+# offers, so the caller can ask the two separate questions: is the pin behind,
+# and is the pin still there at all.
+
+function Get-NpmRegistryInfo {
     param([string]$Id)
     # Scoped names (@scope/name) must have the slash encoded for the registry path.
     $encoded = $Id -replace '/', '%2F'
     $resp = Invoke-RestMethod -Uri "https://registry.npmjs.org/$encoded" -TimeoutSec 30
     $latest = $resp.'dist-tags'.latest
     if (-not $latest) { throw "npm returned no dist-tags.latest for $Id." }
-    return $latest
+    # An unpublished version is removed from the packument's versions map, which
+    # is exactly what "this pin can no longer be installed" looks like on npm.
+    $versions = @($resp.versions.PSObject.Properties.Name)
+    if ($versions.Count -eq 0) { throw "npm returned no versions for $Id." }
+    return [pscustomobject]@{ latest = $latest; versions = $versions }
 }
 
-function Get-LatestNuGetVersion {
+function Get-NuGetRegistryInfo {
     param([string]$Id)
     # The flat-container id segment is lower-cased.
     $resp = Invoke-RestMethod -Uri "https://api.nuget.org/v3-flatcontainer/$($Id.ToLower())/index.json" -TimeoutSec 30
+    $versions = @($resp.versions)
+    if ($versions.Count -eq 0) { throw "NuGet returned no versions for $Id." }
     # Versions are ascending; exclude prereleases (a '-' suffix) and take the last.
-    $stable = @($resp.versions | Where-Object { $_ -notmatch '-' })
+    $stable = @($versions | Where-Object { $_ -notmatch '-' })
     if ($stable.Count -eq 0) { throw "NuGet returned no stable versions for $Id." }
-    return $stable[-1]
+    return [pscustomobject]@{ latest = $stable[-1]; versions = $versions }
 }
 
 function Compare-Version {
@@ -140,7 +162,8 @@ function Get-PinnedVersion {
 # --- Detect ------------------------------------------------------------------
 
 $queryFailures = @()
-$findings = @()  # one per tool that is behind
+$findings = @()      # one per tool that is behind
+$withdrawn = @()     # one per tool whose pinned version is no longer published
 
 foreach ($tool in $tools) {
     # Read every location's current version. They should all agree; if they have
@@ -158,9 +181,9 @@ foreach ($tool in $tools) {
     $current = (@($distinct | Sort-Object { [version]$_ }))[0]
 
     try {
-        $latest = switch ($tool.registry) {
-            'npm'   { Get-LatestNpmVersion   -Id $tool.id }
-            'nuget' { Get-LatestNuGetVersion -Id $tool.id }
+        $info = switch ($tool.registry) {
+            'npm'   { Get-NpmRegistryInfo   -Id $tool.id }
+            'nuget' { Get-NuGetRegistryInfo -Id $tool.id }
             default { throw "Unknown registry '$($tool.registry)' for $($tool.name)." }
         }
     } catch {
@@ -169,9 +192,26 @@ foreach ($tool in $tools) {
         continue
     }
 
+    $latest = $info.latest
+
+    # Every version actually pinned in a file has to still exist upstream, not
+    # just the lowest: a drifted pair could have one live location and one dead.
+    $gone = @($distinct | Where-Object { $info.versions -notcontains $_ })
+
     $behind = Compare-Version -Candidate $latest -Current $current
-    $state = if ($behind) { 'UPDATE' } else { 'current' }
+    $state = if ($gone.Count -gt 0) { "WITHDRAWN from $($tool.registry)" }
+             elseif ($behind) { 'UPDATE' }
+             else { 'current' }
     Write-Host ("  {0,-22} {1,-12} -> {2,-12} {3}" -f $tool.name, $current, $latest, $state)
+
+    if ($gone.Count -gt 0) {
+        $withdrawn += [pscustomobject]@{
+            name     = $tool.name
+            registry = $tool.registry
+            versions = ($gone -join ', ')
+            files    = (@($tool.locations | ForEach-Object { $_.file } | Select-Object -Unique) -join ', ')
+        }
+    }
 
     if ($behind) {
         $findings += [pscustomobject]@{
@@ -191,31 +231,21 @@ if ($queryFailures.Count -gt 0) {
     exit 1
 }
 
-Write-Host ''
-if ($findings.Count -eq 0) {
-    Write-Host 'All manually-pinned tooling is current. Nothing to evaluate.'
-    exit 0
-}
+# --- PR body + apply ---------------------------------------------------------
 
-Write-Host "$($findings.Count) pinned tool(s) have a newer version available to evaluate."
+# Kept in a function so it can run before the withdrawn-pin check decides the
+# exit code: a pin the registry has dropped needs BOTH the loud failure and the
+# bump PR that fixes it, and a bare `exit 3` above this would suppress the very
+# proposal that clears the failure.
+function Publish-BumpProposal {
+    $bodyLines = @('| Tool | Pinned | Available | Files |', '| --- | --- | --- | --- |')
+    foreach ($f in $findings) {
+        $bodyLines += "| ``$($f.name)`` | $($f.current) | $($f.latest) | $($f.files) |"
+    }
+    Set-Content -Path (Join-Path $repoRoot 'tooling-pin-pr-body.md') -Value ($bodyLines -join "`n") -Encoding utf8
 
-# --- PR body + machine-readable outputs --------------------------------------
+    if (-not $Apply) { return }
 
-$bodyLines = @('| Tool | Pinned | Available | Files |', '| --- | --- | --- | --- |')
-foreach ($f in $findings) {
-    $bodyLines += "| ``$($f.name)`` | $($f.current) | $($f.latest) | $($f.files) |"
-}
-$body = $bodyLines -join "`n"
-Set-Content -Path (Join-Path $repoRoot 'tooling-pin-pr-body.md') -Value $body -Encoding utf8
-
-if ($env:GITHUB_OUTPUT) {
-    "has_updates=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-    "update_count=$($findings.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-}
-
-# --- Apply -------------------------------------------------------------------
-
-if ($Apply) {
     Write-Host ''
     Write-Host 'Applying bumps to pin files ...'
     foreach ($f in $findings) {
@@ -231,4 +261,36 @@ if ($Apply) {
     }
 }
 
+Write-Host ''
+
+if ($env:GITHUB_OUTPUT) {
+    "has_updates=$($findings.Count -gt 0)".ToLowerInvariant() | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    "update_count=$($findings.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    "unavailable=$($withdrawn.Count -gt 0)".ToLowerInvariant() | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    "unavailable_tools=$(@($withdrawn | ForEach-Object { $_.name }) -join ', ')" |
+        Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+}
+
+if ($findings.Count -eq 0) {
+    Write-Host 'All manually-pinned tooling is current. Nothing to evaluate.'
+    # Not `exit 0`: a pin the registry no longer offers has to be reported
+    # whether or not there is a bump to propose, and the exit-code decision is
+    # made once, at the end of the script.
+} else {
+    Write-Host "$($findings.Count) pinned tool(s) have a newer version available to evaluate."
+    Publish-BumpProposal
+}
+
+if ($withdrawn.Count -gt 0) {
+    Write-Host ''
+    Write-Host "FATAL: $($withdrawn.Count) pinned tool version(s) are no longer published upstream:"
+    foreach ($w in $withdrawn) {
+        Write-Host "  $($w.name) $($w.versions) is gone from $($w.registry) (pinned in $($w.files))"
+    }
+    Write-Host 'That version can no longer be installed, so the devcontainer cannot be built from these pins.'
+    Write-Host 'Land the bump above, or repin by hand to a version the registry still offers.'
+    exit 3
+}
+
+if ($findings.Count -eq 0) { exit 0 }
 exit 2
