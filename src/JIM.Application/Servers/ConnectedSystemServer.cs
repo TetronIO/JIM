@@ -4698,12 +4698,78 @@ public class ConnectedSystemServer
         foreach (var cso in connectedSystemObjects)
         {
             rpeisByCsoId.TryGetValue(cso.Id, out var rpei);
-            if (rpei != null)
+            if (rpei == null)
+                continue;
+
+            rpei.ConnectedSystemObjectId = cso.Id;
+            try
             {
-                rpei.ConnectedSystemObjectId = cso.Id;
                 ProcessConnectedSystemObjectAttributeValueChanges(cso, rpei, changeTrackingEnabled);
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Synchronisation integrity boundary (#1386): a change record that cannot be built for
+                // one object is that object's error, reported on its Run Profile Execution Item; letting
+                // it escape would fail the whole Activity and abandon every object still to be processed,
+                // with nothing recorded against the object at fault. Cancellation still propagates: an
+                // aborting run must not grind on through this path.
+                RecordChangeRecordFailureOnRpei(cso, rpei, ex, nameof(LinkUpdateChangeRecords));
+
+                // Mirror the normal completion: the caller snapshotted these lists for persistence before
+                // this ran, and leaving them populated would make the object look like it still holds
+                // unapplied work.
+                cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
+                cso.PendingAttributeValueRemovals = new List<ConnectedSystemObjectAttributeValue>();
+            }
         }
+    }
+
+    /// <summary>
+    /// Records a change-record construction failure on the object's Run Profile Execution Item, so the
+    /// error is visible against the object it belongs to and the run continues (#1386).
+    /// </summary>
+    private static void RecordChangeRecordFailureOnRpei(
+        ConnectedSystemObject cso,
+        ActivityRunProfileExecutionItem rpei,
+        Exception ex,
+        string callerName)
+    {
+        Log.Error(ex, "{Caller}: could not build the change record for Connected System Object {CsoId}; " +
+            "the object is errored on its Run Profile Execution Item and the run continues.", callerName, cso.Id);
+        rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+        rpei.ErrorMessage = ex.Message;
+        rpei.ErrorStackTrace = ex.ToString();
+    }
+
+    /// <summary>
+    /// Finds the single attribute value holding a Connected System Object's External ID, throwing a
+    /// diagnostic exception when the object holds more than one.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="ConnectedSystemObject.ExternalIdAttributeValue"/> property answers the same
+    /// question via SingleOrDefault, whose duplicate failure names neither the object nor the values
+    /// (#1386: "Sequence contains more than one matching element", with the whole run dead behind it).
+    /// The change-record paths use this instead so the per-object error the caller records is
+    /// actionable. The property itself stays strict; it is the read on the sync path that must name
+    /// what it found.
+    /// </remarks>
+    private static ConnectedSystemObjectAttributeValue? GetSingleExternalIdAttributeValue(ConnectedSystemObject cso)
+    {
+        var externalIdValues = cso.AttributeValues
+            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == cso.ExternalIdAttributeId)
+            .ToList();
+
+        if (externalIdValues.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"Connected System Object {cso.Id} holds {externalIdValues.Count} values for its External ID attribute " +
+                $"(attribute id {cso.ExternalIdAttributeId}): {string.Join(", ", externalIdValues.Select(v => v.ToStringNoName() ?? "(empty)"))}. " +
+                "An object must hold exactly one External ID value; a duplicate means an earlier write stored the anchor " +
+                "in a slot a later one did not recognise. The object needs its duplicate value removed before its change " +
+                "history can be recorded.");
+        }
+
+        return externalIdValues.Count == 1 ? externalIdValues[0] : null;
     }
 
     /// <summary>
@@ -4719,42 +4785,50 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != rpeis.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
-        // Name only, never NameOrId: the external id is captured separately alongside it.
-        var deletedObjectInfo = connectedSystemObjects
-            .Select(cso => (
-                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.Name,
-                FinalAttributeValues: cso.AttributeValues
-                    .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
-                    .ToList()))
-            .ToList();
-
         if (changeTrackingEnabled)
         {
             for (int i = 0; i < connectedSystemObjects.Count; i++)
             {
                 var cso = connectedSystemObjects[i];
                 var executionItem = rpeis[i];
-                var (externalId, displayName, finalAttributeValues) = deletedObjectInfo[i];
 
-                var change = new ConnectedSystemObjectChange
+                try
                 {
-                    ConnectedSystemId = cso.ConnectedSystemId,
-                    ChangeType = ObjectChangeType.Deleted,
-                    ChangeTime = DateTime.UtcNow,
-                    DeletedObjectType = cso.Type,
-                    DeletedObjectExternalId = externalId,
-                    DeletedObjectDisplayName = displayName,
-                    DeletedConnectedSystemObjectId = cso.Id,
-                    ActivityRunProfileExecutionItem = executionItem,
-                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
-                    InitiatedById = executionItem.Activity?.InitiatedById,
-                    InitiatedByName = executionItem.Activity?.InitiatedByName
-                };
-                executionItem.ConnectedSystemObjectChange = change;
+                    // Name only, never NameOrId: the external id is captured separately alongside it.
+                    // The guarded read throws a diagnostic error on a duplicated anchor, recorded per
+                    // object below rather than escaping the run (#1386).
+                    var externalId = GetSingleExternalIdAttributeValue(cso)?.ToStringNoName();
+                    var finalAttributeValues = cso.AttributeValues
+                        .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
+                        .ToList();
 
-                foreach (var av in finalAttributeValues)
-                    AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+                    var change = new ConnectedSystemObjectChange
+                    {
+                        ConnectedSystemId = cso.ConnectedSystemId,
+                        ChangeType = ObjectChangeType.Deleted,
+                        ChangeTime = DateTime.UtcNow,
+                        DeletedObjectType = cso.Type,
+                        DeletedObjectExternalId = externalId,
+                        DeletedObjectDisplayName = cso.Name,
+                        DeletedConnectedSystemObjectId = cso.Id,
+                        ActivityRunProfileExecutionItem = executionItem,
+                        InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                        InitiatedById = executionItem.Activity?.InitiatedById,
+                        InitiatedByName = executionItem.Activity?.InitiatedByName
+                    };
+                    executionItem.ConnectedSystemObjectChange = change;
+
+                    foreach (var av in finalAttributeValues)
+                        AddChangeAttributeValueObject(change, av, ValueChangeType.Remove);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Same synchronisation integrity boundary as LinkUpdateChangeRecords (#1386): one
+                    // object's failed deletion change record must not abandon the rest of the batch.
+                    // The FK-nulling loop below still runs for this RPEI; the CSOs are about to be
+                    // deleted, and a live FK would violate the constraint at persistence.
+                    RecordChangeRecordFailureOnRpei(cso, executionItem, ex, nameof(LinkDeleteChangeRecords));
+                }
             }
         }
 
@@ -4880,8 +4954,9 @@ public class ConnectedSystemServer
                 InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
                 InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName,
                 // Store external ID as string to enable linking change history even after CSO deletion
-                // Use ToStringNoName() to match the format used in deletion changes
-                DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
+                // Use ToStringNoName() to match the format used in deletion changes. The guarded read
+                // throws a diagnostic error on a duplicated anchor, which the caller records per object (#1386).
+                DeletedObjectExternalId = GetSingleExternalIdAttributeValue(connectedSystemObject)?.ToStringNoName()
             };
 
             // the change object will be persisted with the activity Run Profile execution item further up the stack.

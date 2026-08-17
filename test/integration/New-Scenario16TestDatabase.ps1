@@ -66,6 +66,70 @@ $baseDate = "2020-01-06"
 # Script generation
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
 
+function New-SqlServerSourceRowInserts {
+    <#
+    .SYNOPSIS
+        The INSERTs that author the source rows, shared by the full seed and the hash-match reset.
+    .DESCRIPTION
+        One authoring, two consumers, so the reset can never drift from the seed: the matrix's rows
+        mutate the source tables (Export.Update rewrites an email and adds a phone number,
+        Export.Delete disables employee 20), and the reset has to put back exactly what the seed
+        would have written or the next run inherits the mutations as residue.
+    #>
+    param([int]$Rows)
+
+    return @"
+-- Set-based generation. sys.all_objects cross-joined with itself supplies far more rows than the
+-- 500,000 ceiling, and ROW_NUMBER turns them into the series every value is derived from.
+WITH Numbers AS (
+    SELECT TOP ($Rows) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
+    FROM sys.all_objects a CROSS JOIN sys.all_objects b
+)
+INSERT INTO hr.EMPLOYEES
+    (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID,
+     HEADCOUNT, FTE, IS_ACTIVE, START_DATE, LAST_MODIFIED, HIRED_AT, EMPLOYEE_GUID, PHOTO)
+SELECT
+    n,
+    CONCAT('$($config.EmployeeNumberPrefix)', RIGHT(CONCAT('00000000', CAST(n AS varchar(20))), 8)),
+    CHOOSE((n % 8) + 1, 'Ada', 'Bram', 'Cleo', 'Dara', 'Emil', 'Fern', 'Gita', 'Hugo'),
+    CHOOSE((n % 6) + 1, 'Ashcroft', 'Brandt', 'Calder', 'Duquesne', 'Ellery', 'Fairhurst'),
+    CONCAT('user', CAST(n AS varchar(20)), '@panoply.local'),
+    CHOOSE((n % 4) + 1, 'Engineering', 'Finance', 'Operations', 'Research'),
+    -- The first ten rows have no manager, so a reference that is legitimately absent is covered too.
+    CASE WHEN n > 10 THEN ((n % 10) + 1) ELSE NULL END,
+    CAST(n AS bigint) * 1000000000,
+    -- Two decimal places that binary floating point cannot represent exactly, which is the point.
+    CAST(0.25 + ((n % 4) * 0.25) AS $($config.Types.Decimal)),
+    CASE WHEN (n % 7) = 0 THEN 0 ELSE 1 END,
+    DATEADD(day, n, CAST('$baseDate' AS datetime2(3))),
+    DATEADD(minute, n, CAST('$baseDate' AS datetime2(3))),
+    -- A non-UTC stored offset, so normalisation to UTC is observable rather than a no-op.
+    TODATETIMEOFFSET(DATEADD(minute, n, CAST('$baseDate' AS datetime2(3))), '-05:00'),
+    -- Deterministic, not NEWID(): a re-seed must produce the same identifiers.
+    CAST(CAST(RIGHT(CONCAT('00000000', CAST(n AS varchar(20))), 8) + '-0000-4000-8000-000000000000' AS char(36)) AS uniqueidentifier),
+    CAST(n AS varbinary(64))
+FROM Numbers;
+GO
+
+-- Two phone numbers for every third employee, and one for the rest, so the multi-valued assertions
+-- have both cardinalities to work with.
+INSERT INTO hr.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
+SELECT EMPLOYEE_ID, CONCAT('+44 20 7000 ', RIGHT(CONCAT('0000', CAST(EMPLOYEE_ID AS varchar(20))), 4)), LAST_MODIFIED
+FROM hr.EMPLOYEES;
+GO
+
+INSERT INTO hr.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
+SELECT EMPLOYEE_ID, CONCAT('+44 161 496 ', RIGHT(CONCAT('0000', CAST(EMPLOYEE_ID AS varchar(20))), 4)), LAST_MODIFIED
+FROM hr.EMPLOYEES WHERE (EMPLOYEE_ID % 3) = 0;
+GO
+
+-- One creation entry per employee, so a Delta Import from a zero watermark sees the whole population.
+INSERT INTO hr.IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE, CHANGED_AT)
+SELECT EMPLOYEE_ID, 'I', LAST_MODIFIED FROM hr.EMPLOYEES;
+GO
+"@
+}
+
 function New-SqlServerSeedScript {
     param([int]$Rows)
 
@@ -222,54 +286,7 @@ CREATE TABLE hr.JIM_SEED_MANIFEST (
 );
 GO
 
--- Set-based generation. sys.all_objects cross-joined with itself supplies far more rows than the
--- 500,000 ceiling, and ROW_NUMBER turns them into the series every value is derived from.
-WITH Numbers AS (
-    SELECT TOP ($Rows) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n
-    FROM sys.all_objects a CROSS JOIN sys.all_objects b
-)
-INSERT INTO hr.EMPLOYEES
-    (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID,
-     HEADCOUNT, FTE, IS_ACTIVE, START_DATE, LAST_MODIFIED, HIRED_AT, EMPLOYEE_GUID, PHOTO)
-SELECT
-    n,
-    CONCAT('E', RIGHT(CONCAT('00000000', CAST(n AS varchar(20))), 8)),
-    CHOOSE((n % 8) + 1, 'Ada', 'Bram', 'Cleo', 'Dara', 'Emil', 'Fern', 'Gita', 'Hugo'),
-    CHOOSE((n % 6) + 1, 'Ashcroft', 'Brandt', 'Calder', 'Duquesne', 'Ellery', 'Fairhurst'),
-    CONCAT('user', CAST(n AS varchar(20)), '@panoply.local'),
-    CHOOSE((n % 4) + 1, 'Engineering', 'Finance', 'Operations', 'Research'),
-    -- The first ten rows have no manager, so a reference that is legitimately absent is covered too.
-    CASE WHEN n > 10 THEN ((n % 10) + 1) ELSE NULL END,
-    CAST(n AS bigint) * 1000000000,
-    -- Two decimal places that binary floating point cannot represent exactly, which is the point.
-    CAST(0.25 + ((n % 4) * 0.25) AS $($config.Types.Decimal)),
-    CASE WHEN (n % 7) = 0 THEN 0 ELSE 1 END,
-    DATEADD(day, n, CAST('$baseDate' AS datetime2(3))),
-    DATEADD(minute, n, CAST('$baseDate' AS datetime2(3))),
-    -- A non-UTC stored offset, so normalisation to UTC is observable rather than a no-op.
-    TODATETIMEOFFSET(DATEADD(minute, n, CAST('$baseDate' AS datetime2(3))), '-05:00'),
-    -- Deterministic, not NEWID(): a re-seed must produce the same identifiers.
-    CAST(CAST(RIGHT(CONCAT('00000000', CAST(n AS varchar(20))), 8) + '-0000-4000-8000-000000000000' AS char(36)) AS uniqueidentifier),
-    CAST(n AS varbinary(64))
-FROM Numbers;
-GO
-
--- Two phone numbers for every third employee, and one for the rest, so the multi-valued assertions
--- have both cardinalities to work with.
-INSERT INTO hr.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
-SELECT EMPLOYEE_ID, CONCAT('+44 20 7000 ', RIGHT(CONCAT('0000', CAST(EMPLOYEE_ID AS varchar(20))), 4)), LAST_MODIFIED
-FROM hr.EMPLOYEES;
-GO
-
-INSERT INTO hr.EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
-SELECT EMPLOYEE_ID, CONCAT('+44 161 496 ', RIGHT(CONCAT('0000', CAST(EMPLOYEE_ID AS varchar(20))), 4)), LAST_MODIFIED
-FROM hr.EMPLOYEES WHERE (EMPLOYEE_ID % 3) = 0;
-GO
-
--- One creation entry per employee, so a Delta Import from a zero watermark sees the whole population.
-INSERT INTO hr.IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE, CHANGED_AT)
-SELECT EMPLOYEE_ID, 'I', LAST_MODIFIED FROM hr.EMPLOYEES;
-GO
+$(New-SqlServerSourceRowInserts -Rows $Rows)
 
 INSERT INTO hr.JIM_SEED_MANIFEST (SEED_HASH, ROW_COUNT, SEEDED_AT)
 VALUES ('{0}', $Rows, SYSUTCDATETIME());
@@ -277,6 +294,55 @@ GO
 
 SELECT 'SEEDED' AS Result, COUNT(*) AS Employees FROM hr.EMPLOYEES;
 GO
+"@
+}
+
+function New-OracleSourceRowInserts {
+    <#
+    .SYNOPSIS
+        The Oracle sibling of New-SqlServerSourceRowInserts; same one-authoring rationale.
+    #>
+    param([int]$Rows)
+
+    return @"
+-- Set-based generation. CONNECT BY LEVEL against DUAL is Oracle's generated series.
+INSERT INTO EMPLOYEES
+    (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID,
+     HEADCOUNT, FTE, IS_ACTIVE, START_DATE, LAST_MODIFIED, HIRED_AT, HIRED_AT_LOCAL, EMPLOYEE_GUID, PHOTO)
+SELECT
+    n,
+    '$($config.EmployeeNumberPrefix)' || LPAD(TO_CHAR(n), 8, '0'),
+    DECODE(MOD(n, 8), 0, 'Ada', 1, 'Bram', 2, 'Cleo', 3, 'Dara', 4, 'Emil', 5, 'Fern', 6, 'Gita', 'Hugo'),
+    DECODE(MOD(n, 6), 0, 'Ashcroft', 1, 'Brandt', 2, 'Calder', 3, 'Duquesne', 4, 'Ellery', 'Fairhurst'),
+    'user' || TO_CHAR(n) || '@panoply.local',
+    DECODE(MOD(n, 4), 0, 'Engineering', 1, 'Finance', 2, 'Operations', 'Research'),
+    CASE WHEN n > 10 THEN MOD(n, 10) + 1 ELSE NULL END,
+    n * 1000000000,
+    0.25 + (MOD(n, 4) * 0.25),
+    CASE WHEN MOD(n, 7) = 0 THEN 0 ELSE 1 END,
+    TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'DAY'),
+    TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'MINUTE'),
+    FROM_TZ(TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'MINUTE'), '-05:00'),
+    TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'MINUTE'),
+    -- Oracle stores a GUID in RAW(16) big-endian (RFC 4122), so the hex here is the same identifier
+    -- SQL Server's uniqueidentifier column holds for the same row.
+    HEXTORAW(LPAD(TO_CHAR(n), 8, '0') || '0000' || '4000' || '8000' || '000000000000'),
+    UTL_RAW.CAST_FROM_NUMBER(n)
+FROM (SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= $Rows)
+/
+
+INSERT INTO EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
+SELECT EMPLOYEE_ID, '+44 20 7000 ' || LPAD(TO_CHAR(EMPLOYEE_ID), 4, '0'), LAST_MODIFIED FROM EMPLOYEES
+/
+
+INSERT INTO EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
+SELECT EMPLOYEE_ID, '+44 161 496 ' || LPAD(TO_CHAR(EMPLOYEE_ID), 4, '0'), LAST_MODIFIED
+FROM EMPLOYEES WHERE MOD(EMPLOYEE_ID, 3) = 0
+/
+
+INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE, CHANGED_AT)
+SELECT EMPLOYEE_ID, 'I', LAST_MODIFIED FROM EMPLOYEES
+/
 "@
 }
 
@@ -451,44 +517,7 @@ CREATE TABLE JIM_SEED_MANIFEST (
 )
 /
 
--- Set-based generation. CONNECT BY LEVEL against DUAL is Oracle's generated series.
-INSERT INTO EMPLOYEES
-    (EMPLOYEE_ID, EMPLOYEE_NUMBER, FIRST_NAME, LAST_NAME, EMAIL, DEPARTMENT, MANAGER_EMPLOYEE_ID,
-     HEADCOUNT, FTE, IS_ACTIVE, START_DATE, LAST_MODIFIED, HIRED_AT, HIRED_AT_LOCAL, EMPLOYEE_GUID, PHOTO)
-SELECT
-    n,
-    'E' || LPAD(TO_CHAR(n), 8, '0'),
-    DECODE(MOD(n, 8), 0, 'Ada', 1, 'Bram', 2, 'Cleo', 3, 'Dara', 4, 'Emil', 5, 'Fern', 6, 'Gita', 'Hugo'),
-    DECODE(MOD(n, 6), 0, 'Ashcroft', 1, 'Brandt', 2, 'Calder', 3, 'Duquesne', 4, 'Ellery', 'Fairhurst'),
-    'user' || TO_CHAR(n) || '@panoply.local',
-    DECODE(MOD(n, 4), 0, 'Engineering', 1, 'Finance', 2, 'Operations', 'Research'),
-    CASE WHEN n > 10 THEN MOD(n, 10) + 1 ELSE NULL END,
-    n * 1000000000,
-    0.25 + (MOD(n, 4) * 0.25),
-    CASE WHEN MOD(n, 7) = 0 THEN 0 ELSE 1 END,
-    TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'DAY'),
-    TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'MINUTE'),
-    FROM_TZ(TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'MINUTE'), '-05:00'),
-    TIMESTAMP '$baseDate 00:00:00' + NUMTODSINTERVAL(n, 'MINUTE'),
-    -- Oracle stores a GUID in RAW(16) big-endian (RFC 4122), so the hex here is the same identifier
-    -- SQL Server's uniqueidentifier column holds for the same row.
-    HEXTORAW(LPAD(TO_CHAR(n), 8, '0') || '0000' || '4000' || '8000' || '000000000000'),
-    UTL_RAW.CAST_FROM_NUMBER(n)
-FROM (SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= $Rows)
-/
-
-INSERT INTO EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
-SELECT EMPLOYEE_ID, '+44 20 7000 ' || LPAD(TO_CHAR(EMPLOYEE_ID), 4, '0'), LAST_MODIFIED FROM EMPLOYEES
-/
-
-INSERT INTO EMPLOYEE_PHONES (EMPLOYEE_ID, PHONE_NUMBER, LAST_MODIFIED)
-SELECT EMPLOYEE_ID, '+44 161 496 ' || LPAD(TO_CHAR(EMPLOYEE_ID), 4, '0'), LAST_MODIFIED
-FROM EMPLOYEES WHERE MOD(EMPLOYEE_ID, 3) = 0
-/
-
-INSERT INTO IDM_CHANGE_LOG (EMPLOYEE_ID, CHANGE_TYPE, CHANGED_AT)
-SELECT EMPLOYEE_ID, 'I', LAST_MODIFIED FROM EMPLOYEES
-/
+$(New-OracleSourceRowInserts -Rows $Rows)
 
 -- Three rows whose keys the database authors, so an import of a RAW(16) anchor has something to read
 -- before any export has run.
@@ -505,6 +534,92 @@ COMMIT
 
 SET FEEDBACK ON
 SELECT 'SEEDED' AS RESULT, COUNT(*) AS EMPLOYEES FROM EMPLOYEES;
+EXIT SUCCESS
+"@
+}
+
+# The export-target tables are written by JIM, not by the seeder, so the seed hash says nothing about
+# their state: a preserved database volume carries one run's exported rows into the next, where a fresh
+# JIM stages Creates for people who already have rows. Natural-key inserts then die on the primary key,
+# database-generated keys duplicate silently, and every export row of the matrix fails against residue
+# rather than against the code under test. These scripts run on the hash-match path, so the expensive
+# source seed is still skipped while JIM's own targets always start empty. Identity counters are
+# deliberately NOT restarted: continuing from a higher value never overlaps the seeded EMPLOYEE_ID
+# range, which is all the seed's START WITH 1,000,000 exists to guarantee, and the matrix reads
+# generated keys back from the database rather than asserting absolute values.
+
+function New-SqlServerExportTargetResetScript {
+    param([int]$Rows)
+
+    return @"
+SET NOCOUNT ON;
+GO
+
+USE JIMTEST;
+GO
+
+DELETE FROM hr.APP_USER_ROLES;
+DELETE FROM hr.APP_USERS;
+DELETE FROM hr.APP_ACCOUNTS_NATURAL;
+DELETE FROM hr.APP_USERS_CHANGE_LOG;
+DELETE FROM hr.APP_ACCOUNTS_CHANGE_LOG;
+GO
+
+-- The matrix's rows mutate the SOURCE tables too: Export.Update rewrites an email and adds a phone
+-- number, Export.Delete disables employee 20. Those edits used to survive the hash-skip, so employee
+-- 20 arrived at the next run's baseline already disabled, was never in the outbound rule's scope, and
+-- the export rows failed against residue rather than against the code under test. The source rows are
+-- restored wholesale from the same SQL the seed uses, so any cell mutation, present or future, is
+-- undone without this script having to know about it.
+DELETE FROM hr.IDM_CHANGE_LOG;
+DELETE FROM hr.EMPLOYEE_PHONES;
+DELETE FROM hr.EMPLOYEES;
+GO
+
+$(New-SqlServerSourceRowInserts -Rows $Rows)
+
+SELECT 'RESET' AS RESULT;
+GO
+"@
+}
+
+function New-OracleExportTargetResetScript {
+    param([int]$Rows)
+
+    return @"
+WHENEVER SQLERROR EXIT FAILURE
+SET DEFINE OFF
+SET FEEDBACK OFF
+
+ALTER SESSION SET CURRENT_SCHEMA = JIMTEST;
+
+DELETE FROM APP_USER_ROLES;
+DELETE FROM APP_USERS;
+DELETE FROM APP_ACCOUNTS_NATURAL;
+DELETE FROM GUID_KEYED_PEOPLE;
+DELETE FROM APP_USERS_CHANGE_LOG;
+DELETE FROM APP_ACCOUNTS_CHANGE_LOG;
+DELETE FROM GUID_PEOPLE_CHANGE_LOG;
+
+-- The matrix's rows mutate the SOURCE tables too (see the SQL Server reset above for the history);
+-- restore them wholesale from the same SQL the seed uses.
+DELETE FROM IDM_CHANGE_LOG;
+DELETE FROM EMPLOYEE_PHONES;
+DELETE FROM EMPLOYEES;
+
+$(New-OracleSourceRowInserts -Rows $Rows)
+
+-- The three rows whose keys the database authors, restored exactly as the main seed writes them, so an
+-- import of a RAW(16) anchor has something to read before any export has run.
+INSERT INTO GUID_KEYED_PEOPLE (FULL_NAME, DEPARTMENT)
+SELECT 'Guid Person ' || TO_CHAR(n), 'Research' FROM (SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= 3)
+/
+
+COMMIT
+/
+
+SET FEEDBACK ON
+SELECT 'RESET' AS RESULT FROM DUAL;
 EXIT SUCCESS
 "@
 }
@@ -646,7 +761,14 @@ Write-Host "  Seed hash:  $seedHash" -ForegroundColor Gray
 if (-not $Force) {
     $existingHash = Get-SeededHash -Config $config
     if ($existingHash -eq $seedHash) {
-        Write-Host "  OK Database already matches this seed; skipping (pass -Force to re-seed)" -ForegroundColor Green
+        # The hash covers the source data alone. The export targets hold whatever JIM wrote last run,
+        # so they are reset here even when the seed itself is skipped; see the reset scripts above.
+        Write-Host "  OK Source data already matches this seed; resetting export targets only (pass -Force to re-seed)" -ForegroundColor Green
+        $resetScript = if ($Provider -eq "SqlServer") { New-SqlServerExportTargetResetScript -Rows $RowCount } else { New-OracleExportTargetResetScript -Rows $RowCount }
+        $resetResult = Invoke-ContainerSqlScript -Config $config -ScriptText $resetScript -ScriptName "jim-scenario16-reset-$($Provider.ToLowerInvariant()).sql"
+        if ($resetResult -notmatch 'RESET') {
+            throw "Resetting $($config.DisplayName)'s export targets produced no completion marker. Output:`n$resetResult"
+        }
         return @{ Provider = $Provider; RowCount = $RowCount; SeedHash = $seedHash; Reseeded = $false }
     }
     if ($existingHash) {

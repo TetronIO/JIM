@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
@@ -59,10 +60,33 @@ public class ConnectedSystemObjectAttributeValue
     /// </summary>
     public string? UnresolvedReferenceValue { get; set; }
 
+    /// <summary>
+    /// The string a target system is handed when this value is an anchor being written into a
+    /// reference (for example a manager column, or a group member). Null when no anchor-capable slot
+    /// holds a value, which callers must treat as "not resolvable yet", never as an empty anchor:
+    /// a database-generated anchor has no value until the object's own export is confirmed (#1398).
+    /// </summary>
+    /// <remarks>
+    /// Every slot an external ID can occupy is read (#1386 stores confirmed anchors typed, so a
+    /// LongNumber anchor lives in <see cref="LongValue"/> and a high-precision Oracle NUMBER in
+    /// <see cref="DecimalValue"/>, #1283). Decimals render canonically so 4200.00 and 4200 write the
+    /// same anchor; numbers pin the invariant culture so the rendering does not depend on the
+    /// thread that produced it. Case is preserved: this is the value the target system receives,
+    /// not a lookup key.
+    /// </remarks>
+    public string? ToReferenceValueString()
+    {
+        return StringValue
+            ?? GuidValue?.ToString()
+            ?? IntValue?.ToString(CultureInfo.InvariantCulture)
+            ?? LongValue?.ToString(CultureInfo.InvariantCulture)
+            ?? (DecimalValue.HasValue ? ExternalIdValue.ToCanonicalString(DecimalValue.Value) : null);
+    }
+
     public override string ToString()
     {
         if (Attribute != null)
-            return $"{Attribute.Name}: {ToStringNoName()}";    
+            return $"{Attribute.Name}: {ToStringNoName()}";
 
         return ToStringNoName() ?? "";
     }
