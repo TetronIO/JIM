@@ -268,6 +268,34 @@ Describe 'Set-JIMConnectedSystemAttribute' {
             $command.Parameters['IsExternalId'] | Should -Not -BeNullOrEmpty
         }
 
+        # An Oracle NUMBER column arrives as a Decimal because Oracle has one numeric type, and an
+        # Attribute Flow needs its source and target types to match. Overriding the type is what lets it
+        # reach a built-in numeric Metaverse Attribute without an expression (#1354).
+        It 'Should have a Type parameter on the Single parameter set only' {
+            $param = $command.Parameters['Type']
+            $param | Should -Not -BeNullOrEmpty
+
+            $parameterAttributes = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ParameterAttribute]
+            }
+            $parameterAttributes.ParameterSetName | Should -Be @('Single')
+        }
+
+        It 'Should offer the same data types as New-JIMMetaverseAttribute' {
+            $param = $command.Parameters['Type']
+            $validateSet = $param.Attributes | Where-Object {
+                $_ -is [System.Management.Automation.ValidateSetAttribute]
+            }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Be @(
+                'Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')
+        }
+
+        It 'Should reject a data type that is not a JIM attribute type' {
+            { Set-JIMConnectedSystemAttribute -ConnectedSystemId 1 -ObjectTypeId 1 -AttributeId 1 -Type 'NotSet' -ErrorAction Stop } |
+                Should -Throw
+        }
+
         It 'Should have IsSecondaryExternalId parameter' {
             $command.Parameters['IsSecondaryExternalId'] | Should -Not -BeNullOrEmpty
         }

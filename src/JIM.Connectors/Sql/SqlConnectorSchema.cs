@@ -143,7 +143,10 @@ internal sealed class SqlConnectorSchema
                 AttributePlurality.SingleValued,
                 required: !column.IsNullable,
                 className: null,
-                writability: isAnchor ? anchorWritability : writability));
+                writability: isAnchor ? anchorWritability : writability)
+            {
+                Description = DescribeSourceColumn(column)
+            });
         }
 
         await AddRelatedTableAttributesAsync(configuration, objectType, writability);
@@ -302,8 +305,14 @@ internal sealed class SqlConnectorSchema
 
         foreach (var suggestion in suggestions)
         {
-            suggestion.Attribute!.Description =
+            // Appended, not assigned: the attribute already carries its source column type, and losing
+            // that to add a suggestion would trade one useful thing for another.
+            var advice =
                 $"Foreign key {suggestion.ForeignKey.ConstraintName} points at Object Type '{suggestion.ReferencedObjectTypeName}'. To have JIM resolve it as a Reference, add this column to Object Type '{configuration.Name}' in {SqlConnectorConstants.SettingObjectTypes} with \"referencesObjectType\": \"{suggestion.ReferencedObjectTypeName}\".";
+
+            suggestion.Attribute!.Description = string.IsNullOrWhiteSpace(suggestion.Attribute.Description)
+                ? advice
+                : $"{suggestion.Attribute.Description} {advice}";
         }
     }
 
@@ -396,6 +405,37 @@ internal sealed class SqlConnectorSchema
 
     private static string Describe(string? schemaName, string objectName) =>
         string.IsNullOrWhiteSpace(schemaName) ? objectName : $"{schemaName}.{objectName}";
+
+    /// <summary>
+    /// States the source column's declared type, so an administrator can see what JIM's inferred
+    /// attribute type was inferred <em>from</em> and disagree with it.
+    /// </summary>
+    /// <remarks>
+    /// Written to the attribute's Description for the same reason the foreign key suggestion below is:
+    /// it is the per-column, administrator-facing text the shared Connector Schema model already
+    /// carries, and the portal renders it beside the attribute. That matters most on Oracle, where the
+    /// declaration is the only thing distinguishing a whole-number column from a fractional one and the
+    /// administrator can override the result (#1354); it is useful on any provider, because "this
+    /// attribute came from a varchar(32)" is worth knowing before mapping it.
+    /// </remarks>
+    private static string DescribeSourceColumn(SqlDiscoveredColumn column)
+    {
+        var type = column.ColumnType;
+        var declaration = type.TypeName;
+
+        if (type.Precision.HasValue)
+        {
+            declaration += type.Scale.HasValue && type.Scale.Value != 0
+                ? $"({type.Precision.Value},{type.Scale.Value})"
+                : $"({type.Precision.Value})";
+        }
+        else if (type.MaxLength is > 0)
+        {
+            declaration += $"({type.MaxLength.Value})";
+        }
+
+        return $"Source column type: {declaration}.";
+    }
 
     #endregion
 

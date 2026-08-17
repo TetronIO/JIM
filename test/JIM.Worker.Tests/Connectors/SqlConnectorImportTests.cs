@@ -580,6 +580,46 @@ public class SqlConnectorImportTests
     }
 
     [Test]
+    public async Task ImportAsync_FractionalValueForAWholeNumberAttribute_ErrorsThatObjectRatherThanRounding()
+    {
+        // Reachable through an administrator's data type override: recording a NUMBER(9,4) column as a
+        // whole number is a plausible mistake, and its own values are what disprove it. Convert.ToInt32
+        // rounds rather than throwing, so without a guard 42.7 would become 43 and nothing would say so
+        // (#1354).
+        var provider = new FakeSqlProvider();
+        provider.Catalogue.AddRows("HR", "EMPLOYEES", ["EMPLOYEE_ID", "FTE"],
+            [1, 1.0m], [2, 0.6m], [3, 2m]);
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "HR Database",
+            ObjectTypes =
+            [
+                ObjectType("Person",
+                    Attribute("EMPLOYEE_ID", AttributeDataType.Number, isExternalId: true),
+                    Attribute("FTE", AttributeDataType.Number))
+            ]
+        };
+
+        var run = await RunImportAsync(provider, PersonDocument, connectedSystem, pageSize: 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ImportObjects, Has.Count.EqualTo(3), "One unrepresentable value must not cost the whole page.");
+
+            var errored = ObjectWithAnchor(run, 2);
+            Assert.That(errored.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+            Assert.That(errored.ErrorMessage, Does.Contain("FTE"), "The administrator needs to know which column to look at.");
+            Assert.That(errored.ErrorMessage, Does.Contain("fractional"), "And why it was refused, since the column itself is perfectly valid.");
+
+            // 1.0 and 2 are whole numbers that happen to be carried as decimals, which is ordinary for an
+            // Oracle NUMBER. Refusing those too would make the guard useless.
+            Assert.That(Attribute(ObjectWithAnchor(run, 1), "FTE").IntValues, Is.EqualTo(new[] { 1 }));
+            Assert.That(Attribute(ObjectWithAnchor(run, 3), "FTE").IntValues, Is.EqualTo(new[] { 2 }));
+        }
+    }
+
+    [Test]
     public void ImportAsync_AnchorColumnMissingFromTheSchema_FailsTheRun()
     {
         var provider = new FakeSqlProvider();

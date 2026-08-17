@@ -226,6 +226,11 @@ public class SynchronisationController(
     /// - Selected: Whether the Attribute is managed by JIM
     /// - IsExternalId: Whether this is the unique identifier for objects
     /// - IsSecondaryExternalId: Whether this is a secondary identifier (e.g., DN for LDAP)
+    /// - Type: Overrides the data type schema discovery inferred, where the Connector supports it
+    ///
+    /// A data type override is accepted only where the Connector declares
+    /// SupportsUserSelectedAttributeTypes, and only while the attribute is neither referenced by a
+    /// Synchronisation Rule nor holding values.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
@@ -291,9 +296,51 @@ public class SynchronisationController(
                 "These attributes must remain selected to ensure sync operations function correctly."));
         }
 
+        // Validate: the data type may only be overridden where the Connector says its schema cannot state
+        // one definitively, and only while nothing has been built on the type JIM inferred. A delimited file
+        // names no types at all; Oracle has a single numeric type, so NUMBER(10) may be a whole number, a
+        // counter or a fractional figure and only the administrator knows which (#1354).
+        if (request.Type.HasValue)
+        {
+            if (request.Type.Value == AttributeDataType.NotSet)
+            {
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    "An attribute's data type cannot be set to NotSet. Choose the type the Connected System actually holds."));
+            }
+
+            // An absent Connector Definition is treated as not supporting the override: refusing a change
+            // JIM cannot justify is always safer than applying one it cannot check.
+            if (connectedSystem.ConnectorDefinition?.SupportsUserSelectedAttributeTypes != true)
+            {
+                _logger.LogWarning("Attempted to change the data type of attribute {AttributeId} on a Connector that does not support it", attributeId);
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"The '{connectedSystem.ConnectorDefinition?.Name ?? connectedSystem.Name}' Connector states each attribute's data type from the " +
+                    "Connected System's own schema, so it cannot be overridden."));
+            }
+
+            if (request.Type.Value != attribute.Type &&
+                await _application.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(attribute))
+            {
+                _logger.LogWarning("Attempted to change the data type of referenced attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+                return BadRequest(ApiErrorResponse.BadRequest(
+                    $"The data type of attribute '{attribute.Name}' cannot be changed because it is referenced by a Synchronisation Rule, or already holds values. " +
+                    "Changing it would reinterpret data imported under the previous type. Remove the references, or clear the Connected System Objects, and try again."));
+            }
+        }
+
         // Apply updates
         if (request.Selected.HasValue)
             attribute.Selected = request.Selected.Value;
+
+        if (request.Type.HasValue)
+        {
+            attribute.Type = request.Type.Value;
+
+            // Recorded, not inferred from the value being different: a schema refresh must leave this type
+            // alone even where the administrator happened to choose what discovery would have picked anyway,
+            // because the Connector's inference can change between releases.
+            attribute.TypeSetByAdministrator = true;
+        }
 
         // Get the current API key for Activity attribution if authenticated via API key
         var apiKey = await GetCurrentApiKeyAsync();
@@ -393,6 +440,19 @@ public class SynchronisationController(
         var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
         if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
+
+        // A data type override is refused here rather than dropped. Bulk update applies its changes through a
+        // single application-layer call that carries only the three selection flags, so honouring Type would
+        // need that contract widened; accepting and ignoring it would let a scripted build report success
+        // having changed nothing. The single-attribute endpoint applies it, one attribute at a time (#1354).
+        var typeOverrides = request.Attributes.Where(kvp => kvp.Value.Type.HasValue).Select(kvp => kvp.Key).ToList();
+        if (typeOverrides.Count > 0)
+        {
+            _logger.LogWarning("Rejected bulk attribute update carrying {Count} data type override(s)", typeOverrides.Count);
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"A data type cannot be set through a bulk attribute update ({typeOverrides.Count} attribute(s) requested one). " +
+                "Update each attribute individually via PUT connected-systems/{connectedSystemId}/object-types/{objectTypeId}/attributes/{attributeId}."));
+        }
 
         // Convert request DTOs to the format expected by the server
         var attributeUpdates = request.Attributes.ToDictionary(

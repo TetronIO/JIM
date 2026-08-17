@@ -69,12 +69,17 @@ public class SqlConnectorTests
             Assert.That(_connector.SupportsAutoConfirmExport, Is.True, nameof(_connector.SupportsAutoConfirmExport));
             Assert.That(_connector.SupportsUserSelectedExternalId, Is.True, nameof(_connector.SupportsUserSelectedExternalId));
 
+            // Oracle has one numeric type, so a catalogue that reports NUMBER(10) cannot say whether the
+            // estate means a whole number, a counter or a fractional figure. JIM infers the narrowest safe
+            // type, and the administrator overrules it per attribute when the declaration understates what
+            // the column is for (#1354).
+            Assert.That(_connector.SupportsUserSelectedAttributeTypes, Is.True, nameof(_connector.SupportsUserSelectedAttributeTypes));
+
             Assert.That(_connector.SupportsPartitions, Is.False, nameof(_connector.SupportsPartitions));
             Assert.That(_connector.SupportsPartitionContainers, Is.False, nameof(_connector.SupportsPartitionContainers));
             Assert.That(_connector.SupportsSecondaryExternalId, Is.False, nameof(_connector.SupportsSecondaryExternalId));
             Assert.That(_connector.SupportsFilePaths, Is.False, nameof(_connector.SupportsFilePaths));
             Assert.That(_connector.SupportsParallelExport, Is.False, nameof(_connector.SupportsParallelExport));
-            Assert.That(_connector.SupportsUserSelectedAttributeTypes, Is.False, nameof(_connector.SupportsUserSelectedAttributeTypes));
             Assert.That(_connector.SupportsPasswordSet, Is.False, nameof(_connector.SupportsPasswordSet));
             Assert.That(_connector.SupportsPasswordPolicyDiscovery, Is.False, nameof(_connector.SupportsPasswordPolicyDiscovery));
         }
