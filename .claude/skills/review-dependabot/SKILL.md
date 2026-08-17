@@ -1,30 +1,44 @@
 ---
 name: review-dependabot
-description: Review, assess, and merge open Dependabot PRs using JIM's supply chain security and dependency pinning requirements
+description: Review, assess, and merge open dependency-update PRs (Dependabot and JIM's own tooling-pin-check bot) using JIM's supply chain security and dependency pinning requirements
 argument-hint: "[merge|review-only]"
 allowed-tools: Bash, Read, Glob, Grep, WebSearch, WebFetch
 ---
 
 # Review and Merge Dependabot PRs
 
-Review all open Dependabot PRs against JIM's supply chain security and dependency governance policies, then merge those that pass assessment.
+Review all open dependency-update PRs against JIM's supply chain security and dependency governance policies, then merge those that pass assessment.
+
+Two bot identities raise these PRs and both are in scope:
+- `dependabot[bot]` - Dependabot itself (NuGet, Docker base images, GitHub Actions)
+- `jim-automation[bot]` - JIM's own `tooling-pin-check` workflow, which bumps development-tooling versions pinned outside any Dependabot-readable manifest (currently `.devcontainer/setup.sh`, `.mcp.json`)
+
+Both label their PRs `dependencies` on open.
 
 If `$ARGUMENTS` is "review-only", produce the assessment but do NOT merge. Otherwise, present findings and merge approved PRs.
 
 ## Step 1: List Open PRs
 
+Filter by the `dependencies` label, not by author. An author-only search misses `jim-automation[bot]` entirely (it is a distinct app from Dependabot), and the GitHub search index has been observed to lag right after a PR is created - an author-scoped query returned zero results immediately after PR creation, then the identical query returned the full set a few requests later. Treat a zero-result author-scoped search as suspect, not as confirmation there is nothing to review.
+
 ```
-gh pr list --author "app/dependabot" --state open --json number,title,url,createdAt,labels
+gh pr list --search "is:open label:dependencies" --json number,title,url,createdAt,labels,author
 ```
 
-If there are no open Dependabot PRs, report that and stop.
+**If `gh` is unavailable** (e.g. a Claude Code on the web session, which has GitHub MCP tools instead of the CLI - see root `CLAUDE.md` "GitHub Integration"), use the MCP equivalents throughout this skill:
+- List: `mcp__github__search_pull_requests` with query `is:open label:dependencies`, scoped via the `owner`/`repo` parameters
+- Diff: `mcp__github__pull_request_read` method `get_diff` (large multi-file diffs can exceed the tool's output limit and get written to a scratch file instead - read that file in full before assessing rather than skipping it)
+- CI status: `mcp__github__pull_request_read` method `get_check_runs` (the `get_status` method returns the legacy commit-status API, which JIM does not use and will misleadingly report zero checks - always use `get_check_runs`)
+- Merge: `mcp__github__merge_pull_request`; rebase requests still go via a PR comment (`mcp__github__add_issue_comment` with body `@dependabot rebase`), Dependabot reads comments regardless of which client posted them
+
+If there are no open PRs labelled `dependencies`, report that and stop.
 
 ## Step 2: Gather PR Details
 
 For each PR, collect:
 - The diff (`gh pr diff <number>`)
 - CI check status (`gh pr checks <number>`)
-- The PR body for Dependabot's compatibility score and changelog info
+- The PR body for Dependabot's compatibility score and changelog info, or (for `jim-automation[bot]`) the tool/pinned-version/available-version/files table it generates
 
 ## Step 3: Identify the Update Type
 
@@ -88,6 +102,15 @@ Categorise each PR into one of three ecosystems:
 - Check: Review the action's changelog for changes to inputs, outputs, or behaviour
 - Check: Is the action from a trusted publisher (GitHub, Microsoft, well-known org)?
 
+### Pinned Development Tooling (`jim-automation[bot]`)
+These are version-pinned references that live outside any package-manager manifest, so Dependabot cannot see them; JIM's own `tooling-pin-check` workflow finds and raises them instead (source: `.github/workflows/` - search for `tooling-pin-check` if the mechanism needs auditing). The PR body's table gives the tool, old/new version, and every file touched.
+- Check: Is this a patch or minor version bump for the tool itself (e.g. a `dotnet-ef` global tool version)?
+- Check: Where a tool is pinned in more than one file, does the diff move *every* location to the same version? A partial bump reintroduces the drift the pin exists to prevent.
+- Check: Does the new version exist and install cleanly? For .NET global tools, `dotnet tool install --global <tool> --version <version>` against a scratch install, or check the version is listed on nuget.org/the tool's registry.
+- Check: no `packages.lock.json` involvement expected - these pins sit in shell scripts or config, not `.csproj`, so a lock-file diff on one of these PRs is a sign something is miscategorised.
+- **Coupling check**: if `dotnet-ef` (or another SDK-tied tool) is being bumped, compare against the currently-pinned `RuntimeFrameworkVersion` in `src/JIM.Web/JIM.Web.csproj` and the SDK pin in `.devcontainer/Dockerfile`. These bump independently of Dependabot's `dotnet-runtime` group PRs, so a mismatch between the tool version and the runtime/SDK pin is expected to surface here rather than in the NuGet PR; note it in the assessment but don't block the merge on it unless the mismatch actually breaks tool functionality against the pinned SDK.
+- CI: same required checks as any other PR (`build-and-test` etc. still run because the branch is otherwise identical to `main`), but they exercise the app, not the changed script - a green CI run here does not prove the new tool version actually installs. Treat the version-exists check above as the real verification.
+
 ## Step 4: Security Advisory Check
 
 Search for any security advisories related to the updates:
@@ -137,6 +160,7 @@ Unless running in review-only mode. Assessment (Steps 1 to 5) is batched because
 
 ## Reference: JIM's Supply Chain Security Requirements
 
+- Applies equally to `dependabot[bot]` and `jim-automation[bot]` PRs - both are dependency-governance surfaces, just with different blind spots (package-manager-tracked vs. script/config-pinned)
 - All dependency updates require human review - no auto-merge
 - Docker images pinned by digest (`@sha256:...`)
 - Functional apt packages pinned to exact versions
