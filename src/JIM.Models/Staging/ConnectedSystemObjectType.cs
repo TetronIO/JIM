@@ -25,6 +25,25 @@ public class ConnectedSystemObjectType
     public List<ConnectedSystemObjectTypeTag> Tags { get; set; } = new();
 
     /// <summary>
+    /// The Object Types an administrator has chosen to extend this one with, i.e. the auxiliary classes whose
+    /// attributes should be merged into this structural class. Empty on a Connected System with no such concept.
+    /// </summary>
+    public List<ConnectedSystemObjectTypeExtension> Extensions { get; set; } = new();
+
+    /// <summary>
+    /// The structural Object Type JIM should use as the carrier when creating an object of this type, where this
+    /// type cannot stand alone.
+    /// </summary>
+    /// <remarks>
+    /// An RFC 4512 entry must have exactly one structural class, so an object population identified by an auxiliary
+    /// class (the case traditional ILM solutions forced a bespoke connector for) still needs a structural class in
+    /// order to exist at all. Naming the carrier is what lets JIM provision that population. Null on a structural
+    /// type, which is its own carrier, and on any Connected System without the distinction.
+    /// </remarks>
+    public ConnectedSystemObjectType? StructuralCarrierObjectType { get; set; }
+    public int? StructuralCarrierObjectTypeId { get; set; }
+
+    /// <summary>
     /// Whether an administrator has selected this object type to be managed by JIM.
     /// </summary>
     public bool Selected { get; set; }

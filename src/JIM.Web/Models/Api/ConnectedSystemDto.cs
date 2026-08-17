@@ -146,6 +146,32 @@ public class ConnectedSystemObjectTypeDto
     /// </summary>
     public bool IsInternal { get; set; }
 
+    /// <summary>
+    /// Whether the Connected System classified this object type as an auxiliary class: one that augments another
+    /// rather than standing alone. Derived from <see cref="Tags"/>, and offered here so callers need not match tag
+    /// strings themselves.
+    /// </summary>
+    public bool IsAuxiliary { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System hands this object type's class membership to JIM to compose, which is what
+    /// makes merging an auxiliary class into it mean anything. False for Active Directory, which resolves its own
+    /// auxiliary classes into each structural class.
+    /// </summary>
+    public bool ManagesClassMembership { get; set; }
+
+    /// <summary>
+    /// The auxiliary classes an administrator has merged into this object type, as their own object type ids. Set
+    /// through the object type's auxiliary-classes endpoint.
+    /// </summary>
+    public List<int> MergedAuxiliaryClassObjectTypeIds { get; set; } = [];
+
+    /// <summary>
+    /// For an auxiliary object type, the structural object type JIM writes alongside it when creating an object,
+    /// or null when none has been named and JIM therefore cannot create one.
+    /// </summary>
+    public int? StructuralCarrierObjectTypeId { get; set; }
+
     public List<ConnectedSystemAttributeDto>? Attributes { get; set; }
 
     public static ConnectedSystemObjectTypeDto FromEntity(ConnectedSystemObjectType entity)
@@ -162,9 +188,153 @@ public class ConnectedSystemObjectTypeDto
                 .Select(tag => new ConnectedSystemObjectTypeTagDto { Key = tag.Key, Value = tag.Value })
                 .ToList(),
             IsInternal = entity.IsInternal(),
+            IsAuxiliary = entity.IsAuxiliary(),
+            ManagesClassMembership = entity.ManagesClassMembership(),
+            MergedAuxiliaryClassObjectTypeIds = entity.Extensions
+                .Select(extension => extension.ExtensionObjectTypeId)
+                .Order()
+                .ToList(),
+            StructuralCarrierObjectTypeId = entity.StructuralCarrierObjectTypeId,
             Attributes = entity.Attributes?
                 .Select(ConnectedSystemAttributeDto.FromEntity)
                 .ToList()
+        };
+    }
+}
+
+/// <summary>
+/// API representation of an auxiliary class offered against a structural Connected System Object Type.
+/// </summary>
+public class AuxiliaryClassOfferDto
+{
+    /// <summary>
+    /// The auxiliary class's own Connected System Object Type id, which is what merging is set by.
+    /// </summary>
+    public int ObjectTypeId { get; set; }
+
+    public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// Whether this class is currently merged into the object type the offers were requested for.
+    /// </summary>
+    public bool Merged { get; set; }
+
+    /// <summary>
+    /// How many attributes merging this class would contribute.
+    /// </summary>
+    public int ContributedAttributeCount { get; set; }
+
+    /// <summary>
+    /// Whether the Connected System itself says this class may attach, i.e. an RFC 4512 DIT Content Rule names it.
+    /// Most directories publish no such statement, so its absence says nothing.
+    /// </summary>
+    public bool PermittedByTheConnectedSystem { get; set; }
+
+    /// <summary>
+    /// How many of the entries the last discovery run read were carrying this class, or null when no run has
+    /// observed it. Read against that run's scope: a quick sample counts within the sample, not the population.
+    /// </summary>
+    public int? EntriesObservedOn { get; set; }
+
+    /// <summary>
+    /// Whether anything suggests this class, as opposed to it merely being defined in the schema.
+    /// </summary>
+    public bool IsSuggested { get; set; }
+
+    public static AuxiliaryClassOfferDto FromEntity(AuxiliaryClassOffer offer)
+    {
+        return new AuxiliaryClassOfferDto
+        {
+            ObjectTypeId = offer.ObjectType.Id,
+            Name = offer.ObjectType.Name,
+            Merged = offer.Merged,
+            ContributedAttributeCount = offer.ContributedAttributeCount,
+            PermittedByTheConnectedSystem = offer.PermittedByTheConnectedSystem,
+            EntriesObservedOn = offer.EntriesObservedOn,
+            IsSuggested = offer.IsSuggested
+        };
+    }
+}
+
+/// <summary>
+/// API representation of an auxiliary class discovery run: JIM reading a Connected System's entries to find which
+/// auxiliary classes they actually carry.
+/// </summary>
+public class AuxiliaryClassDiscoveryRunDto
+{
+    public int Id { get; set; }
+    public AuxiliaryClassDiscoveryScope Scope { get; set; }
+
+    /// <summary>
+    /// How many entries per Object Type a quick sample read. Null for a full scan, which has no per-type limit.
+    /// </summary>
+    public int? SampleSizePerObjectType { get; set; }
+
+    public AuxiliaryClassDiscoveryStatus Status { get; set; }
+    public DateTime Started { get; set; }
+
+    /// <summary>
+    /// When the run stopped, however it stopped. Null while it is still going.
+    /// </summary>
+    public DateTime? Completed { get; set; }
+
+    /// <summary>
+    /// How many entries were read. Meaningful on a cancelled or failed run too, as it says how much of the
+    /// population the partial results cover.
+    /// </summary>
+    public int EntriesRead { get; set; }
+
+    /// <summary>
+    /// The Activity carrying the run's progress, cancellation and errors.
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
+    public string? InitiatedByName { get; set; }
+
+    /// <summary>
+    /// Why the run failed, when its status is Failed.
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    public List<AuxiliaryClassDiscoveryResultDto> Results { get; set; } = [];
+
+    public static AuxiliaryClassDiscoveryRunDto FromEntity(AuxiliaryClassDiscoveryRun entity)
+    {
+        return new AuxiliaryClassDiscoveryRunDto
+        {
+            Id = entity.Id,
+            Scope = entity.Scope,
+            SampleSizePerObjectType = entity.SampleSizePerObjectType,
+            Status = entity.Status,
+            Started = entity.Started,
+            Completed = entity.Completed,
+            EntriesRead = entity.EntriesRead,
+            ActivityId = entity.ActivityId,
+            InitiatedByName = entity.InitiatedByName,
+            ErrorMessage = entity.ErrorMessage,
+            Results = entity.Results
+                .Select(AuxiliaryClassDiscoveryResultDto.FromEntity)
+                .ToList()
+        };
+    }
+}
+
+/// <summary>
+/// API representation of one auxiliary class a discovery run observed on one Object Type's entries.
+/// </summary>
+public class AuxiliaryClassDiscoveryResultDto
+{
+    public int StructuralObjectTypeId { get; set; }
+    public string AuxiliaryClassName { get; set; } = null!;
+    public int EntryCount { get; set; }
+
+    public static AuxiliaryClassDiscoveryResultDto FromEntity(AuxiliaryClassDiscoveryResult entity)
+    {
+        return new AuxiliaryClassDiscoveryResultDto
+        {
+            StructuralObjectTypeId = entity.StructuralObjectTypeId,
+            AuxiliaryClassName = entity.AuxiliaryClassName,
+            EntryCount = entity.EntryCount
         };
     }
 }

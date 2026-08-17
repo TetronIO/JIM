@@ -312,6 +312,20 @@ Two invariants here are enforced only by remembering them, and both have been mi
 - Route parameter names must be unique across the *combined* template (the controller-level `[Route]` plus the action's `[HttpGet]`/`[HttpPost]` template). Every controller route is `api/v{version:apiVersion}/[controller]`, so **`version` is already a route parameter on every action** - never reuse it. An action template like `change-history/{version:int}` yields two `version` parameters in the merged route, which ASP.NET rejects at **startup** with an `ArgumentException` ("An item with the same key has already been added"), crashing the app (and the `openapi-gen` Docker build stage) before the route table is built. Use a distinct name such as `{changeVersion:int}`. Likewise avoid colliding with `[controller]` or other ambient tokens.
 - This whole class of bug (duplicate route params, ambiguous templates, bad constraints) is a **runtime route-binding failure, not a compile error**: `dotnet build` stays clean, and unit tests that call controller action methods directly bypass routing, so they pass too. It only surfaces when the app actually boots. **After adding or renaming any API route, validate by starting the app** (`jim-build-light` / `jim-stack`) or running an integration test or the OpenAPI generation; do not rely on `dotnet build` + method-level unit tests alone.
 
+**Adding a navigation property to an entity? Generate the OpenAPI document before you push.**
+
+```bash
+./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath /tmp/openapi-v1.json
+```
+
+(`jim-openapi-generate` in the devcontainer. About 90 seconds against an already-built solution.)
+
+The generator walks the property graph of every response type. Where a cycle runs through a type that does not get its own entry in `components/schemas`, the type is inlined and re-expanded rather than referenced, until the walk hits System.Text.Json's 256-level depth limit and fails the whole document. No document means no `jim.web` image and no release, and nothing else catches it: `dotnet build` is clean, every unit test passes, and the only failing check is `openapi-document`, which takes about five minutes in CI. This has now shipped twice, both times through a new child entity holding a reference back to its parent: #1238 via `ConnectedSystemObjectTypeTag`, then #1277 via `ConnectedSystemObjectTypeExtension`.
+
+- **A back-reference on a child entity gets `[JsonIgnore]`.** If a type is only ever reached as an element of its parent's collection, the navigation pointing back at that parent (or at any other type carrying the same collection) is never serialised; callers have the foreign key. Both of the above were fixed exactly this way.
+- **Do not reason about it from "does this introduce a cycle".** Plenty of cycles are fine: `ConnectedSystem` and `ConnectedSystemObjectType` point at each other and always have, because both are registered as components and so resolve to a `$ref`. Whether a given cycle survives depends on which types the generator decides to register, which is its own internal policy.
+- **There is no unit test that substitutes for this, and it is not for want of trying.** Calling `JsonSchemaExporter` directly over the same types does not reproduce the generator's behaviour: it inlines everything, so it throws for `ConnectedSystem` at every `MaxDepth` from 64 to 2048 while the real document generates that type without complaint. A guard built on it would fail on models that are perfectly fine. Run the generator; it is the only faithful check short of CI.
+
 **API Endpoint Identifier Rules (MUST follow):**
 
 These rules apply across the REST API (`JIM.Web/Controllers/Api/`), the application and repository layers that back it, and any PowerShell cmdlet that wraps an endpoint.

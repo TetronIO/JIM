@@ -253,6 +253,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         IQueryable<ConnectedSystemObjectType> otQuery = Repository.Database.ConnectedSystemObjectTypes
             .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
+            // An administrator's auxiliary class selections. The schema refresh merges their attributes onto the
+            // structural type from this graph, so a selection that is not fetched is one the merge cannot see, and
+            // the refresh would succeed while quietly dropping every attribute those classes contribute.
+            .Include(ot => ot.Extensions)
             .Where(q => q.ConnectedSystemId == id);
 
         if (withChangeTracking)
@@ -697,6 +701,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(ot => ot.Attributes)
             .Include(ot => ot.Tags)
+            // The administrator's auxiliary class selections. Both the REST representation of an Object Type and
+            // the validation that changes the set read them, and a selection that is not fetched reads as one that
+            // was never made.
+            .Include(ot => ot.Extensions)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
     }
@@ -3062,12 +3070,145 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(q => q.Attributes)
             .Include(q => q.Tags)
+            .Include(q => q.Extensions)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
     }
+
+    #region Object Type extensions (auxiliary classes)
+
+    public async Task<List<ConnectedSystemObjectTypeExtension>> GetObjectTypeExtensionsAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemObjectTypeExtensions
+            .Include(extension => extension.BaseObjectType)
+            .Include(extension => extension.ExtensionObjectType)
+            .Where(extension => extension.BaseObjectType.ConnectedSystemId == connectedSystemId)
+            .OrderBy(extension => extension.BaseObjectType.Name)
+            .ThenBy(extension => extension.ExtensionObjectType.Name)
+            .ToListAsync();
+    }
+
+    public async Task<bool> AddObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        if (baseObjectTypeId == extensionObjectTypeId)
+            throw new ArgumentException("An Object Type cannot extend itself.", nameof(extensionObjectTypeId));
+
+        var baseObjectType = await Repository.Database.ConnectedSystemObjectTypes.AsNoTracking()
+            .SingleOrDefaultAsync(objectType => objectType.Id == baseObjectTypeId)
+            ?? throw new ArgumentException($"Object Type {baseObjectTypeId} does not exist.", nameof(baseObjectTypeId));
+
+        var extensionObjectType = await Repository.Database.ConnectedSystemObjectTypes.AsNoTracking()
+            .SingleOrDefaultAsync(objectType => objectType.Id == extensionObjectTypeId)
+            ?? throw new ArgumentException($"Object Type {extensionObjectTypeId} does not exist.", nameof(extensionObjectTypeId));
+
+        // Both ends must belong to the same Connected System. A pairing across two systems would merge one
+        // directory's schema into another's, which is meaningless and would corrupt the merged type.
+        if (baseObjectType.ConnectedSystemId != extensionObjectType.ConnectedSystemId)
+            throw new ArgumentException(
+                $"Object Type {extensionObjectTypeId} belongs to Connected System {extensionObjectType.ConnectedSystemId}, not {baseObjectType.ConnectedSystemId}.",
+                nameof(extensionObjectTypeId));
+
+        if (await Repository.Database.ConnectedSystemObjectTypeExtensions.AnyAsync(extension =>
+                extension.BaseObjectTypeId == baseObjectTypeId && extension.ExtensionObjectTypeId == extensionObjectTypeId))
+            return false;
+
+        // Scalar FKs are set rather than the navigations, so Add does not traverse into the (detached, already
+        // persisted) Object Types and try to insert them. See the DbSet.Add graph-traversal rules in src/CLAUDE.md.
+        Repository.Database.ConnectedSystemObjectTypeExtensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = baseObjectTypeId,
+            ExtensionObjectTypeId = extensionObjectTypeId
+        });
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RemoveObjectTypeExtensionAsync(int baseObjectTypeId, int extensionObjectTypeId)
+    {
+        var extension = await Repository.Database.ConnectedSystemObjectTypeExtensions.AsTracking()
+            .SingleOrDefaultAsync(e => e.BaseObjectTypeId == baseObjectTypeId && e.ExtensionObjectTypeId == extensionObjectTypeId);
+
+        if (extension == null)
+            return false;
+
+        Repository.Database.ConnectedSystemObjectTypeExtensions.Remove(extension);
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task SetStructuralCarrierObjectTypeAsync(int objectTypeId, int? carrierObjectTypeId)
+    {
+        if (objectTypeId == carrierObjectTypeId)
+            throw new ArgumentException("An Object Type cannot be its own structural carrier.", nameof(carrierObjectTypeId));
+
+        // AsTracking is explicit: JIM.Web and JIM.Scheduler run the context NoTracking, so a query result here
+        // would be detached and SaveChangesAsync would write nothing while reporting success.
+        var objectType = await Repository.Database.ConnectedSystemObjectTypes.AsTracking()
+            .SingleOrDefaultAsync(type => type.Id == objectTypeId)
+            ?? throw new ArgumentException($"Object Type {objectTypeId} does not exist.", nameof(objectTypeId));
+
+        if (carrierObjectTypeId.HasValue)
+        {
+            var carrierId = carrierObjectTypeId.Value;
+            var carrier = await Repository.Database.ConnectedSystemObjectTypes.AsNoTracking()
+                .SingleOrDefaultAsync(type => type.Id == carrierId)
+                ?? throw new ArgumentException($"Object Type {carrierId} does not exist.", nameof(carrierObjectTypeId));
+
+            if (carrier.ConnectedSystemId != objectType.ConnectedSystemId)
+                throw new ArgumentException(
+                    $"Object Type {carrierId} belongs to Connected System {carrier.ConnectedSystemId}, not {objectType.ConnectedSystemId}.",
+                    nameof(carrierObjectTypeId));
+        }
+
+        Repository.Database.RequireTracked(objectType, nameof(SetStructuralCarrierObjectTypeAsync),
+            "This method loads the Object Type with AsTracking itself; if this fires, that query has lost its AsTracking.");
+
+        objectType.StructuralCarrierObjectTypeId = carrierObjectTypeId;
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    #endregion
+
+    #region Auxiliary class discovery
+
+    public async Task<AuxiliaryClassDiscoveryRun> CreateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        Repository.Database.AuxiliaryClassDiscoveryRuns.Add(run);
+        await Repository.Database.SaveChangesAsync();
+        return run;
+    }
+
+    public async Task<AuxiliaryClassDiscoveryRun?> GetLatestAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Repository.Database.AuxiliaryClassDiscoveryRuns
+            .Include(run => run.Results).ThenInclude(result => result.StructuralObjectType)
+            .Where(run => run.ConnectedSystemId == connectedSystemId)
+            .OrderByDescending(run => run.Started)
+            .ThenByDescending(run => run.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<AuxiliaryClassDiscoveryRun?> GetInProgressAuxiliaryClassDiscoveryRunAsync(int connectedSystemId)
+    {
+        return await Repository.Database.AuxiliaryClassDiscoveryRuns
+            .Include(run => run.Results).ThenInclude(result => result.StructuralObjectType)
+            .SingleOrDefaultAsync(run =>
+                run.ConnectedSystemId == connectedSystemId &&
+                run.Status == AuxiliaryClassDiscoveryStatus.InProgress);
+    }
+
+    public async Task UpdateAuxiliaryClassDiscoveryRunAsync(AuxiliaryClassDiscoveryRun run)
+    {
+        Repository.Database.RequireTracked(run, nameof(UpdateAuxiliaryClassDiscoveryRunAsync),
+            "Load the run via GetInProgressAuxiliaryClassDiscoveryRunAsync on the same JimApplication instance used to save it.");
+
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    #endregion
 
     /// <summary>
     /// Determines if a Connected System Object Type attribute is being referenced by any Synchronisation Rule Attribute Flow, or any attribute values.
@@ -4942,6 +5083,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            // The graph an export evaluation needs to work out an object's class membership: the tag saying the
+            // Connected System has the concept at all, the auxiliary classes an administrator merged in, and the
+            // structural class that carries an auxiliary-typed object. None of it fetched is class membership
+            // silently not computed, and exports going out without the classes their attributes require.
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Tags)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.Extensions)
+            .ThenInclude(extension => extension.ExtensionObjectType)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.StructuralCarrierObjectType)
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
